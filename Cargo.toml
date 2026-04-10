@@ -1,0 +1,50 @@
+[package]
+name = "qubit-json"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+autotests = false
+authors = ["Haixing Hu <starfish.hu@gmail.com>"]
+license = "Apache-2.0"
+repository = "https://github.com/qubit-ltd/rust-common"
+description = "Lenient JSON decoder for non-fully-trusted JSON text inputs"
+homepage = "https://github.com/qubit-ltd/rust-common"
+documentation = "https://docs.rs/qubit-json"
+readme = "README.md"
+keywords = ["json", "decoder", "serde", "lenient", "qubit"]
+categories = ["encoding", "parser-implementations"]
+exclude = [
+    "coverage.sh",
+    "COVERAGE.md",
+    "COVERAGE.zh_CN.md",
+    ".circleci/*",
+    "ci-check.sh",
+    ".llvm-cov.toml",
+    ".cargo-audit.toml.example",
+]
+
+[lib]
+name = "qubit_json"
+doctest = false
+
+[[test]]
+name = "tests"
+path = "tests/mod.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[profile.bench]
+opt-level = 3
+lto = true
+codegen-units = 1
