@@ -18,7 +18,7 @@ common input issues before parsing and deserializing JSON values.
 
 The crate is intended for cases where JSON text may come from sources such as:
 
-- LLM outputs
+- Markdown-wrapped text
 - Markdown code blocks
 - copied snippets
 - CLI output streams
@@ -48,7 +48,7 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `decode_object<T>()`: requires a top-level JSON object
 - `decode_array<T>()`: requires a top-level JSON array
 
-### `LenientJsonDecoderOptions`
+### `JsonDecodeOptions`
 
 - `trim_whitespace`: trims leading and trailing whitespace
 - `strip_utf8_bom`: strips a leading UTF-8 BOM
@@ -115,12 +115,12 @@ fn main() {
 ### Customize Decoder Options
 
 ```rust
-use qubit_json::{LenientJsonDecoder, LenientJsonDecoderOptions};
+use qubit_json::{LenientJsonDecoder, JsonDecodeOptions};
 
 fn main() {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecoderOptions {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         strip_markdown_code_fence: false,
-        ..LenientJsonDecoderOptions::default()
+        ..JsonDecodeOptions::default()
     });
 
     let value = decoder
@@ -166,3 +166,16 @@ It is not a good fit when:
 
 This project is licensed under the Apache 2.0 License. See [LICENSE](LICENSE)
 for details.
+
+## Alignment Notes
+
+This README reflects the current object model:
+
+- `LenientJsonDecoder` owns an internal `LenientJsonNormalizer`.
+- Public decoding APIs are `decode`, `decode_object`, `decode_array`,
+  `decode_value`.
+- Normalization and error handling are implemented in
+  `src/lenient_json_normalizer.rs`
+  and `src/json_decode_error.rs`, which are covered by tests in `tests/`.
+- Product requirements and implementation behavior are aligned with
+  `doc/json_prd.zh_CN.md` and `doc/json_design.zh_CN.md`.
