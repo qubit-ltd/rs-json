@@ -6,15 +6,15 @@
  *    All rights reserved.
  *
  ******************************************************************************/
-//! Tests for [`qubit_json::LenientJsonDecoderOptions`].
+//! Tests for [`qubit_json::JsonDecodeOptions`].
 //!
 //! Author: Haixing Hu
 
-use qubit_json::LenientJsonDecoderOptions;
+use qubit_json::JsonDecodeOptions;
 
 #[test]
 fn test_default_enables_all_mvp_rules() {
-    let options = LenientJsonDecoderOptions::default();
+    let options = JsonDecodeOptions::default();
     assert!(options.trim_whitespace);
     assert!(options.strip_utf8_bom);
     assert!(options.strip_markdown_code_fence);
@@ -23,7 +23,7 @@ fn test_default_enables_all_mvp_rules() {
 
 #[test]
 fn test_options_are_copy_and_equatable() {
-    let options = LenientJsonDecoderOptions::default();
+    let options = JsonDecodeOptions::default();
     let copied = options;
     assert_eq!(options, copied);
 }

@@ -16,7 +16,7 @@
 /// Defaults are intentionally conservative and cover the most common
 /// non-fully-trusted text inputs without attempting aggressive repair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LenientJsonDecoderOptions {
+pub struct JsonDecodeOptions {
     /// Controls whether leading and trailing whitespace is removed before any
     /// other normalization step is applied.
     pub trim_whitespace: bool,
@@ -33,7 +33,7 @@ pub struct LenientJsonDecoderOptions {
     pub escape_control_chars_in_strings: bool,
 }
 
-impl Default for LenientJsonDecoderOptions {
+impl Default for JsonDecodeOptions {
     fn default() -> Self {
         Self {
             trim_whitespace: true,

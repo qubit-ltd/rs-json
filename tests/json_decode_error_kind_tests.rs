@@ -6,7 +6,7 @@
  *    All rights reserved.
  *
  ******************************************************************************/
-//! Tests for the public `JsonDecodeErrorKind` type in `decode_error_kind.rs`.
+//! Tests for the public `JsonDecodeErrorKind` type in `json_decode_error_kind.rs`.
 //!
 //! Author: Haixing Hu
 

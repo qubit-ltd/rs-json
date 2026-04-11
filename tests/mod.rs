@@ -10,11 +10,10 @@
 //!
 //! Author: Haixing Hu
 
-mod decode_error_kind_tests;
-mod decoder_tests;
-mod error_tests;
+mod json_decode_error_kind_tests;
+mod json_decode_error_tests;
+mod json_decode_options_tests;
+mod json_top_level_kind_tests;
+mod lenient_json_decoder_tests;
+mod lenient_json_normalizer_tests;
 mod lib_tests;
-mod normalize_object_tests;
-mod normalize_tests;
-mod options_tests;
-mod top_level_kind_tests;

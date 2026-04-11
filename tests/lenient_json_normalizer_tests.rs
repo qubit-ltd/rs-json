@@ -6,13 +6,13 @@
  *    All rights reserved.
  *
  ******************************************************************************/
-//! Tests for normalization behavior exposed through the public decoder API.
+//! Tests for normalization behavior implemented in `lenient_json_normalizer.rs`.
 //!
 //! Author: Haixing Hu
 
 use serde_json::json;
 
-use qubit_json::{JsonDecodeErrorKind, LenientJsonDecoder, LenientJsonDecoderOptions};
+use qubit_json::{JsonDecodeErrorKind, JsonDecodeOptions, LenientJsonDecoder};
 
 #[test]
 fn test_decode_value_reports_empty_input_for_empty_string() {
@@ -34,10 +34,10 @@ fn test_decode_value_reports_empty_input_for_whitespace_by_default() {
 
 #[test]
 fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled() {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecoderOptions {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         trim_whitespace: false,
         strip_markdown_code_fence: false,
-        ..LenientJsonDecoderOptions::default()
+        ..JsonDecodeOptions::default()
     });
     let error = decoder
         .decode_value("   ")
@@ -65,9 +65,9 @@ fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
 
 #[test]
 fn test_decode_value_can_leave_utf8_bom_when_disabled() {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecoderOptions {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         strip_utf8_bom: false,
-        ..LenientJsonDecoderOptions::default()
+        ..JsonDecodeOptions::default()
     });
     let error = decoder
         .decode_value("\u{feff}{\"a\":1}")
@@ -95,9 +95,9 @@ fn test_decode_value_strips_code_fence_without_closing_fence() {
 
 #[test]
 fn test_decode_value_reports_invalid_json_for_code_fence_without_newline() {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecoderOptions {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         trim_whitespace: false,
-        ..LenientJsonDecoderOptions::default()
+        ..JsonDecodeOptions::default()
     });
     let error = decoder
         .decode_value("```json")
@@ -116,9 +116,9 @@ fn test_decode_value_reports_empty_input_for_empty_code_fence_body() {
 
 #[test]
 fn test_decode_value_can_disable_code_fence_stripping() {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecoderOptions {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         strip_markdown_code_fence: false,
-        ..LenientJsonDecoderOptions::default()
+        ..JsonDecodeOptions::default()
     });
     let error = decoder
         .decode_value("```json\n{\"name\":\"alice\"}\n```")
@@ -146,9 +146,9 @@ fn test_decode_value_escapes_control_chars_in_strings() {
 
 #[test]
 fn test_decode_value_can_disable_control_char_escaping() {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecoderOptions {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         escape_control_chars_in_strings: false,
-        ..LenientJsonDecoderOptions::default()
+        ..JsonDecodeOptions::default()
     });
     let error = decoder
         .decode_value("{\"text\":\"a\nb\"}")
@@ -186,11 +186,11 @@ fn test_decode_value_trims_surrounding_whitespace_by_default() {
 
 #[test]
 fn test_decode_value_with_trim_disabled_and_escape_enabled_still_decodes_owned_output() {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecoderOptions {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         trim_whitespace: false,
         strip_markdown_code_fence: false,
         escape_control_chars_in_strings: true,
-        ..LenientJsonDecoderOptions::default()
+        ..JsonDecodeOptions::default()
     });
     let value = decoder
         .decode_value("{\"text\":\"a\nb\"}")

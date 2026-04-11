@@ -13,10 +13,7 @@
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::{
-    normalize::JsonNormalizer, JsonDecodeError, JsonTopLevelKind,
-    LenientJsonDecoderOptions,
-};
+use crate::{JsonDecodeError, JsonDecodeOptions, JsonTopLevelKind, LenientJsonNormalizer};
 
 /// A configurable JSON decoder for non-fully-trusted text inputs.
 ///
@@ -29,7 +26,7 @@ use crate::{
 pub struct LenientJsonDecoder {
     /// Stores the immutable normalization and decoding configuration used by
     /// this decoder instance.
-    normalizer: JsonNormalizer,
+    normalizer: LenientJsonNormalizer,
 }
 
 impl LenientJsonDecoder {
@@ -38,9 +35,9 @@ impl LenientJsonDecoder {
     /// Reusing a decoder instance is recommended when multiple inputs should
     /// follow the same lenient decoding policy.
     #[must_use]
-    pub const fn new(options: LenientJsonDecoderOptions) -> Self {
+    pub const fn new(options: JsonDecodeOptions) -> Self {
         Self {
-            normalizer: JsonNormalizer::new(options),
+            normalizer: LenientJsonNormalizer::new(options),
         }
     }
 
@@ -49,7 +46,7 @@ impl LenientJsonDecoder {
     /// This accessor allows callers to inspect the effective configuration
     /// without cloning the decoder or duplicating the options elsewhere.
     #[must_use]
-    pub const fn options(&self) -> &LenientJsonDecoderOptions {
+    pub const fn options(&self) -> &JsonDecodeOptions {
         self.normalizer.options()
     }
 

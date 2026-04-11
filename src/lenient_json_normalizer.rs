@@ -12,35 +12,37 @@
 
 use std::borrow::Cow;
 
-use crate::{JsonDecodeError, LenientJsonDecoderOptions};
+use crate::{JsonDecodeError, JsonDecodeOptions};
 
 /// Normalizes one raw JSON text input before JSON parsing.
 ///
 /// The object holds normalization options and applies all supported preprocessing
 /// rules in the same order for every `normalize` call.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct JsonNormalizer {
+pub struct LenientJsonNormalizer {
     /// Stores the option set used by the normalizer.
-    options: LenientJsonDecoderOptions,
+    options: JsonDecodeOptions,
 }
 
-impl Default for JsonNormalizer {
+impl Default for LenientJsonNormalizer {
     fn default() -> Self {
-        Self::new(LenientJsonDecoderOptions::default())
+        Self::new(JsonDecodeOptions::default())
     }
 }
 
-impl JsonNormalizer {
+impl LenientJsonNormalizer {
     /// Creates a normalizer with the provided lenient decoding options.
     ///
     /// The options are copied into the object so each `normalize` call uses a
     /// consistent policy without external mutation.
-    pub(crate) const fn new(options: LenientJsonDecoderOptions) -> Self {
+    #[must_use]
+    pub const fn new(options: JsonDecodeOptions) -> Self {
         Self { options }
     }
 
     /// Returns the configuration used by this normalizer.
-    pub(crate) const fn options(&self) -> &LenientJsonDecoderOptions {
+    #[must_use]
+    pub const fn options(&self) -> &JsonDecodeOptions {
         &self.options
     }
 
@@ -49,10 +51,7 @@ impl JsonNormalizer {
     /// The pipeline is intentionally narrow: it trims whitespace, strips an
     /// optional BOM, optionally removes a Markdown code fence, escapes control
     /// characters in strings, and finally validates non-emptiness again.
-    pub(crate) fn normalize<'a>(
-        &self,
-        input: &'a str,
-    ) -> Result<Cow<'a, str>, JsonDecodeError> {
+    pub fn normalize<'a>(&self, input: &'a str) -> Result<Cow<'a, str>, JsonDecodeError> {
         let input = self.require_non_empty(input)?;
         let input = self.trim_if_enabled(input);
         let input = self.strip_utf8_bom(input);
@@ -157,10 +156,7 @@ impl JsonNormalizer {
     ///
     /// Characters outside strings remain unchanged. Existing escape sequences are
     /// preserved so valid escapes are not double-escaped.
-    fn escape_control_chars_in_json_strings<'a>(
-        &self,
-        input: &'a str,
-    ) -> Cow<'a, str> {
+    fn escape_control_chars_in_json_strings<'a>(&self, input: &'a str) -> Cow<'a, str> {
         if !self.options.escape_control_chars_in_strings {
             return Cow::Borrowed(input);
         }

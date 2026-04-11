@@ -6,7 +6,7 @@
  *    All rights reserved.
  *
  ******************************************************************************/
-//! Tests for the public `JsonTopLevelKind` type in `top_level_kind.rs`.
+//! Tests for the public `JsonTopLevelKind` type in `json_top_level_kind.rs`.
 //!
 //! Author: Haixing Hu
 

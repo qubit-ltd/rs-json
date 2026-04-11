@@ -16,15 +16,16 @@
 
 #![deny(missing_docs)]
 
-mod decode_error_kind;
-mod decoder;
-mod error;
-mod normalize;
-mod options;
-mod top_level_kind;
+mod json_decode_error;
+mod json_decode_error_kind;
+mod json_decode_options;
+mod json_top_level_kind;
+mod lenient_json_decoder;
+mod lenient_json_normalizer;
 
-pub use decode_error_kind::JsonDecodeErrorKind;
-pub use decoder::LenientJsonDecoder;
-pub use error::JsonDecodeError;
-pub use options::LenientJsonDecoderOptions;
-pub use top_level_kind::JsonTopLevelKind;
+pub use json_decode_error::JsonDecodeError;
+pub use json_decode_error_kind::JsonDecodeErrorKind;
+pub use json_decode_options::JsonDecodeOptions;
+pub use json_top_level_kind::JsonTopLevelKind;
+pub use lenient_json_decoder::LenientJsonDecoder;
+pub use lenient_json_normalizer::LenientJsonNormalizer;

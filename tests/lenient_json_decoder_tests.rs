@@ -6,16 +6,14 @@
  *    All rights reserved.
  *
  ******************************************************************************/
-//! Tests for public decoder behavior in `decoder.rs`.
+//! Tests for the public API in `lenient_json_decoder.rs`.
 //!
 //! Author: Haixing Hu
 
 use serde::Deserialize;
 use serde_json::json;
 
-use qubit_json::{
-    JsonDecodeErrorKind, JsonTopLevelKind, LenientJsonDecoder, LenientJsonDecoderOptions,
-};
+use qubit_json::{JsonDecodeErrorKind, JsonDecodeOptions, JsonTopLevelKind, LenientJsonDecoder};
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 struct User {
@@ -25,9 +23,9 @@ struct User {
 
 #[test]
 fn test_new_exposes_configured_options() {
-    let options = LenientJsonDecoderOptions {
+    let options = JsonDecodeOptions {
         strip_markdown_code_fence: false,
-        ..LenientJsonDecoderOptions::default()
+        ..JsonDecodeOptions::default()
     };
     let decoder = LenientJsonDecoder::new(options);
     assert_eq!(decoder.options(), &options);
@@ -36,7 +34,7 @@ fn test_new_exposes_configured_options() {
 #[test]
 fn test_default_uses_default_options() {
     let decoder = LenientJsonDecoder::default();
-    assert_eq!(decoder.options(), &LenientJsonDecoderOptions::default());
+    assert_eq!(decoder.options(), &JsonDecodeOptions::default());
 }
 
 #[test]
@@ -125,4 +123,51 @@ fn test_decode_reports_deserialize_error() {
         .decode::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
         .expect_err("JSON with a wrong field type should return Deserialize");
     assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
+}
+
+#[test]
+fn test_normalizer_object_reuses_configuration_between_calls() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence: false,
+        ..JsonDecodeOptions::default()
+    });
+
+    let first = decoder.decode_value("```json\n{\"a\":1}\n```");
+    assert_eq!(first.unwrap_err().kind, JsonDecodeErrorKind::InvalidJson);
+
+    let second = decoder.decode_value("```json\n{\"a\":2}\n```");
+    assert_eq!(second.unwrap_err().kind, JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
+fn test_normalizer_objects_with_different_configs_do_not_share_state() {
+    let strict_decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence: false,
+        ..JsonDecodeOptions::default()
+    });
+    let permissive_decoder = LenientJsonDecoder::default();
+
+    assert_eq!(
+        strict_decoder
+            .decode_value("```json\n{\"a\":1}\n```")
+            .expect_err("code fence should stay when stripping is disabled")
+            .kind,
+        JsonDecodeErrorKind::InvalidJson
+    );
+    let value = permissive_decoder
+        .decode_value("```json\n{\"a\":1}\n```")
+        .expect("default normalizer should strip one markdown fence");
+    assert_eq!(value, serde_json::json!({"a": 1}));
+}
+
+#[test]
+fn test_normalizer_object_keeps_trim_whitespace_setting_for_empty_text() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        trim_whitespace: false,
+        ..JsonDecodeOptions::default()
+    });
+    let error = decoder
+        .decode_value(" \n\t")
+        .expect_err("trim disabled should leave whitespace for parser");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
 }
