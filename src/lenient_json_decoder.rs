@@ -11,7 +11,7 @@
 //! Author: Haixing Hu
 
 use serde::de::DeserializeOwned;
-use serde_json::Value;
+use serde_json::{error::Category, Value};
 
 use crate::{JsonDecodeError, JsonDecodeOptions, JsonTopLevelKind, LenientJsonNormalizer};
 
@@ -68,8 +68,8 @@ impl LenientJsonDecoder {
     where
         T: DeserializeOwned,
     {
-        let value = self.decode_value(input)?;
-        serde_json::from_value(value).map_err(JsonDecodeError::deserialize)
+        let normalized = self.normalizer.normalize(input)?;
+        serde_json::from_str(normalized.as_ref()).map_err(Self::map_decode_error)
     }
 
     /// Decodes `input` into a target type `T`, requiring a top-level JSON
@@ -140,6 +140,18 @@ impl LenientJsonDecoder {
             Ok(())
         } else {
             Err(JsonDecodeError::unexpected_top_level(expected, actual))
+        }
+    }
+
+    /// Maps one `serde_json` error from direct typed decoding to the crate
+    /// error model.
+    ///
+    /// Syntax, EOF, and I/O categories are treated as invalid JSON input.
+    /// Data category errors are treated as type deserialization failures.
+    fn map_decode_error(error: serde_json::Error) -> JsonDecodeError {
+        match error.classify() {
+            Category::Data => JsonDecodeError::deserialize(error),
+            Category::Io | Category::Syntax | Category::Eof => JsonDecodeError::invalid_json(error),
         }
     }
 }

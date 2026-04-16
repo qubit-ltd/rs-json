@@ -37,8 +37,17 @@ fn test_top_level_kind_display_uses_lowercase_names() {
 
 #[test]
 fn test_top_level_kind_from_str() {
-    assert_eq!(JsonTopLevelKind::from_str("object").unwrap(), JsonTopLevelKind::Object);
-    assert_eq!(JsonTopLevelKind::from_str("ARRAY").unwrap(), JsonTopLevelKind::Array);
-    assert_eq!(JsonTopLevelKind::from_str("other").unwrap(), JsonTopLevelKind::Other);
+    assert_eq!(
+        JsonTopLevelKind::from_str("object").unwrap(),
+        JsonTopLevelKind::Object
+    );
+    assert_eq!(
+        JsonTopLevelKind::from_str("ARRAY").unwrap(),
+        JsonTopLevelKind::Array
+    );
+    assert_eq!(
+        JsonTopLevelKind::from_str("other").unwrap(),
+        JsonTopLevelKind::Other
+    );
     assert!(JsonTopLevelKind::from_str("dict").is_err());
 }

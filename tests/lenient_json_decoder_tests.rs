@@ -21,6 +21,11 @@ struct User {
     age: u8,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct Message {
+    text: String,
+}
+
 #[test]
 fn test_new_exposes_configured_options() {
     let options = JsonDecodeOptions {
@@ -57,6 +62,20 @@ fn test_decode_typed_value_succeeds() {
         User {
             name: "alice".to_string(),
             age: 30,
+        }
+    );
+}
+
+#[test]
+fn test_decode_typed_value_applies_normalization_pipeline() {
+    let decoder = LenientJsonDecoder::default();
+    let message: Message = decoder
+        .decode("```json\n{\"text\":\"a\nb\"}\n```")
+        .expect("typed decode should still normalize fenced JSON and repair string control chars");
+    assert_eq!(
+        message,
+        Message {
+            text: "a\nb".to_string(),
         }
     );
 }
