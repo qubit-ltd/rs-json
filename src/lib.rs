@@ -23,7 +23,7 @@ mod json_top_level_kind;
 mod lenient_json_decoder;
 mod lenient_json_normalizer;
 
-pub use json_decode_error::JsonDecodeError;
+pub use json_decode_error::{JsonDecodeError, JsonDecodeStage};
 pub use json_decode_error_kind::JsonDecodeErrorKind;
 pub use json_decode_options::JsonDecodeOptions;
 pub use json_top_level_kind::JsonTopLevelKind;

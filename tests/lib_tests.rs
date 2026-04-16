@@ -11,8 +11,8 @@
 //! Author: Haixing Hu
 
 use qubit_json::{
-    JsonDecodeError, JsonDecodeErrorKind, JsonDecodeOptions, JsonTopLevelKind, LenientJsonDecoder,
-    LenientJsonNormalizer,
+    JsonDecodeError, JsonDecodeErrorKind, JsonDecodeOptions, JsonDecodeStage, JsonTopLevelKind,
+    LenientJsonDecoder, LenientJsonNormalizer,
 };
 
 #[test]
@@ -24,11 +24,14 @@ fn test_lib_exports_public_types() {
     let normalizer = LenientJsonNormalizer::default();
     let error = JsonDecodeError {
         kind: error_kind,
+        stage: JsonDecodeStage::Normalize,
         message: "msg".to_string(),
         expected_top_level: None,
         actual_top_level: None,
         line: None,
         column: None,
+        input_bytes: None,
+        max_input_bytes: None,
     };
 
     assert_eq!(decoder.options(), &options);

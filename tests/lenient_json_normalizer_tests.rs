@@ -12,7 +12,7 @@
 
 use serde_json::json;
 
-use qubit_json::{JsonDecodeErrorKind, JsonDecodeOptions, LenientJsonDecoder};
+use qubit_json::{JsonDecodeErrorKind, JsonDecodeOptions, JsonDecodeStage, LenientJsonDecoder};
 
 #[test]
 fn test_decode_value_reports_empty_input_for_empty_string() {
@@ -55,7 +55,10 @@ fn test_decode_value_respects_input_size_limit() {
         .decode_value("{\"a\":1}")
         .expect_err("input above the configured byte limit should be rejected");
     assert_eq!(error.kind, JsonDecodeErrorKind::InputTooLarge);
-    assert!(error.to_string().contains("7 bytes"));
+    assert_eq!(error.stage, JsonDecodeStage::Normalize);
+    assert_eq!(error.input_bytes, Some(7));
+    assert_eq!(error.max_input_bytes, Some(6));
+    assert!(error.to_string().contains("6 bytes"));
 }
 
 #[test]

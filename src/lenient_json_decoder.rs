@@ -69,7 +69,8 @@ impl LenientJsonDecoder {
         T: DeserializeOwned,
     {
         let normalized = self.normalizer.normalize(input)?;
-        serde_json::from_str(normalized.as_ref()).map_err(Self::map_decode_error)
+        serde_json::from_str(normalized.as_ref())
+            .map_err(|error| Self::map_decode_error(error, normalized.len()))
     }
 
     /// Decodes `input` into a target type `T`, requiring a top-level JSON
@@ -90,7 +91,8 @@ impl LenientJsonDecoder {
     {
         let normalized = self.normalizer.normalize(input)?;
         self.ensure_top_level_from_text(normalized.as_ref(), JsonTopLevelKind::Object)?;
-        serde_json::from_str(normalized.as_ref()).map_err(Self::map_decode_error)
+        serde_json::from_str(normalized.as_ref())
+            .map_err(|error| Self::map_decode_error(error, normalized.len()))
     }
 
     /// Decodes `input` into a `Vec<T>`, requiring a top-level JSON array.
@@ -110,7 +112,8 @@ impl LenientJsonDecoder {
     {
         let normalized = self.normalizer.normalize(input)?;
         self.ensure_top_level_from_text(normalized.as_ref(), JsonTopLevelKind::Array)?;
-        serde_json::from_str(normalized.as_ref()).map_err(Self::map_decode_error)
+        serde_json::from_str(normalized.as_ref())
+            .map_err(|error| Self::map_decode_error(error, normalized.len()))
     }
 
     /// Decodes `input` into a [`serde_json::Value`].
@@ -125,7 +128,8 @@ impl LenientJsonDecoder {
     /// or when the normalized text is not valid JSON syntax.
     pub fn decode_value(&self, input: &str) -> Result<Value, JsonDecodeError> {
         let normalized = self.normalizer.normalize(input)?;
-        serde_json::from_str(normalized.as_ref()).map_err(JsonDecodeError::invalid_json)
+        serde_json::from_str(normalized.as_ref())
+            .map_err(|error| JsonDecodeError::invalid_json(error, Some(normalized.len())))
     }
 
     /// Verifies that the normalized text starts with the required top-level
@@ -163,10 +167,12 @@ impl LenientJsonDecoder {
     ///
     /// Syntax, EOF, and I/O categories are treated as invalid JSON input.
     /// Data category errors are treated as type deserialization failures.
-    fn map_decode_error(error: serde_json::Error) -> JsonDecodeError {
+    fn map_decode_error(error: serde_json::Error, input_bytes: usize) -> JsonDecodeError {
         match error.classify() {
-            Category::Data => JsonDecodeError::deserialize(error),
-            Category::Io | Category::Syntax | Category::Eof => JsonDecodeError::invalid_json(error),
+            Category::Data => JsonDecodeError::deserialize(error, Some(input_bytes)),
+            Category::Io | Category::Syntax | Category::Eof => {
+                JsonDecodeError::invalid_json(error, Some(input_bytes))
+            }
         }
     }
 }

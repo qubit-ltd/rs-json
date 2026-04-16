@@ -68,6 +68,10 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `InvalidJson`: normalized text is not valid JSON syntax
 - `UnexpectedTopLevel`: top-level JSON kind does not match the requested method
 - `Deserialize`: JSON is valid but cannot be deserialized into the target type
+- `JsonDecodeError.stage`: indicates the failing stage (`normalize`, `parse`,
+  `top_level_check`, `deserialize`)
+- `JsonDecodeError.input_bytes` / `max_input_bytes`: optional byte context for
+  diagnostics
 
 ## Installation
 
