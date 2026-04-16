@@ -79,7 +79,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qubit-json = "0.1.0"
+qubit-json = "0.2.0"
 ```
 
 ## Quick Start
