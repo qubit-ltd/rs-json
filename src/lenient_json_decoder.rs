@@ -11,7 +11,7 @@
 //! Author: Haixing Hu
 
 use serde::de::DeserializeOwned;
-use serde_json::{error::Category, Value};
+use serde_json::{Value, error::Category};
 
 use crate::{JsonDecodeError, JsonDecodeOptions, JsonTopLevelKind, LenientJsonNormalizer};
 
@@ -139,10 +139,10 @@ impl LenientJsonDecoder {
         normalized: &str,
         expected: JsonTopLevelKind,
     ) -> Result<(), JsonDecodeError> {
-        if let Some(actual) = Self::classify_top_level_from_text(normalized) {
-            if actual != expected {
-                return Err(JsonDecodeError::unexpected_top_level(expected, actual));
-            }
+        if let Some(actual) = Self::classify_top_level_from_text(normalized)
+            && actual != expected
+        {
+            return Err(JsonDecodeError::unexpected_top_level(expected, actual));
         }
         Ok(())
     }

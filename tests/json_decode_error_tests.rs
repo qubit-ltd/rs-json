@@ -6,7 +6,8 @@
  *    All rights reserved.
  *
  ******************************************************************************/
-//! Tests for the public `JsonDecodeError` type in `json_decode_error.rs`.
+//! Tests for the public [`qubit_json::JsonDecodeError`] type in
+//! `json_decode_error.rs`.
 //!
 //! Author: Haixing Hu
 
@@ -93,7 +94,9 @@ fn test_error_display_for_deserialize_error_uses_context_message() {
     assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
     assert_eq!(error.stage, JsonDecodeStage::Deserialize);
     assert!(error.input_bytes.is_some());
-    assert!(error
-        .to_string()
-        .contains("Failed to deserialize JSON value:"));
+    assert!(
+        error
+            .to_string()
+            .contains("Failed to deserialize JSON value:")
+    );
 }
