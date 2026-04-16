@@ -2,7 +2,7 @@
 name = "qubit-json"
 version = "0.1.2"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.94.1"
 autotests = false
 authors = ["Haixing Hu <starfish.hu@gmail.com>"]
 license = "Apache-2.0"
