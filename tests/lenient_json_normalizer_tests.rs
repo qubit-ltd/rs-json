@@ -191,6 +191,71 @@ fn test_decode_value_does_not_accept_inline_closing_ticks_as_fence_end() {
 }
 
 #[test]
+fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid() {
+    let decoders = [
+        LenientJsonDecoder::default(),
+        LenientJsonDecoder::new(JsonDecodeOptions {
+            trim_whitespace: false,
+            strip_markdown_code_fence: false,
+            ..JsonDecodeOptions::default()
+        }),
+        LenientJsonDecoder::new(JsonDecodeOptions {
+            strip_markdown_code_fence_json_only: true,
+            strip_markdown_code_fence_requires_closing: true,
+            ..JsonDecodeOptions::default()
+        }),
+    ];
+
+    let mut seed = 0x0d15_ea5e_d5e0_ded5u64;
+    for _ in 0..3000 {
+        let input = generate_noisy_json_candidate(&mut seed);
+        for decoder in &decoders {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                decoder.decode_value(&input)
+            }));
+            assert!(result.is_ok(), "decoder panicked on input: {input:?}");
+
+            if let Ok(value) = result.expect("catch_unwind returned no result") {
+                let canonical = serde_json::to_string(&value)
+                    .expect("serializing a decoded JSON value should not fail");
+                let reparsed = decoder
+                    .decode_value(&canonical)
+                    .expect("canonical JSON should be decodable by the same decoder");
+                assert_eq!(reparsed, value);
+            }
+        }
+    }
+}
+
+fn generate_noisy_json_candidate(seed: &mut u64) -> String {
+    const ALPHABET: &[char] = &[
+        '{', '}', '[', ']', ':', ',', '"', '\\', '`', ' ', '\t', '\n', '\r', 'a', 'b', 'c', 'x',
+        'y', 'z', '0', '1', '2', '9', '-', '.', 't', 'f', 'n', '\u{0000}', '\u{0008}', '\u{001f}',
+    ];
+
+    let len = (next_u64(seed) % 48) as usize;
+    let mut text = String::with_capacity(len + 16);
+    for _ in 0..len {
+        let index = (next_u64(seed) % ALPHABET.len() as u64) as usize;
+        text.push(ALPHABET[index]);
+    }
+
+    match next_u64(seed) % 4 {
+        0 => format!("```json\n{text}\n```"),
+        1 => format!("```python\n{text}\n```"),
+        2 => format!("\u{feff}{text}"),
+        _ => text,
+    }
+}
+
+fn next_u64(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    *seed
+}
+
+#[test]
 fn test_decode_value_reports_invalid_json_for_code_fence_without_newline() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         trim_whitespace: false,
