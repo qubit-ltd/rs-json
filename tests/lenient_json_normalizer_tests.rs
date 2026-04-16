@@ -131,6 +131,63 @@ fn test_decode_value_strips_code_fence_without_closing_fence() {
 }
 
 #[test]
+fn test_decode_value_can_require_closing_code_fence() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence_requires_closing: true,
+        ..JsonDecodeOptions::default()
+    });
+    let error = decoder.decode_value("```json\n{\"a\":1}").expect_err(
+        "opening fence without closing fence should be rejected when strict mode is enabled",
+    );
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
+fn test_decode_value_allows_strict_closing_code_fence_when_present() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence_requires_closing: true,
+        ..JsonDecodeOptions::default()
+    });
+    let value = decoder
+        .decode_value("```json\n{\"a\":1}\n```")
+        .expect("strict closing mode should still strip a properly closed fence");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
+fn test_decode_value_can_restrict_code_fence_to_json_language_tags() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence_json_only: true,
+        ..JsonDecodeOptions::default()
+    });
+    let error = decoder
+        .decode_value("```python\n{\"a\":1}\n```")
+        .expect_err("non-JSON code fence should not be stripped in json-only mode");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
+fn test_decode_value_json_only_mode_accepts_jsonc_code_fence() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence_json_only: true,
+        ..JsonDecodeOptions::default()
+    });
+    let value = decoder
+        .decode_value("```jsonc\n{\"a\":1}\n```")
+        .expect("json-only mode should accept jsonc fenced blocks");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
+fn test_decode_value_does_not_accept_inline_closing_ticks_as_fence_end() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_value("```json\n{\"a\":1}```")
+        .expect_err("inline trailing ticks are not treated as a valid closing fence");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
 fn test_decode_value_reports_invalid_json_for_code_fence_without_newline() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         trim_whitespace: false,

@@ -28,6 +28,18 @@ pub struct JsonDecodeOptions {
     /// Typical examples include `````json ... ````` and bare fenced blocks
     /// starting with ````` followed by a newline.
     pub strip_markdown_code_fence: bool,
+    /// Controls whether Markdown fence stripping requires a matching closing
+    /// fence.
+    ///
+    /// When enabled, an opening fence without a valid closing fence keeps the
+    /// input unchanged.
+    pub strip_markdown_code_fence_requires_closing: bool,
+    /// Controls whether Markdown fence stripping only accepts JSON-like
+    /// language tags (`json`, `jsonc`, or empty tag).
+    ///
+    /// When enabled, fenced blocks labeled with other languages are not
+    /// stripped.
+    pub strip_markdown_code_fence_json_only: bool,
     /// Controls whether raw ASCII control characters inside JSON string
     /// literals are converted into valid JSON escape sequences.
     pub escape_control_chars_in_strings: bool,
@@ -45,6 +57,8 @@ impl Default for JsonDecodeOptions {
             trim_whitespace: true,
             strip_utf8_bom: true,
             strip_markdown_code_fence: true,
+            strip_markdown_code_fence_requires_closing: false,
+            strip_markdown_code_fence_json_only: false,
             escape_control_chars_in_strings: true,
             max_input_bytes: None,
         }

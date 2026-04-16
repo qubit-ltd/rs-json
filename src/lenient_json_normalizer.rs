@@ -155,13 +155,44 @@ impl LenientJsonNormalizer {
         let Some(line_end) = input.find('\n') else {
             return input;
         };
-        let content = &input[line_end + 1..];
-        let trimmed_end = content.trim_end_matches(char::is_whitespace);
+        let opening_tag = input[3..line_end].trim();
+        if self.options.strip_markdown_code_fence_json_only
+            && !Self::is_json_code_fence_tag(opening_tag)
+        {
+            return input;
+        }
 
-        if let Some(without_close) = trimmed_end.strip_suffix("```") {
-            without_close
+        let content = &input[line_end + 1..];
+
+        if let Some(without_close) = Self::strip_markdown_closing_fence(content) {
+            return without_close;
+        }
+        if self.options.strip_markdown_code_fence_requires_closing {
+            input
         } else {
             content
+        }
+    }
+
+    /// Returns whether a fenced language tag should be treated as JSON.
+    fn is_json_code_fence_tag(tag: &str) -> bool {
+        tag.is_empty() || tag.eq_ignore_ascii_case("json") || tag.eq_ignore_ascii_case("jsonc")
+    }
+
+    /// Removes a valid closing Markdown code fence from `content` when present.
+    ///
+    /// A closing fence is considered valid only when the last non-whitespace
+    /// token is exactly ````` and appears on its own line.
+    fn strip_markdown_closing_fence(content: &str) -> Option<&str> {
+        let trimmed_end = content.trim_end_matches(char::is_whitespace);
+        let without_close = trimmed_end.strip_suffix("```")?;
+        if without_close.is_empty()
+            || without_close.ends_with('\n')
+            || without_close.ends_with('\r')
+        {
+            Some(without_close)
+        } else {
+            None
         }
     }
 
