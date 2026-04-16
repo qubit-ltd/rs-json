@@ -27,6 +27,22 @@ fn test_error_display_for_empty_input_uses_message() {
 }
 
 #[test]
+fn test_error_display_for_input_too_large_uses_message() {
+    let error = JsonDecodeError {
+        kind: JsonDecodeErrorKind::InputTooLarge,
+        message: "JSON input is too large: 8 bytes exceed configured limit 7 bytes".to_string(),
+        expected_top_level: None,
+        actual_top_level: None,
+        line: None,
+        column: None,
+    };
+    assert_eq!(
+        error.to_string(),
+        "JSON input is too large: 8 bytes exceed configured limit 7 bytes"
+    );
+}
+
+#[test]
 fn test_error_display_for_top_level_mismatch_uses_expected_and_actual() {
     let error = JsonDecodeError {
         kind: JsonDecodeErrorKind::UnexpectedTopLevel,

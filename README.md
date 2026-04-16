@@ -55,9 +55,11 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `strip_markdown_code_fence`: strips one outer Markdown code fence
 - `escape_control_chars_in_strings`: escapes ASCII control characters inside
   JSON string literals
+- `max_input_bytes`: optional byte-size limit applied before normalization
 
 ### Explicit Error Model
 
+- `InputTooLarge`: raw input size exceeds configured limit
 - `EmptyInput`: input becomes empty after normalization
 - `InvalidJson`: normalized text is not valid JSON syntax
 - `UnexpectedTopLevel`: top-level JSON kind does not match the requested method

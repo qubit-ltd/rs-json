@@ -53,6 +53,23 @@ pub struct JsonDecodeError {
 }
 
 impl JsonDecodeError {
+    /// Creates an error indicating that the raw input size exceeds a
+    /// configured upper bound.
+    #[inline]
+    pub(crate) fn input_too_large(actual_bytes: usize, max_bytes: usize) -> Self {
+        Self {
+            kind: JsonDecodeErrorKind::InputTooLarge,
+            message: format!(
+                "JSON input is too large: {} bytes exceed configured limit {} bytes",
+                actual_bytes, max_bytes
+            ),
+            expected_top_level: None,
+            actual_top_level: None,
+            line: None,
+            column: None,
+        }
+    }
+
     /// Creates an error indicating that the input became empty after
     /// normalization.
     #[inline]
@@ -120,6 +137,7 @@ impl JsonDecodeError {
 impl fmt::Display for JsonDecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
+            JsonDecodeErrorKind::InputTooLarge => f.write_str(&self.message),
             JsonDecodeErrorKind::EmptyInput => f.write_str(&self.message),
             JsonDecodeErrorKind::UnexpectedTopLevel => f.write_str(&self.message),
             JsonDecodeErrorKind::InvalidJson | JsonDecodeErrorKind::Deserialize => {

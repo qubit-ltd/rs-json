@@ -19,6 +19,9 @@ use parse_display::{Display, FromStr as DeriveFromStr};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display, DeriveFromStr)]
 #[display(style = "snake_case")]
 pub enum JsonDecodeErrorKind {
+    /// Indicates that the raw input size exceeds the configured maximum.
+    #[from_str(regex = "(?i)input_too_large")]
+    InputTooLarge,
     /// Indicates that the input became empty after normalization.
     #[from_str(regex = "(?i)empty_input")]
     EmptyInput,

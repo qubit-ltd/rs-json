@@ -31,6 +31,12 @@ pub struct JsonDecodeOptions {
     /// Controls whether raw ASCII control characters inside JSON string
     /// literals are converted into valid JSON escape sequences.
     pub escape_control_chars_in_strings: bool,
+    /// Caps the accepted raw input size in bytes before normalization.
+    ///
+    /// When set to `Some(limit)`, any input whose byte length is greater than
+    /// `limit` is rejected before further processing. When set to `None`,
+    /// no size limit is enforced.
+    pub max_input_bytes: Option<usize>,
 }
 
 impl Default for JsonDecodeOptions {
@@ -40,6 +46,7 @@ impl Default for JsonDecodeOptions {
             strip_utf8_bom: true,
             strip_markdown_code_fence: true,
             escape_control_chars_in_strings: true,
+            max_input_bytes: None,
         }
     }
 }

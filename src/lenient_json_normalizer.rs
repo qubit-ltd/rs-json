@@ -52,6 +52,7 @@ impl LenientJsonNormalizer {
     /// optional BOM, optionally removes a Markdown code fence, escapes control
     /// characters in strings, and finally validates non-emptiness again.
     pub fn normalize<'a>(&self, input: &'a str) -> Result<Cow<'a, str>, JsonDecodeError> {
+        self.require_within_size_limit(input)?;
         let input = self.require_non_empty(input)?;
         let input = self.trim_if_enabled(input);
         let input = self.strip_utf8_bom(input);
@@ -84,6 +85,18 @@ impl LenientJsonNormalizer {
         } else {
             Ok(input)
         }
+    }
+
+    /// Verifies that the raw input length does not exceed the configured
+    /// maximum, when one is configured.
+    fn require_within_size_limit(&self, input: &str) -> Result<(), JsonDecodeError> {
+        if let Some(limit) = self.options.max_input_bytes {
+            let size = input.len();
+            if size > limit {
+                return Err(JsonDecodeError::input_too_large(size, limit));
+            }
+        }
+        Ok(())
     }
 
     /// Trims a borrowed input slice if trimming is enabled.

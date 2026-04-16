@@ -46,6 +46,43 @@ fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled(
 }
 
 #[test]
+fn test_decode_value_respects_input_size_limit() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        max_input_bytes: Some(6),
+        ..JsonDecodeOptions::default()
+    });
+    let error = decoder
+        .decode_value("{\"a\":1}")
+        .expect_err("input above the configured byte limit should be rejected");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InputTooLarge);
+    assert!(error.to_string().contains("7 bytes"));
+}
+
+#[test]
+fn test_decode_value_accepts_input_at_size_limit() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        max_input_bytes: Some(7),
+        ..JsonDecodeOptions::default()
+    });
+    let value = decoder
+        .decode_value("[1,2,3]")
+        .expect("input whose size matches the limit should be accepted");
+    assert_eq!(value, json!([1, 2, 3]));
+}
+
+#[test]
+fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        max_input_bytes: Some(0),
+        ..JsonDecodeOptions::default()
+    });
+    let error = decoder
+        .decode_value("{")
+        .expect_err("size guard should run before parser handling");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InputTooLarge);
+}
+
+#[test]
 fn test_decode_value_strips_utf8_bom_by_default() {
     let decoder = LenientJsonDecoder::default();
     let value = decoder
