@@ -103,6 +103,28 @@ fn test_decode_array_requires_array_top_level() {
 }
 
 #[test]
+fn test_decode_object_rejects_scalar_top_level() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_object::<User>("42")
+        .expect_err("top-level scalar should be rejected by decode_object");
+    assert_eq!(error.kind, JsonDecodeErrorKind::UnexpectedTopLevel);
+    assert_eq!(error.expected_top_level, Some(JsonTopLevelKind::Object));
+    assert_eq!(error.actual_top_level, Some(JsonTopLevelKind::Other));
+}
+
+#[test]
+fn test_decode_array_rejects_scalar_top_level() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_array::<User>("42")
+        .expect_err("top-level scalar should be rejected by decode_array");
+    assert_eq!(error.kind, JsonDecodeErrorKind::UnexpectedTopLevel);
+    assert_eq!(error.expected_top_level, Some(JsonTopLevelKind::Array));
+    assert_eq!(error.actual_top_level, Some(JsonTopLevelKind::Other));
+}
+
+#[test]
 fn test_decode_array_succeeds() {
     let decoder = LenientJsonDecoder::default();
     let people = decoder
@@ -142,6 +164,19 @@ fn test_decode_reports_deserialize_error() {
         .decode::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
         .expect_err("JSON with a wrong field type should return Deserialize");
     assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
+}
+
+#[test]
+fn test_decode_object_reports_invalid_json_for_non_token_start() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        trim_whitespace: false,
+        strip_markdown_code_fence: false,
+        ..JsonDecodeOptions::default()
+    });
+    let error = decoder
+        .decode_object::<User>(" \n\t ")
+        .expect_err("invalid syntax should still be mapped as InvalidJson");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
 }
 
 #[test]

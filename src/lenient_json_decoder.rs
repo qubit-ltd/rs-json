@@ -88,9 +88,9 @@ impl LenientJsonDecoder {
     where
         T: DeserializeOwned,
     {
-        let value = self.decode_value(input)?;
-        self.ensure_top_level(&value, JsonTopLevelKind::Object)?;
-        serde_json::from_value(value).map_err(JsonDecodeError::deserialize)
+        let normalized = self.normalizer.normalize(input)?;
+        self.ensure_top_level_from_text(normalized.as_ref(), JsonTopLevelKind::Object)?;
+        serde_json::from_str(normalized.as_ref()).map_err(Self::map_decode_error)
     }
 
     /// Decodes `input` into a `Vec<T>`, requiring a top-level JSON array.
@@ -108,9 +108,9 @@ impl LenientJsonDecoder {
     where
         T: DeserializeOwned,
     {
-        let value = self.decode_value(input)?;
-        self.ensure_top_level(&value, JsonTopLevelKind::Array)?;
-        serde_json::from_value(value).map_err(JsonDecodeError::deserialize)
+        let normalized = self.normalizer.normalize(input)?;
+        self.ensure_top_level_from_text(normalized.as_ref(), JsonTopLevelKind::Array)?;
+        serde_json::from_str(normalized.as_ref()).map_err(Self::map_decode_error)
     }
 
     /// Decodes `input` into a [`serde_json::Value`].
@@ -128,18 +128,33 @@ impl LenientJsonDecoder {
         serde_json::from_str(normalized.as_ref()).map_err(JsonDecodeError::invalid_json)
     }
 
-    /// Verifies that `value` has the top-level kind required by the calling
-    /// public method.
-    fn ensure_top_level(
+    /// Verifies that the normalized text starts with the required top-level
+    /// JSON kind token, when such a token can be classified cheaply.
+    fn ensure_top_level_from_text(
         &self,
-        value: &Value,
+        normalized: &str,
         expected: JsonTopLevelKind,
     ) -> Result<(), JsonDecodeError> {
-        let actual = JsonTopLevelKind::of(value);
-        if actual == expected {
-            Ok(())
-        } else {
-            Err(JsonDecodeError::unexpected_top_level(expected, actual))
+        if let Some(actual) = Self::classify_top_level_from_text(normalized) {
+            if actual != expected {
+                return Err(JsonDecodeError::unexpected_top_level(expected, actual));
+            }
+        }
+        Ok(())
+    }
+
+    /// Classifies the top-level JSON kind from the first significant character.
+    ///
+    /// Returns `None` when the first non-whitespace character is missing or not
+    /// a valid JSON token start, in which case full parsing should handle the
+    /// error mapping.
+    fn classify_top_level_from_text(input: &str) -> Option<JsonTopLevelKind> {
+        let first = input.chars().find(|ch| !ch.is_whitespace())?;
+        match first {
+            '{' => Some(JsonTopLevelKind::Object),
+            '[' => Some(JsonTopLevelKind::Array),
+            '"' | '-' | '0'..='9' | 't' | 'f' | 'n' => Some(JsonTopLevelKind::Other),
+            _ => None,
         }
     }
 
