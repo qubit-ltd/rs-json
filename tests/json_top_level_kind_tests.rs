@@ -13,6 +13,7 @@
 use serde_json::json;
 
 use qubit_json::JsonTopLevelKind;
+use std::str::FromStr;
 
 #[test]
 fn test_top_level_kind_classifies_values() {
@@ -32,4 +33,12 @@ fn test_top_level_kind_display_uses_lowercase_names() {
     assert_eq!(JsonTopLevelKind::Object.to_string(), "object");
     assert_eq!(JsonTopLevelKind::Array.to_string(), "array");
     assert_eq!(JsonTopLevelKind::Other.to_string(), "other");
+}
+
+#[test]
+fn test_top_level_kind_from_str() {
+    assert_eq!(JsonTopLevelKind::from_str("object").unwrap(), JsonTopLevelKind::Object);
+    assert_eq!(JsonTopLevelKind::from_str("ARRAY").unwrap(), JsonTopLevelKind::Array);
+    assert_eq!(JsonTopLevelKind::from_str("other").unwrap(), JsonTopLevelKind::Other);
+    assert!(JsonTopLevelKind::from_str("dict").is_err());
 }

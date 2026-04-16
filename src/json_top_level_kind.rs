@@ -10,7 +10,7 @@
 //!
 //! Author: Haixing Hu
 
-use std::fmt;
+use parse_display::{Display, FromStr as DeriveFromStr};
 
 use serde_json::Value;
 
@@ -18,14 +18,18 @@ use serde_json::Value;
 ///
 /// The decoder uses this type to report whether the parsed value is an object,
 /// an array, or any other scalar-like JSON value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display, DeriveFromStr)]
+#[display(style = "snake_case")]
 pub enum JsonTopLevelKind {
     /// Indicates that the parsed top-level value is a JSON object.
+    #[from_str(regex = "(?i)object")]
     Object,
     /// Indicates that the parsed top-level value is a JSON array.
+    #[from_str(regex = "(?i)array")]
     Array,
     /// Indicates that the parsed top-level value is neither an object nor an
     /// array.
+    #[from_str(regex = "(?i)other")]
     Other,
 }
 
@@ -49,16 +53,5 @@ impl From<&Value> for JsonTopLevelKind {
     #[inline]
     fn from(value: &Value) -> Self {
         Self::of(value)
-    }
-}
-
-impl fmt::Display for JsonTopLevelKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let text = match self {
-            Self::Object => "object",
-            Self::Array => "array",
-            Self::Other => "other",
-        };
-        f.write_str(text)
     }
 }
