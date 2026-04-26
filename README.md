@@ -50,6 +50,8 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 
 ### `JsonDecodeOptions`
 
+- Presets and builder helpers: `lenient()`, `strict()`,
+  `json_code_fences_only()`, `with_max_input_bytes()`
 - `trim_whitespace`: trims leading and trailing whitespace
 - `strip_utf8_bom`: strips a leading UTF-8 BOM
 - `strip_markdown_code_fence`: strips one outer backtick Markdown code fence
@@ -132,10 +134,9 @@ fn main() {
 use qubit_json::{LenientJsonDecoder, JsonDecodeOptions};
 
 fn main() {
-    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
-        strip_markdown_code_fence: false,
-        ..JsonDecodeOptions::default()
-    });
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::json_code_fences_only().with_max_input_bytes(1024),
+    );
 
     let value = decoder
         .decode_value("{\"ok\":true}")

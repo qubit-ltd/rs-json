@@ -106,6 +106,15 @@ pub struct JsonDecodeOptions {
 }
 ```
 
+常用构造辅助：
+
+- `JsonDecodeOptions::lenient()`：返回默认宽松配置。
+- `JsonDecodeOptions::strict()`：禁用所有规范化规则。
+- `JsonDecodeOptions::json_code_fences_only()`：保留默认宽松行为，但仅移除
+  JSON-like Markdown code fence。
+- `JsonDecodeOptions::with_max_input_bytes(limit)`：在现有配置上设置原始输入
+  字节数上限。
+
 默认值：
 
 - `trim_whitespace = true`

@@ -51,8 +51,14 @@ pub struct JsonDecodeOptions {
     pub max_input_bytes: Option<usize>,
 }
 
-impl Default for JsonDecodeOptions {
-    fn default() -> Self {
+impl JsonDecodeOptions {
+    /// Creates the default lenient option set.
+    ///
+    /// This preset enables the small, predictable normalization rules intended
+    /// for non-fully-trusted text inputs while keeping aggressive JSON repair out
+    /// of scope.
+    #[must_use]
+    pub const fn lenient() -> Self {
         Self {
             trim_whitespace: true,
             strip_utf8_bom: true,
@@ -62,5 +68,51 @@ impl Default for JsonDecodeOptions {
             escape_control_chars_in_strings: true,
             max_input_bytes: None,
         }
+    }
+
+    /// Creates an option set that disables all normalization rules.
+    ///
+    /// This preset still allows `serde_json` to accept JSON syntax that is valid
+    /// on its own, but the decoder will not trim, strip BOMs, remove Markdown
+    /// fences, or escape raw control characters before parsing.
+    #[must_use]
+    pub const fn strict() -> Self {
+        Self {
+            trim_whitespace: false,
+            strip_utf8_bom: false,
+            strip_markdown_code_fence: false,
+            strip_markdown_code_fence_requires_closing: false,
+            strip_markdown_code_fence_json_only: false,
+            escape_control_chars_in_strings: false,
+            max_input_bytes: None,
+        }
+    }
+
+    /// Creates lenient options that only strip JSON-like Markdown code fences.
+    ///
+    /// The resulting preset keeps the other default normalization rules, but
+    /// restricts Markdown fence stripping to empty, `json`, or `jsonc` language
+    /// tags.
+    #[must_use]
+    pub const fn json_code_fences_only() -> Self {
+        let mut options = Self::lenient();
+        options.strip_markdown_code_fence_json_only = true;
+        options
+    }
+
+    /// Returns a copy of these options with a raw input byte-size limit.
+    ///
+    /// Inputs whose byte length is greater than `max_input_bytes` are rejected
+    /// before normalization.
+    #[must_use]
+    pub const fn with_max_input_bytes(mut self, max_input_bytes: usize) -> Self {
+        self.max_input_bytes = Some(max_input_bytes);
+        self
+    }
+}
+
+impl Default for JsonDecodeOptions {
+    fn default() -> Self {
+        Self::lenient()
     }
 }
