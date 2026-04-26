@@ -68,6 +68,19 @@ impl LenientJsonDecoder {
     /// Returns [`JsonDecodeError`] when the input becomes empty after
     /// normalization, when the normalized text is not valid JSON, or when the
     /// parsed JSON value cannot be deserialized into `T`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use qubit_json::LenientJsonDecoder;
+    ///
+    /// let decoder = LenientJsonDecoder::default();
+    /// let value: u64 = decoder
+    ///     .decode("42")
+    ///     .expect("a numeric JSON scalar should decode into u64");
+    ///
+    /// assert_eq!(value, 42);
+    /// ```
     pub fn decode<T>(&self, input: &str) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
@@ -89,6 +102,19 @@ impl LenientJsonDecoder {
     /// Returns [`JsonDecodeError`] when the input cannot be normalized into a
     /// valid JSON value, when the top-level JSON kind is not an object, or
     /// when the object cannot be deserialized into `T`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use qubit_json::LenientJsonDecoder;
+    ///
+    /// let decoder = LenientJsonDecoder::default();
+    /// let value: serde_json::Value = decoder
+    ///     .decode_object("```json\n{\"ok\":true}\n```")
+    ///     .expect("a fenced JSON object should decode into a value");
+    ///
+    /// assert_eq!(value["ok"], true);
+    /// ```
     pub fn decode_object<T>(&self, input: &str) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
@@ -111,6 +137,19 @@ impl LenientJsonDecoder {
     /// Returns [`JsonDecodeError`] when the input cannot be normalized into a
     /// valid JSON value, when the top-level JSON kind is not an array, or when
     /// the array cannot be deserialized into `Vec<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use qubit_json::{JsonDecodeErrorKind, LenientJsonDecoder};
+    ///
+    /// let decoder = LenientJsonDecoder::default();
+    /// let error = decoder
+    ///     .decode_array::<serde_json::Value>("{\"ok\":true}")
+    ///     .expect_err("a top-level object should fail an array contract");
+    ///
+    /// assert_eq!(error.kind, JsonDecodeErrorKind::UnexpectedTopLevel);
+    /// ```
     pub fn decode_array<T>(&self, input: &str) -> Result<Vec<T>, JsonDecodeError>
     where
         T: DeserializeOwned,
@@ -132,6 +171,22 @@ impl LenientJsonDecoder {
     ///
     /// Returns [`JsonDecodeError`] when the input is empty after normalization
     /// or when the normalized text is not valid JSON syntax.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
+    ///
+    /// let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+    ///     max_input_bytes: Some(16),
+    ///     ..JsonDecodeOptions::default()
+    /// });
+    /// let value = decoder
+    ///     .decode_value("{\"ok\":true}")
+    ///     .expect("input within the size limit should decode");
+    ///
+    /// assert_eq!(value["ok"], true);
+    /// ```
     pub fn decode_value(&self, input: &str) -> Result<Value, JsonDecodeError> {
         let normalized = self.normalizer.normalize(input)?;
         Self::parse_value(normalized.as_ref())
