@@ -145,11 +145,15 @@ fn main() {
 
 When enabled, the decoder applies the following pipeline before parsing:
 
-1. validate that the input is not empty
-2. trim surrounding whitespace
-3. strip a leading UTF-8 BOM
-4. strip one outer Markdown code fence
-5. escape ASCII control characters inside JSON string literals
+1. enforce the optional raw input byte-size limit
+2. validate that the input is not empty
+3. trim surrounding whitespace
+4. strip a leading UTF-8 BOM
+5. trim surrounding whitespace again
+6. strip one outer Markdown code fence
+7. trim surrounding whitespace again
+8. escape ASCII control characters inside JSON string literals
+9. trim surrounding whitespace again
 
 The decoder does not:
 

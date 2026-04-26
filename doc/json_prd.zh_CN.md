@@ -82,7 +82,10 @@
 
 - 验收标准
   - 配置字段包含 `trim_whitespace`、`strip_utf8_bom`、
-    `strip_markdown_code_fence`、`escape_control_chars_in_strings`。
+    `strip_markdown_code_fence`、
+    `strip_markdown_code_fence_requires_closing`、
+    `strip_markdown_code_fence_json_only`、
+    `escape_control_chars_in_strings`、`max_input_bytes`。
   - 默认值覆盖高频轻度脏数据场景。
   - 默认实例与配置实例行为可回归验证。
 
@@ -90,7 +93,7 @@
 
 - 验收标准
   - 规范化顺序固定为：
-    `require_non_empty -> trim -> strip_bom -> strip_fence -> escape_control_chars -> trim`。
+    `require_within_size_limit -> require_non_empty -> trim -> strip_bom -> trim -> strip_fence -> trim -> escape_control_chars -> trim`。
   - 不发生修改时尽量复用输入，减少分配。
 
 ### PRD-RSJSON-004：`decode<T>()`
@@ -103,12 +106,14 @@
 ### PRD-RSJSON-005：`decode_object<T>()`
 
 - 验收标准
+  - 输入不是合法 JSON 时返回 `InvalidJson`，不提前归类为顶层类型不匹配。
   - 输入顶层非对象时返回 `UnexpectedTopLevel`。
   - 顶层为对象但结构不匹配时返回 `Deserialize`。
 
 ### PRD-RSJSON-006：`decode_array<T>()`
 
 - 验收标准
+  - 输入不是合法 JSON 时返回 `InvalidJson`，不提前归类为顶层类型不匹配。
   - 输入顶层非数组时返回 `UnexpectedTopLevel`。
   - 顶层为数组且元素可反序列化时返回 `Vec<T>`。
 
@@ -121,8 +126,9 @@
 ### PRD-RSJSON-008：错误模型稳定性
 
 - 验收标准
-  - 支持 `EmptyInput`、`InvalidJson`、`UnexpectedTopLevel`、`Deserialize`。
-  - 保留行列号信息用于排障。
+  - 支持 `InputTooLarge`、`EmptyInput`、`InvalidJson`、
+    `UnexpectedTopLevel`、`Deserialize`。
+  - 保留失败阶段、行列号和输入字节数信息用于排障。
   - 默认不返回完整原始文本内容。
 
 ## 7. 风险与约束

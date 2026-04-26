@@ -39,9 +39,10 @@ LenientJsonDecoder
     |    |-- strip_markdown_code_fence
     |    |-- escape_control_chars_in_strings
     |
-    |-- decode_value()
-    |-- enforce_top_level()
-    |-- from_value deserialize<T>()
+    |-- decode<T>()                 // normalized text -> T
+    |-- decode_value()              // normalized text -> Value
+    |-- decode_object<T>()          // normalized text -> Value -> top-level check -> T
+    |-- decode_array<T>()           // normalized text -> Value -> top-level check -> Vec<T>
     |
     v
 serde_json / typed output
@@ -98,7 +99,10 @@ pub struct JsonDecodeOptions {
     pub trim_whitespace: bool,
     pub strip_utf8_bom: bool,
     pub strip_markdown_code_fence: bool,
+    pub strip_markdown_code_fence_requires_closing: bool,
+    pub strip_markdown_code_fence_json_only: bool,
     pub escape_control_chars_in_strings: bool,
+    pub max_input_bytes: Option<usize>,
 }
 ```
 
@@ -107,7 +111,10 @@ pub struct JsonDecodeOptions {
 - `trim_whitespace = true`
 - `strip_utf8_bom = true`
 - `strip_markdown_code_fence = true`
+- `strip_markdown_code_fence_requires_closing = false`
+- `strip_markdown_code_fence_json_only = false`
 - `escape_control_chars_in_strings = true`
+- `max_input_bytes = None`
 
 ### 4.4 错误模型
 
@@ -116,24 +123,35 @@ pub struct JsonDecodeOptions {
 pub enum JsonTopLevelKind { Object, Array, Other }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum JsonDecodeErrorKind { EmptyInput, InvalidJson, UnexpectedTopLevel, Deserialize }
+pub enum JsonDecodeErrorKind {
+    InputTooLarge,
+    EmptyInput,
+    InvalidJson,
+    UnexpectedTopLevel,
+    Deserialize,
+}
 
 #[derive(Debug)]
 pub struct JsonDecodeError {
     pub kind: JsonDecodeErrorKind,
+    pub stage: JsonDecodeStage,
     pub message: String,
     pub expected_top_level: Option<JsonTopLevelKind>,
     pub actual_top_level: Option<JsonTopLevelKind>,
     pub line: Option<usize>,
     pub column: Option<usize>,
+    pub input_bytes: Option<usize>,
+    pub max_input_bytes: Option<usize>,
 }
 ```
 
 设计说明：
 
 1. `JsonDecodeError` 承担错误场景聚合与诊断信息承载。
-2. `line`/`column` 用于解析阶段定位，默认在解析成功后保持 `None`。
-3. `expected_top_level`/`actual_top_level` 仅用于 `UnexpectedTopLevel`。
+2. `stage` 用于标识失败发生在规范化、解析、顶层检查或反序列化阶段。
+3. `line`/`column` 用于解析和反序列化阶段定位，无法定位时保持 `None`。
+4. `expected_top_level`/`actual_top_level` 仅用于 `UnexpectedTopLevel`。
+5. `input_bytes`/`max_input_bytes` 用于输入大小限制和解析诊断。
 
 ## 5. 公开 API 设计
 
@@ -162,9 +180,9 @@ impl LenientJsonDecoder {
 
 ### 5.2 行为说明
 
-- `decode<T>()`：不限定顶层结构，依赖反序列化目标类型是否匹配。
-- `decode_object<T>()`：要求顶层为对象，失败返回 `UnexpectedTopLevel`。
-- `decode_array<T>()`：要求顶层为数组，失败返回 `UnexpectedTopLevel`。
+- `decode<T>()`：不限定顶层结构，规范化后直接反序列化为 `T`。
+- `decode_object<T>()`：先解析为 `Value`，确认顶层为对象后再反序列化为 `T`。
+- `decode_array<T>()`：先解析为 `Value`，确认顶层为数组后再反序列化为 `Vec<T>`。
 - `decode_value()`：先规范化再直接解析为 `serde_json::Value`。
 
 ## 6. 规范化管线
@@ -172,13 +190,16 @@ impl LenientJsonDecoder {
 实现统一在 `src/lenient_json_normalizer.rs`，对外不直接暴露独立函数 API。
 核心处理顺序如下：
 
-1. `require_non_empty(input)`：按 trim 策略判定空输入。
-2. `trim_if_enabled(input)`：首尾空白清理。
-3. `strip_utf8_bom(input)`：可配置移除 UTF-8 BOM。
-4. `strip_markdown_code_fence(input)`：可配置去除外层代码块。
-5. `escape_control_chars_in_json_strings(input)`：可配置转义字符串内控制字符。
-6. `trim_cow_if_enabled(input)`：规范化后再次处理尾部空白。
-7. 最终空值检查并返回 `Cow<'_, str>`。
+1. `require_within_size_limit(input)`：按字节数上限拒绝过大输入。
+2. `require_non_empty(input)`：按 trim 策略判定空输入。
+3. `trim_if_enabled(input)`：首尾空白清理。
+4. `strip_utf8_bom(input)`：可配置移除 UTF-8 BOM。
+5. `trim_if_enabled(input)`：移除 BOM 后再次按需裁剪。
+6. `strip_markdown_code_fence(input)`：可配置去除外层代码块。
+7. `trim_if_enabled(input)`：去除代码块后再次按需裁剪。
+8. `escape_control_chars_in_json_strings(input)`：可配置转义字符串内控制字符。
+9. `trim_cow_if_enabled(input)`：规范化后再次处理尾部空白。
+10. 最终空值检查并返回 `Cow<'_, str>`。
 
 该管线通过 `LenientJsonNormalizer::normalize()` 单一入口触发，保证顺序不变。
 

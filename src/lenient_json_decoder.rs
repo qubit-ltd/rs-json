@@ -56,8 +56,9 @@ impl LenientJsonDecoder {
     /// objects, scalars, and any other JSON value kinds are all allowed as long
     /// as they can be deserialized into `T`.
     ///
-    /// The generic type `T` must implement [`DeserializeOwned`], because the
-    /// decoder first builds an owned [`Value`] and then deserializes from it.
+    /// The generic type `T` must implement [`DeserializeOwned`] because this
+    /// method deserializes directly from normalized text and does not return
+    /// values borrowing from the input.
     ///
     /// # Errors
     ///
