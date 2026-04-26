@@ -67,6 +67,15 @@ fn test_decode_typed_value_succeeds() {
 }
 
 #[test]
+fn test_decode_reports_empty_input_from_normalizer() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode::<User>("")
+        .expect_err("empty input should fail during normalization");
+    assert_eq!(error.kind, JsonDecodeErrorKind::EmptyInput);
+}
+
+#[test]
 fn test_decode_typed_value_applies_normalization_pipeline() {
     let decoder = LenientJsonDecoder::default();
     let message: Message = decoder
@@ -92,6 +101,33 @@ fn test_decode_object_requires_object_top_level() {
 }
 
 #[test]
+fn test_decode_object_reports_empty_input_from_normalizer() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_object::<User>("")
+        .expect_err("empty input should fail during normalization");
+    assert_eq!(error.kind, JsonDecodeErrorKind::EmptyInput);
+}
+
+#[test]
+fn test_decode_object_reports_invalid_json_for_malformed_array() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_object::<User>("[")
+        .expect_err("malformed JSON should be reported before top-level checking");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
+fn test_decode_object_reports_invalid_json_for_malformed_scalar() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_object::<User>("\"unterminated")
+        .expect_err("malformed scalar JSON should not be treated as a top-level mismatch");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
 fn test_decode_array_requires_array_top_level() {
     let decoder = LenientJsonDecoder::default();
     let error = decoder
@@ -100,6 +136,24 @@ fn test_decode_array_requires_array_top_level() {
     assert_eq!(error.kind, JsonDecodeErrorKind::UnexpectedTopLevel);
     assert_eq!(error.expected_top_level, Some(JsonTopLevelKind::Array));
     assert_eq!(error.actual_top_level, Some(JsonTopLevelKind::Object));
+}
+
+#[test]
+fn test_decode_array_reports_empty_input_from_normalizer() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_array::<User>("")
+        .expect_err("empty input should fail during normalization");
+    assert_eq!(error.kind, JsonDecodeErrorKind::EmptyInput);
+}
+
+#[test]
+fn test_decode_array_reports_invalid_json_for_malformed_object() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_array::<User>("{")
+        .expect_err("malformed JSON should be reported before top-level checking");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
 }
 
 #[test]
@@ -137,6 +191,24 @@ fn test_decode_array_succeeds() {
             age: 30,
         }]
     );
+}
+
+#[test]
+fn test_decode_object_reports_deserialize_error_after_top_level_check() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_object::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
+        .expect_err("valid object with wrong field type should return Deserialize");
+    assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
+}
+
+#[test]
+fn test_decode_array_reports_deserialize_error_after_top_level_check() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_array::<User>("[{\"name\":\"alice\",\"age\":\"old\"}]")
+        .expect_err("valid array with wrong element type should return Deserialize");
+    assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
 }
 
 #[test]

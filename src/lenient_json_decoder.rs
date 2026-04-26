@@ -90,9 +90,10 @@ impl LenientJsonDecoder {
         T: DeserializeOwned,
     {
         let normalized = self.normalizer.normalize(input)?;
-        self.ensure_top_level_from_text(normalized.as_ref(), JsonTopLevelKind::Object)?;
-        serde_json::from_str(normalized.as_ref())
-            .map_err(|error| Self::map_decode_error(error, normalized.len()))
+        let value = Self::parse_value(normalized.as_ref())?;
+        Self::ensure_top_level_from_value(&value, JsonTopLevelKind::Object)?;
+        serde_json::from_value(value)
+            .map_err(|error| JsonDecodeError::deserialize(error, Some(normalized.len())))
     }
 
     /// Decodes `input` into a `Vec<T>`, requiring a top-level JSON array.
@@ -111,9 +112,10 @@ impl LenientJsonDecoder {
         T: DeserializeOwned,
     {
         let normalized = self.normalizer.normalize(input)?;
-        self.ensure_top_level_from_text(normalized.as_ref(), JsonTopLevelKind::Array)?;
-        serde_json::from_str(normalized.as_ref())
-            .map_err(|error| Self::map_decode_error(error, normalized.len()))
+        let value = Self::parse_value(normalized.as_ref())?;
+        Self::ensure_top_level_from_value(&value, JsonTopLevelKind::Array)?;
+        serde_json::from_value(value)
+            .map_err(|error| JsonDecodeError::deserialize(error, Some(normalized.len())))
     }
 
     /// Decodes `input` into a [`serde_json::Value`].
@@ -128,38 +130,28 @@ impl LenientJsonDecoder {
     /// or when the normalized text is not valid JSON syntax.
     pub fn decode_value(&self, input: &str) -> Result<Value, JsonDecodeError> {
         let normalized = self.normalizer.normalize(input)?;
-        serde_json::from_str(normalized.as_ref())
+        Self::parse_value(normalized.as_ref())
+    }
+
+    /// Parses normalized text into a JSON value.
+    ///
+    /// Syntax failures are mapped to the crate error model with normalized
+    /// input byte length included for diagnostics.
+    fn parse_value(normalized: &str) -> Result<Value, JsonDecodeError> {
+        serde_json::from_str(normalized)
             .map_err(|error| JsonDecodeError::invalid_json(error, Some(normalized.len())))
     }
 
-    /// Verifies that the normalized text starts with the required top-level
-    /// JSON kind token, when such a token can be classified cheaply.
-    fn ensure_top_level_from_text(
-        &self,
-        normalized: &str,
+    /// Verifies that a parsed JSON value has the required top-level kind.
+    fn ensure_top_level_from_value(
+        value: &Value,
         expected: JsonTopLevelKind,
     ) -> Result<(), JsonDecodeError> {
-        if let Some(actual) = Self::classify_top_level_from_text(normalized)
-            && actual != expected
-        {
+        let actual = JsonTopLevelKind::of(value);
+        if actual != expected {
             return Err(JsonDecodeError::unexpected_top_level(expected, actual));
         }
         Ok(())
-    }
-
-    /// Classifies the top-level JSON kind from the first significant character.
-    ///
-    /// Returns `None` when the first non-whitespace character is missing or not
-    /// a valid JSON token start, in which case full parsing should handle the
-    /// error mapping.
-    fn classify_top_level_from_text(input: &str) -> Option<JsonTopLevelKind> {
-        let first = input.chars().find(|ch| !ch.is_whitespace())?;
-        match first {
-            '{' => Some(JsonTopLevelKind::Object),
-            '[' => Some(JsonTopLevelKind::Array),
-            '"' | '-' | '0'..='9' | 't' | 'f' | 'n' => Some(JsonTopLevelKind::Other),
-            _ => None,
-        }
     }
 
     /// Maps one `serde_json` error from direct typed decoding to the crate

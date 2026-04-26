@@ -86,6 +86,25 @@ fn test_error_display_for_invalid_json_includes_location() {
 }
 
 #[test]
+fn test_error_display_for_parse_or_deserialize_without_location_uses_message() {
+    let error = JsonDecodeError {
+        kind: JsonDecodeErrorKind::Deserialize,
+        stage: JsonDecodeStage::Deserialize,
+        message: "Failed to deserialize JSON value: invalid type".to_string(),
+        expected_top_level: None,
+        actual_top_level: None,
+        line: None,
+        column: None,
+        input_bytes: Some(12),
+        max_input_bytes: None,
+    };
+    assert_eq!(
+        error.to_string(),
+        "Failed to deserialize JSON value: invalid type"
+    );
+}
+
+#[test]
 fn test_error_display_for_deserialize_error_uses_context_message() {
     let decoder = LenientJsonDecoder::default();
     let error = decoder

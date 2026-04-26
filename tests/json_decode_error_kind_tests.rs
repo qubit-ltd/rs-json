@@ -46,5 +46,9 @@ fn test_decode_error_kind_from_str() {
         JsonDecodeErrorKind::from_str("unexpected_top_level").unwrap(),
         JsonDecodeErrorKind::UnexpectedTopLevel
     );
+    assert_eq!(
+        JsonDecodeErrorKind::from_str("deserialize").unwrap(),
+        JsonDecodeErrorKind::Deserialize
+    );
     assert!(JsonDecodeErrorKind::from_str("unsupported").is_err());
 }
