@@ -12,7 +12,64 @@
 # Uses cargo-llvm-cov to generate code coverage reports
 #
 
-set -e
+set -euo pipefail
+
+MIN_FUNCTION_COVERAGE=100
+MIN_LINE_COVERAGE=98
+MIN_REGION_COVERAGE=98
+COVERAGE_JSON_PATH="target/llvm-cov/coverage.json"
+
+check_json_coverage_thresholds() {
+    local report_path="$1"
+
+    if ! command -v jq > /dev/null 2>&1; then
+        echo "❌ Error: jq is required to validate JSON coverage thresholds"
+        echo "Install jq with your system package manager, then rerun this script."
+        exit 1
+    fi
+
+    local source_file_count
+    source_file_count=$(jq \
+        --arg root "$CURRENT_CRATE_DIR/" \
+        '[.data[0].files[] | select(.filename | startswith($root + "src/"))] | length' \
+        "$report_path")
+    if [ "$source_file_count" -eq 0 ]; then
+        echo "❌ Error: no src/ files found in coverage report"
+        exit 1
+    fi
+
+    local failures
+    failures=$(jq -r \
+        --arg root "$CURRENT_CRATE_DIR/" \
+        --argjson min_lines "$MIN_LINE_COVERAGE" \
+        --argjson min_regions "$MIN_REGION_COVERAGE" \
+        '.data[0].files[]
+        | select(.filename | startswith($root + "src/"))
+        | {
+            file: (.filename | ltrimstr($root)),
+            functions_total: .summary.functions.count,
+            functions_covered: .summary.functions.covered,
+            lines_percent: .summary.lines.percent,
+            regions_percent: .summary.regions.percent
+        }
+        | select(
+            (.functions_covered != .functions_total)
+            or (.lines_percent <= $min_lines)
+            or (.regions_percent <= $min_regions)
+        )
+        | "\(.file): functions=\(.functions_covered)/\(.functions_total), lines=\(.lines_percent)%, regions=\(.regions_percent)%"' \
+        "$report_path")
+
+    if [ -n "$failures" ]; then
+        echo "❌ Coverage threshold check failed"
+        echo "Required per src/ file: functions = ${MIN_FUNCTION_COVERAGE}%, lines > ${MIN_LINE_COVERAGE}%, regions > ${MIN_REGION_COVERAGE}%"
+        echo "$failures"
+        exit 1
+    fi
+
+    echo "✅ Coverage thresholds passed"
+    echo "   Per src/ file: functions = ${MIN_FUNCTION_COVERAGE}%, lines > ${MIN_LINE_COVERAGE}%, regions > ${MIN_REGION_COVERAGE}%"
+}
 
 echo "🔍 Starting code coverage testing..."
 
@@ -110,10 +167,11 @@ case "$FORMAT_ARG" in
 
     json)
         echo "📊 Generating JSON format coverage report..."
-        cargo llvm-cov --package "$PACKAGE_NAME" --json --output-path target/llvm-cov/coverage.json \
+        cargo llvm-cov --package "$PACKAGE_NAME" --json --output-path "$COVERAGE_JSON_PATH" \
             --ignore-filename-regex "$EXCLUDE_PATTERN"
         echo "✅ JSON report generated"
-        echo "   Report location: target/llvm-cov/coverage.json"
+        echo "   Report location: $COVERAGE_JSON_PATH"
+        check_json_coverage_thresholds "$COVERAGE_JSON_PATH"
         ;;
 
     cobertura)
@@ -139,7 +197,7 @@ case "$FORMAT_ARG" in
 
         # JSON
         echo "  - Generating JSON report..."
-        cargo llvm-cov --package "$PACKAGE_NAME" --json --output-path target/llvm-cov/coverage.json \
+        cargo llvm-cov --package "$PACKAGE_NAME" --json --output-path "$COVERAGE_JSON_PATH" \
             --ignore-filename-regex "$EXCLUDE_PATTERN"
 
         # Cobertura
@@ -150,8 +208,9 @@ case "$FORMAT_ARG" in
         echo "✅ All format reports generated"
         echo "   HTML:      target/llvm-cov/html/index.html"
         echo "   LCOV:      target/llvm-cov/lcov.info"
-        echo "   JSON:      target/llvm-cov/coverage.json"
+        echo "   JSON:      $COVERAGE_JSON_PATH"
         echo "   Cobertura: target/llvm-cov/cobertura.xml"
+        check_json_coverage_thresholds "$COVERAGE_JSON_PATH"
         ;;
 
     help|--help|-h)
@@ -161,7 +220,7 @@ case "$FORMAT_ARG" in
         echo "  html       Generate HTML report and open in browser (default)"
         echo "  text       Output text format report to terminal"
         echo "  lcov       Generate LCOV format report"
-        echo "  json       Generate JSON format report"
+        echo "  json       Generate JSON report and enforce coverage thresholds"
         echo "  cobertura  Generate Cobertura XML format report"
         echo "  all        Generate all format reports"
         echo "  help       Show this help information"
@@ -169,6 +228,9 @@ case "$FORMAT_ARG" in
         echo "Options:"
         echo "  --clean    Clean old coverage data and build cache before running"
         echo "             By default, cached builds are used to speed up compilation"
+        echo ""
+        echo "Requirements:"
+        echo "  jq         Required for json/all coverage threshold validation"
         echo ""
         echo "Performance tips:"
         echo "  • First run will be slower (needs to compile all dependencies)"
@@ -185,11 +247,10 @@ case "$FORMAT_ARG" in
         ;;
 
     *)
-        echo "❌ Error: Unknown format '$1'"
+        echo "❌ Error: Unknown format '$FORMAT_ARG'"
         echo "Run './coverage.sh help' to see available options"
         exit 1
         ;;
 esac
 
 echo "✅ Code coverage testing completed!"
-
