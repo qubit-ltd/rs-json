@@ -80,7 +80,11 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 qubit-json = "0.2.0"
+serde = { version = "1.0", features = ["derive"] }
 ```
+
+The direct `serde` dependency is only needed when deriving `Deserialize` for
+typed decoding, as shown in the first quick-start example below.
 
 ## Quick Start
 
