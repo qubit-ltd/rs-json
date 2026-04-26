@@ -12,7 +12,7 @@
 # Run this script before committing code to ensure it passes all CircleCI checks
 #
 
-set -e  # Exit immediately on error
+set -euo pipefail  # Exit immediately on error, unset variables, or failed pipelines.
 
 # Color definitions
 RED='\033[0;31m'
@@ -68,15 +68,18 @@ echo ""
 
 # Check 2: Clippy linting
 print_step "2/6 Running Clippy checks (cargo +nightly clippy)..."
-if cargo +nightly clippy --all-targets --all-features -- -D warnings 2>&1 | tee /tmp/clippy-output.txt | grep -q "warning\|error"; then
+CLIPPY_LOG=$(mktemp)
+if cargo +nightly clippy --all-targets --all-features -- -D warnings > "$CLIPPY_LOG" 2>&1; then
+    command rm -f "$CLIPPY_LOG"
+    print_success "Clippy checks passed"
+else
     print_error "Clippy found issues"
-    cat /tmp/clippy-output.txt
+    cat "$CLIPPY_LOG"
+    command rm -f "$CLIPPY_LOG"
     echo ""
     echo "Please try to auto-fix with:"
     echo "  cargo +nightly clippy --fix --all-targets --all-features"
     exit 1
-else
-    print_success "Clippy checks passed"
 fi
 echo ""
 
@@ -231,7 +234,3 @@ echo ""
 echo "Your code is ready to commit."
 echo "After pushing, CircleCI will automatically run the same checks."
 echo ""
-
-# Clean up temporary files
-rm -f /tmp/clippy-output.txt
-
