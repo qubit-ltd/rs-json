@@ -34,8 +34,8 @@ pub struct JsonDecodeOptions {
     /// When enabled, an opening fence without a valid closing fence keeps the
     /// input unchanged.
     pub strip_markdown_code_fence_requires_closing: bool,
-    /// Controls whether Markdown fence stripping only accepts JSON-like
-    /// language tags (`json`, `jsonc`, or empty tag).
+    /// Controls whether Markdown fence stripping only accepts JSON-like info
+    /// strings whose first token is empty, `json`, or `jsonc`.
     ///
     /// When enabled, fenced blocks labeled with other languages are not
     /// stripped.
@@ -91,8 +91,8 @@ impl JsonDecodeOptions {
     /// Creates lenient options that only strip JSON-like Markdown code fences.
     ///
     /// The resulting preset keeps the other default normalization rules, but
-    /// restricts Markdown fence stripping to empty, `json`, or `jsonc` language
-    /// tags.
+    /// restricts Markdown fence stripping to empty, `json`, or `jsonc` as the
+    /// first info-string token.
     #[must_use]
     pub const fn json_code_fences_only() -> Self {
         let mut options = Self::lenient();

@@ -184,9 +184,12 @@ impl LenientJsonNormalizer {
         (count >= 3).then_some(count)
     }
 
-    /// Returns whether a fenced language tag should be treated as JSON.
+    /// Returns whether a fenced info string should be treated as JSON.
     fn is_json_code_fence_tag(tag: &str) -> bool {
-        tag.is_empty() || tag.eq_ignore_ascii_case("json") || tag.eq_ignore_ascii_case("jsonc")
+        let language = tag.split_whitespace().next().unwrap_or("");
+        language.is_empty()
+            || language.eq_ignore_ascii_case("json")
+            || language.eq_ignore_ascii_case("jsonc")
     }
 
     /// Removes a valid closing Markdown code fence from `content` when present.

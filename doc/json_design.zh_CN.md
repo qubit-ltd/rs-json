@@ -111,7 +111,7 @@ pub struct JsonDecodeOptions {
 - `JsonDecodeOptions::lenient()`：返回默认宽松配置。
 - `JsonDecodeOptions::strict()`：禁用所有规范化规则。
 - `JsonDecodeOptions::json_code_fences_only()`：保留默认宽松行为，但仅移除
-  JSON-like Markdown code fence。
+  info string 首个 token 为 JSON-like 的 Markdown code fence。
 - `JsonDecodeOptions::with_max_input_bytes(limit)`：在现有配置上设置原始输入
   字节数上限。
 
@@ -220,6 +220,7 @@ impl LenientJsonDecoder {
 - `strip_markdown_code_fence`
   - 仅处理以 3 个或更多反引号开头的输入。
   - 支持语言标签和无标签两种 fence 开头。
+  - JSON-only 模式按 info string 的首个空白分隔 token 判断是否为 JSON-like。
   - 若存在单独成行、长度不短于 opening fence 的结束 fence，尝试一并去除。
   - 不存在有效结束 fence 时，默认仍移除开头并保留剩余内容；严格模式下保持输入不变。
 - `escape_control_chars_in_json_strings`

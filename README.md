@@ -57,8 +57,8 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `strip_markdown_code_fence`: strips one outer backtick Markdown code fence
 - `strip_markdown_code_fence_requires_closing`: only strip code fence when a
   valid closing fence exists
-- `strip_markdown_code_fence_json_only`: only strip fenced blocks whose
-  language tag is empty, `json`, or `jsonc`
+- `strip_markdown_code_fence_json_only`: only strip fenced blocks whose first
+  info-string token is empty, `json`, or `jsonc`
 - `escape_control_chars_in_strings`: escapes ASCII control characters inside
   JSON string literals
 - `max_input_bytes`: optional byte-size limit applied before normalization

@@ -233,6 +233,42 @@ fn test_decode_value_json_only_mode_accepts_jsonc_code_fence() {
 }
 
 #[test]
+fn test_decode_value_json_only_mode_accepts_empty_code_fence_tag() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence_json_only: true,
+        ..JsonDecodeOptions::default()
+    });
+    let value = decoder
+        .decode_value("```\n{\"a\":1}\n```")
+        .expect("json-only mode should accept fenced blocks without a language tag");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
+fn test_decode_value_json_only_mode_accepts_json_info_string() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence_json_only: true,
+        ..JsonDecodeOptions::default()
+    });
+    let value = decoder
+        .decode_value("```json title=\"sample\"\n{\"a\":1}\n```")
+        .expect("json-only mode should accept JSON fenced blocks with info strings");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
+fn test_decode_value_json_only_mode_rejects_non_json_info_string_first_token() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence_json_only: true,
+        ..JsonDecodeOptions::default()
+    });
+    let error = decoder
+        .decode_value("```python json\n{\"a\":1}\n```")
+        .expect_err("json-only mode should use the first info-string token");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
 fn test_decode_value_does_not_accept_inline_closing_ticks_as_fence_end() {
     let decoder = LenientJsonDecoder::default();
     let error = decoder
