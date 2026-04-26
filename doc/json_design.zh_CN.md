@@ -80,7 +80,7 @@ pub struct LenientJsonDecoder {
 
 ```rust
 #[derive(Debug, Clone, Copy)]
-pub struct LenientJsonNormalizer {
+pub(crate) struct LenientJsonNormalizer {
     options: JsonDecodeOptions,
 }
 ```

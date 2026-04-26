@@ -19,7 +19,7 @@ use crate::{JsonDecodeError, JsonDecodeOptions};
 /// The object holds normalization options and applies all supported preprocessing
 /// rules in the same order for every `normalize` call.
 #[derive(Debug, Clone, Copy)]
-pub struct LenientJsonNormalizer {
+pub(crate) struct LenientJsonNormalizer {
     /// Stores the option set used by the normalizer.
     options: JsonDecodeOptions,
 }
@@ -36,13 +36,13 @@ impl LenientJsonNormalizer {
     /// The options are copied into the object so each `normalize` call uses a
     /// consistent policy without external mutation.
     #[must_use]
-    pub const fn new(options: JsonDecodeOptions) -> Self {
+    pub(crate) const fn new(options: JsonDecodeOptions) -> Self {
         Self { options }
     }
 
     /// Returns the configuration used by this normalizer.
     #[must_use]
-    pub const fn options(&self) -> &JsonDecodeOptions {
+    pub(crate) const fn options(&self) -> &JsonDecodeOptions {
         &self.options
     }
 
@@ -51,7 +51,7 @@ impl LenientJsonNormalizer {
     /// The pipeline is intentionally narrow: it trims whitespace, strips an
     /// optional BOM, optionally removes a Markdown code fence, escapes control
     /// characters in strings, and finally validates non-emptiness again.
-    pub fn normalize<'a>(&self, input: &'a str) -> Result<Cow<'a, str>, JsonDecodeError> {
+    pub(crate) fn normalize<'a>(&self, input: &'a str) -> Result<Cow<'a, str>, JsonDecodeError> {
         self.require_within_size_limit(input)?;
         let input = self.require_non_empty(input)?;
         let input = self.trim_if_enabled(input);

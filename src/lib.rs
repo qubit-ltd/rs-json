@@ -30,4 +30,3 @@ pub use json_decode_options::JsonDecodeOptions;
 pub use json_decode_stage::JsonDecodeStage;
 pub use json_top_level_kind::JsonTopLevelKind;
 pub use lenient_json_decoder::LenientJsonDecoder;
-pub use lenient_json_normalizer::LenientJsonNormalizer;

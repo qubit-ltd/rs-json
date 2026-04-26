@@ -13,7 +13,10 @@
 use serde::de::DeserializeOwned;
 use serde_json::{Value, error::Category};
 
-use crate::{JsonDecodeError, JsonDecodeOptions, JsonTopLevelKind, LenientJsonNormalizer};
+use crate::{
+    JsonDecodeError, JsonDecodeOptions, JsonTopLevelKind,
+    lenient_json_normalizer::LenientJsonNormalizer,
+};
 
 /// A configurable JSON decoder for non-fully-trusted text inputs.
 ///
