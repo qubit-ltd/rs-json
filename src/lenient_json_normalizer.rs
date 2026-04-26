@@ -144,18 +144,21 @@ impl LenientJsonNormalizer {
 
     /// Removes one outer Markdown code fence when enabled.
     ///
-    /// The helper only strips a fence that starts at the beginning of input.
-    /// If a closing fence is present after trimming the trailing side, it is
-    /// also removed.
+    /// The helper only strips a backtick fence that starts at the beginning of
+    /// input and has at least three backticks. If a valid closing fence is
+    /// present after trimming the trailing side, it is also removed.
     fn strip_markdown_code_fence<'a>(&self, input: &'a str) -> &'a str {
-        if !self.options.strip_markdown_code_fence || !input.starts_with("```") {
+        if !self.options.strip_markdown_code_fence {
             return input;
         }
 
+        let Some(opening_fence_len) = Self::opening_backtick_fence_len(input) else {
+            return input;
+        };
         let Some(line_end) = input.find('\n') else {
             return input;
         };
-        let opening_tag = input[3..line_end].trim();
+        let opening_tag = input[opening_fence_len..line_end].trim();
         if self.options.strip_markdown_code_fence_json_only
             && !Self::is_json_code_fence_tag(opening_tag)
         {
@@ -164,7 +167,8 @@ impl LenientJsonNormalizer {
 
         let content = &input[line_end + 1..];
 
-        if let Some(without_close) = Self::strip_markdown_closing_fence(content) {
+        if let Some(without_close) = Self::strip_markdown_closing_fence(content, opening_fence_len)
+        {
             return without_close;
         }
         if self.options.strip_markdown_code_fence_requires_closing {
@@ -172,6 +176,12 @@ impl LenientJsonNormalizer {
         } else {
             content
         }
+    }
+
+    /// Returns the byte length of an opening backtick fence when present.
+    fn opening_backtick_fence_len(input: &str) -> Option<usize> {
+        let count = input.bytes().take_while(|byte| *byte == b'`').count();
+        (count >= 3).then_some(count)
     }
 
     /// Returns whether a fenced language tag should be treated as JSON.
@@ -182,15 +192,19 @@ impl LenientJsonNormalizer {
     /// Removes a valid closing Markdown code fence from `content` when present.
     ///
     /// A closing fence is considered valid only when the last non-whitespace
-    /// token is exactly ````` and appears on its own line.
-    fn strip_markdown_closing_fence(content: &str) -> Option<&str> {
+    /// token is a backtick fence that is at least as long as the opening fence
+    /// and appears on its own line.
+    fn strip_markdown_closing_fence(content: &str, opening_fence_len: usize) -> Option<&str> {
         let trimmed_end = content.trim_end_matches(char::is_whitespace);
-        let without_close = trimmed_end.strip_suffix("```")?;
-        if without_close.is_empty()
-            || without_close.ends_with('\n')
-            || without_close.ends_with('\r')
-        {
-            Some(without_close)
+        let closing_line_start = trimmed_end
+            .rfind('\n')
+            .or_else(|| trimmed_end.rfind('\r'))
+            .map_or(0, |index| index + 1);
+        let closing_line = trimmed_end[closing_line_start..].trim();
+        let closing_len = Self::opening_backtick_fence_len(closing_line)?;
+
+        if closing_len == closing_line.len() && closing_len >= opening_fence_len {
+            Some(&content[..closing_line_start])
         } else {
             None
         }

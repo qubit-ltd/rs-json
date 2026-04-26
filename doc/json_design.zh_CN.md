@@ -206,9 +206,10 @@ impl LenientJsonDecoder {
 ### 6.1 关键算法要点
 
 - `strip_markdown_code_fence`
-  - 仅处理以 ````` 开头的输入。
+  - 仅处理以 3 个或更多反引号开头的输入。
   - 支持语言标签和无标签两种 fence 开头。
-  - 若存在结束 fence，尝试一并去除；不存在时仍移除开头并保留剩余内容。
+  - 若存在单独成行、长度不短于 opening fence 的结束 fence，尝试一并去除。
+  - 不存在有效结束 fence 时，默认仍移除开头并保留剩余内容；严格模式下保持输入不变。
 - `escape_control_chars_in_json_strings`
   - 通过字符串状态机识别 `in_string` 与 `in_escape`。
   - 仅处理 JSON 字符串中的 `0x00..=0x1F`。

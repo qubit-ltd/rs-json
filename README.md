@@ -52,7 +52,7 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 
 - `trim_whitespace`: trims leading and trailing whitespace
 - `strip_utf8_bom`: strips a leading UTF-8 BOM
-- `strip_markdown_code_fence`: strips one outer Markdown code fence
+- `strip_markdown_code_fence`: strips one outer backtick Markdown code fence
 - `strip_markdown_code_fence_requires_closing`: only strip code fence when a
   valid closing fence exists
 - `strip_markdown_code_fence_json_only`: only strip fenced blocks whose
@@ -150,7 +150,7 @@ When enabled, the decoder applies the following pipeline before parsing:
 3. trim surrounding whitespace
 4. strip a leading UTF-8 BOM
 5. trim surrounding whitespace again
-6. strip one outer Markdown code fence
+6. strip one outer backtick Markdown code fence
 7. trim surrounding whitespace again
 8. escape ASCII control characters inside JSON string literals
 9. trim surrounding whitespace again

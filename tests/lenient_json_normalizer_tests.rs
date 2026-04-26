@@ -125,6 +125,45 @@ fn test_decode_value_strips_code_fence_with_closing_fence() {
 }
 
 #[test]
+fn test_decode_value_strips_code_fence_with_more_than_three_backticks() {
+    let decoder = LenientJsonDecoder::default();
+    let value = decoder
+        .decode_value("````json\n{\"text\":\"```\"}\n````")
+        .expect("decoder should strip matching Markdown fences longer than three backticks");
+    assert_eq!(value, json!({"text": "```"}));
+}
+
+#[test]
+fn test_decode_value_strips_code_fence_with_longer_closing_fence() {
+    let decoder = LenientJsonDecoder::default();
+    let value = decoder
+        .decode_value("```json\n{\"a\":1}\n````")
+        .expect("decoder should accept a closing fence longer than the opening fence");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
+fn test_decode_value_strips_code_fence_with_indented_closing_fence() {
+    let decoder = LenientJsonDecoder::default();
+    let value = decoder
+        .decode_value("```json\n{\"a\":1}\n   ```   \n")
+        .expect("decoder should accept a closing fence alone on a whitespace-padded line");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
+fn test_decode_value_rejects_closing_fence_shorter_than_opening_fence() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence_requires_closing: true,
+        ..JsonDecodeOptions::default()
+    });
+    let error = decoder
+        .decode_value("````json\n{\"a\":1}\n```")
+        .expect_err("closing fence shorter than the opening fence should not be stripped");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
 fn test_decode_value_strips_code_fence_without_closing_fence() {
     let decoder = LenientJsonDecoder::default();
     let value = decoder
@@ -167,6 +206,18 @@ fn test_decode_value_can_restrict_code_fence_to_json_language_tags() {
         .decode_value("```python\n{\"a\":1}\n```")
         .expect_err("non-JSON code fence should not be stripped in json-only mode");
     assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
+fn test_decode_value_json_only_mode_accepts_longer_json_code_fence() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        strip_markdown_code_fence_json_only: true,
+        ..JsonDecodeOptions::default()
+    });
+    let value = decoder
+        .decode_value("````JSON\n{\"a\":1}\n````")
+        .expect("json-only mode should accept longer JSON fenced blocks");
+    assert_eq!(value, json!({"a": 1}));
 }
 
 #[test]
