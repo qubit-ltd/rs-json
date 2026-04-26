@@ -18,6 +18,7 @@ use crate::{JsonDecodeErrorKind, JsonDecodeStage, JsonTopLevelKind};
 ///
 /// This value captures both a stable category in [`JsonDecodeErrorKind`] and
 /// human-readable context that can be logged or surfaced to the caller.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JsonDecodeError {
     /// Identifies the stable category of this decoding failure.

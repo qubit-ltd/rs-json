@@ -21,19 +21,12 @@ fn test_lib_exports_public_types() {
     let options = JsonDecodeOptions::default();
     let kind = JsonTopLevelKind::Other;
     let error_kind = JsonDecodeErrorKind::EmptyInput;
-    let error = JsonDecodeError {
-        kind: error_kind,
-        stage: JsonDecodeStage::Normalize,
-        message: "msg".to_string(),
-        expected_top_level: None,
-        actual_top_level: None,
-        line: None,
-        column: None,
-        input_bytes: None,
-        max_input_bytes: None,
-    };
+    let error: JsonDecodeError = decoder
+        .decode_value("")
+        .expect_err("empty input should produce an exported error type");
 
     assert_eq!(decoder.options(), &options);
     assert_eq!(kind.to_string(), "other");
-    assert_eq!(error.kind, JsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind, error_kind);
+    assert_eq!(error.stage, JsonDecodeStage::Normalize);
 }

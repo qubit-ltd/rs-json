@@ -13,6 +13,7 @@
 use std::fmt;
 
 /// Identifies the decoding stage where an error was produced.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeStage {
     /// The error happened while normalizing raw input text.

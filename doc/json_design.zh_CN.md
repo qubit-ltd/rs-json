@@ -119,9 +119,11 @@ pub struct JsonDecodeOptions {
 ### 4.4 错误模型
 
 ```rust
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JsonTopLevelKind { Object, Array, Other }
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JsonDecodeErrorKind {
     InputTooLarge,
@@ -131,6 +133,7 @@ pub enum JsonDecodeErrorKind {
     Deserialize,
 }
 
+#[non_exhaustive]
 #[derive(Debug)]
 pub struct JsonDecodeError {
     pub kind: JsonDecodeErrorKind,

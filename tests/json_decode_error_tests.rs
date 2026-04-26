@@ -12,39 +12,28 @@
 //! Author: Haixing Hu
 
 use qubit_json::{
-    JsonDecodeError, JsonDecodeErrorKind, JsonDecodeStage, JsonTopLevelKind, LenientJsonDecoder,
+    JsonDecodeErrorKind, JsonDecodeOptions, JsonDecodeStage, JsonTopLevelKind, LenientJsonDecoder,
 };
 
 #[test]
 fn test_error_display_for_empty_input_uses_message() {
-    let error = JsonDecodeError {
-        kind: JsonDecodeErrorKind::EmptyInput,
-        stage: JsonDecodeStage::Normalize,
-        message: "JSON input is empty after normalization".to_string(),
-        expected_top_level: None,
-        actual_top_level: None,
-        line: None,
-        column: None,
-        input_bytes: None,
-        max_input_bytes: None,
-    };
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_value("")
+        .expect_err("empty input should return a normalization error");
     assert_eq!(error.to_string(), "JSON input is empty after normalization");
     assert!(std::error::Error::source(&error).is_none());
 }
 
 #[test]
 fn test_error_display_for_input_too_large_uses_message() {
-    let error = JsonDecodeError {
-        kind: JsonDecodeErrorKind::InputTooLarge,
-        stage: JsonDecodeStage::Normalize,
-        message: "JSON input is too large: 8 bytes exceed configured limit 7 bytes".to_string(),
-        expected_top_level: None,
-        actual_top_level: None,
-        line: None,
-        column: None,
-        input_bytes: Some(8),
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         max_input_bytes: Some(7),
-    };
+        ..JsonDecodeOptions::default()
+    });
+    let error = decoder
+        .decode_value("{\"a\": 1}")
+        .expect_err("oversized input should return an input-too-large error");
     assert_eq!(
         error.to_string(),
         "JSON input is too large: 8 bytes exceed configured limit 7 bytes"
@@ -53,17 +42,12 @@ fn test_error_display_for_input_too_large_uses_message() {
 
 #[test]
 fn test_error_display_for_top_level_mismatch_uses_expected_and_actual() {
-    let error = JsonDecodeError {
-        kind: JsonDecodeErrorKind::UnexpectedTopLevel,
-        stage: JsonDecodeStage::TopLevelCheck,
-        message: "Unexpected JSON top-level type: expected object, got array".to_string(),
-        expected_top_level: Some(JsonTopLevelKind::Object),
-        actual_top_level: Some(JsonTopLevelKind::Array),
-        line: None,
-        column: None,
-        input_bytes: None,
-        max_input_bytes: None,
-    };
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_object::<serde_json::Value>("[]")
+        .expect_err("top-level array should fail an object contract");
+    assert_eq!(error.expected_top_level, Some(JsonTopLevelKind::Object));
+    assert_eq!(error.actual_top_level, Some(JsonTopLevelKind::Array));
     assert_eq!(
         error.to_string(),
         "Unexpected JSON top-level type: expected object, got array"
@@ -87,21 +71,15 @@ fn test_error_display_for_invalid_json_includes_location() {
 
 #[test]
 fn test_error_display_for_parse_or_deserialize_without_location_uses_message() {
-    let error = JsonDecodeError {
-        kind: JsonDecodeErrorKind::Deserialize,
-        stage: JsonDecodeStage::Deserialize,
-        message: "Failed to deserialize JSON value: invalid type".to_string(),
-        expected_top_level: None,
-        actual_top_level: None,
-        line: None,
-        column: None,
-        input_bytes: Some(12),
-        max_input_bytes: None,
-    };
-    assert_eq!(
-        error.to_string(),
-        "Failed to deserialize JSON value: invalid type"
-    );
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_object::<u64>("{\"a\":1}")
+        .expect_err("deserializing a parsed object into u64 should fail");
+    assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.stage, JsonDecodeStage::Deserialize);
+    assert_eq!(error.line, None);
+    assert_eq!(error.column, None);
+    assert!(!error.to_string().contains("line"));
 }
 
 #[test]

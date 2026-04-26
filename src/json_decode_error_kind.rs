@@ -16,6 +16,7 @@ use std::{fmt, str::FromStr};
 ///
 /// This type is intended for callers that need stable, programmatic branching
 /// without depending on full error messages produced by lower-level parsers.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeErrorKind {
     /// Indicates that the raw input size exceeds the configured maximum.

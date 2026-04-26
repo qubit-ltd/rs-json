@@ -18,6 +18,7 @@ use serde_json::Value;
 ///
 /// The decoder uses this type to report whether the parsed value is an object,
 /// an array, or any other scalar-like JSON value.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonTopLevelKind {
     /// Indicates that the parsed top-level value is a JSON object.
