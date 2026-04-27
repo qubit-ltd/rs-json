@@ -24,6 +24,17 @@ pub(crate) struct LenientJsonNormalizer {
     options: JsonDecodeOptions,
 }
 
+/// Describes one recognized Markdown code fence opening line.
+#[derive(Debug, Clone, Copy)]
+struct MarkdownFence {
+    /// Stores the byte marker used by the fence.
+    marker: u8,
+    /// Stores the number of repeated marker bytes in the opening fence.
+    marker_len: usize,
+    /// Stores the byte index immediately after the opening marker run.
+    marker_end: usize,
+}
+
 impl Default for LenientJsonNormalizer {
     fn default() -> Self {
         Self::new(JsonDecodeOptions::default())
@@ -145,30 +156,30 @@ impl LenientJsonNormalizer {
     /// Removes one outer Markdown code fence when enabled.
     ///
     /// The helper only strips a backtick fence that starts at the beginning of
-    /// input and has at least three backticks. If a valid closing fence is
-    /// present after trimming the trailing side, it is also removed.
+    /// input and uses at least three backticks or tildes. Up to three leading
+    /// spaces before the opening marker are accepted. If a valid closing fence
+    /// is present after trimming the trailing side, it is also removed.
     fn strip_markdown_code_fence<'a>(&self, input: &'a str) -> &'a str {
         if !self.options.strip_markdown_code_fence {
             return input;
         }
 
-        let Some(opening_fence_len) = Self::opening_backtick_fence_len(input) else {
+        let Some(opening_fence) = Self::opening_markdown_fence(input) else {
             return input;
         };
-        let Some(line_end) = input.find('\n') else {
+        let Some((line_end, content_start)) = Self::first_line_break(input) else {
             return input;
         };
-        let opening_tag = input[opening_fence_len..line_end].trim();
+        let opening_tag = input[opening_fence.marker_end..line_end].trim();
         if self.options.strip_markdown_code_fence_json_only
             && !Self::is_json_code_fence_tag(opening_tag)
         {
             return input;
         }
 
-        let content = &input[line_end + 1..];
+        let content = &input[content_start..];
 
-        if let Some(without_close) = Self::strip_markdown_closing_fence(content, opening_fence_len)
-        {
+        if let Some(without_close) = Self::strip_markdown_closing_fence(content, opening_fence) {
             return without_close;
         }
         if self.options.strip_markdown_code_fence_requires_closing {
@@ -178,10 +189,46 @@ impl LenientJsonNormalizer {
         }
     }
 
-    /// Returns the byte length of an opening backtick fence when present.
-    fn opening_backtick_fence_len(input: &str) -> Option<usize> {
-        let count = input.bytes().take_while(|byte| *byte == b'`').count();
-        (count >= 3).then_some(count)
+    /// Returns a recognized opening Markdown fence when present.
+    fn opening_markdown_fence(input: &str) -> Option<MarkdownFence> {
+        let indent_len = input.bytes().take_while(|byte| *byte == b' ').count();
+        if indent_len > 3 {
+            return None;
+        }
+
+        let marker = *input.as_bytes().get(indent_len)?;
+        if marker != b'`' && marker != b'~' {
+            return None;
+        }
+
+        let marker_len = input[indent_len..]
+            .bytes()
+            .take_while(|byte| *byte == marker)
+            .count();
+        (marker_len >= 3).then_some(MarkdownFence {
+            marker,
+            marker_len,
+            marker_end: indent_len + marker_len,
+        })
+    }
+
+    /// Returns the end of the first line and the start of the next line.
+    fn first_line_break(input: &str) -> Option<(usize, usize)> {
+        let newline = input.find('\n');
+        let carriage_return = input.find('\r');
+        match (newline, carriage_return) {
+            (Some(newline), Some(carriage_return)) if carriage_return < newline => {
+                let content_start = if newline == carriage_return + 1 {
+                    newline + 1
+                } else {
+                    carriage_return + 1
+                };
+                Some((carriage_return, content_start))
+            }
+            (Some(newline), _) => Some((newline, newline + 1)),
+            (None, Some(carriage_return)) => Some((carriage_return, carriage_return + 1)),
+            (None, None) => None,
+        }
     }
 
     /// Returns whether a fenced info string should be treated as JSON.
@@ -197,20 +244,26 @@ impl LenientJsonNormalizer {
     /// A closing fence is considered valid only when the last non-whitespace
     /// token is a backtick fence that is at least as long as the opening fence
     /// and appears on its own line.
-    fn strip_markdown_closing_fence(content: &str, opening_fence_len: usize) -> Option<&str> {
+    fn strip_markdown_closing_fence(content: &str, opening_fence: MarkdownFence) -> Option<&str> {
         let trimmed_end = content.trim_end_matches(char::is_whitespace);
         let closing_line_start = trimmed_end
             .rfind('\n')
             .or_else(|| trimmed_end.rfind('\r'))
             .map_or(0, |index| index + 1);
         let closing_line = trimmed_end[closing_line_start..].trim();
-        let closing_len = Self::opening_backtick_fence_len(closing_line)?;
+        let closing_len = Self::same_marker_fence_len(closing_line, opening_fence.marker)?;
 
-        if closing_len == closing_line.len() && closing_len >= opening_fence_len {
+        if closing_len == closing_line.len() && closing_len >= opening_fence.marker_len {
             Some(&content[..closing_line_start])
         } else {
             None
         }
+    }
+
+    /// Returns the marker run length when `line` starts with the same fence marker.
+    fn same_marker_fence_len(line: &str, marker: u8) -> Option<usize> {
+        let count = line.bytes().take_while(|byte| *byte == marker).count();
+        (count >= 3).then_some(count)
     }
 
     /// Escapes raw ASCII control chars inside JSON string literals.
@@ -222,11 +275,16 @@ impl LenientJsonNormalizer {
             return Cow::Borrowed(input);
         }
 
+        let replacement_count = Self::count_control_chars_in_json_strings(input);
+        if replacement_count == 0 {
+            return Cow::Borrowed(input);
+        }
+
         let mut in_string = false;
         let mut in_escape = false;
-        let mut output: Option<String> = None;
+        let mut output = String::with_capacity(input.len() + replacement_count * 5);
 
-        for (index, ch) in input.char_indices() {
+        for ch in input.chars() {
             let mut replacement = None;
 
             if in_string {
@@ -244,24 +302,39 @@ impl LenientJsonNormalizer {
             }
 
             if let Some(escaped) = replacement {
-                let text = output.get_or_insert_with(|| {
-                    let mut text = String::with_capacity(input.len() + 8);
-                    text.push_str(&input[..index]);
-                    text
-                });
-                text.push_str(escaped);
+                output.push_str(escaped);
                 continue;
             }
 
-            if let Some(text) = output.as_mut() {
-                text.push(ch);
+            output.push(ch);
+        }
+
+        Cow::Owned(output)
+    }
+
+    /// Counts raw ASCII control chars inside JSON string literals.
+    fn count_control_chars_in_json_strings(input: &str) -> usize {
+        let mut in_string = false;
+        let mut in_escape = false;
+        let mut count = 0;
+
+        for ch in input.chars() {
+            if in_string {
+                if in_escape {
+                    in_escape = false;
+                } else if ch == '\\' {
+                    in_escape = true;
+                } else if ch == '"' {
+                    in_string = false;
+                } else if ('\u{0000}'..='\u{001f}').contains(&ch) {
+                    count += 1;
+                }
+            } else if ch == '"' {
+                in_string = true;
             }
         }
 
-        match output {
-            Some(text) => Cow::Owned(text),
-            None => Cow::Borrowed(input),
-        }
+        count
     }
 
     /// Maps one supported ASCII control character to its JSON escape.

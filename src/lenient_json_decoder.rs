@@ -86,8 +86,7 @@ impl LenientJsonDecoder {
         T: DeserializeOwned,
     {
         let normalized = self.normalizer.normalize(input)?;
-        serde_json::from_str(normalized.as_ref())
-            .map_err(|error| Self::map_decode_error(error, normalized.len()))
+        Self::deserialize_normalized(normalized.as_ref(), normalized.len())
     }
 
     /// Decodes `input` into a target type `T`, requiring a top-level JSON
@@ -119,11 +118,7 @@ impl LenientJsonDecoder {
     where
         T: DeserializeOwned,
     {
-        let normalized = self.normalizer.normalize(input)?;
-        let value = Self::parse_value(normalized.as_ref())?;
-        Self::ensure_top_level_from_value(&value, JsonTopLevelKind::Object)?;
-        serde_json::from_value(value)
-            .map_err(|error| JsonDecodeError::deserialize(error, Some(normalized.len())))
+        self.decode_with_top_level(input, JsonTopLevelKind::Object)
     }
 
     /// Decodes `input` into a `Vec<T>`, requiring a top-level JSON array.
@@ -154,11 +149,7 @@ impl LenientJsonDecoder {
     where
         T: DeserializeOwned,
     {
-        let normalized = self.normalizer.normalize(input)?;
-        let value = Self::parse_value(normalized.as_ref())?;
-        Self::ensure_top_level_from_value(&value, JsonTopLevelKind::Array)?;
-        serde_json::from_value(value)
-            .map_err(|error| JsonDecodeError::deserialize(error, Some(normalized.len())))
+        self.decode_with_top_level(input, JsonTopLevelKind::Array)
     }
 
     /// Decodes `input` into a [`serde_json::Value`].
@@ -188,8 +179,30 @@ impl LenientJsonDecoder {
     /// assert_eq!(value["ok"], true);
     /// ```
     pub fn decode_value(&self, input: &str) -> Result<Value, JsonDecodeError> {
+        let (value, _) = self.parse_input_as_value(input)?;
+        Ok(value)
+    }
+
+    /// Normalizes input text and parses it as a JSON value.
+    fn parse_input_as_value(&self, input: &str) -> Result<(Value, usize), JsonDecodeError> {
         let normalized = self.normalizer.normalize(input)?;
-        Self::parse_value(normalized.as_ref())
+        let input_bytes = normalized.len();
+        let value = Self::parse_value(normalized.as_ref())?;
+        Ok((value, input_bytes))
+    }
+
+    /// Decodes input after enforcing a required top-level JSON kind.
+    fn decode_with_top_level<T>(
+        &self,
+        input: &str,
+        expected: JsonTopLevelKind,
+    ) -> Result<T, JsonDecodeError>
+    where
+        T: DeserializeOwned,
+    {
+        let (value, input_bytes) = self.parse_input_as_value(input)?;
+        Self::ensure_top_level_from_value(&value, expected)?;
+        Self::deserialize_value(value, input_bytes)
     }
 
     /// Parses normalized text into a JSON value.
@@ -211,6 +224,23 @@ impl LenientJsonDecoder {
             return Err(JsonDecodeError::unexpected_top_level(expected, actual));
         }
         Ok(())
+    }
+
+    /// Deserializes normalized JSON text into the target type.
+    fn deserialize_normalized<T>(normalized: &str, input_bytes: usize) -> Result<T, JsonDecodeError>
+    where
+        T: DeserializeOwned,
+    {
+        serde_json::from_str(normalized).map_err(|error| Self::map_decode_error(error, input_bytes))
+    }
+
+    /// Deserializes a parsed JSON value into the target type.
+    fn deserialize_value<T>(value: Value, input_bytes: usize) -> Result<T, JsonDecodeError>
+    where
+        T: DeserializeOwned,
+    {
+        serde_json::from_value(value)
+            .map_err(|error| JsonDecodeError::deserialize(error, Some(input_bytes)))
     }
 
     /// Maps one `serde_json` error from direct typed decoding to the crate

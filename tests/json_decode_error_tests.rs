@@ -67,6 +67,19 @@ fn test_error_display_for_invalid_json_includes_location() {
     assert!(error.input_bytes.is_some());
     assert!(error.to_string().contains("Failed to parse JSON:"));
     assert!(error.to_string().contains("line"));
+    assert!(std::error::Error::source(&error).is_some());
+}
+
+#[test]
+fn test_error_source_for_invalid_json_preserves_serde_error() {
+    let decoder = LenientJsonDecoder::default();
+    let error = decoder
+        .decode_value("{")
+        .expect_err("invalid JSON should preserve the parser source error");
+    let source = std::error::Error::source(&error)
+        .expect("invalid JSON errors should expose the serde_json source");
+
+    assert!(source.to_string().contains("EOF"));
 }
 
 #[test]
@@ -96,4 +109,5 @@ fn test_error_display_for_deserialize_error_uses_context_message() {
             .to_string()
             .contains("Failed to deserialize JSON value:")
     );
+    assert!(std::error::Error::source(&error).is_some());
 }

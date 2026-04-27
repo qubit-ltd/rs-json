@@ -10,7 +10,7 @@
 //!
 //! Author: Haixing Hu
 
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use crate::{JsonDecodeErrorKind, JsonDecodeStage, JsonTopLevelKind};
 
@@ -19,7 +19,7 @@ use crate::{JsonDecodeErrorKind, JsonDecodeStage, JsonTopLevelKind};
 /// This value captures both a stable category in [`JsonDecodeErrorKind`] and
 /// human-readable context that can be logged or surfaced to the caller.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct JsonDecodeError {
     /// Identifies the stable category of this decoding failure.
     ///
@@ -57,6 +57,8 @@ pub struct JsonDecodeError {
     pub input_bytes: Option<usize>,
     /// Stores the configured maximum input byte length, when relevant.
     pub max_input_bytes: Option<usize>,
+    /// Stores the original parser or deserializer error when one exists.
+    source: Option<Arc<serde_json::Error>>,
 }
 
 impl JsonDecodeError {
@@ -77,6 +79,7 @@ impl JsonDecodeError {
             column: None,
             input_bytes: Some(actual_bytes),
             max_input_bytes: Some(max_bytes),
+            source: None,
         }
     }
 
@@ -94,6 +97,7 @@ impl JsonDecodeError {
             column: None,
             input_bytes: None,
             max_input_bytes: None,
+            source: None,
         }
     }
 
@@ -103,16 +107,18 @@ impl JsonDecodeError {
     pub(crate) fn invalid_json(error: serde_json::Error, input_bytes: Option<usize>) -> Self {
         let line = error.line();
         let column = error.column();
+        let message = format!("Failed to parse JSON: {error}");
         Self {
             kind: JsonDecodeErrorKind::InvalidJson,
             stage: JsonDecodeStage::Parse,
-            message: format!("Failed to parse JSON: {error}"),
+            message,
             expected_top_level: None,
             actual_top_level: None,
             line: (line > 0).then_some(line),
             column: (column > 0).then_some(column),
             input_bytes,
             max_input_bytes: None,
+            source: Some(Arc::new(error)),
         }
     }
 
@@ -133,6 +139,7 @@ impl JsonDecodeError {
             column: None,
             input_bytes: None,
             max_input_bytes: None,
+            source: None,
         }
     }
 
@@ -142,19 +149,37 @@ impl JsonDecodeError {
     pub(crate) fn deserialize(error: serde_json::Error, input_bytes: Option<usize>) -> Self {
         let line = error.line();
         let column = error.column();
+        let message = format!("Failed to deserialize JSON value: {error}");
         Self {
             kind: JsonDecodeErrorKind::Deserialize,
             stage: JsonDecodeStage::Deserialize,
-            message: format!("Failed to deserialize JSON value: {error}"),
+            message,
             expected_top_level: None,
             actual_top_level: None,
             line: (line > 0).then_some(line),
             column: (column > 0).then_some(column),
             input_bytes,
             max_input_bytes: None,
+            source: Some(Arc::new(error)),
         }
     }
 }
+
+impl PartialEq for JsonDecodeError {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+            && self.stage == other.stage
+            && self.message == other.message
+            && self.expected_top_level == other.expected_top_level
+            && self.actual_top_level == other.actual_top_level
+            && self.line == other.line
+            && self.column == other.column
+            && self.input_bytes == other.input_bytes
+            && self.max_input_bytes == other.max_input_bytes
+    }
+}
+
+impl Eq for JsonDecodeError {}
 
 impl fmt::Display for JsonDecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -174,4 +199,10 @@ impl fmt::Display for JsonDecodeError {
     }
 }
 
-impl std::error::Error for JsonDecodeError {}
+impl std::error::Error for JsonDecodeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source
+            .as_deref()
+            .map(|error| error as &(dyn std::error::Error + 'static))
+    }
+}

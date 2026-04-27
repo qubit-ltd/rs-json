@@ -19,7 +19,7 @@ common input issues before parsing and deserializing JSON values.
 The crate is intended for cases where JSON text may come from sources such as:
 
 - Markdown-wrapped text
-- Markdown code blocks
+- Markdown code blocks using backtick or tilde fences
 - copied snippets
 - CLI output streams
 - other text channels that may wrap otherwise valid JSON
@@ -54,7 +54,8 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
   `json_code_fences_only()`, `with_max_input_bytes()`
 - `trim_whitespace`: trims leading and trailing whitespace
 - `strip_utf8_bom`: strips a leading UTF-8 BOM
-- `strip_markdown_code_fence`: strips one outer backtick Markdown code fence
+- `strip_markdown_code_fence`: strips one outer backtick or tilde Markdown
+  code fence, including fences indented by up to three spaces
 - `strip_markdown_code_fence_requires_closing`: only strip code fence when a
   valid closing fence exists
 - `strip_markdown_code_fence_json_only`: only strip fenced blocks whose first
@@ -155,7 +156,7 @@ When enabled, the decoder applies the following pipeline before parsing:
 3. trim surrounding whitespace
 4. strip a leading UTF-8 BOM
 5. trim surrounding whitespace again
-6. strip one outer backtick Markdown code fence
+6. strip one outer backtick or tilde Markdown code fence
 7. trim surrounding whitespace again
 8. escape ASCII control characters inside JSON string literals
 9. trim surrounding whitespace again

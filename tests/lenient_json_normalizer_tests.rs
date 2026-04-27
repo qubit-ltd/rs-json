@@ -125,6 +125,39 @@ fn test_decode_value_strips_code_fence_with_closing_fence() {
 }
 
 #[test]
+fn test_decode_value_strips_tilde_code_fence() {
+    let decoder = LenientJsonDecoder::default();
+    let value = decoder
+        .decode_value("~~~json\n{\"a\":1}\n~~~")
+        .expect("default decoder should strip a tilde Markdown code fence");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
+fn test_decode_value_strips_indented_code_fence_when_trimming_disabled() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        trim_whitespace: false,
+        ..JsonDecodeOptions::default()
+    });
+    let value = decoder
+        .decode_value("  ```json\n{\"a\":1}\n  ```")
+        .expect("decoder should accept up to three leading spaces before a fence");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
+fn test_decode_value_rejects_deeply_indented_code_fence_when_trimming_disabled() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
+        trim_whitespace: false,
+        ..JsonDecodeOptions::default()
+    });
+    let error = decoder
+        .decode_value("    ```json\n{\"a\":1}\n    ```")
+        .expect_err("deeply indented fences should remain ordinary text");
+    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
 fn test_decode_value_strips_code_fence_with_more_than_three_backticks() {
     let decoder = LenientJsonDecoder::default();
     let value = decoder

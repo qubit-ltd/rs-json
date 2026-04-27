@@ -154,6 +154,7 @@ pub struct JsonDecodeError {
     pub column: Option<usize>,
     pub input_bytes: Option<usize>,
     pub max_input_bytes: Option<usize>,
+    source: Option<Arc<serde_json::Error>>,
 }
 ```
 
@@ -164,6 +165,8 @@ pub struct JsonDecodeError {
 3. `line`/`column` 用于解析和反序列化阶段定位，无法定位时保持 `None`。
 4. `expected_top_level`/`actual_top_level` 仅用于 `UnexpectedTopLevel`。
 5. `input_bytes`/`max_input_bytes` 用于输入大小限制和解析诊断。
+6. `source()` 在解析或反序列化失败时暴露底层 `serde_json::Error`，便于上游
+   诊断；规范化和顶层类型检查错误没有底层 source。
 
 ## 5. 公开 API 设计
 
@@ -218,10 +221,12 @@ impl LenientJsonDecoder {
 ### 6.1 关键算法要点
 
 - `strip_markdown_code_fence`
-  - 仅处理以 3 个或更多反引号开头的输入。
+  - 仅处理以 3 个或更多反引号或波浪线开头的输入。
+  - opening fence 前最多允许 3 个空格缩进。
   - 支持语言标签和无标签两种 fence 开头。
   - JSON-only 模式按 info string 的首个空白分隔 token 判断是否为 JSON-like。
-  - 若存在单独成行、长度不短于 opening fence 的结束 fence，尝试一并去除。
+  - 若存在同类 marker、单独成行、长度不短于 opening fence 的结束 fence，
+    尝试一并去除。
   - 不存在有效结束 fence 时，默认仍移除开头并保留剩余内容；严格模式下保持输入不变。
 - `escape_control_chars_in_json_strings`
   - 通过字符串状态机识别 `in_string` 与 `in_escape`。
