@@ -111,3 +111,21 @@ fn test_error_display_for_deserialize_error_uses_context_message() {
     );
     assert!(std::error::Error::source(&error).is_some());
 }
+
+#[test]
+fn test_error_partial_eq_compares_all_stable_fields() {
+    let decoder = LenientJsonDecoder::default();
+    let first = decoder
+        .decode_value("{\n")
+        .expect_err("invalid json should return parse error");
+    let second = decoder
+        .decode_value("{\n")
+        .expect_err("invalid json should return parse error");
+
+    assert_eq!(first, second);
+
+    let third = decoder
+        .decode_value("")
+        .expect_err("empty input should return normalization error");
+    assert_ne!(first, third);
+}
