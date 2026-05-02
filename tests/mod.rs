@@ -1,14 +1,14 @@
 /*******************************************************************************
  *
- *    Copyright (c) 2026.
- *    Haixing Hu, Qubit Co. Ltd.
+ *    Copyright (c) 2026 Haixing Hu.
  *
- *    All rights reserved.
+ *    SPDX-License-Identifier: Apache-2.0
+ *
+ *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
 //! Integration test entry point for `qubit-json`.
 //!
-//! Author: Haixing Hu
 
 mod json_decode_error_kind_tests;
 mod json_decode_error_tests;

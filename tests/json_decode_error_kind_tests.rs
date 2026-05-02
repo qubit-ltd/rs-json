@@ -1,14 +1,14 @@
 /*******************************************************************************
  *
- *    Copyright (c) 2026.
- *    Haixing Hu, Qubit Co. Ltd.
+ *    Copyright (c) 2026 Haixing Hu.
  *
- *    All rights reserved.
+ *    SPDX-License-Identifier: Apache-2.0
+ *
+ *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
 //! Tests for the public `JsonDecodeErrorKind` type in `json_decode_error_kind.rs`.
 //!
-//! Author: Haixing Hu
 
 use qubit_json::JsonDecodeErrorKind;
 use std::str::FromStr;

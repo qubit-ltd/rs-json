@@ -1,15 +1,15 @@
 /*******************************************************************************
  *
- *    Copyright (c) 2026.
- *    Haixing Hu, Qubit Co. Ltd.
+ *    Copyright (c) 2026 Haixing Hu.
  *
- *    All rights reserved.
+ *    SPDX-License-Identifier: Apache-2.0
+ *
+ *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
 //! Tests for the public [`qubit_json::JsonDecodeError`] type in
 //! `json_decode_error.rs`.
 //!
-//! Author: Haixing Hu
 
 use qubit_json::{
     JsonDecodeErrorKind, JsonDecodeOptions, JsonDecodeStage, JsonTopLevelKind, LenientJsonDecoder,

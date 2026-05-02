@@ -1,14 +1,14 @@
 /*******************************************************************************
  *
- *    Copyright (c) 2026.
- *    Haixing Hu, Qubit Co. Ltd.
+ *    Copyright (c) 2026 Haixing Hu.
  *
- *    All rights reserved.
+ *    SPDX-License-Identifier: Apache-2.0
+ *
+ *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
 //! Tests for the public API in `lenient_json_decoder.rs`.
 //!
-//! Author: Haixing Hu
 
 use serde::Deserialize;
 use serde_json::json;

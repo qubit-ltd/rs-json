@@ -1,14 +1,14 @@
 /*******************************************************************************
  *
- *    Copyright (c) 2026.
- *    Haixing Hu, Qubit Co. Ltd.
+ *    Copyright (c) 2026 Haixing Hu.
  *
- *    All rights reserved.
+ *    SPDX-License-Identifier: Apache-2.0
+ *
+ *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
 //! Defines the coarse top-level JSON kinds used by constrained decode methods.
 //!
-//! Author: Haixing Hu
 
 use std::{fmt, str::FromStr};
 
