@@ -10,7 +10,10 @@
 //! Defines the coarse top-level JSON kinds used by constrained decode methods.
 //!
 
-use std::{fmt, str::FromStr};
+use std::{
+    fmt,
+    str::FromStr,
+};
 
 use serde_json::Value;
 

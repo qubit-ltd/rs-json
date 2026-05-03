@@ -12,7 +12,12 @@
 
 use serde_json::json;
 
-use qubit_json::{JsonDecodeErrorKind, JsonDecodeOptions, JsonDecodeStage, LenientJsonDecoder};
+use qubit_json::{
+    JsonDecodeErrorKind,
+    JsonDecodeOptions,
+    JsonDecodeStage,
+    LenientJsonDecoder,
+};
 
 #[test]
 fn test_decode_value_reports_empty_input_for_empty_string() {

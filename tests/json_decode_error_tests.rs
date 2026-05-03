@@ -12,7 +12,11 @@
 //!
 
 use qubit_json::{
-    JsonDecodeErrorKind, JsonDecodeOptions, JsonDecodeStage, JsonTopLevelKind, LenientJsonDecoder,
+    JsonDecodeErrorKind,
+    JsonDecodeOptions,
+    JsonDecodeStage,
+    JsonTopLevelKind,
+    LenientJsonDecoder,
 };
 
 #[test]

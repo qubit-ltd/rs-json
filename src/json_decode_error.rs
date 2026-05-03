@@ -10,9 +10,16 @@
 //! Defines the [`JsonDecodeError`] type used by the public decoder API.
 //!
 
-use std::{fmt, sync::Arc};
+use std::{
+    fmt,
+    sync::Arc,
+};
 
-use crate::{JsonDecodeErrorKind, JsonDecodeStage, JsonTopLevelKind};
+use crate::{
+    JsonDecodeErrorKind,
+    JsonDecodeStage,
+    JsonTopLevelKind,
+};
 
 /// Error returned when lenient JSON decoding fails.
 ///

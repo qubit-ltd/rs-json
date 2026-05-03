@@ -13,7 +13,12 @@
 use serde::Deserialize;
 use serde_json::json;
 
-use qubit_json::{JsonDecodeErrorKind, JsonDecodeOptions, JsonTopLevelKind, LenientJsonDecoder};
+use qubit_json::{
+    JsonDecodeErrorKind,
+    JsonDecodeOptions,
+    JsonTopLevelKind,
+    LenientJsonDecoder,
+};
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 struct User {

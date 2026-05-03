@@ -11,10 +11,15 @@
 //!
 
 use serde::de::DeserializeOwned;
-use serde_json::{Value, error::Category};
+use serde_json::{
+    Value,
+    error::Category,
+};
 
 use crate::{
-    JsonDecodeError, JsonDecodeOptions, JsonTopLevelKind,
+    JsonDecodeError,
+    JsonDecodeOptions,
+    JsonTopLevelKind,
     lenient_json_normalizer::LenientJsonNormalizer,
 };
 

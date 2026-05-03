@@ -10,7 +10,10 @@
 //! Defines the stable error categories returned by the decoder.
 //!
 
-use std::{fmt, str::FromStr};
+use std::{
+    fmt,
+    str::FromStr,
+};
 
 /// Represents the coarse category of a lenient JSON decoding failure.
 ///
