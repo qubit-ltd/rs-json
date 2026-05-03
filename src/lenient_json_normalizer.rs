@@ -12,7 +12,10 @@
 
 use std::borrow::Cow;
 
-use crate::{JsonDecodeError, JsonDecodeOptions};
+use crate::{
+    JsonDecodeError,
+    JsonDecodeOptions,
+};
 
 /// Normalizes one raw JSON text input before JSON parsing.
 ///
