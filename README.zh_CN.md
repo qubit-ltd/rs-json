@@ -1,6 +1,6 @@
 # Qubit JSON
 
-[![CircleCI](https://circleci.com/gh/qubit-ltd/rs-json.svg?style=shield)](https://circleci.com/gh/qubit-ltd/rs-json)
+[![Rust CI](https://github.com/qubit-ltd/rs-json/actions/workflows/ci.yml/badge.svg)](https://github.com/qubit-ltd/rs-json/actions/workflows/ci.yml)
 [![Coverage Status](https://coveralls.io/repos/github/qubit-ltd/rs-json/badge.svg?branch=main)](https://coveralls.io/github/qubit-ltd/rs-json?branch=main)
 [![Crates.io](https://img.shields.io/crates/v/qubit-json.svg?color=blue)](https://crates.io/crates/qubit-json)
 [![docs.rs](https://img.shields.io/docsrs/qubit-json?logo=docs.rs)](https://docs.rs/qubit-json)
