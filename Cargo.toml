@@ -1,6 +1,6 @@
 [package]
 name = "qubit-json"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 rust-version = "1.94"
 autotests = false
@@ -14,11 +14,12 @@ readme = "README.md"
 keywords = ["json", "decoder", "serde", "lenient", "qubit"]
 categories = ["encoding", "parser-implementations"]
 exclude = [
-    "coverage.sh",
-    "COVERAGE.md",
-    "COVERAGE.zh_CN.md",
-    ".circleci/*",
+    "align-ci.sh",
     "ci-check.sh",
+    "coverage.sh",
+    "style-check.sh",
+    "update-submodule.sh",
+    ".github/*",
     ".llvm-cov.toml",
     ".cargo-audit.toml.example",
 ]
