@@ -1,7 +1,7 @@
 # Qubit JSON
 
 [![Rust CI](https://github.com/qubit-ltd/rs-json/actions/workflows/ci.yml/badge.svg)](https://github.com/qubit-ltd/rs-json/actions/workflows/ci.yml)
-[![Coverage Status](https://coveralls.io/repos/github/qubit-ltd/rs-json/badge.svg?branch=main)](https://coveralls.io/github/qubit-ltd/rs-json?branch=main)
+[![Coverage](https://img.shields.io/endpoint?url=https://qubit-ltd.github.io/rs-json/coverage-badge.json)](https://qubit-ltd.github.io/rs-json/coverage/)
 [![Crates.io](https://img.shields.io/crates/v/qubit-json.svg?color=blue)](https://crates.io/crates/qubit-json)
 [![docs.rs](https://img.shields.io/docsrs/qubit-json?logo=docs.rs)](https://docs.rs/qubit-json)
 [![Rust](https://img.shields.io/badge/rust-1.94+-blue.svg?logo=rust)](https://www.rust-lang.org)
@@ -78,7 +78,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 
 ```toml
 [dependencies]
-qubit-json = "0.2.0"
+qubit-json = "0.3.3"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
