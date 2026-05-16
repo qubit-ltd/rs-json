@@ -1,6 +1,6 @@
 [package]
 name = "qubit-json"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2024"
 rust-version = "1.94"
 autotests = false
@@ -13,15 +13,15 @@ documentation = "https://docs.rs/qubit-json"
 readme = "README.md"
 keywords = ["json", "decoder", "serde", "lenient", "qubit"]
 categories = ["encoding", "parser-implementations"]
-exclude = [
-    "align-ci.sh",
-    "ci-check.sh",
-    "coverage.sh",
-    "style-check.sh",
-    "update-submodule.sh",
-    ".github/*",
-    ".llvm-cov.toml",
-    ".cargo-audit.toml.example",
+include = [
+    "/Cargo.toml",
+    "/LICENSE",
+    "/README.md",
+    "/README.zh_CN.md",
+    "/doc/**/user_guide*.md",
+    "/examples/**",
+    "/src/**",
+    "/tests/**",
 ]
 
 [lib]
