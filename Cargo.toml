@@ -1,6 +1,6 @@
 [package]
 name = "qubit-json"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2024"
 rust-version = "1.94"
 autotests = false
@@ -18,8 +18,11 @@ include = [
     "/LICENSE",
     "/README.md",
     "/README.zh_CN.md",
+    "/RUST_CODING_STYLE.md",
+    "/RUST_CODING_STYLE.zh_CN.md",
     "/doc/**/user_guide*.md",
     "/examples/**",
+    "/resources/**",
     "/src/**",
     "/tests/**",
 ]
