@@ -174,9 +174,7 @@ impl LenientJsonNormalizer {
             return input;
         };
         let opening_tag = input[opening_fence.marker_end..line_end].trim();
-        if self.options.strip_markdown_code_fence_json_only
-            && !Self::is_json_code_fence_tag(opening_tag)
-        {
+        if self.options.strip_markdown_code_fence_json_only && !Self::is_json_code_fence_tag(opening_tag) {
             return input;
         }
 
@@ -204,10 +202,7 @@ impl LenientJsonNormalizer {
             return None;
         }
 
-        let marker_len = input[indent_len..]
-            .bytes()
-            .take_while(|byte| *byte == marker)
-            .count();
+        let marker_len = input[indent_len..].bytes().take_while(|byte| *byte == marker).count();
         (marker_len >= 3).then_some(MarkdownFence {
             marker,
             marker_len,
@@ -237,9 +232,7 @@ impl LenientJsonNormalizer {
     /// Returns whether a fenced info string should be treated as JSON.
     fn is_json_code_fence_tag(tag: &str) -> bool {
         let language = tag.split_whitespace().next().unwrap_or("");
-        language.is_empty()
-            || language.eq_ignore_ascii_case("json")
-            || language.eq_ignore_ascii_case("jsonc")
+        language.is_empty() || language.eq_ignore_ascii_case("json") || language.eq_ignore_ascii_case("jsonc")
     }
 
     /// Removes a valid closing Markdown code fence from `content` when present.

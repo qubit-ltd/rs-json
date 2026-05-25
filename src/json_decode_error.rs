@@ -132,10 +132,7 @@ impl JsonDecodeError {
     /// Creates an error describing a mismatch between expected and actual
     /// top-level JSON kinds.
     #[inline]
-    pub(crate) fn unexpected_top_level(
-        expected: JsonTopLevelKind,
-        actual: JsonTopLevelKind,
-    ) -> Self {
+    pub(crate) fn unexpected_top_level(expected: JsonTopLevelKind, actual: JsonTopLevelKind) -> Self {
         Self {
             kind: JsonDecodeErrorKind::UnexpectedTopLevel,
             stage: JsonDecodeStage::TopLevelCheck,
@@ -194,14 +191,12 @@ impl fmt::Display for JsonDecodeError {
             JsonDecodeErrorKind::InputTooLarge => f.write_str(&self.message),
             JsonDecodeErrorKind::EmptyInput => f.write_str(&self.message),
             JsonDecodeErrorKind::UnexpectedTopLevel => f.write_str(&self.message),
-            JsonDecodeErrorKind::InvalidJson | JsonDecodeErrorKind::Deserialize => {
-                match (self.line, self.column) {
-                    (Some(line), Some(column)) => {
-                        write!(f, "{} (line {}, column {})", self.message, line, column)
-                    }
-                    _ => f.write_str(&self.message),
+            JsonDecodeErrorKind::InvalidJson | JsonDecodeErrorKind::Deserialize => match (self.line, self.column) {
+                (Some(line), Some(column)) => {
+                    write!(f, "{} (line {}, column {})", self.message, line, column)
                 }
-            }
+                _ => f.write_str(&self.message),
+            },
         }
     }
 }

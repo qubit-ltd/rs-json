@@ -219,9 +219,7 @@ fn test_decode_array_reports_deserialize_error_after_top_level_check() {
 #[test]
 fn test_decode_allows_generic_scalar_targets() {
     let decoder = LenientJsonDecoder::default();
-    let value: i64 = decoder
-        .decode("42")
-        .expect("scalar JSON should deserialize into i64");
+    let value: i64 = decoder.decode("42").expect("scalar JSON should deserialize into i64");
     assert_eq!(value, 42);
 }
 
