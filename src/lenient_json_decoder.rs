@@ -197,11 +197,7 @@ impl LenientJsonDecoder {
     }
 
     /// Decodes input after enforcing a required top-level JSON kind.
-    fn decode_with_top_level<T>(
-        &self,
-        input: &str,
-        expected: JsonTopLevelKind,
-    ) -> Result<T, JsonDecodeError>
+    fn decode_with_top_level<T>(&self, input: &str, expected: JsonTopLevelKind) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
     {
@@ -215,15 +211,11 @@ impl LenientJsonDecoder {
     /// Syntax failures are mapped to the crate error model with normalized
     /// input byte length included for diagnostics.
     fn parse_value(normalized: &str) -> Result<Value, JsonDecodeError> {
-        serde_json::from_str(normalized)
-            .map_err(|error| JsonDecodeError::invalid_json(error, Some(normalized.len())))
+        serde_json::from_str(normalized).map_err(|error| JsonDecodeError::invalid_json(error, Some(normalized.len())))
     }
 
     /// Verifies that a parsed JSON value has the required top-level kind.
-    fn ensure_top_level_from_value(
-        value: &Value,
-        expected: JsonTopLevelKind,
-    ) -> Result<(), JsonDecodeError> {
+    fn ensure_top_level_from_value(value: &Value, expected: JsonTopLevelKind) -> Result<(), JsonDecodeError> {
         let actual = JsonTopLevelKind::of(value);
         if actual != expected {
             return Err(JsonDecodeError::unexpected_top_level(expected, actual));
@@ -244,8 +236,7 @@ impl LenientJsonDecoder {
     where
         T: DeserializeOwned,
     {
-        serde_json::from_value(value)
-            .map_err(|error| JsonDecodeError::deserialize(error, Some(input_bytes)))
+        serde_json::from_value(value).map_err(|error| JsonDecodeError::deserialize(error, Some(input_bytes)))
     }
 
     /// Maps one `serde_json` error from direct typed decoding to the crate
@@ -256,9 +247,7 @@ impl LenientJsonDecoder {
     fn map_decode_error(error: serde_json::Error, input_bytes: usize) -> JsonDecodeError {
         match error.classify() {
             Category::Data => JsonDecodeError::deserialize(error, Some(input_bytes)),
-            Category::Io | Category::Syntax | Category::Eof => {
-                JsonDecodeError::invalid_json(error, Some(input_bytes))
-            }
+            Category::Io | Category::Syntax | Category::Eof => JsonDecodeError::invalid_json(error, Some(input_bytes)),
         }
     }
 }

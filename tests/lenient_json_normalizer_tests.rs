@@ -216,9 +216,9 @@ fn test_decode_value_can_require_closing_code_fence() {
         strip_markdown_code_fence_requires_closing: true,
         ..JsonDecodeOptions::default()
     });
-    let error = decoder.decode_value("```json\n{\"a\":1}").expect_err(
-        "opening fence without closing fence should be rejected when strict mode is enabled",
-    );
+    let error = decoder
+        .decode_value("```json\n{\"a\":1}")
+        .expect_err("opening fence without closing fence should be rejected when strict mode is enabled");
     assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
 }
 
@@ -335,14 +335,12 @@ fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid() 
     for _ in 0..3000 {
         let input = generate_noisy_json_candidate(&mut seed);
         for decoder in &decoders {
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                decoder.decode_value(&input)
-            }));
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| decoder.decode_value(&input)));
             assert!(result.is_ok(), "decoder panicked on input: {input:?}");
 
             if let Ok(value) = result.expect("catch_unwind returned no result") {
-                let canonical = serde_json::to_string(&value)
-                    .expect("serializing a decoded JSON value should not fail");
+                let canonical =
+                    serde_json::to_string(&value).expect("serializing a decoded JSON value should not fail");
                 let reparsed = decoder
                     .decode_value(&canonical)
                     .expect("canonical JSON should be decodable by the same decoder");
@@ -354,8 +352,8 @@ fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid() 
 
 fn generate_noisy_json_candidate(seed: &mut u64) -> String {
     const ALPHABET: &[char] = &[
-        '{', '}', '[', ']', ':', ',', '"', '\\', '`', ' ', '\t', '\n', '\r', 'a', 'b', 'c', 'x',
-        'y', 'z', '0', '1', '2', '9', '-', '.', 't', 'f', 'n', '\u{0000}', '\u{0008}', '\u{001f}',
+        '{', '}', '[', ']', ':', ',', '"', '\\', '`', ' ', '\t', '\n', '\r', 'a', 'b', 'c', 'x', 'y', 'z', '0', '1',
+        '2', '9', '-', '.', 't', 'f', 'n', '\u{0000}', '\u{0008}', '\u{001f}',
     ];
 
     let len = (next_u64(seed) % 48) as usize;
@@ -374,9 +372,7 @@ fn generate_noisy_json_candidate(seed: &mut u64) -> String {
 }
 
 fn next_u64(seed: &mut u64) -> u64 {
-    *seed = seed
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(1442695040888963407);
+    *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     *seed
 }
 
@@ -446,11 +442,10 @@ fn test_decode_value_can_disable_control_char_escaping() {
 #[test]
 fn test_decode_value_covers_all_supported_control_char_escapes() {
     let control_chars = [
-        '\u{0000}', '\u{0001}', '\u{0002}', '\u{0003}', '\u{0004}', '\u{0005}', '\u{0006}',
-        '\u{0007}', '\u{0008}', '\u{0009}', '\u{000a}', '\u{000b}', '\u{000c}', '\u{000d}',
-        '\u{000e}', '\u{000f}', '\u{0010}', '\u{0011}', '\u{0012}', '\u{0013}', '\u{0014}',
-        '\u{0015}', '\u{0016}', '\u{0017}', '\u{0018}', '\u{0019}', '\u{001a}', '\u{001b}',
-        '\u{001c}', '\u{001d}', '\u{001e}', '\u{001f}',
+        '\u{0000}', '\u{0001}', '\u{0002}', '\u{0003}', '\u{0004}', '\u{0005}', '\u{0006}', '\u{0007}', '\u{0008}',
+        '\u{0009}', '\u{000a}', '\u{000b}', '\u{000c}', '\u{000d}', '\u{000e}', '\u{000f}', '\u{0010}', '\u{0011}',
+        '\u{0012}', '\u{0013}', '\u{0014}', '\u{0015}', '\u{0016}', '\u{0017}', '\u{0018}', '\u{0019}', '\u{001a}',
+        '\u{001b}', '\u{001c}', '\u{001d}', '\u{001e}', '\u{001f}',
     ];
     let control_text: String = control_chars.into_iter().collect();
     let json_input = format!("{{\"text\":\"{control_text}\"}}");
@@ -465,9 +460,9 @@ fn test_decode_value_covers_all_supported_control_char_escapes() {
 #[test]
 fn test_decode_value_trims_surrounding_whitespace_by_default() {
     let decoder = LenientJsonDecoder::default();
-    let value = decoder.decode_value("\n{\"text\":\"abc\"}\n").expect(
-        "leading and trailing control characters outside strings should be trimmed by default",
-    );
+    let value = decoder
+        .decode_value("\n{\"text\":\"abc\"}\n")
+        .expect("leading and trailing control characters outside strings should be trimmed by default");
     assert_eq!(value, json!({"text": "abc"}));
 }
 
