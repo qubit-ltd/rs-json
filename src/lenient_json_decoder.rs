@@ -1,14 +1,11 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 //! Defines the [`LenientJsonDecoder`] type and its public decoding methods.
-//!
 
 use serde::de::DeserializeOwned;
 use serde_json::{
@@ -150,7 +147,10 @@ impl LenientJsonDecoder {
     ///
     /// assert_eq!(error.kind, JsonDecodeErrorKind::UnexpectedTopLevel);
     /// ```
-    pub fn decode_array<T>(&self, input: &str) -> Result<Vec<T>, JsonDecodeError>
+    pub fn decode_array<T>(
+        &self,
+        input: &str,
+    ) -> Result<Vec<T>, JsonDecodeError>
     where
         T: DeserializeOwned,
     {
@@ -189,7 +189,10 @@ impl LenientJsonDecoder {
     }
 
     /// Normalizes input text and parses it as a JSON value.
-    fn parse_input_as_value(&self, input: &str) -> Result<(Value, usize), JsonDecodeError> {
+    fn parse_input_as_value(
+        &self,
+        input: &str,
+    ) -> Result<(Value, usize), JsonDecodeError> {
         let normalized = self.normalizer.normalize(input)?;
         let input_bytes = normalized.len();
         let value = Self::parse_value(normalized.as_ref())?;
@@ -197,7 +200,11 @@ impl LenientJsonDecoder {
     }
 
     /// Decodes input after enforcing a required top-level JSON kind.
-    fn decode_with_top_level<T>(&self, input: &str, expected: JsonTopLevelKind) -> Result<T, JsonDecodeError>
+    fn decode_with_top_level<T>(
+        &self,
+        input: &str,
+        expected: JsonTopLevelKind,
+    ) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
     {
@@ -211,32 +218,48 @@ impl LenientJsonDecoder {
     /// Syntax failures are mapped to the crate error model with normalized
     /// input byte length included for diagnostics.
     fn parse_value(normalized: &str) -> Result<Value, JsonDecodeError> {
-        serde_json::from_str(normalized).map_err(|error| JsonDecodeError::invalid_json(error, Some(normalized.len())))
+        serde_json::from_str(normalized).map_err(|error| {
+            JsonDecodeError::invalid_json(error, Some(normalized.len()))
+        })
     }
 
     /// Verifies that a parsed JSON value has the required top-level kind.
-    fn ensure_top_level_from_value(value: &Value, expected: JsonTopLevelKind) -> Result<(), JsonDecodeError> {
+    fn ensure_top_level_from_value(
+        value: &Value,
+        expected: JsonTopLevelKind,
+    ) -> Result<(), JsonDecodeError> {
         let actual = JsonTopLevelKind::of(value);
         if actual != expected {
-            return Err(JsonDecodeError::unexpected_top_level(expected, actual));
+            return Err(JsonDecodeError::unexpected_top_level(
+                expected, actual,
+            ));
         }
         Ok(())
     }
 
     /// Deserializes normalized JSON text into the target type.
-    fn deserialize_normalized<T>(normalized: &str, input_bytes: usize) -> Result<T, JsonDecodeError>
+    fn deserialize_normalized<T>(
+        normalized: &str,
+        input_bytes: usize,
+    ) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
     {
-        serde_json::from_str(normalized).map_err(|error| Self::map_decode_error(error, input_bytes))
+        serde_json::from_str(normalized)
+            .map_err(|error| Self::map_decode_error(error, input_bytes))
     }
 
     /// Deserializes a parsed JSON value into the target type.
-    fn deserialize_value<T>(value: Value, input_bytes: usize) -> Result<T, JsonDecodeError>
+    fn deserialize_value<T>(
+        value: Value,
+        input_bytes: usize,
+    ) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
     {
-        serde_json::from_value(value).map_err(|error| JsonDecodeError::deserialize(error, Some(input_bytes)))
+        serde_json::from_value(value).map_err(|error| {
+            JsonDecodeError::deserialize(error, Some(input_bytes))
+        })
     }
 
     /// Maps one `serde_json` error from direct typed decoding to the crate
@@ -244,10 +267,17 @@ impl LenientJsonDecoder {
     ///
     /// Syntax, EOF, and I/O categories are treated as invalid JSON input.
     /// Data category errors are treated as type deserialization failures.
-    fn map_decode_error(error: serde_json::Error, input_bytes: usize) -> JsonDecodeError {
+    fn map_decode_error(
+        error: serde_json::Error,
+        input_bytes: usize,
+    ) -> JsonDecodeError {
         match error.classify() {
-            Category::Data => JsonDecodeError::deserialize(error, Some(input_bytes)),
-            Category::Io | Category::Syntax | Category::Eof => JsonDecodeError::invalid_json(error, Some(input_bytes)),
+            Category::Data => {
+                JsonDecodeError::deserialize(error, Some(input_bytes))
+            }
+            Category::Io | Category::Syntax | Category::Eof => {
+                JsonDecodeError::invalid_json(error, Some(input_bytes))
+            }
         }
     }
 }

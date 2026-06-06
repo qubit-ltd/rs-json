@@ -1,14 +1,11 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 //! Defines the [`JsonDecodeError`] type used by the public decoder API.
-//!
 
 use std::{
     fmt,
@@ -72,7 +69,10 @@ impl JsonDecodeError {
     /// Creates an error indicating that the raw input size exceeds a
     /// configured upper bound.
     #[inline]
-    pub(crate) fn input_too_large(actual_bytes: usize, max_bytes: usize) -> Self {
+    pub(crate) fn input_too_large(
+        actual_bytes: usize,
+        max_bytes: usize,
+    ) -> Self {
         Self {
             kind: JsonDecodeErrorKind::InputTooLarge,
             stage: JsonDecodeStage::Normalize,
@@ -111,7 +111,10 @@ impl JsonDecodeError {
     /// Creates an error describing invalid JSON syntax reported by
     /// `serde_json`.
     #[inline]
-    pub(crate) fn invalid_json(error: serde_json::Error, input_bytes: Option<usize>) -> Self {
+    pub(crate) fn invalid_json(
+        error: serde_json::Error,
+        input_bytes: Option<usize>,
+    ) -> Self {
         let line = error.line();
         let column = error.column();
         let message = format!("Failed to parse JSON: {error}");
@@ -132,11 +135,16 @@ impl JsonDecodeError {
     /// Creates an error describing a mismatch between expected and actual
     /// top-level JSON kinds.
     #[inline]
-    pub(crate) fn unexpected_top_level(expected: JsonTopLevelKind, actual: JsonTopLevelKind) -> Self {
+    pub(crate) fn unexpected_top_level(
+        expected: JsonTopLevelKind,
+        actual: JsonTopLevelKind,
+    ) -> Self {
         Self {
             kind: JsonDecodeErrorKind::UnexpectedTopLevel,
             stage: JsonDecodeStage::TopLevelCheck,
-            message: format!("Unexpected JSON top-level type: expected {expected}, got {actual}"),
+            message: format!(
+                "Unexpected JSON top-level type: expected {expected}, got {actual}"
+            ),
             expected_top_level: Some(expected),
             actual_top_level: Some(actual),
             line: None,
@@ -150,7 +158,10 @@ impl JsonDecodeError {
     /// Creates an error describing a type deserialization failure reported by
     /// `serde_json`.
     #[inline]
-    pub(crate) fn deserialize(error: serde_json::Error, input_bytes: Option<usize>) -> Self {
+    pub(crate) fn deserialize(
+        error: serde_json::Error,
+        input_bytes: Option<usize>,
+    ) -> Self {
         let line = error.line();
         let column = error.column();
         let message = format!("Failed to deserialize JSON value: {error}");
@@ -190,13 +201,22 @@ impl fmt::Display for JsonDecodeError {
         match self.kind {
             JsonDecodeErrorKind::InputTooLarge => f.write_str(&self.message),
             JsonDecodeErrorKind::EmptyInput => f.write_str(&self.message),
-            JsonDecodeErrorKind::UnexpectedTopLevel => f.write_str(&self.message),
-            JsonDecodeErrorKind::InvalidJson | JsonDecodeErrorKind::Deserialize => match (self.line, self.column) {
-                (Some(line), Some(column)) => {
-                    write!(f, "{} (line {}, column {})", self.message, line, column)
+            JsonDecodeErrorKind::UnexpectedTopLevel => {
+                f.write_str(&self.message)
+            }
+            JsonDecodeErrorKind::InvalidJson
+            | JsonDecodeErrorKind::Deserialize => {
+                match (self.line, self.column) {
+                    (Some(line), Some(column)) => {
+                        write!(
+                            f,
+                            "{} (line {}, column {})",
+                            self.message, line, column
+                        )
+                    }
+                    _ => f.write_str(&self.message),
                 }
-                _ => f.write_str(&self.message),
-            },
+            }
         }
     }
 }

@@ -1,14 +1,11 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 //! Tests for the public API in `lenient_json_decoder.rs`.
-//!
 
 use serde::Deserialize;
 use serde_json::json;
@@ -117,18 +114,18 @@ fn test_decode_object_reports_empty_input_from_normalizer() {
 #[test]
 fn test_decode_object_reports_invalid_json_for_malformed_array() {
     let decoder = LenientJsonDecoder::default();
-    let error = decoder
-        .decode_object::<User>("[")
-        .expect_err("malformed JSON should be reported before top-level checking");
+    let error = decoder.decode_object::<User>("[").expect_err(
+        "malformed JSON should be reported before top-level checking",
+    );
     assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
 }
 
 #[test]
 fn test_decode_object_reports_invalid_json_for_malformed_scalar() {
     let decoder = LenientJsonDecoder::default();
-    let error = decoder
-        .decode_object::<User>("\"unterminated")
-        .expect_err("malformed scalar JSON should not be treated as a top-level mismatch");
+    let error = decoder.decode_object::<User>("\"unterminated").expect_err(
+        "malformed scalar JSON should not be treated as a top-level mismatch",
+    );
     assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
 }
 
@@ -155,9 +152,9 @@ fn test_decode_array_reports_empty_input_from_normalizer() {
 #[test]
 fn test_decode_array_reports_invalid_json_for_malformed_object() {
     let decoder = LenientJsonDecoder::default();
-    let error = decoder
-        .decode_array::<User>("{")
-        .expect_err("malformed JSON should be reported before top-level checking");
+    let error = decoder.decode_array::<User>("{").expect_err(
+        "malformed JSON should be reported before top-level checking",
+    );
     assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
 }
 
@@ -203,7 +200,9 @@ fn test_decode_object_reports_deserialize_error_after_top_level_check() {
     let decoder = LenientJsonDecoder::default();
     let error = decoder
         .decode_object::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
-        .expect_err("valid object with wrong field type should return Deserialize");
+        .expect_err(
+            "valid object with wrong field type should return Deserialize",
+        );
     assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
 }
 
@@ -212,14 +211,18 @@ fn test_decode_array_reports_deserialize_error_after_top_level_check() {
     let decoder = LenientJsonDecoder::default();
     let error = decoder
         .decode_array::<User>("[{\"name\":\"alice\",\"age\":\"old\"}]")
-        .expect_err("valid array with wrong element type should return Deserialize");
+        .expect_err(
+            "valid array with wrong element type should return Deserialize",
+        );
     assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
 }
 
 #[test]
 fn test_decode_allows_generic_scalar_targets() {
     let decoder = LenientJsonDecoder::default();
-    let value: i64 = decoder.decode("42").expect("scalar JSON should deserialize into i64");
+    let value: i64 = decoder
+        .decode("42")
+        .expect("scalar JSON should deserialize into i64");
     assert_eq!(value, 42);
 }
 
