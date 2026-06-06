@@ -1,14 +1,11 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 //! Tests for the public `JsonTopLevelKind` type in `json_top_level_kind.rs`.
-//!
 
 use serde_json::json;
 
@@ -37,8 +34,17 @@ fn test_top_level_kind_display_uses_lowercase_names() {
 
 #[test]
 fn test_top_level_kind_from_str() {
-    assert_eq!(JsonTopLevelKind::from_str("object").unwrap(), JsonTopLevelKind::Object);
-    assert_eq!(JsonTopLevelKind::from_str("ARRAY").unwrap(), JsonTopLevelKind::Array);
-    assert_eq!(JsonTopLevelKind::from_str("other").unwrap(), JsonTopLevelKind::Other);
+    assert_eq!(
+        JsonTopLevelKind::from_str("object").unwrap(),
+        JsonTopLevelKind::Object
+    );
+    assert_eq!(
+        JsonTopLevelKind::from_str("ARRAY").unwrap(),
+        JsonTopLevelKind::Array
+    );
+    assert_eq!(
+        JsonTopLevelKind::from_str("other").unwrap(),
+        JsonTopLevelKind::Other
+    );
     assert!(JsonTopLevelKind::from_str("dict").is_err());
 }

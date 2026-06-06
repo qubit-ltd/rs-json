@@ -1,18 +1,15 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 //! Provides the public API for the `qubit-json` crate.
 //!
 //! The crate exposes a lenient JSON decoder and the related option and error
 //! types needed to normalize and deserialize JSON text from
 //! non-fully-trusted sources.
-//!
 
 #![deny(missing_docs)]
 

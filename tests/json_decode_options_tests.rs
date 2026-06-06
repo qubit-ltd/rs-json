@@ -1,14 +1,11 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 //! Tests for [`qubit_json::JsonDecodeOptions`].
-//!
 
 use qubit_json::JsonDecodeOptions;
 
@@ -42,7 +39,8 @@ fn test_strict_disables_all_normalization_rules() {
 }
 
 #[test]
-fn test_json_code_fences_only_keeps_lenient_defaults_with_json_tag_restriction() {
+fn test_json_code_fences_only_keeps_lenient_defaults_with_json_tag_restriction()
+{
     let options = JsonDecodeOptions::json_code_fences_only();
     assert!(options.trim_whitespace);
     assert!(options.strip_utf8_bom);

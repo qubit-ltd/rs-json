@@ -1,14 +1,11 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 //! Defines the option type used to configure the lenient JSON decoder.
-//!
 
 /// Configuration switches for [`crate::LenientJsonDecoder`].
 ///
@@ -55,8 +52,8 @@ impl JsonDecodeOptions {
     /// Creates the default lenient option set.
     ///
     /// This preset enables the small, predictable normalization rules intended
-    /// for non-fully-trusted text inputs while keeping aggressive JSON repair out
-    /// of scope.
+    /// for non-fully-trusted text inputs while keeping aggressive JSON repair
+    /// out of scope.
     #[must_use]
     pub const fn lenient() -> Self {
         Self {
@@ -72,9 +69,9 @@ impl JsonDecodeOptions {
 
     /// Creates an option set that disables all normalization rules.
     ///
-    /// This preset still allows `serde_json` to accept JSON syntax that is valid
-    /// on its own, but the decoder will not trim, strip BOMs, remove Markdown
-    /// fences, or escape raw control characters before parsing.
+    /// This preset still allows `serde_json` to accept JSON syntax that is
+    /// valid on its own, but the decoder will not trim, strip BOMs, remove
+    /// Markdown fences, or escape raw control characters before parsing.
     #[must_use]
     pub const fn strict() -> Self {
         Self {
@@ -105,7 +102,10 @@ impl JsonDecodeOptions {
     /// Inputs whose byte length is greater than `max_input_bytes` are rejected
     /// before normalization.
     #[must_use]
-    pub const fn with_max_input_bytes(mut self, max_input_bytes: usize) -> Self {
+    pub const fn with_max_input_bytes(
+        mut self,
+        max_input_bytes: usize,
+    ) -> Self {
         self.max_input_bytes = Some(max_input_bytes);
         self
     }
