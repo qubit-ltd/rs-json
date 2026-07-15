@@ -15,6 +15,7 @@ use qubit_json::{
     JsonDecodeOptions,
     JsonTopLevelKind,
     LenientJsonDecoder,
+    MarkdownFencePolicy,
 };
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -28,10 +29,21 @@ struct Message {
     text: String,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct ExactInteger {
+    value: u128,
+}
+
+#[derive(Debug, Deserialize)]
+struct SingleValue {
+    #[serde(rename = "value")]
+    _value: u8,
+}
+
 #[test]
 fn test_new_exposes_configured_options() {
     let options = JsonDecodeOptions {
-        strip_markdown_code_fence: false,
+        markdown_fence_policy: MarkdownFencePolicy::Disabled,
         ..JsonDecodeOptions::default()
     };
     let decoder = LenientJsonDecoder::new(options);
@@ -74,7 +86,7 @@ fn test_decode_reports_empty_input_from_normalizer() {
     let error = decoder
         .decode::<User>("")
         .expect_err("empty input should fail during normalization");
-    assert_eq!(error.kind, JsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::EmptyInput);
 }
 
 #[test]
@@ -97,9 +109,9 @@ fn test_decode_object_requires_object_top_level() {
     let error = decoder
         .decode_object::<User>("[{\"name\":\"alice\",\"age\":30}]")
         .expect_err("top-level array should be rejected by decode_object");
-    assert_eq!(error.kind, JsonDecodeErrorKind::UnexpectedTopLevel);
-    assert_eq!(error.expected_top_level, Some(JsonTopLevelKind::Object));
-    assert_eq!(error.actual_top_level, Some(JsonTopLevelKind::Array));
+    assert_eq!(error.kind(), JsonDecodeErrorKind::UnexpectedTopLevel);
+    assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Object));
+    assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Array));
 }
 
 #[test]
@@ -108,7 +120,7 @@ fn test_decode_object_reports_empty_input_from_normalizer() {
     let error = decoder
         .decode_object::<User>("")
         .expect_err("empty input should fail during normalization");
-    assert_eq!(error.kind, JsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::EmptyInput);
 }
 
 #[test]
@@ -117,7 +129,7 @@ fn test_decode_object_reports_invalid_json_for_malformed_array() {
     let error = decoder.decode_object::<User>("[").expect_err(
         "malformed JSON should be reported before top-level checking",
     );
-    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 #[test]
@@ -126,7 +138,7 @@ fn test_decode_object_reports_invalid_json_for_malformed_scalar() {
     let error = decoder.decode_object::<User>("\"unterminated").expect_err(
         "malformed scalar JSON should not be treated as a top-level mismatch",
     );
-    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 #[test]
@@ -135,9 +147,9 @@ fn test_decode_array_requires_array_top_level() {
     let error = decoder
         .decode_array::<User>("{\"name\":\"alice\",\"age\":30}")
         .expect_err("top-level object should be rejected by decode_array");
-    assert_eq!(error.kind, JsonDecodeErrorKind::UnexpectedTopLevel);
-    assert_eq!(error.expected_top_level, Some(JsonTopLevelKind::Array));
-    assert_eq!(error.actual_top_level, Some(JsonTopLevelKind::Object));
+    assert_eq!(error.kind(), JsonDecodeErrorKind::UnexpectedTopLevel);
+    assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Array));
+    assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Object));
 }
 
 #[test]
@@ -146,7 +158,7 @@ fn test_decode_array_reports_empty_input_from_normalizer() {
     let error = decoder
         .decode_array::<User>("")
         .expect_err("empty input should fail during normalization");
-    assert_eq!(error.kind, JsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::EmptyInput);
 }
 
 #[test]
@@ -155,7 +167,7 @@ fn test_decode_array_reports_invalid_json_for_malformed_object() {
     let error = decoder.decode_array::<User>("{").expect_err(
         "malformed JSON should be reported before top-level checking",
     );
-    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 #[test]
@@ -164,9 +176,9 @@ fn test_decode_object_rejects_scalar_top_level() {
     let error = decoder
         .decode_object::<User>("42")
         .expect_err("top-level scalar should be rejected by decode_object");
-    assert_eq!(error.kind, JsonDecodeErrorKind::UnexpectedTopLevel);
-    assert_eq!(error.expected_top_level, Some(JsonTopLevelKind::Object));
-    assert_eq!(error.actual_top_level, Some(JsonTopLevelKind::Other));
+    assert_eq!(error.kind(), JsonDecodeErrorKind::UnexpectedTopLevel);
+    assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Object));
+    assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Other));
 }
 
 #[test]
@@ -175,9 +187,9 @@ fn test_decode_array_rejects_scalar_top_level() {
     let error = decoder
         .decode_array::<User>("42")
         .expect_err("top-level scalar should be rejected by decode_array");
-    assert_eq!(error.kind, JsonDecodeErrorKind::UnexpectedTopLevel);
-    assert_eq!(error.expected_top_level, Some(JsonTopLevelKind::Array));
-    assert_eq!(error.actual_top_level, Some(JsonTopLevelKind::Other));
+    assert_eq!(error.kind(), JsonDecodeErrorKind::UnexpectedTopLevel);
+    assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Array));
+    assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Other));
 }
 
 #[test]
@@ -203,7 +215,7 @@ fn test_decode_object_reports_deserialize_error_after_top_level_check() {
         .expect_err(
             "valid object with wrong field type should return Deserialize",
         );
-    assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
 }
 
 #[test]
@@ -214,7 +226,7 @@ fn test_decode_array_reports_deserialize_error_after_top_level_check() {
         .expect_err(
             "valid array with wrong element type should return Deserialize",
         );
-    assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
 }
 
 #[test]
@@ -232,7 +244,7 @@ fn test_decode_reports_invalid_json() {
     let error = decoder
         .decode::<User>("{")
         .expect_err("broken JSON should return InvalidJson");
-    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 #[test]
@@ -241,40 +253,40 @@ fn test_decode_reports_deserialize_error() {
     let error = decoder
         .decode::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
         .expect_err("JSON with a wrong field type should return Deserialize");
-    assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
 }
 
 #[test]
 fn test_decode_object_reports_invalid_json_for_non_token_start() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
         trim_whitespace: false,
-        strip_markdown_code_fence: false,
+        markdown_fence_policy: MarkdownFencePolicy::Disabled,
         ..JsonDecodeOptions::default()
     });
     let error = decoder
         .decode_object::<User>(" \n\t ")
         .expect_err("invalid syntax should still be mapped as InvalidJson");
-    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 #[test]
 fn test_normalizer_object_reuses_configuration_between_calls() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
-        strip_markdown_code_fence: false,
+        markdown_fence_policy: MarkdownFencePolicy::Disabled,
         ..JsonDecodeOptions::default()
     });
 
     let first = decoder.decode_value("```json\n{\"a\":1}\n```");
-    assert_eq!(first.unwrap_err().kind, JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(first.unwrap_err().kind(), JsonDecodeErrorKind::InvalidJson);
 
     let second = decoder.decode_value("```json\n{\"a\":2}\n```");
-    assert_eq!(second.unwrap_err().kind, JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(second.unwrap_err().kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 #[test]
 fn test_normalizer_objects_with_different_configs_do_not_share_state() {
     let strict_decoder = LenientJsonDecoder::new(JsonDecodeOptions {
-        strip_markdown_code_fence: false,
+        markdown_fence_policy: MarkdownFencePolicy::Disabled,
         ..JsonDecodeOptions::default()
     });
     let permissive_decoder = LenientJsonDecoder::default();
@@ -283,7 +295,7 @@ fn test_normalizer_objects_with_different_configs_do_not_share_state() {
         strict_decoder
             .decode_value("```json\n{\"a\":1}\n```")
             .expect_err("code fence should stay when stripping is disabled")
-            .kind,
+            .kind(),
         JsonDecodeErrorKind::InvalidJson
     );
     let value = permissive_decoder
@@ -301,5 +313,32 @@ fn test_normalizer_object_keeps_trim_whitespace_setting_for_empty_text() {
     let error = decoder
         .decode_value(" \n\t")
         .expect_err("trim disabled should leave whitespace for parser");
-    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
+fn test_decode_object_preserves_u128_without_value_round_trip() {
+    let decoded: ExactInteger = LenientJsonDecoder::default()
+        .decode_object(r#"{"value":340282366920938463463374607431768211455}"#)
+        .expect("direct object decoding should preserve u128::MAX");
+
+    assert_eq!(decoded.value, u128::MAX);
+}
+
+#[test]
+fn test_decode_array_preserves_u128_without_value_round_trip() {
+    let decoded: Vec<ExactInteger> = LenientJsonDecoder::default()
+        .decode_array(r#"[{"value":340282366920938463463374607431768211455}]"#)
+        .expect("direct array decoding should preserve u128::MAX");
+
+    assert_eq!(decoded, vec![ExactInteger { value: u128::MAX }]);
+}
+
+#[test]
+fn test_decode_object_preserves_duplicate_field_rejection() {
+    let error = LenientJsonDecoder::default()
+        .decode_object::<SingleValue>(r#"{"value":1,"value":2}"#)
+        .expect_err("direct object decoding should reject duplicate fields");
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
 }

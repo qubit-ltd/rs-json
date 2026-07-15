@@ -5,8 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for the public [`qubit_json::JsonDecodeError`] type in
-//! `json_decode_error.rs`.
+//! Tests for the public [`qubit_json::JsonDecodeError`] type.
 
 use qubit_json::{
     JsonDecodeErrorKind,
@@ -18,20 +17,20 @@ use qubit_json::{
 
 #[test]
 fn test_error_display_for_empty_input_uses_message() {
-    let decoder = LenientJsonDecoder::default();
-    let error = decoder
+    let error = LenientJsonDecoder::default()
         .decode_value("")
         .expect_err("empty input should return a normalization error");
     assert_eq!(error.to_string(), "JSON input is empty after normalization");
+    assert_eq!(error.raw_input_bytes(), 0);
+    assert_eq!(error.normalized_input_bytes(), None);
     assert!(std::error::Error::source(&error).is_none());
 }
 
 #[test]
 fn test_error_display_for_input_too_large_uses_message() {
-    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
-        max_input_bytes: Some(7),
-        ..JsonDecodeOptions::default()
-    });
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default().with_max_input_bytes(7),
+    );
     let error = decoder
         .decode_value("{\"a\": 1}")
         .expect_err("oversized input should return an input-too-large error");
@@ -39,16 +38,19 @@ fn test_error_display_for_input_too_large_uses_message() {
         error.to_string(),
         "JSON input is too large: 8 bytes exceed configured limit 7 bytes"
     );
+    assert_eq!(error.raw_input_bytes(), 8);
+    assert_eq!(error.max_input_bytes(), Some(7));
 }
 
 #[test]
-fn test_error_display_for_top_level_mismatch_uses_expected_and_actual() {
-    let decoder = LenientJsonDecoder::default();
-    let error = decoder
+fn test_error_exposes_top_level_mismatch_context() {
+    let error = LenientJsonDecoder::default()
         .decode_object::<serde_json::Value>("[]")
         .expect_err("top-level array should fail an object contract");
-    assert_eq!(error.expected_top_level, Some(JsonTopLevelKind::Object));
-    assert_eq!(error.actual_top_level, Some(JsonTopLevelKind::Array));
+    assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Object));
+    assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Array));
+    assert_eq!(error.raw_input_bytes(), 2);
+    assert_eq!(error.normalized_input_bytes(), Some(2));
     assert_eq!(
         error.to_string(),
         "Unexpected JSON top-level type: expected object, got array"
@@ -56,55 +58,43 @@ fn test_error_display_for_top_level_mismatch_uses_expected_and_actual() {
 }
 
 #[test]
-fn test_error_display_for_invalid_json_includes_location() {
-    let decoder = LenientJsonDecoder::default();
-    let error = decoder
-        .decode_value("{")
-        .expect_err("invalid JSON should return a parse error");
-    assert_eq!(error.kind, JsonDecodeErrorKind::InvalidJson);
-    assert_eq!(error.stage, JsonDecodeStage::Parse);
-    assert!(error.line.is_some());
-    assert!(error.column.is_some());
-    assert!(error.input_bytes.is_some());
-    assert!(error.to_string().contains("Failed to parse JSON:"));
-    assert!(error.to_string().contains("line"));
+fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_location()
+ {
+    let error = LenientJsonDecoder::default()
+        .decode_value("  {\n")
+        .expect_err(
+            "incomplete JSON should fail after whitespace normalization",
+        );
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), JsonDecodeStage::Parse);
+    assert_eq!(error.raw_input_bytes(), 4);
+    assert_eq!(error.normalized_input_bytes(), Some(1));
+    assert_eq!(error.normalized_line(), Some(1));
+    assert_eq!(error.normalized_column(), Some(1));
+    assert_eq!(error.to_string(), error.message());
     assert!(std::error::Error::source(&error).is_some());
 }
 
 #[test]
 fn test_error_source_for_invalid_json_preserves_serde_error() {
-    let decoder = LenientJsonDecoder::default();
-    let error = decoder
+    let error = LenientJsonDecoder::default()
         .decode_value("{")
         .expect_err("invalid JSON should preserve the parser source error");
     let source = std::error::Error::source(&error)
         .expect("invalid JSON errors should expose the serde_json source");
-
     assert!(source.to_string().contains("EOF"));
 }
 
 #[test]
-fn test_error_display_for_parse_or_deserialize_without_location_uses_message() {
-    let decoder = LenientJsonDecoder::default();
-    let error = decoder
-        .decode_object::<u64>("{\"a\":1}")
-        .expect_err("deserializing a parsed object into u64 should fail");
-    assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
-    assert_eq!(error.stage, JsonDecodeStage::Deserialize);
-    assert_eq!(error.line, None);
-    assert_eq!(error.column, None);
-    assert!(!error.to_string().contains("line"));
-}
-
-#[test]
 fn test_error_display_for_deserialize_error_uses_context_message() {
-    let decoder = LenientJsonDecoder::default();
-    let error = decoder
+    let error = LenientJsonDecoder::default()
         .decode::<u64>("\"text\"")
         .expect_err("string JSON should not deserialize into u64");
-    assert_eq!(error.kind, JsonDecodeErrorKind::Deserialize);
-    assert_eq!(error.stage, JsonDecodeStage::Deserialize);
-    assert!(error.input_bytes.is_some());
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.stage(), JsonDecodeStage::Deserialize);
+    assert_eq!(error.raw_input_bytes(), 6);
+    assert_eq!(error.normalized_input_bytes(), Some(6));
     assert!(
         error
             .to_string()
@@ -118,11 +108,10 @@ fn test_error_partial_eq_compares_all_stable_fields() {
     let decoder = LenientJsonDecoder::default();
     let first = decoder
         .decode_value("{\n")
-        .expect_err("invalid json should return parse error");
+        .expect_err("invalid JSON should return parse error");
     let second = decoder
         .decode_value("{\n")
-        .expect_err("invalid json should return parse error");
-
+        .expect_err("invalid JSON should return parse error");
     assert_eq!(first, second);
 
     let third = decoder

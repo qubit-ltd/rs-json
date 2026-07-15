@@ -20,6 +20,8 @@ mod json_decode_stage;
 mod json_top_level_kind;
 mod lenient_json_decoder;
 mod lenient_json_normalizer;
+mod markdown_fence_closing;
+mod markdown_fence_policy;
 
 pub use json_decode_error::JsonDecodeError;
 pub use json_decode_error_kind::JsonDecodeErrorKind;
@@ -27,3 +29,5 @@ pub use json_decode_options::JsonDecodeOptions;
 pub use json_decode_stage::JsonDecodeStage;
 pub use json_top_level_kind::JsonTopLevelKind;
 pub use lenient_json_decoder::LenientJsonDecoder;
+pub use markdown_fence_closing::MarkdownFenceClosing;
+pub use markdown_fence_policy::MarkdownFencePolicy;

@@ -28,6 +28,6 @@ fn test_lib_exports_public_types() {
 
     assert_eq!(decoder.options(), &options);
     assert_eq!(kind.to_string(), "other");
-    assert_eq!(error.kind, error_kind);
-    assert_eq!(error.stage, JsonDecodeStage::Normalize);
+    assert_eq!(error.kind(), error_kind);
+    assert_eq!(error.stage(), JsonDecodeStage::Normalize);
 }

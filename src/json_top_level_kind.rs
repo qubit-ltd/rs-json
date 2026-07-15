@@ -44,6 +44,19 @@ impl JsonTopLevelKind {
             _ => Self::Other,
         }
     }
+
+    /// Classifies validated normalized JSON text by its first JSON token.
+    #[inline]
+    pub(crate) fn of_normalized_json(value: &str) -> Self {
+        match value
+            .bytes()
+            .find(|byte| !matches!(*byte, b' ' | b'\n' | b'\r' | b'\t'))
+        {
+            Some(b'{') => Self::Object,
+            Some(b'[') => Self::Array,
+            _ => Self::Other,
+        }
+    }
 }
 
 impl From<&Value> for JsonTopLevelKind {

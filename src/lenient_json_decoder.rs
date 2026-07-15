@@ -11,6 +11,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{
     Value,
     error::Category,
+    value::RawValue,
 };
 
 use crate::{
@@ -24,21 +25,13 @@ use crate::{
 ///
 /// `LenientJsonDecoder` applies a small set of predictable normalization rules
 /// before delegating actual parsing and deserialization to `serde_json`.
-///
-/// The decoder itself is stateless aside from its immutable configuration, so a
-/// single instance can be reused across many decoding calls.
 #[derive(Debug, Clone, Default)]
 pub struct LenientJsonDecoder {
-    /// Stores the immutable normalization and decoding configuration used by
-    /// this decoder instance.
     normalizer: LenientJsonNormalizer,
 }
 
 impl LenientJsonDecoder {
     /// Creates a decoder with the exact normalization rules in `options`.
-    ///
-    /// Reusing a decoder instance is recommended when multiple inputs should
-    /// follow the same lenient decoding policy.
     #[must_use]
     pub const fn new(options: JsonDecodeOptions) -> Self {
         Self {
@@ -47,75 +40,31 @@ impl LenientJsonDecoder {
     }
 
     /// Returns the immutable options used by this decoder.
-    ///
-    /// This accessor allows callers to inspect the effective configuration
-    /// without cloning the decoder or duplicating the options elsewhere.
     #[must_use]
     pub const fn options(&self) -> &JsonDecodeOptions {
         self.normalizer.options()
     }
 
-    /// Decodes `input` into the target Rust type `T`.
-    ///
-    /// This method does not constrain the JSON top-level structure. Arrays,
-    /// objects, scalars, and any other JSON value kinds are all allowed as long
-    /// as they can be deserialized into `T`.
-    ///
-    /// The generic type `T` must implement [`DeserializeOwned`] because this
-    /// method deserializes directly from normalized text and does not return
-    /// values borrowing from the input.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`JsonDecodeError`] when the input becomes empty after
-    /// normalization, when the normalized text is not valid JSON, or when the
-    /// parsed JSON value cannot be deserialized into `T`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use qubit_json::LenientJsonDecoder;
-    ///
-    /// let decoder = LenientJsonDecoder::default();
-    /// let value: u64 = decoder
-    ///     .decode("42")
-    ///     .expect("a numeric JSON scalar should decode into u64");
-    ///
-    /// assert_eq!(value, 42);
-    /// ```
+    /// Decodes `input` into the target Rust type `T` without a top-level
+    /// structure constraint.
     pub fn decode<T>(&self, input: &str) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
     {
+        let raw_input_bytes = input.len();
         let normalized = self.normalizer.normalize(input)?;
-        Self::deserialize_normalized(normalized.as_ref(), normalized.len())
+        Self::deserialize_normalized(
+            normalized.as_ref(),
+            raw_input_bytes,
+            normalized.len(),
+        )
     }
 
-    /// Decodes `input` into a target type `T`, requiring a top-level JSON
-    /// object.
+    /// Decodes `input` into `T`, requiring a top-level JSON object.
     ///
-    /// This method is useful for APIs that require a structured object at the
-    /// top level and want an explicit error when an array or scalar is
-    /// received.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`JsonDecodeError`] when the input cannot be normalized into a
-    /// valid JSON value, when the top-level JSON kind is not an object, or
-    /// when the object cannot be deserialized into `T`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use qubit_json::LenientJsonDecoder;
-    ///
-    /// let decoder = LenientJsonDecoder::default();
-    /// let value: serde_json::Value = decoder
-    ///     .decode_object("```json\n{\"ok\":true}\n```")
-    ///     .expect("a fenced JSON object should decode into a value");
-    ///
-    /// assert_eq!(value["ok"], true);
-    /// ```
+    /// The target is deserialized directly from normalized text after syntax
+    /// and top-level validation, preserving serde's duplicate-field and number
+    /// handling semantics.
     pub fn decode_object<T>(&self, input: &str) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
@@ -123,30 +72,10 @@ impl LenientJsonDecoder {
         self.decode_with_top_level(input, JsonTopLevelKind::Object)
     }
 
-    /// Decodes `input` into a `Vec<T>`, requiring a top-level JSON array.
+    /// Decodes `input` into `Vec<T>`, requiring a top-level JSON array.
     ///
-    /// This method should be preferred over [`Self::decode`] when the caller
-    /// wants an explicit top-level array contract instead of relying on the
-    /// target type alone.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`JsonDecodeError`] when the input cannot be normalized into a
-    /// valid JSON value, when the top-level JSON kind is not an array, or when
-    /// the array cannot be deserialized into `Vec<T>`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use qubit_json::{JsonDecodeErrorKind, LenientJsonDecoder};
-    ///
-    /// let decoder = LenientJsonDecoder::default();
-    /// let error = decoder
-    ///     .decode_array::<serde_json::Value>("{\"ok\":true}")
-    ///     .expect_err("a top-level object should fail an array contract");
-    ///
-    /// assert_eq!(error.kind, JsonDecodeErrorKind::UnexpectedTopLevel);
-    /// ```
+    /// The elements are deserialized directly from normalized text after syntax
+    /// and top-level validation.
     pub fn decode_array<T>(
         &self,
         input: &str,
@@ -159,47 +88,18 @@ impl LenientJsonDecoder {
 
     /// Decodes `input` into a [`serde_json::Value`].
     ///
-    /// This is the lowest-level public entry point. It exposes the normalized
-    /// and parsed JSON value before any additional type-specific
-    /// deserialization is attempted.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`JsonDecodeError`] when the input is empty after normalization
-    /// or when the normalized text is not valid JSON syntax.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
-    ///
-    /// let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
-    ///     max_input_bytes: Some(16),
-    ///     ..JsonDecodeOptions::default()
-    /// });
-    /// let value = decoder
-    ///     .decode_value("{\"ok\":true}")
-    ///     .expect("input within the size limit should decode");
-    ///
-    /// assert_eq!(value["ok"], true);
-    /// ```
+    /// This entry point intentionally constructs a JSON DOM because its public
+    /// return type is [`Value`].
     pub fn decode_value(&self, input: &str) -> Result<Value, JsonDecodeError> {
-        let (value, _) = self.parse_input_as_value(input)?;
-        Ok(value)
-    }
-
-    /// Normalizes input text and parses it as a JSON value.
-    fn parse_input_as_value(
-        &self,
-        input: &str,
-    ) -> Result<(Value, usize), JsonDecodeError> {
+        let raw_input_bytes = input.len();
         let normalized = self.normalizer.normalize(input)?;
-        let input_bytes = normalized.len();
-        let value = Self::parse_value(normalized.as_ref())?;
-        Ok((value, input_bytes))
+        Self::parse_value(
+            normalized.as_ref(),
+            raw_input_bytes,
+            normalized.len(),
+        )
     }
 
-    /// Decodes input after enforcing a required top-level JSON kind.
     fn decode_with_top_level<T>(
         &self,
         input: &str,
@@ -208,75 +108,94 @@ impl LenientJsonDecoder {
     where
         T: DeserializeOwned,
     {
-        let (value, input_bytes) = self.parse_input_as_value(input)?;
-        Self::ensure_top_level_from_value(&value, expected)?;
-        Self::deserialize_value(value, input_bytes)
+        let raw_input_bytes = input.len();
+        let normalized = self.normalizer.normalize(input)?;
+        let normalized_input_bytes = normalized.len();
+        Self::validate_json(
+            normalized.as_ref(),
+            raw_input_bytes,
+            normalized_input_bytes,
+        )?;
+        let actual = JsonTopLevelKind::of_normalized_json(normalized.as_ref());
+        if actual != expected {
+            return Err(JsonDecodeError::unexpected_top_level(
+                expected,
+                actual,
+                raw_input_bytes,
+                normalized_input_bytes,
+            ));
+        }
+        Self::deserialize_normalized(
+            normalized.as_ref(),
+            raw_input_bytes,
+            normalized_input_bytes,
+        )
     }
 
-    /// Parses normalized text into a JSON value.
-    ///
-    /// Syntax failures are mapped to the crate error model with normalized
-    /// input byte length included for diagnostics.
-    fn parse_value(normalized: &str) -> Result<Value, JsonDecodeError> {
+    fn parse_value(
+        normalized: &str,
+        raw_input_bytes: usize,
+        normalized_input_bytes: usize,
+    ) -> Result<Value, JsonDecodeError> {
         serde_json::from_str(normalized).map_err(|error| {
-            JsonDecodeError::invalid_json(error, Some(normalized.len()))
+            JsonDecodeError::invalid_json(
+                error,
+                raw_input_bytes,
+                normalized_input_bytes,
+            )
         })
     }
 
-    /// Verifies that a parsed JSON value has the required top-level kind.
-    fn ensure_top_level_from_value(
-        value: &Value,
-        expected: JsonTopLevelKind,
+    fn validate_json(
+        normalized: &str,
+        raw_input_bytes: usize,
+        normalized_input_bytes: usize,
     ) -> Result<(), JsonDecodeError> {
-        let actual = JsonTopLevelKind::of(value);
-        if actual != expected {
-            return Err(JsonDecodeError::unexpected_top_level(
-                expected, actual,
-            ));
-        }
+        let _: &RawValue =
+            serde_json::from_str(normalized).map_err(|error| {
+                JsonDecodeError::invalid_json(
+                    error,
+                    raw_input_bytes,
+                    normalized_input_bytes,
+                )
+            })?;
         Ok(())
     }
 
-    /// Deserializes normalized JSON text into the target type.
     fn deserialize_normalized<T>(
         normalized: &str,
-        input_bytes: usize,
+        raw_input_bytes: usize,
+        normalized_input_bytes: usize,
     ) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
     {
-        serde_json::from_str(normalized)
-            .map_err(|error| Self::map_decode_error(error, input_bytes))
-    }
-
-    /// Deserializes a parsed JSON value into the target type.
-    fn deserialize_value<T>(
-        value: Value,
-        input_bytes: usize,
-    ) -> Result<T, JsonDecodeError>
-    where
-        T: DeserializeOwned,
-    {
-        serde_json::from_value(value).map_err(|error| {
-            JsonDecodeError::deserialize(error, Some(input_bytes))
+        serde_json::from_str(normalized).map_err(|error| {
+            Self::map_decode_error(
+                error,
+                raw_input_bytes,
+                normalized_input_bytes,
+            )
         })
     }
 
-    /// Maps one `serde_json` error from direct typed decoding to the crate
-    /// error model.
-    ///
-    /// Syntax, EOF, and I/O categories are treated as invalid JSON input.
-    /// Data category errors are treated as type deserialization failures.
     fn map_decode_error(
         error: serde_json::Error,
-        input_bytes: usize,
+        raw_input_bytes: usize,
+        normalized_input_bytes: usize,
     ) -> JsonDecodeError {
         match error.classify() {
-            Category::Data => {
-                JsonDecodeError::deserialize(error, Some(input_bytes))
-            }
+            Category::Data => JsonDecodeError::deserialize(
+                error,
+                raw_input_bytes,
+                normalized_input_bytes,
+            ),
             Category::Io | Category::Syntax | Category::Eof => {
-                JsonDecodeError::invalid_json(error, Some(input_bytes))
+                JsonDecodeError::invalid_json(
+                    error,
+                    raw_input_bytes,
+                    normalized_input_bytes,
+                )
             }
         }
     }
