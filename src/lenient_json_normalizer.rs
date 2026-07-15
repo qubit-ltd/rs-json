@@ -12,6 +12,8 @@ use std::borrow::Cow;
 use crate::{
     JsonDecodeError,
     JsonDecodeOptions,
+    MarkdownFenceClosing,
+    MarkdownFencePolicy,
 };
 
 /// Normalizes one raw JSON text input before JSON parsing.
@@ -67,8 +69,9 @@ impl LenientJsonNormalizer {
         &self,
         input: &'a str,
     ) -> Result<Cow<'a, str>, JsonDecodeError> {
+        let raw_input_bytes = input.len();
         self.require_within_size_limit(input)?;
-        let input = self.require_non_empty(input)?;
+        let input = self.require_non_empty(input, raw_input_bytes)?;
         let input = self.trim_if_enabled(input);
         let input = self.strip_utf8_bom(input);
         let input = self.trim_if_enabled(input);
@@ -78,7 +81,7 @@ impl LenientJsonNormalizer {
         let input = self.trim_cow_if_enabled(input);
 
         if input.is_empty() {
-            Err(JsonDecodeError::empty_input())
+            Err(JsonDecodeError::empty_input(raw_input_bytes))
         } else {
             Ok(input)
         }
@@ -91,15 +94,16 @@ impl LenientJsonNormalizer {
     fn require_non_empty<'a>(
         &self,
         input: &'a str,
+        raw_input_bytes: usize,
     ) -> Result<&'a str, JsonDecodeError> {
         if self.options.trim_whitespace {
             if input.trim().is_empty() {
-                Err(JsonDecodeError::empty_input())
+                Err(JsonDecodeError::empty_input(raw_input_bytes))
             } else {
                 Ok(input)
             }
         } else if input.is_empty() {
-            Err(JsonDecodeError::empty_input())
+            Err(JsonDecodeError::empty_input(raw_input_bytes))
         } else {
             Ok(input)
         }
@@ -170,9 +174,11 @@ impl LenientJsonNormalizer {
     /// spaces before the opening marker are accepted. If a valid closing fence
     /// is present after trimming the trailing side, it is also removed.
     fn strip_markdown_code_fence<'a>(&self, input: &'a str) -> &'a str {
-        if !self.options.strip_markdown_code_fence {
-            return input;
-        }
+        let (json_only, closing) = match self.options.markdown_fence_policy {
+            MarkdownFencePolicy::Disabled => return input,
+            MarkdownFencePolicy::Any { closing } => (false, closing),
+            MarkdownFencePolicy::JsonOnly { closing } => (true, closing),
+        };
 
         let Some(opening_fence) = Self::opening_markdown_fence(input) else {
             return input;
@@ -182,9 +188,7 @@ impl LenientJsonNormalizer {
             return input;
         };
         let opening_tag = input[opening_fence.marker_end..line_end].trim();
-        if self.options.strip_markdown_code_fence_json_only
-            && !Self::is_json_code_fence_tag(opening_tag)
-        {
+        if json_only && !Self::is_json_code_fence_tag(opening_tag) {
             return input;
         }
 
@@ -195,7 +199,7 @@ impl LenientJsonNormalizer {
         {
             return without_close;
         }
-        if self.options.strip_markdown_code_fence_requires_closing {
+        if closing == MarkdownFenceClosing::Required {
             input
         } else {
             content
