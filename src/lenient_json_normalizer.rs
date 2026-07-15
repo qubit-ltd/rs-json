@@ -81,7 +81,11 @@ impl LenientJsonNormalizer {
         let input = self.trim_cow_if_enabled(input);
 
         if input.is_empty() {
-            Err(JsonDecodeError::empty_input(raw_input_bytes))
+            Err(JsonDecodeError::empty_input(
+                raw_input_bytes,
+                Some(input.len()),
+                self.options.error_privacy_policy(),
+            ))
         } else {
             Ok(input)
         }
@@ -96,14 +100,22 @@ impl LenientJsonNormalizer {
         input: &'a str,
         raw_input_bytes: usize,
     ) -> Result<&'a str, JsonDecodeError> {
-        if self.options.trim_whitespace {
+        if self.options.trim_whitespace() {
             if input.trim().is_empty() {
-                Err(JsonDecodeError::empty_input(raw_input_bytes))
+                Err(JsonDecodeError::empty_input(
+                    raw_input_bytes,
+                    None,
+                    self.options.error_privacy_policy(),
+                ))
             } else {
                 Ok(input)
             }
         } else if input.is_empty() {
-            Err(JsonDecodeError::empty_input(raw_input_bytes))
+            Err(JsonDecodeError::empty_input(
+                raw_input_bytes,
+                None,
+                self.options.error_privacy_policy(),
+            ))
         } else {
             Ok(input)
         }
@@ -115,10 +127,14 @@ impl LenientJsonNormalizer {
         &self,
         input: &str,
     ) -> Result<(), JsonDecodeError> {
-        if let Some(limit) = self.options.max_input_bytes {
+        if let Some(limit) = self.options.max_input_bytes() {
             let size = input.len();
             if size > limit {
-                return Err(JsonDecodeError::input_too_large(size, limit));
+                return Err(JsonDecodeError::input_too_large(
+                    size,
+                    limit,
+                    self.options.error_privacy_policy(),
+                ));
             }
         }
         Ok(())
@@ -128,7 +144,7 @@ impl LenientJsonNormalizer {
     ///
     /// This helper borrows and never allocates when trimming is disabled.
     fn trim_if_enabled<'a>(&self, input: &'a str) -> &'a str {
-        if self.options.trim_whitespace {
+        if self.options.trim_whitespace() {
             input.trim()
         } else {
             input
@@ -140,7 +156,7 @@ impl LenientJsonNormalizer {
     /// Borrowed values remain borrowed, and owned values are copied only when
     /// trimming removes characters.
     fn trim_cow_if_enabled<'a>(&self, input: Cow<'a, str>) -> Cow<'a, str> {
-        if !self.options.trim_whitespace {
+        if !self.options.trim_whitespace() {
             return input;
         }
         match input {
@@ -160,7 +176,7 @@ impl LenientJsonNormalizer {
     ///
     /// If no BOM exists, the input is returned unchanged.
     fn strip_utf8_bom<'a>(&self, input: &'a str) -> &'a str {
-        if self.options.strip_utf8_bom {
+        if self.options.strip_utf8_bom() {
             input.strip_prefix('\u{feff}').unwrap_or(input)
         } else {
             input
@@ -174,7 +190,7 @@ impl LenientJsonNormalizer {
     /// spaces before the opening marker are accepted. If a valid closing fence
     /// is present after trimming the trailing side, it is also removed.
     fn strip_markdown_code_fence<'a>(&self, input: &'a str) -> &'a str {
-        let (json_only, closing) = match self.options.markdown_fence_policy {
+        let (json_only, closing) = match self.options.markdown_fence_policy() {
             MarkdownFencePolicy::Disabled => return input,
             MarkdownFencePolicy::Any { closing } => (false, closing),
             MarkdownFencePolicy::JsonOnly { closing } => (true, closing),
@@ -272,7 +288,7 @@ impl LenientJsonNormalizer {
         let trimmed_end = content.trim_end_matches(char::is_whitespace);
         let closing_line_start = trimmed_end
             .rfind('\n')
-            .or_else(|| trimmed_end.rfind('\r'))
+            .max(trimmed_end.rfind('\r'))
             .map_or(0, |index| index + 1);
         let closing_line = trimmed_end[closing_line_start..].trim();
         let closing_len =
@@ -302,7 +318,7 @@ impl LenientJsonNormalizer {
         &self,
         input: &'a str,
     ) -> Cow<'a, str> {
-        if !self.options.escape_control_chars_in_strings {
+        if !self.options.escape_control_chars_in_strings() {
             return Cow::Borrowed(input);
         }
 
@@ -323,6 +339,10 @@ impl LenientJsonNormalizer {
             if in_string {
                 if in_escape {
                     in_escape = false;
+                    if ('\u{0000}'..='\u{001f}').contains(&ch) {
+                        let escaped = self.escaped_control_char(ch);
+                        replacement = escaped.strip_prefix('\\');
+                    }
                 } else if ch == '\\' {
                     in_escape = true;
                 } else if ch == '"' {
@@ -355,6 +375,9 @@ impl LenientJsonNormalizer {
             if in_string {
                 if in_escape {
                     in_escape = false;
+                    if ('\u{0000}'..='\u{001f}').contains(&ch) {
+                        count += 1;
+                    }
                 } else if ch == '\\' {
                     in_escape = true;
                 } else if ch == '"' {

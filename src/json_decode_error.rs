@@ -13,6 +13,7 @@ use std::{
 };
 
 use crate::{
+    ErrorPrivacyPolicy,
     JsonDecodeErrorKind,
     JsonDecodeStage,
     JsonTopLevelKind,
@@ -27,6 +28,7 @@ use crate::{
 pub struct JsonDecodeError {
     kind: JsonDecodeErrorKind,
     stage: JsonDecodeStage,
+    privacy_policy: ErrorPrivacyPolicy,
     message: String,
     expected_top_level: Option<JsonTopLevelKind>,
     actual_top_level: Option<JsonTopLevelKind>,
@@ -49,6 +51,12 @@ impl JsonDecodeError {
     #[must_use]
     pub const fn stage(&self) -> JsonDecodeStage {
         self.stage
+    }
+
+    /// Returns the privacy policy applied when this error was constructed.
+    #[must_use]
+    pub const fn privacy_policy(&self) -> ErrorPrivacyPolicy {
+        self.privacy_policy
     }
 
     /// Returns the human-readable diagnostic message.
@@ -106,10 +114,12 @@ impl JsonDecodeError {
     pub(crate) fn input_too_large(
         raw_input_bytes: usize,
         max_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
     ) -> Self {
         Self {
             kind: JsonDecodeErrorKind::InputTooLarge,
             stage: JsonDecodeStage::Normalize,
+            privacy_policy,
             message: format!(
                 "JSON input is too large: {raw_input_bytes} bytes exceed configured limit {max_input_bytes} bytes"
             ),
@@ -125,15 +135,20 @@ impl JsonDecodeError {
     }
 
     #[inline]
-    pub(crate) fn empty_input(raw_input_bytes: usize) -> Self {
+    pub(crate) fn empty_input(
+        raw_input_bytes: usize,
+        normalized_input_bytes: Option<usize>,
+        privacy_policy: ErrorPrivacyPolicy,
+    ) -> Self {
         Self {
             kind: JsonDecodeErrorKind::EmptyInput,
             stage: JsonDecodeStage::Normalize,
+            privacy_policy,
             message: "JSON input is empty after normalization".to_string(),
             expected_top_level: None,
             actual_top_level: None,
             raw_input_bytes,
-            normalized_input_bytes: None,
+            normalized_input_bytes,
             max_input_bytes: None,
             normalized_line: None,
             normalized_column: None,
@@ -146,6 +161,7 @@ impl JsonDecodeError {
         error: serde_json::Error,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
     ) -> Self {
         Self::from_serde_error(
             JsonDecodeErrorKind::InvalidJson,
@@ -154,6 +170,7 @@ impl JsonDecodeError {
             error,
             raw_input_bytes,
             normalized_input_bytes,
+            privacy_policy,
         )
     }
 
@@ -163,10 +180,12 @@ impl JsonDecodeError {
         actual: JsonTopLevelKind,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
     ) -> Self {
         Self {
             kind: JsonDecodeErrorKind::UnexpectedTopLevel,
             stage: JsonDecodeStage::TopLevelCheck,
+            privacy_policy,
             message: format!(
                 "Unexpected JSON top-level type: expected {expected}, got {actual}"
             ),
@@ -186,6 +205,7 @@ impl JsonDecodeError {
         error: serde_json::Error,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
     ) -> Self {
         Self::from_serde_error(
             JsonDecodeErrorKind::Deserialize,
@@ -194,6 +214,7 @@ impl JsonDecodeError {
             error,
             raw_input_bytes,
             normalized_input_bytes,
+            privacy_policy,
         )
     }
 
@@ -204,13 +225,23 @@ impl JsonDecodeError {
         error: serde_json::Error,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
     ) -> Self {
         let line = error.line();
         let column = error.column();
+        let (message, source) = match privacy_policy {
+            ErrorPrivacyPolicy::Redacted => {
+                (Self::redacted_message(prefix, line, column), None)
+            }
+            ErrorPrivacyPolicy::Detailed => {
+                (format!("{prefix}: {error}"), Some(Arc::new(error)))
+            }
+        };
         Self {
             kind,
             stage,
-            message: format!("{prefix}: {error}"),
+            privacy_policy,
+            message,
             expected_top_level: None,
             actual_top_level: None,
             raw_input_bytes,
@@ -218,7 +249,23 @@ impl JsonDecodeError {
             max_input_bytes: None,
             normalized_line: (line > 0).then_some(line),
             normalized_column: (column > 0).then_some(column),
-            source: Some(Arc::new(error)),
+            source,
+        }
+    }
+
+    /// Builds a diagnostic that contains only stable text and parser location.
+    fn redacted_message(prefix: &str, line: usize, column: usize) -> String {
+        match (line > 0, column > 0) {
+            (true, true) => {
+                format!("{prefix} at normalized line {line} column {column}")
+            }
+            (true, false) => {
+                format!("{prefix} at normalized line {line}")
+            }
+            (false, true) => {
+                format!("{prefix} at normalized column {column}")
+            }
+            (false, false) => prefix.to_string(),
         }
     }
 }
@@ -227,6 +274,7 @@ impl PartialEq for JsonDecodeError {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind
             && self.stage == other.stage
+            && self.privacy_policy == other.privacy_policy
             && self.message == other.message
             && self.expected_top_level == other.expected_top_level
             && self.actual_top_level == other.actual_top_level

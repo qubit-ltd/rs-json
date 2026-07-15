@@ -34,7 +34,8 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - **Object-oriented API**: use a reusable `LenientJsonDecoder` instance instead
   of a loose bag of helper functions
 - **Serde-first**: delegate actual parsing and deserialization to `serde_json`
-- **Clear errors**: report stable error kinds with enough context for callers
+- **Privacy-aware errors**: report stable, redacted diagnostics by default and
+  allow detailed serde diagnostics only by explicit configuration
 - **Low overhead**: avoid unnecessary allocation when normalization can borrow
   the original input
 
@@ -52,9 +53,8 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 
 ### `JsonDecodeOptions`
 
-- Presets and builder helpers: `lenient()`, `strict()`,
-  `json_code_fences_only()`, `with_markdown_fence_policy()`,
-  `with_max_input_bytes()`
+- Immutable presets, getters, and value-style builders for every option
+- Presets: `lenient()`, `strict()`, and `json_code_fences_only()`
 - `trim_whitespace`: trims leading and trailing whitespace
 - `strip_utf8_bom`: strips a leading UTF-8 BOM
 - `markdown_fence_policy`: selects disabled, any-language, or JSON-only fence
@@ -62,6 +62,8 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `escape_control_chars_in_strings`: escapes ASCII control characters inside
   JSON string literals
 - `max_input_bytes`: optional byte-size limit applied before normalization
+- `error_privacy_policy`: selects safe redacted errors (the default) or
+  explicitly requested detailed serde diagnostics
 
 ### Explicit Error Model
 
@@ -73,6 +75,11 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `JsonDecodeError` exposes immutable accessors for the failure kind, stage,
   message, top-level context, raw and normalized byte sizes, and input limit
 - parser line and column accessors refer to normalized JSON text
+- `privacy_policy()` records the policy applied to every returned error
+- under the default `Redacted` policy, parser/deserializer messages do not
+  contain serde-provided input fragments and `Error::source()` is `None`
+- `Detailed` preserves the complete serde message and source and may therefore
+  expose input values; use it only in controlled diagnostic environments
 
 ## Installation
 
@@ -80,7 +87,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qubit-json = "0.3"
+qubit-json = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -134,7 +141,8 @@ use qubit_json::{LenientJsonDecoder, JsonDecodeOptions};
 
 fn main() {
     let decoder = LenientJsonDecoder::new(
-        JsonDecodeOptions::json_code_fences_only().with_max_input_bytes(1024),
+        JsonDecodeOptions::json_code_fences_only()
+            .with_max_input_bytes(Some(1024)),
     );
 
     let value = decoder
@@ -142,6 +150,31 @@ fn main() {
         .expect("plain JSON should still decode with custom options");
 
     assert_eq!(value["ok"], true);
+}
+```
+
+### Opt In to Detailed Error Diagnostics
+
+Detailed serde diagnostics may include values from the input. Enable them only
+when the diagnostic sink and its readers are trusted.
+
+```rust
+use qubit_json::{
+    ErrorPrivacyPolicy,
+    JsonDecodeOptions,
+    LenientJsonDecoder,
+};
+
+fn main() {
+    let options = JsonDecodeOptions::default()
+        .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed);
+    let decoder = LenientJsonDecoder::new(options);
+
+    let error = decoder
+        .decode::<u64>(r#""not a number""#)
+        .expect_err("the JSON string cannot deserialize into u64");
+    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Detailed);
+    assert!(std::error::Error::source(&error).is_some());
 }
 ```
 
@@ -172,7 +205,7 @@ Qubit JSON is a good fit when:
 
 - you need a reusable, configurable JSON decoder object
 - your inputs are mostly valid JSON but may be wrapped or slightly noisy
-- you want stable error categories around `serde_json`
+- you want stable and safe-by-default error categories around `serde_json`
 
 It is not a good fit when:
 

@@ -15,6 +15,7 @@ use serde_json::{
 };
 
 use crate::{
+    ErrorPrivacyPolicy,
     JsonDecodeError,
     JsonDecodeOptions,
     JsonTopLevelKind,
@@ -52,11 +53,13 @@ impl LenientJsonDecoder {
         T: DeserializeOwned,
     {
         let raw_input_bytes = input.len();
+        let privacy_policy = self.options().error_privacy_policy();
         let normalized = self.normalizer.normalize(input)?;
         Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,
             normalized.len(),
+            privacy_policy,
         )
     }
 
@@ -92,11 +95,13 @@ impl LenientJsonDecoder {
     /// return type is [`Value`].
     pub fn decode_value(&self, input: &str) -> Result<Value, JsonDecodeError> {
         let raw_input_bytes = input.len();
+        let privacy_policy = self.options().error_privacy_policy();
         let normalized = self.normalizer.normalize(input)?;
         Self::parse_value(
             normalized.as_ref(),
             raw_input_bytes,
             normalized.len(),
+            privacy_policy,
         )
     }
 
@@ -109,12 +114,14 @@ impl LenientJsonDecoder {
         T: DeserializeOwned,
     {
         let raw_input_bytes = input.len();
+        let privacy_policy = self.options().error_privacy_policy();
         let normalized = self.normalizer.normalize(input)?;
         let normalized_input_bytes = normalized.len();
         Self::validate_json(
             normalized.as_ref(),
             raw_input_bytes,
             normalized_input_bytes,
+            privacy_policy,
         )?;
         let actual = JsonTopLevelKind::of_normalized_json(normalized.as_ref());
         if actual != expected {
@@ -123,12 +130,14 @@ impl LenientJsonDecoder {
                 actual,
                 raw_input_bytes,
                 normalized_input_bytes,
+                privacy_policy,
             ));
         }
         Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,
             normalized_input_bytes,
+            privacy_policy,
         )
     }
 
@@ -136,12 +145,14 @@ impl LenientJsonDecoder {
         normalized: &str,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
     ) -> Result<Value, JsonDecodeError> {
         serde_json::from_str(normalized).map_err(|error| {
             JsonDecodeError::invalid_json(
                 error,
                 raw_input_bytes,
                 normalized_input_bytes,
+                privacy_policy,
             )
         })
     }
@@ -150,6 +161,7 @@ impl LenientJsonDecoder {
         normalized: &str,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
     ) -> Result<(), JsonDecodeError> {
         let _: &RawValue =
             serde_json::from_str(normalized).map_err(|error| {
@@ -157,6 +169,7 @@ impl LenientJsonDecoder {
                     error,
                     raw_input_bytes,
                     normalized_input_bytes,
+                    privacy_policy,
                 )
             })?;
         Ok(())
@@ -166,6 +179,7 @@ impl LenientJsonDecoder {
         normalized: &str,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
     ) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
@@ -175,6 +189,7 @@ impl LenientJsonDecoder {
                 error,
                 raw_input_bytes,
                 normalized_input_bytes,
+                privacy_policy,
             )
         })
     }
@@ -183,18 +198,21 @@ impl LenientJsonDecoder {
         error: serde_json::Error,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
     ) -> JsonDecodeError {
         match error.classify() {
             Category::Data => JsonDecodeError::deserialize(
                 error,
                 raw_input_bytes,
                 normalized_input_bytes,
+                privacy_policy,
             ),
             Category::Io | Category::Syntax | Category::Eof => {
                 JsonDecodeError::invalid_json(
                     error,
                     raw_input_bytes,
                     normalized_input_bytes,
+                    privacy_policy,
                 )
             }
         }

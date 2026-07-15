@@ -33,7 +33,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 - **对象化 API**：通过可复用的 `LenientJsonDecoder` 实例暴露能力，而不是
   散落的工具函数
 - **以 Serde 为核心**：真正的解析和反序列化仍然交给 `serde_json`
-- **错误语义清晰**：提供稳定的错误分类和必要的上下文信息
+- **隐私感知错误**：默认提供稳定的脱敏诊断，仅在显式配置后保留完整 serde 明细
 - **低额外开销**：在可以借用原始输入时尽量避免额外分配
 
 ## 特性
@@ -48,14 +48,14 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 
 ### `JsonDecodeOptions`
 
-- 预设与 builder 辅助方法：`lenient()`、`strict()`、
-  `json_code_fences_only()`、`with_markdown_fence_policy()`、
-  `with_max_input_bytes()`
+- 每个选项都提供不可变 getter 和值式 builder
+- 预设：`lenient()`、`strict()`、`json_code_fences_only()`
 - `trim_whitespace`：裁剪首尾空白
 - `strip_utf8_bom`：移除开头的 UTF-8 BOM
 - `markdown_fence_policy`：统一表达禁用、任意语言或仅 JSON 围栏，以及可选或必须闭合
 - `escape_control_chars_in_strings`：转义 JSON 字符串字面量里的 ASCII 控制字符
 - `max_input_bytes`：规范化前的输入字节数上限（可选）
+- `error_privacy_policy`：选择默认安全的脱敏错误，或显式启用完整 serde 诊断
 
 ### 显式错误模型
 
@@ -67,6 +67,11 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 - `JsonDecodeError` 通过不可变访问器提供失败种类、阶段、消息、顶层上下文、原始与
   规范化字节数及输入上限
 - 解析行列访问器对应规范化后的 JSON 文本
+- `privacy_policy()` 记录每个错误实际采用的隐私策略
+- 默认 `Redacted` 策略不会在解析/反序列化消息中保留 serde 提供的输入片段，
+  `Error::source()` 返回 `None`
+- `Detailed` 会保留完整 serde 消息与 source，因此可能暴露输入值；仅应在受控诊断
+  环境中显式启用
 
 ## 安装
 
@@ -74,7 +79,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 
 ```toml
 [dependencies]
-qubit-json = "0.3"
+qubit-json = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -128,7 +133,8 @@ use qubit_json::{LenientJsonDecoder, JsonDecodeOptions};
 
 fn main() {
     let decoder = LenientJsonDecoder::new(
-        JsonDecodeOptions::json_code_fences_only().with_max_input_bytes(1024),
+        JsonDecodeOptions::json_code_fences_only()
+            .with_max_input_bytes(Some(1024)),
     );
 
     let value = decoder
@@ -136,6 +142,30 @@ fn main() {
         .expect("plain JSON should still decode with custom options");
 
     assert_eq!(value["ok"], true);
+}
+```
+
+### 显式启用详细错误诊断
+
+完整 serde 诊断可能包含输入值。只有当诊断存储及其读者均可信时才应启用。
+
+```rust
+use qubit_json::{
+    ErrorPrivacyPolicy,
+    JsonDecodeOptions,
+    LenientJsonDecoder,
+};
+
+fn main() {
+    let options = JsonDecodeOptions::default()
+        .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed);
+    let decoder = LenientJsonDecoder::new(options);
+
+    let error = decoder
+        .decode::<u64>(r#""not a number""#)
+        .expect_err("the JSON string cannot deserialize into u64");
+    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Detailed);
+    assert!(std::error::Error::source(&error).is_some());
 }
 ```
 
@@ -166,7 +196,7 @@ Qubit JSON 适合这些情况：
 
 - 你需要一个可复用、可配置的 JSON 解码对象
 - 输入大体是合法 JSON，只是外层可能有包裹或轻度噪声
-- 你希望在 `serde_json` 之外再得到一层稳定的错误语义
+- 你希望在 `serde_json` 之外再得到一层稳定且默认安全的错误语义
 
 它不适合这些情况：
 
