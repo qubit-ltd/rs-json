@@ -8,6 +8,7 @@
 //! Smoke tests for crate-level exports in `lib.rs`.
 
 use qubit_json::{
+    ErrorPrivacyPolicy,
     JsonDecodeError,
     JsonDecodeErrorKind,
     JsonDecodeOptions,
@@ -22,6 +23,7 @@ fn test_lib_exports_public_types() {
     let options = JsonDecodeOptions::default();
     let kind = JsonTopLevelKind::Other;
     let error_kind = JsonDecodeErrorKind::EmptyInput;
+    let privacy_policy = ErrorPrivacyPolicy::Redacted;
     let error: JsonDecodeError = decoder
         .decode_value("")
         .expect_err("empty input should produce an exported error type");
@@ -30,4 +32,5 @@ fn test_lib_exports_public_types() {
     assert_eq!(kind.to_string(), "other");
     assert_eq!(error.kind(), error_kind);
     assert_eq!(error.stage(), JsonDecodeStage::Normalize);
+    assert_eq!(privacy_policy, ErrorPrivacyPolicy::default());
 }

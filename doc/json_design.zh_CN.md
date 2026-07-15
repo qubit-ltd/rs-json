@@ -2,8 +2,9 @@
 
 ## 版本信息
 
-- 文档版本：`v2.1`
+- 文档版本：`v3.0`
 - 创建日期：`2026-04-12`
+- 更新日期：`2026-07-15`
 - 对齐 PRD：`json_prd.zh_CN.md`
 
 ## 1. 背景与目标
@@ -38,6 +39,8 @@ LenientJsonDecoder
     |    |-- strip_utf8_bom
     |    |-- markdown_fence_policy
     |    |-- escape_control_chars_in_strings
+    |    |-- max_input_bytes
+    |    `-- error_privacy_policy
     |
     |-- decode<T>()                 // normalized text -> T
     |-- decode_value()              // normalized text -> Value
@@ -96,23 +99,28 @@ pub(crate) struct LenientJsonNormalizer {
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JsonDecodeOptions {
-    pub trim_whitespace: bool,
-    pub strip_utf8_bom: bool,
-    pub markdown_fence_policy: MarkdownFencePolicy,
-    pub escape_control_chars_in_strings: bool,
-    pub max_input_bytes: Option<usize>,
+    trim_whitespace: bool,
+    strip_utf8_bom: bool,
+    markdown_fence_policy: MarkdownFencePolicy,
+    escape_control_chars_in_strings: bool,
+    max_input_bytes: Option<usize>,
+    error_privacy_policy: ErrorPrivacyPolicy,
 }
 ```
 
-常用构造辅助：
+字段全部私有，以便后续增加配置时不破坏下游 struct literal。每个字段均提供同名
+getter，并提供以下值式 builder：
 
 - `JsonDecodeOptions::lenient()`：返回默认宽松配置。
 - `JsonDecodeOptions::strict()`：禁用所有规范化规则。
 - `JsonDecodeOptions::json_code_fences_only()`：保留默认宽松行为，但仅移除
   info string 首个 token 为 JSON-like 的 Markdown code fence。
-- `JsonDecodeOptions::with_markdown_fence_policy(policy)`：在现有配置上设置围栏策略。
-- `JsonDecodeOptions::with_max_input_bytes(limit)`：在现有配置上设置原始输入
-  字节数上限。
+- `with_trim_whitespace(enabled)`。
+- `with_strip_utf8_bom(enabled)`。
+- `with_markdown_fence_policy(policy)`。
+- `with_escape_control_chars_in_strings(enabled)`。
+- `with_max_input_bytes(Some(limit))` 设置上限，`with_max_input_bytes(None)` 清除上限。
+- `with_error_privacy_policy(policy)`。
 
 默认值：
 
@@ -121,6 +129,7 @@ pub struct JsonDecodeOptions {
 - `markdown_fence_policy = Any { closing: Optional }`
 - `escape_control_chars_in_strings = true`
 - `max_input_bytes = None`
+- `error_privacy_policy = ErrorPrivacyPolicy::Redacted`
 
 ### 4.4 错误模型
 
@@ -140,9 +149,18 @@ pub enum JsonDecodeErrorKind {
 }
 
 #[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ErrorPrivacyPolicy {
+    #[default]
+    Redacted,
+    Detailed,
+}
+
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct JsonDecodeError {
     // all fields are private; immutable accessors expose diagnostics
+    privacy_policy: ErrorPrivacyPolicy,
     source: Option<Arc<serde_json::Error>>,
 }
 ```
@@ -156,8 +174,14 @@ pub struct JsonDecodeError {
 4. `expected_top_level`/`actual_top_level` 仅用于 `UnexpectedTopLevel`。
 5. `raw_input_bytes()`、`normalized_input_bytes()` 与 `max_input_bytes()` 用于
    输入大小限制和解析诊断。
-6. `source()` 在解析或反序列化失败时暴露底层 `serde_json::Error`，便于上游
-   诊断；规范化和顶层类型检查错误没有底层 source。
+6. `privacy_policy()` 记录错误构造时实际生效的诊断策略，并参与稳定字段相等性
+   比较。
+7. 默认 `Redacted` 在错误构造时只保留稳定前缀和规范化后行列，不格式化或保存
+   `serde_json::Error`；因此 `message`、`Display`、`Debug` 和标准 error source
+   均不含 serde 提供的输入派生内容。
+8. 显式 `Detailed` 保留 `{prefix}: {serde_error}` 消息及底层 source，可能暴露
+   输入值，只适用于受控诊断环境。
+9. 规范化和顶层类型检查错误本身不含输入内容，但同样记录生效隐私策略。
 
 ## 5. 公开 API 设计
 
@@ -222,11 +246,15 @@ impl LenientJsonDecoder {
   - JSON-only 模式按 info string 的首个空白分隔 token 判断是否为 JSON-like。
   - 若存在同类 marker、单独成行、长度不短于 opening fence 的结束 fence，
     尝试一并去除。
+  - 查找 closing line 时分别取最后一个 LF 和 CR，并使用索引较大的换行，支持正文
+    和结束 fence 使用混合换行。
   - 不存在有效结束 fence 时，默认仍移除开头并保留剩余内容；严格模式下保持输入不变。
 - `escape_control_chars_in_json_strings`
   - 通过字符串状态机识别 `in_string` 与 `in_escape`。
   - 仅处理 JSON 字符串中的 `0x00..=0x1F`。
-  - 先有转义序列不二次转义。
+  - 已有合法转义序列不二次转义。
+  - 未配对反斜杠后紧跟原始控制字符时复用该反斜杠作为 escape 引导符；连续
+    反斜杠按照奇偶配对语义处理。
 - `require_non_empty`
   - 默认通过 trim 后判断空串。
   - 禁用 trim 时仅判空 `""`。
@@ -240,6 +268,8 @@ impl LenientJsonDecoder {
    - 解析失败 -> `InvalidJson`。
    - 顶层不匹配 -> `UnexpectedTopLevel`。
    - 反序列化失败 -> `Deserialize`。
+5. normalizer 和 decoder 均从同一 `JsonDecodeOptions` 读取隐私策略，并将其传入
+   所有错误构造路径。
 
 ## 8. 目录结构
 
@@ -247,6 +277,7 @@ impl LenientJsonDecoder {
 rust-common/rs-json/
   ├─ src/
   │   ├─ lib.rs
+  │   ├─ error_privacy_policy.rs
   │   ├─ lenient_json_decoder.rs
   │   ├─ json_decode_options.rs
   │   ├─ json_decode_error.rs
@@ -255,6 +286,7 @@ rust-common/rs-json/
   │   └─ lenient_json_normalizer.rs
   ├─ tests/
   │   ├─ mod.rs
+  │   ├─ error_privacy_policy_tests.rs
   │   ├─ lenient_json_decoder_tests.rs
   │   ├─ json_decode_error_kind_tests.rs
   │   ├─ json_decode_error_tests.rs
@@ -276,14 +308,15 @@ rust-common/rs-json/
 
 ### 9.2 配置与错误模型测试
 
-- `tests/json_decode_options_tests.rs`：默认值、字段覆盖与行为一致性。
+- `tests/json_decode_options_tests.rs`：预设、getter、builder 与可清除大小限制。
+- `tests/error_privacy_policy_tests.rs`：隐私策略默认值和类型契约。
 - `tests/json_decode_error_tests.rs`、`tests/json_decode_error_kind_tests.rs`、`tests/json_top_level_kind_tests.rs`：
-  - 错误种类、顶层类型映射。
+  - 错误种类、顶层类型映射、默认脱敏和显式详细诊断。
 
 ### 9.3 规范化测试
 
-- `tests/lenient_json_normalizer_tests.rs`：BOM、代码块、控制字符、空输入、trim
-  行为。
+- `tests/lenient_json_normalizer_tests.rs`：BOM、混合换行代码块、反斜杠后控制字符、
+  空输入诊断和 trim 行为。
 
 ## 10. 接入与发布边界
 

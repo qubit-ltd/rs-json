@@ -42,10 +42,8 @@ struct SingleValue {
 
 #[test]
 fn test_new_exposes_configured_options() {
-    let options = JsonDecodeOptions {
-        markdown_fence_policy: MarkdownFencePolicy::Disabled,
-        ..JsonDecodeOptions::default()
-    };
+    let options = JsonDecodeOptions::default()
+        .with_markdown_fence_policy(MarkdownFencePolicy::Disabled);
     let decoder = LenientJsonDecoder::new(options);
     assert_eq!(decoder.options(), &options);
 }
@@ -258,11 +256,11 @@ fn test_decode_reports_deserialize_error() {
 
 #[test]
 fn test_decode_object_reports_invalid_json_for_non_token_start() {
-    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
-        trim_whitespace: false,
-        markdown_fence_policy: MarkdownFencePolicy::Disabled,
-        ..JsonDecodeOptions::default()
-    });
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default()
+            .with_trim_whitespace(false)
+            .with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
+    );
     let error = decoder
         .decode_object::<User>(" \n\t ")
         .expect_err("invalid syntax should still be mapped as InvalidJson");
@@ -271,10 +269,10 @@ fn test_decode_object_reports_invalid_json_for_non_token_start() {
 
 #[test]
 fn test_normalizer_object_reuses_configuration_between_calls() {
-    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
-        markdown_fence_policy: MarkdownFencePolicy::Disabled,
-        ..JsonDecodeOptions::default()
-    });
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default()
+            .with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
+    );
 
     let first = decoder.decode_value("```json\n{\"a\":1}\n```");
     assert_eq!(first.unwrap_err().kind(), JsonDecodeErrorKind::InvalidJson);
@@ -285,10 +283,10 @@ fn test_normalizer_object_reuses_configuration_between_calls() {
 
 #[test]
 fn test_normalizer_objects_with_different_configs_do_not_share_state() {
-    let strict_decoder = LenientJsonDecoder::new(JsonDecodeOptions {
-        markdown_fence_policy: MarkdownFencePolicy::Disabled,
-        ..JsonDecodeOptions::default()
-    });
+    let strict_decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default()
+            .with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
+    );
     let permissive_decoder = LenientJsonDecoder::default();
 
     assert_eq!(
@@ -306,10 +304,9 @@ fn test_normalizer_objects_with_different_configs_do_not_share_state() {
 
 #[test]
 fn test_normalizer_object_keeps_trim_whitespace_setting_for_empty_text() {
-    let decoder = LenientJsonDecoder::new(JsonDecodeOptions {
-        trim_whitespace: false,
-        ..JsonDecodeOptions::default()
-    });
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default().with_trim_whitespace(false),
+    );
     let error = decoder
         .decode_value(" \n\t")
         .expect_err("trim disabled should leave whitespace for parser");
