@@ -36,13 +36,13 @@ LenientJsonDecoder
     |-- options-aware LenientJsonNormalizer
     |    |-- trim_whitespace
     |    |-- strip_utf8_bom
-    |    |-- strip_markdown_code_fence
+    |    |-- markdown_fence_policy
     |    |-- escape_control_chars_in_strings
     |
     |-- decode<T>()                 // normalized text -> T
     |-- decode_value()              // normalized text -> Value
-    |-- decode_object<T>()          // normalized text -> Value -> top-level check -> T
-    |-- decode_array<T>()           // normalized text -> Value -> top-level check -> Vec<T>
+    |-- decode_object<T>()          // normalized text -> RawValue validation -> T
+    |-- decode_array<T>()           // normalized text -> RawValue validation -> Vec<T>
     |
     v
 serde_json / typed output
@@ -98,9 +98,7 @@ pub(crate) struct LenientJsonNormalizer {
 pub struct JsonDecodeOptions {
     pub trim_whitespace: bool,
     pub strip_utf8_bom: bool,
-    pub strip_markdown_code_fence: bool,
-    pub strip_markdown_code_fence_requires_closing: bool,
-    pub strip_markdown_code_fence_json_only: bool,
+    pub markdown_fence_policy: MarkdownFencePolicy,
     pub escape_control_chars_in_strings: bool,
     pub max_input_bytes: Option<usize>,
 }
@@ -112,6 +110,7 @@ pub struct JsonDecodeOptions {
 - `JsonDecodeOptions::strict()`：禁用所有规范化规则。
 - `JsonDecodeOptions::json_code_fences_only()`：保留默认宽松行为，但仅移除
   info string 首个 token 为 JSON-like 的 Markdown code fence。
+- `JsonDecodeOptions::with_markdown_fence_policy(policy)`：在现有配置上设置围栏策略。
 - `JsonDecodeOptions::with_max_input_bytes(limit)`：在现有配置上设置原始输入
   字节数上限。
 
@@ -119,9 +118,7 @@ pub struct JsonDecodeOptions {
 
 - `trim_whitespace = true`
 - `strip_utf8_bom = true`
-- `strip_markdown_code_fence = true`
-- `strip_markdown_code_fence_requires_closing = false`
-- `strip_markdown_code_fence_json_only = false`
+- `markdown_fence_policy = Any { closing: Optional }`
 - `escape_control_chars_in_strings = true`
 - `max_input_bytes = None`
 
@@ -143,17 +140,9 @@ pub enum JsonDecodeErrorKind {
 }
 
 #[non_exhaustive]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JsonDecodeError {
-    pub kind: JsonDecodeErrorKind,
-    pub stage: JsonDecodeStage,
-    pub message: String,
-    pub expected_top_level: Option<JsonTopLevelKind>,
-    pub actual_top_level: Option<JsonTopLevelKind>,
-    pub line: Option<usize>,
-    pub column: Option<usize>,
-    pub input_bytes: Option<usize>,
-    pub max_input_bytes: Option<usize>,
+    // all fields are private; immutable accessors expose diagnostics
     source: Option<Arc<serde_json::Error>>,
 }
 ```
@@ -162,9 +151,11 @@ pub struct JsonDecodeError {
 
 1. `JsonDecodeError` 承担错误场景聚合与诊断信息承载。
 2. `stage` 用于标识失败发生在规范化、解析、顶层检查或反序列化阶段。
-3. `line`/`column` 用于解析和反序列化阶段定位，无法定位时保持 `None`。
+3. `normalized_line()`/`normalized_column()` 用于解析和反序列化阶段定位，
+   坐标相对于规范化后的 JSON 文本，无法定位时保持 `None`。
 4. `expected_top_level`/`actual_top_level` 仅用于 `UnexpectedTopLevel`。
-5. `input_bytes`/`max_input_bytes` 用于输入大小限制和解析诊断。
+5. `raw_input_bytes()`、`normalized_input_bytes()` 与 `max_input_bytes()` 用于
+   输入大小限制和解析诊断。
 6. `source()` 在解析或反序列化失败时暴露底层 `serde_json::Error`，便于上游
    诊断；规范化和顶层类型检查错误没有底层 source。
 
@@ -196,8 +187,10 @@ impl LenientJsonDecoder {
 ### 5.2 行为说明
 
 - `decode<T>()`：不限定顶层结构，规范化后直接反序列化为 `T`。
-- `decode_object<T>()`：先解析为 `Value`，确认顶层为对象后再反序列化为 `T`。
-- `decode_array<T>()`：先解析为 `Value`，确认顶层为数组后再反序列化为 `Vec<T>`。
+- `decode_object<T>()`：先借助 `RawValue` 验证 JSON 并确认顶层为对象，再直接
+  从规范化文本反序列化为 `T`。
+- `decode_array<T>()`：先借助 `RawValue` 验证 JSON 并确认顶层为数组，再直接
+  从规范化文本反序列化为 `Vec<T>`。
 - `decode_value()`：先规范化再直接解析为 `serde_json::Value`。
 
 ## 6. 规范化管线
@@ -210,7 +203,8 @@ impl LenientJsonDecoder {
 3. `trim_if_enabled(input)`：首尾空白清理。
 4. `strip_utf8_bom(input)`：可配置移除 UTF-8 BOM。
 5. `trim_if_enabled(input)`：移除 BOM 后再次按需裁剪。
-6. `strip_markdown_code_fence(input)`：可配置去除外层代码块。
+6. `strip_markdown_code_fence(input)`：根据 `markdown_fence_policy` 可配置去除
+   外层代码块。
 7. `trim_if_enabled(input)`：去除代码块后再次按需裁剪。
 8. `escape_control_chars_in_json_strings(input)`：可配置转义字符串内控制字符。
 9. `trim_cow_if_enabled(input)`：规范化后再次处理尾部空白。
@@ -220,7 +214,8 @@ impl LenientJsonDecoder {
 
 ### 6.1 关键算法要点
 
-- `strip_markdown_code_fence`
+- `strip_markdown_code_fence`（由 `markdown_fence_policy` 决定启用、语言范围和
+  闭合要求）
   - 仅处理以 3 个或更多反引号或波浪线开头的输入。
   - opening fence 前最多允许 3 个空格缩进。
   - 支持语言标签和无标签两种 fence 开头。

@@ -82,10 +82,10 @@
 
 - 验收标准
   - 配置字段包含 `trim_whitespace`、`strip_utf8_bom`、
-    `strip_markdown_code_fence`、
-    `strip_markdown_code_fence_requires_closing`、
-    `strip_markdown_code_fence_json_only`、
-    `escape_control_chars_in_strings`、`max_input_bytes`。
+    `markdown_fence_policy`、`escape_control_chars_in_strings`、
+    `max_input_bytes`。
+  - `markdown_fence_policy` 用单一枚举表达禁用、任意语言和仅 JSON 围栏，以及
+    可选或必须闭合，避免多个布尔字段组合出矛盾状态。
   - 默认值覆盖高频轻度脏数据场景。
   - 默认实例与配置实例行为可回归验证。
 
@@ -107,6 +107,8 @@
 
 - 验收标准
   - 输入不是合法 JSON 时返回 `InvalidJson`，不提前归类为顶层类型不匹配。
+  - 完成顶层对象检查后直接反序列化目标类型，不经由 `Value` 中转，从而保留
+    serde 的重复字段检测与精确数值语义。
   - 输入顶层非对象时返回 `UnexpectedTopLevel`。
   - 顶层为对象但结构不匹配时返回 `Deserialize`。
 
