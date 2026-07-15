@@ -45,21 +45,20 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - Reusable decoder object that holds immutable decoding options
 - `decode<T>()`: decodes any JSON top-level value into `T`
 - `decode_value()`: decodes into `serde_json::Value`
-- `decode_object<T>()`: requires a top-level JSON object
-- `decode_array<T>()`: requires a top-level JSON array
+- `decode_object<T>()`: requires a top-level JSON object and deserializes `T`
+  directly from normalized text
+- `decode_array<T>()`: requires a top-level JSON array and deserializes its
+  elements directly from normalized text
 
 ### `JsonDecodeOptions`
 
 - Presets and builder helpers: `lenient()`, `strict()`,
-  `json_code_fences_only()`, `with_max_input_bytes()`
+  `json_code_fences_only()`, `with_markdown_fence_policy()`,
+  `with_max_input_bytes()`
 - `trim_whitespace`: trims leading and trailing whitespace
 - `strip_utf8_bom`: strips a leading UTF-8 BOM
-- `strip_markdown_code_fence`: strips one outer backtick or tilde Markdown
-  code fence, including fences indented by up to three spaces
-- `strip_markdown_code_fence_requires_closing`: only strip code fence when a
-  valid closing fence exists
-- `strip_markdown_code_fence_json_only`: only strip fenced blocks whose first
-  info-string token is empty, `json`, or `jsonc`
+- `markdown_fence_policy`: selects disabled, any-language, or JSON-only fence
+  stripping, together with an optional or required closing fence
 - `escape_control_chars_in_strings`: escapes ASCII control characters inside
   JSON string literals
 - `max_input_bytes`: optional byte-size limit applied before normalization
@@ -71,10 +70,9 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `InvalidJson`: normalized text is not valid JSON syntax
 - `UnexpectedTopLevel`: top-level JSON kind does not match the requested method
 - `Deserialize`: JSON is valid but cannot be deserialized into the target type
-- `JsonDecodeError.stage`: indicates the failing stage (`normalize`, `parse`,
-  `top_level_check`, `deserialize`)
-- `JsonDecodeError.input_bytes` / `max_input_bytes`: optional byte context for
-  diagnostics
+- `JsonDecodeError` exposes immutable accessors for the failure kind, stage,
+  message, top-level context, raw and normalized byte sizes, and input limit
+- parser line and column accessors refer to normalized JSON text
 
 ## Installation
 

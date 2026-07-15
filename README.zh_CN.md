@@ -43,21 +43,17 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 - 可复用的解码器对象，内部持有不可变配置
 - `decode<T>()`：把任意 JSON 顶层值解码为 `T`
 - `decode_value()`：解码为 `serde_json::Value`
-- `decode_object<T>()`：要求顶层必须是 JSON 对象
-- `decode_array<T>()`：要求顶层必须是 JSON 数组
+- `decode_object<T>()`：要求顶层必须是 JSON 对象，并直接从规范化文本反序列化 `T`
+- `decode_array<T>()`：要求顶层必须是 JSON 数组，并直接从规范化文本反序列化元素
 
 ### `JsonDecodeOptions`
 
 - 预设与 builder 辅助方法：`lenient()`、`strict()`、
-  `json_code_fences_only()`、`with_max_input_bytes()`
+  `json_code_fences_only()`、`with_markdown_fence_policy()`、
+  `with_max_input_bytes()`
 - `trim_whitespace`：裁剪首尾空白
 - `strip_utf8_bom`：移除开头的 UTF-8 BOM
-- `strip_markdown_code_fence`：移除最外层反引号或波浪线 Markdown
-  代码块包裹，支持最多三个前导空格缩进
-- `strip_markdown_code_fence_requires_closing`：仅在存在合法闭合 fence
-  时才执行移除
-- `strip_markdown_code_fence_json_only`：仅移除 info string 首个 token 为空、
-  `json` 或 `jsonc` 的 fence
+- `markdown_fence_policy`：统一表达禁用、任意语言或仅 JSON 围栏，以及可选或必须闭合
 - `escape_control_chars_in_strings`：转义 JSON 字符串字面量里的 ASCII 控制字符
 - `max_input_bytes`：规范化前的输入字节数上限（可选）
 
@@ -68,9 +64,9 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 - `InvalidJson`：规范化后的文本不是合法 JSON 语法
 - `UnexpectedTopLevel`：JSON 顶层类型和调用的方法约束不一致
 - `Deserialize`：JSON 语法合法，但无法反序列化为目标类型
-- `JsonDecodeError.stage`：标识失败阶段（`normalize`、`parse`、
-  `top_level_check`、`deserialize`）
-- `JsonDecodeError.input_bytes` / `max_input_bytes`：用于诊断的可选字节上下文
+- `JsonDecodeError` 通过不可变访问器提供失败种类、阶段、消息、顶层上下文、原始与
+  规范化字节数及输入上限
+- 解析行列访问器对应规范化后的 JSON 文本
 
 ## 安装
 
