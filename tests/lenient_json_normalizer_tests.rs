@@ -239,9 +239,9 @@ fn test_decode_value_can_require_closing_code_fence() {
             },
         ),
     );
-    let error = decoder
-        .decode_value("```json\n{\"a\":1}")
-        .expect_err("opening fence without closing fence should be rejected when strict mode is enabled");
+    let error = decoder.decode_value("```json\n{\"a\":1}").expect_err(
+        "opening fence without closing fence should be rejected when strict mode is enabled",
+    );
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
@@ -523,13 +523,11 @@ fn test_decode_value_escapes_control_chars_after_odd_and_even_backslashes() {
             json_input.push(control);
             json_input.push_str("\"}");
 
-            let value = decoder.decode_value(&json_input).unwrap_or_else(
-                |error| {
-                    panic!(
-                        "{backslash_count} backslashes before {control:?} should be repaired: {error}"
-                    )
-                },
-            );
+            let value = decoder.decode_value(&json_input).unwrap_or_else(|error| {
+                panic!(
+                    "{backslash_count} backslashes before {control:?} should be repaired: {error}"
+                )
+            });
             let mut expected = "\\".repeat(backslash_count / 2);
             expected.push(control);
             assert_eq!(
@@ -542,11 +540,20 @@ fn test_decode_value_escapes_control_chars_after_odd_and_even_backslashes() {
 }
 
 #[test]
+fn test_decode_value_leaves_non_whitespace_controls_outside_strings_invalid() {
+    let error = LenientJsonDecoder::default()
+        .decode_value("\u{0001}{\"text\":\"value\"}")
+        .expect_err("a raw control character outside a JSON string must not be repaired");
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
 fn test_decode_value_trims_surrounding_whitespace_by_default() {
     let decoder = LenientJsonDecoder::default();
-    let value = decoder
-        .decode_value("\n{\"text\":\"abc\"}\n")
-        .expect("leading and trailing control characters outside strings should be trimmed by default");
+    let value = decoder.decode_value("\n{\"text\":\"abc\"}\n").expect(
+        "leading and trailing control characters outside strings should be trimmed by default",
+    );
     assert_eq!(value, json!({"text": "abc"}));
 }
 

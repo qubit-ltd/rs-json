@@ -1,0 +1,20 @@
+[package]
+name = "qubit-json-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+qubit-json = { path = ".." }
+serde = { version = "1.0", features = ["derive"] }
+
+[[bin]]
+name = "decoder"
+path = "fuzz_targets/decoder.rs"
+test = false
+doc = false
+bench = false
