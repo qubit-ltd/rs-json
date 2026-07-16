@@ -386,9 +386,7 @@ impl LenientJsonNormalizer {
         content: &str,
         opening_fence: MarkdownFence,
     ) -> Option<&str> {
-        let trimmed_end = content.trim_end_matches(|ch| {
-            matches!(ch, ' ' | '\t' | '\n' | '\r')
-        });
+        let trimmed_end = content.trim_end_matches([' ', '\t', '\n', '\r']);
         let closing_line_start = trimmed_end
             .rfind('\n')
             .max(trimmed_end.rfind('\r'))
