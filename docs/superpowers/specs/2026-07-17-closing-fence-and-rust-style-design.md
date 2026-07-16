@@ -18,16 +18,18 @@ line is recognized only when it has:
 - zero to three leading ASCII spaces;
 - a run of the same marker used by the opening fence;
 - at least as many marker bytes as the opening fence; and
-- no residual non-whitespace content after the marker run.
+- only ASCII spaces or tabs remaining after the marker run.
 
-The normalizer removes surrounding Unicode whitespace from the complete input
-before fence recognition. Consequently, whitespace after a final closing
-marker is accepted as outer input whitespace. Four or more spaces, a tab, or
-Unicode whitespace before the closing marker remain inside the input and do
-not form a closing fence. Under `MarkdownFenceClosing::Required`, the original
-input is retained and parsing fails. Under `Optional`, only the opening fence
-is stripped, leaving the invalid candidate in the JSON body so parsing also
-fails.
+When `trim_whitespace` is enabled, the normalizer removes surrounding Unicode
+whitespace from the complete input before fence recognition. Consequently,
+Unicode whitespace after a final closing marker is accepted as outer input
+whitespace. When trimming is disabled, that whitespace remains in the input,
+and the closing helper does not accept non-ASCII trailing whitespace. Four or
+more spaces, a tab, or Unicode whitespace before the closing marker remain
+inside the input and do not form a closing fence. Under
+`MarkdownFenceClosing::Required`, the original input is retained and parsing
+fails. Under `Optional`, only the opening fence is stripped, leaving the invalid
+candidate in the JSON body so parsing also fails.
 
 No general-purpose Markdown parser or new dependency is introduced.
 
