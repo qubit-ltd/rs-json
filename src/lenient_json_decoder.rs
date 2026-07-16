@@ -33,6 +33,15 @@ pub struct LenientJsonDecoder {
 
 impl LenientJsonDecoder {
     /// Creates a decoder with the exact normalization rules in `options`.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - Immutable normalization and error-diagnostic options.
+    ///
+    /// # Returns
+    ///
+    /// A decoder configured with `options`.
+    #[inline(always)]
     #[must_use]
     pub const fn new(options: JsonDecodeOptions) -> Self {
         Self {
@@ -41,6 +50,11 @@ impl LenientJsonDecoder {
     }
 
     /// Returns the immutable options used by this decoder.
+    ///
+    /// # Returns
+    ///
+    /// The option set supplied when the decoder was created.
+    #[inline(always)]
     #[must_use]
     pub const fn options(&self) -> &JsonDecodeOptions {
         self.normalizer.options()
@@ -48,6 +62,19 @@ impl LenientJsonDecoder {
 
     /// Decodes `input` into the target Rust type `T` without a top-level
     /// structure constraint.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Raw JSON text to normalize and deserialize.
+    ///
+    /// # Returns
+    ///
+    /// The deserialized target value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] when input normalization, JSON parsing, or
+    /// target deserialization fails.
     pub fn decode<T>(&self, input: &str) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
@@ -68,6 +95,22 @@ impl LenientJsonDecoder {
     /// The target is deserialized directly from normalized text after a
     /// top-level check, preserving serde's duplicate-field and number handling
     /// semantics.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Raw JSON text to normalize and deserialize.
+    ///
+    /// # Returns
+    ///
+    /// The deserialized target value when the normalized input is a JSON
+    /// object.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] when normalization or parsing fails, when
+    /// the top-level value is not an object, or when the object cannot be
+    /// deserialized into `T`.
+    #[inline(always)]
     pub fn decode_object<T>(&self, input: &str) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
@@ -79,6 +122,21 @@ impl LenientJsonDecoder {
     ///
     /// The elements are deserialized directly from normalized text after a
     /// top-level check.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Raw JSON text to normalize and deserialize.
+    ///
+    /// # Returns
+    ///
+    /// The deserialized elements when the normalized input is a JSON array.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] when normalization or parsing fails, when
+    /// the top-level value is not an array, or when an element cannot be
+    /// deserialized into `T`.
+    #[inline(always)]
     pub fn decode_array<T>(
         &self,
         input: &str,
@@ -93,6 +151,19 @@ impl LenientJsonDecoder {
     ///
     /// This entry point intentionally constructs a JSON DOM because its public
     /// return type is [`Value`].
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Raw JSON text to normalize and parse.
+    ///
+    /// # Returns
+    ///
+    /// The parsed dynamic JSON value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] when input normalization or JSON parsing
+    /// fails.
     pub fn decode_value(&self, input: &str) -> Result<Value, JsonDecodeError> {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
@@ -105,6 +176,22 @@ impl LenientJsonDecoder {
         )
     }
 
+    /// Decodes input while enforcing an object or array top-level contract.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Raw JSON text to normalize and deserialize.
+    /// * `expected` - Required top-level JSON kind.
+    ///
+    /// # Returns
+    ///
+    /// The deserialized target value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] when normalization or parsing fails, when
+    /// the validated top-level kind differs from `expected`, or when target
+    /// deserialization fails.
     fn decode_with_top_level<T>(
         &self,
         input: &str,
@@ -141,6 +228,23 @@ impl LenientJsonDecoder {
         )
     }
 
+    /// Parses normalized JSON text into a dynamic value.
+    ///
+    /// # Arguments
+    ///
+    /// * `normalized` - Normalized JSON text.
+    /// * `raw_input_bytes` - Input length before normalization.
+    /// * `normalized_input_bytes` - Normalized text length.
+    /// * `privacy_policy` - Policy applied to parse diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// The parsed dynamic JSON value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeErrorKind::InvalidJson`](crate::JsonDecodeErrorKind::InvalidJson)
+    /// when `normalized` is not valid JSON.
     fn parse_value(
         normalized: &str,
         raw_input_bytes: usize,
@@ -157,6 +261,23 @@ impl LenientJsonDecoder {
         })
     }
 
+    /// Validates normalized JSON syntax without constructing a value tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `normalized` - Normalized JSON text.
+    /// * `raw_input_bytes` - Input length before normalization.
+    /// * `normalized_input_bytes` - Normalized text length.
+    /// * `privacy_policy` - Policy applied to parse diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the complete normalized text is valid JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeErrorKind::InvalidJson`](crate::JsonDecodeErrorKind::InvalidJson)
+    /// when validation fails.
     fn validate_json(
         normalized: &str,
         raw_input_bytes: usize,
@@ -175,6 +296,23 @@ impl LenientJsonDecoder {
         Ok(())
     }
 
+    /// Deserializes normalized JSON text into `T`.
+    ///
+    /// # Arguments
+    ///
+    /// * `normalized` - Normalized JSON text.
+    /// * `raw_input_bytes` - Input length before normalization.
+    /// * `normalized_input_bytes` - Normalized text length.
+    /// * `privacy_policy` - Policy applied to decode diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// The deserialized target value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] classified as invalid JSON for syntax and
+    /// end-of-input failures, or as a deserialization failure for data errors.
     fn deserialize_normalized<T>(
         normalized: &str,
         raw_input_bytes: usize,
@@ -194,6 +332,19 @@ impl LenientJsonDecoder {
         })
     }
 
+    /// Maps a serde error to the stable public decoder error model.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - Serde JSON error to classify.
+    /// * `raw_input_bytes` - Input length before normalization.
+    /// * `normalized_input_bytes` - Normalized text length.
+    /// * `privacy_policy` - Policy applied to retained diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// A deserialization error for serde data failures, or an invalid-JSON
+    /// error for IO, syntax, and end-of-input failures.
     fn map_decode_error(
         error: serde_json::Error,
         raw_input_bytes: usize,

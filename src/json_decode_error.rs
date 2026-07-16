@@ -53,76 +53,17 @@ pub struct JsonDecodeError {
 }
 
 impl JsonDecodeError {
-    /// Returns the stable category of this decoding failure.
-    #[must_use]
-    pub const fn kind(&self) -> JsonDecodeErrorKind {
-        self.kind
-    }
-
-    /// Returns the decoding stage that produced this error.
-    #[must_use]
-    pub const fn stage(&self) -> JsonDecodeStage {
-        self.stage
-    }
-
-    /// Returns the privacy policy applied when this error was constructed.
-    #[must_use]
-    pub const fn privacy_policy(&self) -> ErrorPrivacyPolicy {
-        self.privacy_policy
-    }
-
-    /// Returns the human-readable diagnostic message.
-    #[must_use]
-    pub fn message(&self) -> &str {
-        &self.message
-    }
-
-    /// Returns the required top-level JSON kind, when constrained decoding
-    /// rejected a valid value.
-    #[must_use]
-    pub const fn expected_top_level(&self) -> Option<JsonTopLevelKind> {
-        self.expected_top_level
-    }
-
-    /// Returns the parsed top-level JSON kind, when constrained decoding
-    /// rejected a valid value.
-    #[must_use]
-    pub const fn actual_top_level(&self) -> Option<JsonTopLevelKind> {
-        self.actual_top_level
-    }
-
-    /// Returns the byte length of the input before normalization.
-    #[must_use]
-    pub const fn raw_input_bytes(&self) -> usize {
-        self.raw_input_bytes
-    }
-
-    /// Returns the byte length of normalized JSON text, when normalization
-    /// completed before the failure.
-    #[must_use]
-    pub const fn normalized_input_bytes(&self) -> Option<usize> {
-        self.normalized_input_bytes
-    }
-
-    /// Returns the configured raw-input limit for size failures.
-    #[must_use]
-    pub const fn max_input_bytes(&self) -> Option<usize> {
-        self.max_input_bytes
-    }
-
-    /// Returns the one-based parser line in normalized JSON text, when known.
-    #[must_use]
-    pub const fn normalized_line(&self) -> Option<usize> {
-        self.normalized_line
-    }
-
-    /// Returns the one-based parser column in normalized JSON text, when known.
-    #[must_use]
-    pub const fn normalized_column(&self) -> Option<usize> {
-        self.normalized_column
-    }
-
-    #[inline]
+    /// Creates an error for raw input that exceeds the configured size limit.
+    ///
+    /// # Arguments
+    ///
+    /// * `raw_input_bytes` - Raw input length in bytes.
+    /// * `max_input_bytes` - Configured maximum raw input length.
+    /// * `privacy_policy` - Privacy policy active during normalization.
+    ///
+    /// # Returns
+    ///
+    /// An input-too-large error containing the supplied size diagnostics.
     pub(crate) fn input_too_large(
         raw_input_bytes: usize,
         max_input_bytes: usize,
@@ -146,7 +87,18 @@ impl JsonDecodeError {
         }
     }
 
-    #[inline]
+    /// Creates an error for input that is empty at a normalization boundary.
+    ///
+    /// # Arguments
+    ///
+    /// * `raw_input_bytes` - Raw input length in bytes.
+    /// * `normalized_input_bytes` - Normalized length when normalization
+    ///   completed, or `None` when the input was rejected earlier.
+    /// * `privacy_policy` - Privacy policy active during normalization.
+    ///
+    /// # Returns
+    ///
+    /// An empty-input error containing the available size diagnostics.
     pub(crate) fn empty_input(
         raw_input_bytes: usize,
         normalized_input_bytes: Option<usize>,
@@ -168,7 +120,19 @@ impl JsonDecodeError {
         }
     }
 
-    #[inline]
+    /// Creates an error for invalid normalized JSON syntax.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - Serde parser error.
+    /// * `raw_input_bytes` - Raw input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length in bytes.
+    /// * `privacy_policy` - Policy controlling retained serde diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// An invalid-JSON error with stable location and size metadata.
+    #[inline(always)]
     pub(crate) fn invalid_json(
         error: serde_json::Error,
         raw_input_bytes: usize,
@@ -186,7 +150,20 @@ impl JsonDecodeError {
         )
     }
 
-    #[inline]
+    /// Creates an error for a valid JSON value with an unexpected top-level
+    /// kind.
+    ///
+    /// # Arguments
+    ///
+    /// * `expected` - Required top-level kind.
+    /// * `actual` - Observed top-level kind.
+    /// * `raw_input_bytes` - Raw input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length in bytes.
+    /// * `privacy_policy` - Privacy policy active during decoding.
+    ///
+    /// # Returns
+    ///
+    /// A top-level-check error containing the expected and actual kinds.
     pub(crate) fn unexpected_top_level(
         expected: JsonTopLevelKind,
         actual: JsonTopLevelKind,
@@ -212,7 +189,19 @@ impl JsonDecodeError {
         }
     }
 
-    #[inline]
+    /// Creates an error for valid JSON that cannot deserialize into the target.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - Serde deserialization error.
+    /// * `raw_input_bytes` - Raw input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length in bytes.
+    /// * `privacy_policy` - Policy controlling retained serde diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// A deserialization error with stable location and size metadata.
+    #[inline(always)]
     pub(crate) fn deserialize(
         error: serde_json::Error,
         raw_input_bytes: usize,
@@ -230,6 +219,22 @@ impl JsonDecodeError {
         )
     }
 
+    /// Creates a decoder error from a serde error and privacy policy.
+    ///
+    /// # Arguments
+    ///
+    /// * `kind` - Stable public error category.
+    /// * `stage` - Decoder stage that produced the error.
+    /// * `prefix` - Stable message prefix.
+    /// * `error` - Serde error carrying location and optional details.
+    /// * `raw_input_bytes` - Raw input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length in bytes.
+    /// * `privacy_policy` - Policy controlling retained serde diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// A decoder error that always retains stable metadata and retains the
+    /// serde source only under the detailed privacy policy.
     fn from_serde_error(
         kind: JsonDecodeErrorKind,
         stage: JsonDecodeStage,
@@ -265,7 +270,143 @@ impl JsonDecodeError {
         }
     }
 
+    /// Returns the stable category of this decoding failure.
+    ///
+    /// # Returns
+    ///
+    /// The stable error category.
+    #[inline(always)]
+    #[must_use]
+    pub const fn kind(&self) -> JsonDecodeErrorKind {
+        self.kind
+    }
+
+    /// Returns the decoding stage that produced this error.
+    ///
+    /// # Returns
+    ///
+    /// The decoder stage where the failure occurred.
+    #[inline(always)]
+    #[must_use]
+    pub const fn stage(&self) -> JsonDecodeStage {
+        self.stage
+    }
+
+    /// Returns the privacy policy applied when this error was constructed.
+    ///
+    /// # Returns
+    ///
+    /// The effective error privacy policy.
+    #[inline(always)]
+    #[must_use]
+    pub const fn privacy_policy(&self) -> ErrorPrivacyPolicy {
+        self.privacy_policy
+    }
+
+    /// Returns the human-readable diagnostic message.
+    ///
+    /// # Returns
+    ///
+    /// The stable redacted message or explicitly requested detailed message.
+    #[inline(always)]
+    #[must_use]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// Returns the required top-level JSON kind for a constrained decode.
+    ///
+    /// # Returns
+    ///
+    /// `Some(kind)` when constrained decoding rejected a valid top-level
+    /// value; otherwise, `None`.
+    #[inline(always)]
+    #[must_use]
+    pub const fn expected_top_level(&self) -> Option<JsonTopLevelKind> {
+        self.expected_top_level
+    }
+
+    /// Returns the observed top-level JSON kind for a constrained decode.
+    ///
+    /// # Returns
+    ///
+    /// `Some(kind)` when constrained decoding rejected a valid top-level
+    /// value; otherwise, `None`.
+    #[inline(always)]
+    #[must_use]
+    pub const fn actual_top_level(&self) -> Option<JsonTopLevelKind> {
+        self.actual_top_level
+    }
+
+    /// Returns the byte length of the input before normalization.
+    ///
+    /// # Returns
+    ///
+    /// The raw input length in bytes.
+    #[inline(always)]
+    #[must_use]
+    pub const fn raw_input_bytes(&self) -> usize {
+        self.raw_input_bytes
+    }
+
+    /// Returns the byte length of normalized JSON text.
+    ///
+    /// # Returns
+    ///
+    /// `Some(length)` when normalization completed before the failure, or
+    /// `None` when the input was rejected before a normalized length existed.
+    #[inline(always)]
+    #[must_use]
+    pub const fn normalized_input_bytes(&self) -> Option<usize> {
+        self.normalized_input_bytes
+    }
+
+    /// Returns the configured raw-input limit for a size failure.
+    ///
+    /// # Returns
+    ///
+    /// `Some(limit)` for an input-too-large error, or `None` for other errors.
+    #[inline(always)]
+    #[must_use]
+    pub const fn max_input_bytes(&self) -> Option<usize> {
+        self.max_input_bytes
+    }
+
+    /// Returns the parser line in normalized JSON text.
+    ///
+    /// # Returns
+    ///
+    /// `Some(line)` with a one-based line number when serde reported one, or
+    /// `None` when no parser location is available.
+    #[inline(always)]
+    #[must_use]
+    pub const fn normalized_line(&self) -> Option<usize> {
+        self.normalized_line
+    }
+
+    /// Returns the parser column in normalized JSON text.
+    ///
+    /// # Returns
+    ///
+    /// `Some(column)` with a one-based column number when serde reported one,
+    /// or `None` when no parser location is available.
+    #[inline(always)]
+    #[must_use]
+    pub const fn normalized_column(&self) -> Option<usize> {
+        self.normalized_column
+    }
+
     /// Builds a diagnostic that contains only stable text and parser location.
+    ///
+    /// # Arguments
+    ///
+    /// * `prefix` - Stable error-message prefix.
+    /// * `line` - One-based parser line, or zero when unavailable.
+    /// * `column` - One-based parser column, or zero when unavailable.
+    ///
+    /// # Returns
+    ///
+    /// A message containing the prefix and each available normalized location.
     fn redacted_message(prefix: &str, line: usize, column: usize) -> String {
         match (line > 0, column > 0) {
             (true, true) => {
@@ -283,6 +424,15 @@ impl JsonDecodeError {
 }
 
 impl PartialEq for JsonDecodeError {
+    /// Compares all stable error fields while ignoring the retained source.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - Error to compare with this error.
+    ///
+    /// # Returns
+    ///
+    /// `true` when every stable diagnostic field is equal; otherwise, `false`.
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind
             && self.stage == other.stage
@@ -301,12 +451,32 @@ impl PartialEq for JsonDecodeError {
 impl Eq for JsonDecodeError {}
 
 impl fmt::Display for JsonDecodeError {
+    /// Writes the configured human-readable diagnostic message.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - Destination formatter.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the message is written successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns a formatting error when the destination formatter rejects the
+    /// write.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)
     }
 }
 
 impl std::error::Error for JsonDecodeError {
+    /// Returns the retained serde error under detailed privacy mode.
+    ///
+    /// # Returns
+    ///
+    /// `Some(source)` when detailed diagnostics retained a serde error, or
+    /// `None` for redacted and non-serde failures.
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.source
             .as_deref()

@@ -30,6 +30,11 @@ pub(crate) struct LenientJsonNormalizer {
 
 impl Default for LenientJsonNormalizer {
     /// Creates a normalizer using the default lenient option set.
+    ///
+    /// # Returns
+    ///
+    /// A normalizer configured with [`JsonDecodeOptions::default`].
+    #[inline(always)]
     fn default() -> Self {
         Self::new(JsonDecodeOptions::default())
     }
@@ -37,18 +42,46 @@ impl Default for LenientJsonNormalizer {
 
 impl LenientJsonNormalizer {
     /// Creates a normalizer with the provided lenient decoding options.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - Immutable normalization and error-diagnostic options.
+    ///
+    /// # Returns
+    ///
+    /// A normalizer configured with `options`.
+    #[inline(always)]
     #[must_use]
     pub(crate) const fn new(options: JsonDecodeOptions) -> Self {
         Self { options }
     }
 
     /// Returns the configuration used by this normalizer.
+    ///
+    /// # Returns
+    ///
+    /// The immutable normalization options.
+    #[inline(always)]
     #[must_use]
     pub(crate) const fn options(&self) -> &JsonDecodeOptions {
         &self.options
     }
 
     /// Normalizes one raw JSON text input into text ready for parsing.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Raw JSON text to normalize.
+    ///
+    /// # Returns
+    ///
+    /// Borrowed input when no rewrite is needed, or owned normalized text when
+    /// control characters require escaping.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] when the raw input exceeds its configured
+    /// limit or becomes empty at a normalization boundary.
     pub(crate) fn normalize<'a>(
         &self,
         input: &'a str,
@@ -79,6 +112,20 @@ impl LenientJsonNormalizer {
     }
 
     /// Rejects empty text according to the configured whitespace policy.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Raw input to check.
+    /// * `raw_input_bytes` - Original raw input length in bytes.
+    ///
+    /// # Returns
+    ///
+    /// The unchanged input when it is accepted.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] when the input is empty under the active
+    /// whitespace policy.
     fn require_non_empty<'a>(
         &self,
         input: &'a str,
@@ -103,6 +150,19 @@ impl LenientJsonNormalizer {
     }
 
     /// Rejects raw input that exceeds the configured size limit.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Raw input whose byte length is checked.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the input is within the limit or no limit is configured.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] when the input is larger than the configured
+    /// raw byte limit.
     fn require_within_size_limit(
         &self,
         input: &str,
@@ -121,7 +181,15 @@ impl LenientJsonNormalizer {
     }
 
     /// Trims a borrowed input slice when trimming is enabled.
-    #[inline]
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Borrowed text to conditionally trim.
+    ///
+    /// # Returns
+    ///
+    /// A borrowed view of the trimmed or unchanged input.
+    #[inline(always)]
     fn trim_if_enabled<'a>(&self, input: &'a str) -> &'a str {
         if self.options.trim_whitespace() {
             input.trim()
@@ -132,6 +200,15 @@ impl LenientJsonNormalizer {
 
     /// Trims normalized text while preserving its ownership mode where
     /// possible.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Borrowed or owned normalized text.
+    ///
+    /// # Returns
+    ///
+    /// Conditionally trimmed text, preserving borrowed storage and retaining
+    /// owned storage when no trim is needed.
     fn trim_cow_if_enabled<'a>(&self, input: Cow<'a, str>) -> Cow<'a, str> {
         if !self.options.trim_whitespace() {
             return input;
@@ -150,7 +227,16 @@ impl LenientJsonNormalizer {
     }
 
     /// Removes one leading UTF-8 byte order mark when configured.
-    #[inline]
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Text to inspect for a leading byte order mark.
+    ///
+    /// # Returns
+    ///
+    /// A borrowed view with one leading mark removed when configured, or the
+    /// unchanged input.
+    #[inline(always)]
     fn strip_utf8_bom<'a>(&self, input: &'a str) -> &'a str {
         if self.options.strip_utf8_bom() {
             input.strip_prefix('\u{feff}').unwrap_or(input)
@@ -160,6 +246,15 @@ impl LenientJsonNormalizer {
     }
 
     /// Removes one supported outer Markdown code fence when configured.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Text to inspect for one outer Markdown code fence.
+    ///
+    /// # Returns
+    ///
+    /// The fenced body when the active policy accepts the fence, or the
+    /// unchanged input otherwise.
     fn strip_markdown_code_fence<'a>(&self, input: &'a str) -> &'a str {
         let (json_only, closing) = match self.options.markdown_fence_policy() {
             MarkdownFencePolicy::Disabled => return input,
@@ -191,6 +286,15 @@ impl LenientJsonNormalizer {
     }
 
     /// Returns a recognized opening Markdown fence when present.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Text beginning at a possible fence opening.
+    ///
+    /// # Returns
+    ///
+    /// `Some(fence)` when `input` begins with a supported marker after at most
+    /// three spaces, or `None` otherwise.
     fn opening_markdown_fence(input: &str) -> Option<MarkdownFence> {
         let indent_len = input.bytes().take_while(|byte| *byte == b' ').count();
         if indent_len > 3 {
@@ -212,6 +316,15 @@ impl LenientJsonNormalizer {
     }
 
     /// Returns the end of the first line and the start of the next line.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Text whose first line break is located.
+    ///
+    /// # Returns
+    ///
+    /// `Some((line_end, next_line_start))` for LF, CRLF, or CR input, or
+    /// `None` when no line break exists.
     fn first_line_break(input: &str) -> Option<(usize, usize)> {
         let newline = input.find('\n');
         let carriage_return = input.find('\r');
@@ -235,6 +348,16 @@ impl LenientJsonNormalizer {
     }
 
     /// Returns whether a fenced info string should be treated as JSON.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - Markdown fence info string.
+    ///
+    /// # Returns
+    ///
+    /// `true` for an empty, `json`, or `jsonc` first token, ignoring ASCII
+    /// case; otherwise, `false`.
+    #[inline]
     fn is_json_code_fence_tag(tag: &str) -> bool {
         let language = tag.split_whitespace().next().unwrap_or("");
         language.is_empty()
@@ -243,6 +366,16 @@ impl LenientJsonNormalizer {
     }
 
     /// Removes a compatible closing fence from content when present.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - Fenced body and possible closing fence.
+    /// * `opening_fence` - Opening marker that the closing line must match.
+    ///
+    /// # Returns
+    ///
+    /// `Some(body)` when the final non-whitespace line is a compatible closing
+    /// fence, or `None` otherwise.
     fn strip_markdown_closing_fence(
         content: &str,
         opening_fence: MarkdownFence,
@@ -265,6 +398,17 @@ impl LenientJsonNormalizer {
     }
 
     /// Returns the marker run length when a line starts with the same marker.
+    ///
+    /// # Arguments
+    ///
+    /// * `line` - Candidate closing-fence line.
+    /// * `marker` - Opening fence marker byte.
+    ///
+    /// # Returns
+    ///
+    /// `Some(length)` for a run of at least three matching marker bytes, or
+    /// `None` otherwise.
+    #[inline]
     fn same_marker_fence_len(line: &str, marker: u8) -> Option<usize> {
         let count = line.bytes().take_while(|byte| *byte == marker).count();
         (count >= 3).then_some(count)
