@@ -26,17 +26,29 @@ use crate::{
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct JsonDecodeError {
+    /// Stores the stable category of the decoding failure.
     kind: JsonDecodeErrorKind,
+    /// Stores the pipeline stage that produced the failure.
     stage: JsonDecodeStage,
+    /// Stores the privacy policy applied while constructing diagnostics.
     privacy_policy: ErrorPrivacyPolicy,
+    /// Stores the human-readable diagnostic message.
     message: String,
+    /// Stores the expected constrained top-level kind, when applicable.
     expected_top_level: Option<JsonTopLevelKind>,
+    /// Stores the actual constrained top-level kind, when applicable.
     actual_top_level: Option<JsonTopLevelKind>,
+    /// Stores the input byte length before normalization.
     raw_input_bytes: usize,
+    /// Stores the normalized byte length when normalization completed.
     normalized_input_bytes: Option<usize>,
+    /// Stores the configured raw input limit for size failures.
     max_input_bytes: Option<usize>,
+    /// Stores the one-based parser line in normalized text when available.
     normalized_line: Option<usize>,
+    /// Stores the one-based parser column in normalized text when available.
     normalized_column: Option<usize>,
+    /// Stores the detailed serde error when diagnostics permit retaining it.
     source: Option<Arc<serde_json::Error>>,
 }
 

@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Internal normalization utilities used by the lenient JSON decoder.
+//! Defines the private normalization pipeline for lenient JSON decoding.
 
 use std::borrow::Cow;
 
@@ -16,28 +16,20 @@ use crate::{
     MarkdownFencePolicy,
 };
 
+use super::{
+    control_character_escaper::ControlCharacterEscaper,
+    markdown_fence::MarkdownFence,
+};
+
 /// Normalizes one raw JSON text input before JSON parsing.
-///
-/// The object holds normalization options and applies all supported
-/// preprocessing rules in the same order for every `normalize` call.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LenientJsonNormalizer {
     /// Stores the option set used by the normalizer.
     options: JsonDecodeOptions,
 }
 
-/// Describes one recognized Markdown code fence opening line.
-#[derive(Debug, Clone, Copy)]
-struct MarkdownFence {
-    /// Stores the byte marker used by the fence.
-    marker: u8,
-    /// Stores the number of repeated marker bytes in the opening fence.
-    marker_len: usize,
-    /// Stores the byte index immediately after the opening marker run.
-    marker_end: usize,
-}
-
 impl Default for LenientJsonNormalizer {
+    /// Creates a normalizer using the default lenient option set.
     fn default() -> Self {
         Self::new(JsonDecodeOptions::default())
     }
@@ -45,9 +37,6 @@ impl Default for LenientJsonNormalizer {
 
 impl LenientJsonNormalizer {
     /// Creates a normalizer with the provided lenient decoding options.
-    ///
-    /// The options are copied into the object so each `normalize` call uses a
-    /// consistent policy without external mutation.
     #[must_use]
     pub(crate) const fn new(options: JsonDecodeOptions) -> Self {
         Self { options }
@@ -59,12 +48,7 @@ impl LenientJsonNormalizer {
         &self.options
     }
 
-    /// Normalizes one raw JSON text input and returns a parsed-ready text
-    /// slice.
-    ///
-    /// The pipeline is intentionally narrow: it trims whitespace, strips an
-    /// optional BOM, optionally removes a Markdown code fence, escapes control
-    /// characters in strings, and finally validates non-emptiness again.
+    /// Normalizes one raw JSON text input into text ready for parsing.
     pub(crate) fn normalize<'a>(
         &self,
         input: &'a str,
@@ -77,7 +61,10 @@ impl LenientJsonNormalizer {
         let input = self.trim_if_enabled(input);
         let input = self.strip_markdown_code_fence(input);
         let input = self.trim_if_enabled(input);
-        let input = self.escape_control_chars_in_json_strings(input);
+        let input = ControlCharacterEscaper::escape(
+            input,
+            self.options.escape_control_chars_in_strings(),
+        );
         let input = self.trim_cow_if_enabled(input);
 
         if input.is_empty() {
@@ -91,10 +78,7 @@ impl LenientJsonNormalizer {
         }
     }
 
-    /// Verifies that the input is not empty under the configured policy.
-    ///
-    /// If `trim_whitespace` is enabled, whitespace-only input is rejected as
-    /// empty; otherwise only zero-length input is rejected.
+    /// Rejects empty text according to the configured whitespace policy.
     fn require_non_empty<'a>(
         &self,
         input: &'a str,
@@ -102,27 +86,23 @@ impl LenientJsonNormalizer {
     ) -> Result<&'a str, JsonDecodeError> {
         if self.options.trim_whitespace() {
             if input.trim().is_empty() {
-                Err(JsonDecodeError::empty_input(
+                return Err(JsonDecodeError::empty_input(
                     raw_input_bytes,
                     None,
                     self.options.error_privacy_policy(),
-                ))
-            } else {
-                Ok(input)
+                ));
             }
         } else if input.is_empty() {
-            Err(JsonDecodeError::empty_input(
+            return Err(JsonDecodeError::empty_input(
                 raw_input_bytes,
                 None,
                 self.options.error_privacy_policy(),
-            ))
-        } else {
-            Ok(input)
+            ));
         }
+        Ok(input)
     }
 
-    /// Verifies that the raw input length does not exceed the configured
-    /// maximum, when one is configured.
+    /// Rejects raw input that exceeds the configured size limit.
     fn require_within_size_limit(
         &self,
         input: &str,
@@ -140,9 +120,8 @@ impl LenientJsonNormalizer {
         Ok(())
     }
 
-    /// Trims a borrowed input slice if trimming is enabled.
-    ///
-    /// This helper borrows and never allocates when trimming is disabled.
+    /// Trims a borrowed input slice when trimming is enabled.
+    #[inline]
     fn trim_if_enabled<'a>(&self, input: &'a str) -> &'a str {
         if self.options.trim_whitespace() {
             input.trim()
@@ -151,10 +130,8 @@ impl LenientJsonNormalizer {
         }
     }
 
-    /// Trims the normalized text when trimming is enabled.
-    ///
-    /// Borrowed values remain borrowed, and owned values are copied only when
-    /// trimming removes characters.
+    /// Trims normalized text while preserving its ownership mode where
+    /// possible.
     fn trim_cow_if_enabled<'a>(&self, input: Cow<'a, str>) -> Cow<'a, str> {
         if !self.options.trim_whitespace() {
             return input;
@@ -172,9 +149,8 @@ impl LenientJsonNormalizer {
         }
     }
 
-    /// Removes an optional UTF-8 BOM before parsing.
-    ///
-    /// If no BOM exists, the input is returned unchanged.
+    /// Removes one leading UTF-8 byte order mark when configured.
+    #[inline]
     fn strip_utf8_bom<'a>(&self, input: &'a str) -> &'a str {
         if self.options.strip_utf8_bom() {
             input.strip_prefix('\u{feff}').unwrap_or(input)
@@ -183,19 +159,13 @@ impl LenientJsonNormalizer {
         }
     }
 
-    /// Removes one outer Markdown code fence when enabled.
-    ///
-    /// The helper only strips a backtick fence that starts at the beginning of
-    /// input and uses at least three backticks or tildes. Up to three leading
-    /// spaces before the opening marker are accepted. If a valid closing fence
-    /// is present after trimming the trailing side, it is also removed.
+    /// Removes one supported outer Markdown code fence when configured.
     fn strip_markdown_code_fence<'a>(&self, input: &'a str) -> &'a str {
         let (json_only, closing) = match self.options.markdown_fence_policy() {
             MarkdownFencePolicy::Disabled => return input,
             MarkdownFencePolicy::Any { closing } => (false, closing),
             MarkdownFencePolicy::JsonOnly { closing } => (true, closing),
         };
-
         let Some(opening_fence) = Self::opening_markdown_fence(input) else {
             return input;
         };
@@ -207,9 +177,7 @@ impl LenientJsonNormalizer {
         if json_only && !Self::is_json_code_fence_tag(opening_tag) {
             return input;
         }
-
         let content = &input[content_start..];
-
         if let Some(without_close) =
             Self::strip_markdown_closing_fence(content, opening_fence)
         {
@@ -228,12 +196,10 @@ impl LenientJsonNormalizer {
         if indent_len > 3 {
             return None;
         }
-
         let marker = *input.as_bytes().get(indent_len)?;
         if marker != b'`' && marker != b'~' {
             return None;
         }
-
         let marker_len = input[indent_len..]
             .bytes()
             .take_while(|byte| *byte == marker)
@@ -276,11 +242,7 @@ impl LenientJsonNormalizer {
             || language.eq_ignore_ascii_case("jsonc")
     }
 
-    /// Removes a valid closing Markdown code fence from `content` when present.
-    ///
-    /// A closing fence is considered valid only when the last non-whitespace
-    /// token is a backtick fence that is at least as long as the opening fence
-    /// and appears on its own line.
+    /// Removes a compatible closing fence from content when present.
     fn strip_markdown_closing_fence(
         content: &str,
         opening_fence: MarkdownFence,
@@ -293,7 +255,6 @@ impl LenientJsonNormalizer {
         let closing_line = trimmed_end[closing_line_start..].trim();
         let closing_len =
             Self::same_marker_fence_len(closing_line, opening_fence.marker)?;
-
         if closing_len == closing_line.len()
             && closing_len >= opening_fence.marker_len
         {
@@ -303,136 +264,9 @@ impl LenientJsonNormalizer {
         }
     }
 
-    /// Returns the marker run length when `line` starts with the same fence
-    /// marker.
+    /// Returns the marker run length when a line starts with the same marker.
     fn same_marker_fence_len(line: &str, marker: u8) -> Option<usize> {
         let count = line.bytes().take_while(|byte| *byte == marker).count();
         (count >= 3).then_some(count)
-    }
-
-    /// Escapes raw ASCII control chars inside JSON string literals.
-    ///
-    /// Characters outside strings remain unchanged. Existing escape sequences
-    /// are preserved so valid escapes are not double-escaped.
-    fn escape_control_chars_in_json_strings<'a>(
-        &self,
-        input: &'a str,
-    ) -> Cow<'a, str> {
-        if !self.options.escape_control_chars_in_strings() {
-            return Cow::Borrowed(input);
-        }
-
-        let replacement_count =
-            Self::count_control_chars_in_json_strings(input);
-        if replacement_count == 0 {
-            return Cow::Borrowed(input);
-        }
-
-        let mut in_string = false;
-        let mut in_escape = false;
-        let mut output =
-            String::with_capacity(input.len() + replacement_count * 5);
-
-        for ch in input.chars() {
-            let mut replacement = None;
-
-            if in_string {
-                if in_escape {
-                    in_escape = false;
-                    if ('\u{0000}'..='\u{001f}').contains(&ch) {
-                        let escaped = self.escaped_control_char(ch);
-                        replacement = escaped.strip_prefix('\\');
-                    }
-                } else if ch == '\\' {
-                    in_escape = true;
-                } else if ch == '"' {
-                    in_string = false;
-                } else if ('\u{0000}'..='\u{001f}').contains(&ch) {
-                    replacement = Some(self.escaped_control_char(ch));
-                }
-            } else if ch == '"' {
-                in_string = true;
-            }
-
-            if let Some(escaped) = replacement {
-                output.push_str(escaped);
-                continue;
-            }
-
-            output.push(ch);
-        }
-
-        Cow::Owned(output)
-    }
-
-    /// Counts raw ASCII control chars inside JSON string literals.
-    fn count_control_chars_in_json_strings(input: &str) -> usize {
-        let mut in_string = false;
-        let mut in_escape = false;
-        let mut count = 0;
-
-        for ch in input.chars() {
-            if in_string {
-                if in_escape {
-                    in_escape = false;
-                    if ('\u{0000}'..='\u{001f}').contains(&ch) {
-                        count += 1;
-                    }
-                } else if ch == '\\' {
-                    in_escape = true;
-                } else if ch == '"' {
-                    in_string = false;
-                } else if ('\u{0000}'..='\u{001f}').contains(&ch) {
-                    count += 1;
-                }
-            } else if ch == '"' {
-                in_string = true;
-            }
-        }
-
-        count
-    }
-
-    /// Maps one supported ASCII control character to its JSON escape.
-    ///
-    /// This helper only handles characters in `U+0000..=U+001F`.
-    fn escaped_control_char(&self, ch: char) -> &'static str {
-        match ch {
-            '\u{0008}' => "\\b",
-            '\u{0009}' => "\\t",
-            '\u{000a}' => "\\n",
-            '\u{000c}' => "\\f",
-            '\u{000d}' => "\\r",
-            '\u{0000}' => "\\u0000",
-            '\u{0001}' => "\\u0001",
-            '\u{0002}' => "\\u0002",
-            '\u{0003}' => "\\u0003",
-            '\u{0004}' => "\\u0004",
-            '\u{0005}' => "\\u0005",
-            '\u{0006}' => "\\u0006",
-            '\u{0007}' => "\\u0007",
-            '\u{000b}' => "\\u000b",
-            '\u{000e}' => "\\u000e",
-            '\u{000f}' => "\\u000f",
-            '\u{0010}' => "\\u0010",
-            '\u{0011}' => "\\u0011",
-            '\u{0012}' => "\\u0012",
-            '\u{0013}' => "\\u0013",
-            '\u{0014}' => "\\u0014",
-            '\u{0015}' => "\\u0015",
-            '\u{0016}' => "\\u0016",
-            '\u{0017}' => "\\u0017",
-            '\u{0018}' => "\\u0018",
-            '\u{0019}' => "\\u0019",
-            '\u{001a}' => "\\u001a",
-            '\u{001b}' => "\\u001b",
-            '\u{001c}' => "\\u001c",
-            '\u{001d}' => "\\u001d",
-            '\u{001e}' => "\\u001e",
-            '\u{001f}' => "\\u001f",
-            _ => unreachable!(
-                "escaped_control_char only supports ASCII control chars"
-            ),
-        }
     }
 }
