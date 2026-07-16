@@ -386,15 +386,25 @@ impl LenientJsonNormalizer {
         content: &str,
         opening_fence: MarkdownFence,
     ) -> Option<&str> {
-        let trimmed_end = content.trim_end_matches(char::is_whitespace);
+        let trimmed_end = content.trim_end_matches(|ch| {
+            matches!(ch, ' ' | '\t' | '\n' | '\r')
+        });
         let closing_line_start = trimmed_end
             .rfind('\n')
             .max(trimmed_end.rfind('\r'))
             .map_or(0, |index| index + 1);
-        let closing_line = trimmed_end[closing_line_start..].trim();
+        let closing_line = &trimmed_end[closing_line_start..];
+        let indent_len = closing_line
+            .bytes()
+            .take_while(|byte| *byte == b' ')
+            .count();
+        if indent_len > 3 {
+            return None;
+        }
+        let marker_line = &closing_line[indent_len..];
         let closing_len =
-            Self::same_marker_fence_len(closing_line, opening_fence.marker)?;
-        if closing_len == closing_line.len()
+            Self::same_marker_fence_len(marker_line, opening_fence.marker)?;
+        if closing_len == marker_line.len()
             && closing_len >= opening_fence.marker_len
         {
             Some(&content[..closing_line_start])
