@@ -208,13 +208,9 @@ fn test_decode_value_strips_code_fence_with_indented_closing_fence() {
 
 #[test]
 fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_policy()
-{
+ {
     let decoder = LenientJsonDecoder::default();
-    for closing_line in [
-        "    ```",
-        "\t```",
-        "\u{00a0}```",
-    ] {
+    for closing_line in ["    ```", "\t```", "\u{00a0}```"] {
         let input = format!("```json\n{{\"a\":1}}\n{closing_line}");
         let error = decoder.decode_value(&input).expect_err(
             "invalid closing-fence whitespace must remain in the JSON body",
@@ -225,7 +221,7 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_pol
 
 #[test]
 fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_policy()
-{
+ {
     let decoder = LenientJsonDecoder::new(
         JsonDecodeOptions::default().with_markdown_fence_policy(
             MarkdownFencePolicy::Any {
@@ -233,11 +229,7 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_pol
             },
         ),
     );
-    for closing_line in [
-        "    ```",
-        "\t```",
-        "\u{00a0}```",
-    ] {
+    for closing_line in ["    ```", "\t```", "\u{00a0}```"] {
         let input = format!("```json\n{{\"a\":1}}\n{closing_line}");
         let error = decoder.decode_value(&input).expect_err(
             "required mode must reject invalid closing-fence whitespace",
