@@ -57,6 +57,9 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 - `max_input_bytes`：规范化前的输入字节数上限（可选）
 - `error_privacy_policy`：选择默认安全的脱敏错误，或显式启用完整 serde 诊断
 
+默认配置不会设置 `max_input_bytes`，避免库替应用强加资源上限。来自不可信边界的输入应由
+调用方按自身内存与延迟预算，通过 `with_max_input_bytes(Some(limit))` 显式限制。
+
 ### 显式错误模型
 
 - `InputTooLarge`：原始输入大小超过配置上限
@@ -210,10 +213,23 @@ Qubit JSON 适合这些情况：
 
 - `LenientJsonDecoder` 通过内部的 `LenientJsonNormalizer` 完成输入规范化。
 - 对外公开能力为 `decode`、`decode_object`、`decode_array`、`decode_value`。
-- 规范化与错误模型由 `src/lenient_json_normalizer.rs`、`src/json_decode_error.rs` 实现，并有
+- 规范化与错误模型由 `src/internal/lenient_json_normalizer.rs`、`src/json_decode_error.rs` 实现，并有
   `tests/` 下对应测试覆盖。
 - 需求与实现口径与
   `doc/json_prd.zh_CN.md` 和 `doc/json_design.zh_CN.md` 对齐。
+
+## 开发验证
+
+先运行 `./align-ci.sh`，再运行 `./ci-check.sh`。Criterion 基准可通过
+`cargo bench --bench decoder_bench --no-run` 编译。
+
+可选 fuzz 目标仅用于开发，不会成为运行时依赖。安装 `cargo-fuzz` 后，在仓库根目录执行：
+
+```bash
+cargo install cargo-fuzz
+(cd fuzz && cargo fuzz build decoder)
+(cd fuzz && cargo fuzz run decoder)
+```
 
 ## 许可证
 

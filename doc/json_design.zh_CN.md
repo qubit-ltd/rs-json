@@ -55,7 +55,8 @@ serde_json / typed output
 
 1. 对外以对象 API 为中心，不以工具函数列表为中心。
 2. 规范化作为解码内部阶段，保持对象边界稳定。
-3. 内部组件按职责拆分，`lenient_json_normalizer.rs` 仅承载内部预处理策略。
+3. 内部组件按职责拆分：`internal/lenient_json_normalizer.rs` 承载预处理策略，
+   `internal/control_character_escaper.rs` 以单次、惰性分配扫描处理字符串内 C0 控制字符。
 
 ## 4. 核心对象模型
 
@@ -219,7 +220,7 @@ impl LenientJsonDecoder {
 
 ## 6. 规范化管线
 
-实现统一在 `src/lenient_json_normalizer.rs`，对外不直接暴露独立函数 API。
+实现统一在 `src/internal/lenient_json_normalizer.rs`，对外不直接暴露独立函数 API。
 核心处理顺序如下：
 
 1. `require_within_size_limit(input)`：按字节数上限拒绝过大输入。
@@ -261,7 +262,7 @@ impl LenientJsonDecoder {
 
 ## 7. 与实现对齐性
 
-1. `lenient_json_normalizer.rs` 采用 `LenientJsonNormalizer` 对象模型，而非全局函数集合。
+1. `internal/lenient_json_normalizer.rs` 采用 `LenientJsonNormalizer` 对象模型，而非全局函数集合。
 2. `lenient_json_decoder.rs` 使用单一 `normalize` 调用，避免重复逻辑。
 3. `decode_object` 与 `decode_array` 通过 `JsonTopLevelKind` 做一致约束检查。
 4. 错误映射路径：
@@ -283,7 +284,10 @@ rust-common/rs-json/
   │   ├─ json_decode_error.rs
   │   ├─ json_decode_error_kind.rs
   │   ├─ json_top_level_kind.rs
-  │   └─ lenient_json_normalizer.rs
+  │   └─ internal/
+  │       ├─ control_character_escaper.rs
+  │       ├─ lenient_json_normalizer.rs
+  │       └─ markdown_fence.rs
   ├─ tests/
   │   ├─ mod.rs
   │   ├─ error_privacy_policy_tests.rs
