@@ -46,6 +46,13 @@ Implementation follows a red-green-refactor cycle:
 4. Re-run the focused tests, then the repository's authorized validation
    sequence.
 
+As a coverage-only follow-up, two permanent external regressions exercise the
+same terminal NBSP input through `LenientJsonDecoder::decode_value`: default
+trimming must decode `json!({"a": 1})`, while
+`with_trim_whitespace(false)` must return `JsonDecodeErrorKind::InvalidJson`.
+These tests lock in confirmed behavior and require no production change or
+artificial RED phase.
+
 Existing coverage for zero-to-three-space indentation, longer matching fences,
 shorter closing fences, and mixed line endings remains unchanged.
 

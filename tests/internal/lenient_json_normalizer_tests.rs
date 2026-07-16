@@ -207,6 +207,30 @@ fn test_decode_value_strips_code_fence_with_indented_closing_fence() {
 }
 
 #[test]
+fn test_decode_value_accepts_terminal_unicode_whitespace_when_trimming_enabled()
+{
+    let decoder = LenientJsonDecoder::default();
+    let value = decoder
+        .decode_value("```json\n{\"a\":1}\n```\u{00a0}")
+        .expect("default trimming should remove terminal Unicode whitespace");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
+fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled()
+ {
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default().with_trim_whitespace(false),
+    );
+    let error = decoder
+        .decode_value("```json\n{\"a\":1}\n```\u{00a0}")
+        .expect_err(
+            "terminal Unicode whitespace should remain without trimming",
+        );
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
 fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_policy()
  {
     let decoder = LenientJsonDecoder::default();
