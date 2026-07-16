@@ -58,13 +58,13 @@
 #![deny(missing_docs)]
 
 mod error_privacy_policy;
+mod internal;
 mod json_decode_error;
 mod json_decode_error_kind;
 mod json_decode_options;
 mod json_decode_stage;
 mod json_top_level_kind;
 mod lenient_json_decoder;
-mod lenient_json_normalizer;
 mod markdown_fence_closing;
 mod markdown_fence_policy;
 

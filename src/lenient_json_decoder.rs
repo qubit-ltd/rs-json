@@ -19,7 +19,7 @@ use crate::{
     JsonDecodeError,
     JsonDecodeOptions,
     JsonTopLevelKind,
-    lenient_json_normalizer::LenientJsonNormalizer,
+    internal::lenient_json_normalizer::LenientJsonNormalizer,
 };
 
 /// A configurable JSON decoder for non-fully-trusted text inputs.
@@ -65,9 +65,9 @@ impl LenientJsonDecoder {
 
     /// Decodes `input` into `T`, requiring a top-level JSON object.
     ///
-    /// The target is deserialized directly from normalized text after syntax
-    /// and top-level validation, preserving serde's duplicate-field and number
-    /// handling semantics.
+    /// The target is deserialized directly from normalized text after a
+    /// top-level check, preserving serde's duplicate-field and number handling
+    /// semantics.
     pub fn decode_object<T>(&self, input: &str) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
@@ -77,8 +77,8 @@ impl LenientJsonDecoder {
 
     /// Decodes `input` into `Vec<T>`, requiring a top-level JSON array.
     ///
-    /// The elements are deserialized directly from normalized text after syntax
-    /// and top-level validation.
+    /// The elements are deserialized directly from normalized text after a
+    /// top-level check.
     pub fn decode_array<T>(
         &self,
         input: &str,
@@ -117,14 +117,14 @@ impl LenientJsonDecoder {
         let privacy_policy = self.options().error_privacy_policy();
         let normalized = self.normalizer.normalize(input)?;
         let normalized_input_bytes = normalized.len();
-        Self::validate_json(
-            normalized.as_ref(),
-            raw_input_bytes,
-            normalized_input_bytes,
-            privacy_policy,
-        )?;
         let actual = JsonTopLevelKind::of_normalized_json(normalized.as_ref());
         if actual != expected {
+            Self::validate_json(
+                normalized.as_ref(),
+                raw_input_bytes,
+                normalized_input_bytes,
+                privacy_policy,
+            )?;
             return Err(JsonDecodeError::unexpected_top_level(
                 expected,
                 actual,
