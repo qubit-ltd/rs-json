@@ -260,8 +260,10 @@ cargo bench --bench decoder_bench --no-run
 ```
 
 The optional fuzz target is development tooling and is not a runtime
-dependency. Install `cargo-fuzz`, then build or run it from the repository
-root:
+dependency. It exercises the default, strict, JSON-only, and required-closing
+decoder policies. A bounded run is scheduled by `.github/workflows/fuzz.yml`;
+install `cargo-fuzz` to build or run the same target locally from the
+repository root:
 
 ```bash
 cargo install cargo-fuzz

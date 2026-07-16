@@ -223,7 +223,9 @@ Qubit JSON 适合这些情况：
 先运行 `./align-ci.sh`，再运行 `./ci-check.sh`。Criterion 基准可通过
 `cargo bench --bench decoder_bench --no-run` 编译。
 
-可选 fuzz 目标仅用于开发，不会成为运行时依赖。安装 `cargo-fuzz` 后，在仓库根目录执行：
+可选 fuzz 目标仅用于开发，不会成为运行时依赖。它覆盖默认、严格、仅 JSON 围栏和
+必须闭合围栏四类策略，并由 `.github/workflows/fuzz.yml` 定时执行有时限的运行。
+安装 `cargo-fuzz` 后，可在仓库根目录构建或运行同一目标：
 
 ```bash
 cargo install cargo-fuzz

@@ -1,0 +1,33 @@
+name: Rust Fuzz
+
+on:
+  schedule:
+    - cron: "23 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.repository }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  decoder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Install Rust nightly
+        run: rustup toolchain install nightly-2026-06-05 --profile minimal
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Fuzz decoder
+        working-directory: fuzz
+        run: cargo +nightly-2026-06-05 fuzz run decoder -- -max_total_time=300
