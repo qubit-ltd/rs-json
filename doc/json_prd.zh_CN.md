@@ -173,11 +173,18 @@
 - 文档中的行为描述必须与 [json_design.zh_CN.md](json_design.zh_CN.md) 保持一致。
 - 公开能力必须在测试目录中可观测：
   - `tests/lenient_json_decoder_tests.rs`
-  - `tests/lenient_json_normalizer_tests.rs`
+  - `tests/internal/lenient_json_normalizer_tests.rs`
   - `tests/json_decode_options_tests.rs`
   - `tests/error_privacy_policy_tests.rs`
   - `tests/json_decode_error_tests.rs`
   - `tests/json_top_level_kind_tests.rs`
   - `tests/json_decode_error_kind_tests.rs`
+  - `tests/json_decode_stage_tests.rs`
+  - `tests/markdown_fence_closing_tests.rs`
+  - `tests/markdown_fence_policy_tests.rs`
+
+- `benches/decoder_bench.rs` 提供公开解码路径的 Criterion 基准。
+- `fuzz/fuzz_targets/decoder.rs` 覆盖主要配置组合，并由
+  `.github/workflows/fuzz.yml` 定时执行有时限的 fuzz。
 
 以上清单与目前代码目录保持一致，避免文档与实现的漂移。
