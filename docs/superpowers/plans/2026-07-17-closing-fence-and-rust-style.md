@@ -12,7 +12,10 @@
 
 - Preserve every public API, module path, dependency, and normalization stage.
 - Recognize a closing fence only with zero to three leading ASCII spaces.
-- Preserve the existing outer Unicode-whitespace trim before fence recognition.
+- Preserve the configured outer-whitespace boundary: when `trim_whitespace` is
+  enabled, terminal Unicode whitespace is removed before fence recognition;
+  when disabled, it remains and the closing helper does not accept non-ASCII
+  trailing whitespace.
 - Use the exact approved seven-line copyright header at byte zero in all 29 Rust files.
 - Rename all 49 `# Arguments` headings under `src` to `# Parameters` without changing their prose.
 - Follow test-driven development: verify the regression tests fail before changing production code.
@@ -274,9 +277,11 @@ git add docs/superpowers/specs/2026-07-17-closing-fence-and-rust-style-design.md
 git commit -m "docs(json): clarify outer whitespace handling"
 ```
 
-Expected: the commit only records that terminal Unicode whitespace is removed
-by the existing outer trim, while four spaces, a tab, or Unicode whitespace
-before the closing marker remain invalid indentation.
+Expected: the commit records that terminal Unicode whitespace is removed and
+accepted as outer input whitespace only when `trim_whitespace` is enabled. When
+trimming is disabled, it remains and the closing helper does not accept
+non-ASCII trailing whitespace. Four spaces, a tab, or Unicode whitespace before
+the closing marker remain invalid indentation under either setting.
 
 - [ ] **Step 2: Run repository alignment first**
 
@@ -318,7 +323,9 @@ git --no-pager diff --check
 git --no-pager log -4 --oneline
 ```
 
-Expected: an empty status after the Task 1 and Task 2 commits; no whitespace errors are reported.
+Expected: an empty status after the behavior, repository-wide style,
+specification-correction, and repository-alignment commits; no whitespace
+errors are reported.
 
 - [ ] **Step 6: Verify the final repository state**
 
@@ -326,7 +333,9 @@ Run:
 
 ```bash
 git status --short
-git --no-pager log -3 --oneline
+git --no-pager log -4 --oneline
 ```
 
-Expected: an empty status and two English grouped implementation commits for behavior and style.
+Expected: an empty status and four relevant English grouped commits for the
+behavior change, repository-wide style alignment, specification correction,
+and repository-prescribed alignment.
