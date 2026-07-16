@@ -28,6 +28,7 @@ use crate::{
 /// before delegating actual parsing and deserialization to `serde_json`.
 #[derive(Debug, Clone, Default)]
 pub struct LenientJsonDecoder {
+    /// Stores the configured normalization pipeline.
     normalizer: LenientJsonNormalizer,
 }
 
@@ -345,6 +346,7 @@ impl LenientJsonDecoder {
     ///
     /// A deserialization error for serde data failures, or an invalid-JSON
     /// error for IO, syntax, and end-of-input failures.
+    #[must_use]
     fn map_decode_error(
         error: serde_json::Error,
         raw_input_bytes: usize,

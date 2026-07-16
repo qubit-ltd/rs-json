@@ -87,7 +87,9 @@ impl JsonDecodeOptions {
     /// # Returns
     ///
     /// A lenient option set that accepts empty, `json`, and `jsonc` fence
-    /// language tags while leaving other fenced blocks unchanged.
+    /// language tags while leaving other fenced blocks unchanged. The `jsonc`
+    /// token is only a fence label; fenced content must still be standard JSON
+    /// without comments or trailing commas.
     #[inline]
     #[must_use]
     pub const fn json_code_fences_only() -> Self {
@@ -224,7 +226,6 @@ impl JsonDecodeOptions {
     /// `Some(limit)` when accepted raw input is capped at `limit` bytes, or
     /// `None` when the decoder enforces no input-size limit.
     #[inline(always)]
-    #[must_use]
     pub const fn max_input_bytes(&self) -> Option<usize> {
         self.max_input_bytes
     }

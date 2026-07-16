@@ -64,6 +64,7 @@ impl JsonDecodeError {
     /// # Returns
     ///
     /// An input-too-large error containing the supplied size diagnostics.
+    #[must_use]
     pub(crate) fn input_too_large(
         raw_input_bytes: usize,
         max_input_bytes: usize,
@@ -99,6 +100,7 @@ impl JsonDecodeError {
     /// # Returns
     ///
     /// An empty-input error containing the available size diagnostics.
+    #[must_use]
     pub(crate) fn empty_input(
         raw_input_bytes: usize,
         normalized_input_bytes: Option<usize>,
@@ -133,6 +135,7 @@ impl JsonDecodeError {
     ///
     /// An invalid-JSON error with stable location and size metadata.
     #[inline(always)]
+    #[must_use]
     pub(crate) fn invalid_json(
         error: serde_json::Error,
         raw_input_bytes: usize,
@@ -164,6 +167,7 @@ impl JsonDecodeError {
     /// # Returns
     ///
     /// A top-level-check error containing the expected and actual kinds.
+    #[must_use]
     pub(crate) fn unexpected_top_level(
         expected: JsonTopLevelKind,
         actual: JsonTopLevelKind,
@@ -202,6 +206,7 @@ impl JsonDecodeError {
     ///
     /// A deserialization error with stable location and size metadata.
     #[inline(always)]
+    #[must_use]
     pub(crate) fn deserialize(
         error: serde_json::Error,
         raw_input_bytes: usize,
@@ -235,6 +240,7 @@ impl JsonDecodeError {
     ///
     /// A decoder error that always retains stable metadata and retains the
     /// serde source only under the detailed privacy policy.
+    #[must_use]
     fn from_serde_error(
         kind: JsonDecodeErrorKind,
         stage: JsonDecodeStage,
@@ -321,7 +327,6 @@ impl JsonDecodeError {
     /// `Some(kind)` when constrained decoding rejected a valid top-level
     /// value; otherwise, `None`.
     #[inline(always)]
-    #[must_use]
     pub const fn expected_top_level(&self) -> Option<JsonTopLevelKind> {
         self.expected_top_level
     }
@@ -333,7 +338,6 @@ impl JsonDecodeError {
     /// `Some(kind)` when constrained decoding rejected a valid top-level
     /// value; otherwise, `None`.
     #[inline(always)]
-    #[must_use]
     pub const fn actual_top_level(&self) -> Option<JsonTopLevelKind> {
         self.actual_top_level
     }
@@ -356,7 +360,6 @@ impl JsonDecodeError {
     /// `Some(length)` when normalization completed before the failure, or
     /// `None` when the input was rejected before a normalized length existed.
     #[inline(always)]
-    #[must_use]
     pub const fn normalized_input_bytes(&self) -> Option<usize> {
         self.normalized_input_bytes
     }
@@ -367,7 +370,6 @@ impl JsonDecodeError {
     ///
     /// `Some(limit)` for an input-too-large error, or `None` for other errors.
     #[inline(always)]
-    #[must_use]
     pub const fn max_input_bytes(&self) -> Option<usize> {
         self.max_input_bytes
     }
@@ -379,7 +381,6 @@ impl JsonDecodeError {
     /// `Some(line)` with a one-based line number when serde reported one, or
     /// `None` when no parser location is available.
     #[inline(always)]
-    #[must_use]
     pub const fn normalized_line(&self) -> Option<usize> {
         self.normalized_line
     }
@@ -391,7 +392,6 @@ impl JsonDecodeError {
     /// `Some(column)` with a one-based column number when serde reported one,
     /// or `None` when no parser location is available.
     #[inline(always)]
-    #[must_use]
     pub const fn normalized_column(&self) -> Option<usize> {
         self.normalized_column
     }
@@ -407,6 +407,7 @@ impl JsonDecodeError {
     /// # Returns
     ///
     /// A message containing the prefix and each available normalized location.
+    #[must_use]
     fn redacted_message(prefix: &str, line: usize, column: usize) -> String {
         match (line > 0, column > 0) {
             (true, true) => {

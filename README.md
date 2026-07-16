@@ -59,6 +59,8 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `strip_utf8_bom`: strips a leading UTF-8 BOM
 - `markdown_fence_policy`: selects disabled, any-language, or JSON-only fence
   stripping, together with an optional or required closing fence
+- `jsonc` is accepted only as a Markdown fence label; fenced content is still
+  parsed as standard JSON, so comments and trailing commas remain invalid
 - `escape_control_chars_in_strings`: escapes ASCII control characters inside
   JSON string literals
 - `max_input_bytes`: optional byte-size limit applied before normalization
