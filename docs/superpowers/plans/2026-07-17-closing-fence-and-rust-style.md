@@ -12,7 +12,7 @@
 
 - Preserve every public API, module path, dependency, and normalization stage.
 - Recognize a closing fence only with zero to three leading ASCII spaces.
-- Permit only ASCII spaces or tabs after the closing marker run.
+- Preserve the existing outer Unicode-whitespace trim before fence recognition.
 - Use the exact approved seven-line copyright header at byte zero in all 29 Rust files.
 - Rename all 49 `# Arguments` headings under `src` to `# Parameters` without changing their prose.
 - Follow test-driven development: verify the regression tests fail before changing production code.
@@ -43,7 +43,6 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_pol
         "    ```",
         "\t```",
         "\u{00a0}```",
-        "```\u{00a0}",
     ] {
         let input = format!("```json\n{{\"a\":1}}\n{closing_line}");
         let error = decoder.decode_value(&input).expect_err(
@@ -73,7 +72,6 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_pol
         "    ```",
         "\t```",
         "\u{00a0}```",
-        "```\u{00a0}",
     ] {
         let input = format!("```json\n{{\"a\":1}}\n{closing_line}");
         let error = decoder.decode_value(&input).expect_err(
@@ -257,13 +255,30 @@ git commit -m "style(json): standardize Rust headers and docs"
 ### Task 3: Repository validation
 
 **Files:**
+- Modify: `docs/superpowers/specs/2026-07-17-closing-fence-and-rust-style-design.md`
+- Modify: `docs/superpowers/plans/2026-07-17-closing-fence-and-rust-style.md`
 - Inspect: all changes made by `align-ci.sh` before proceeding.
 
 **Interfaces:**
 - Consumes: the completed behavioral and style changes from Tasks 1 and 2.
-- Produces: CI-equivalent verification evidence for the completed changes.
+- Produces: a committed record of the user-confirmed outer-whitespace boundary
+  and CI-equivalent verification evidence for the completed changes.
 
-- [ ] **Step 1: Run repository alignment first**
+- [ ] **Step 1: Commit the confirmed specification correction**
+
+Inspect the two documentation changes and commit only them:
+
+```bash
+git --no-pager diff -- docs/superpowers/specs/2026-07-17-closing-fence-and-rust-style-design.md docs/superpowers/plans/2026-07-17-closing-fence-and-rust-style.md
+git add docs/superpowers/specs/2026-07-17-closing-fence-and-rust-style-design.md docs/superpowers/plans/2026-07-17-closing-fence-and-rust-style.md
+git commit -m "docs(json): clarify outer whitespace handling"
+```
+
+Expected: the commit only records that terminal Unicode whitespace is removed
+by the existing outer trim, while four spaces, a tab, or Unicode whitespace
+before the closing marker remain invalid indentation.
+
+- [ ] **Step 2: Run repository alignment first**
 
 Run:
 
@@ -273,7 +288,7 @@ Run:
 
 Expected: exit 0. Immediately inspect `git status --short` and `git --no-pager diff`; retain only in-scope formatting/alignment changes.
 
-- [ ] **Step 2: Run CI-equivalent validation**
+- [ ] **Step 3: Run CI-equivalent validation**
 
 Run:
 
@@ -283,17 +298,17 @@ Run:
 
 Expected: exit 0 with formatting, compilation, Clippy, tests, doctests, and the configured coverage threshold passing.
 
-- [ ] **Step 3: Run coverage JSON only if CI reports coverage below threshold**
+- [ ] **Step 4: Run coverage JSON only if CI reports coverage below threshold**
 
-If and only if Step 2 reports coverage below its threshold, run:
+If and only if Step 3 reports coverage below its threshold, run:
 
 ```bash
 ./coverage.sh json
 ```
 
-Expected: exit 0 and a per-file coverage report identifying any remaining uncovered branch. Do not run this command when Step 2 meets the configured threshold.
+Expected: exit 0 and a per-file coverage report identifying any remaining uncovered branch. Do not run this command when Step 3 meets the configured threshold.
 
-- [ ] **Step 4: Recheck exact scope and history**
+- [ ] **Step 5: Recheck exact scope and history**
 
 Run:
 
@@ -305,7 +320,7 @@ git --no-pager log -4 --oneline
 
 Expected: an empty status after the Task 1 and Task 2 commits; no whitespace errors are reported.
 
-- [ ] **Step 5: Verify the final repository state**
+- [ ] **Step 6: Verify the final repository state**
 
 Run:
 

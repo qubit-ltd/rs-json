@@ -18,10 +18,13 @@ line is recognized only when it has:
 - zero to three leading ASCII spaces;
 - a run of the same marker used by the opening fence;
 - at least as many marker bytes as the opening fence; and
-- only ASCII spaces or tabs after the marker run.
+- no residual non-whitespace content after the marker run.
 
-Four or more leading spaces, a leading tab, or other Unicode whitespace do not
-form a closing fence. Under `MarkdownFenceClosing::Required`, the original
+The normalizer removes surrounding Unicode whitespace from the complete input
+before fence recognition. Consequently, whitespace after a final closing
+marker is accepted as outer input whitespace. Four or more spaces, a tab, or
+Unicode whitespace before the closing marker remain inside the input and do
+not form a closing fence. Under `MarkdownFenceClosing::Required`, the original
 input is retained and parsing fails. Under `Optional`, only the opening fence
 is stripped, leaving the invalid candidate in the JSON body so parsing also
 fails.
@@ -33,7 +36,8 @@ No general-purpose Markdown parser or new dependency is introduced.
 Implementation follows a red-green-refactor cycle:
 
 1. Add external regression tests covering four-space indentation, leading tabs,
-   and non-ASCII whitespace under optional and required closing policies.
+   and leading non-ASCII whitespace under optional and required closing
+   policies.
 2. Run the focused test target and confirm the new tests fail for the expected
    reason.
 3. Apply the smallest parser change that enforces the closing-line grammar.
