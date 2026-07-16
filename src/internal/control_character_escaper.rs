@@ -1,5 +1,5 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
@@ -19,7 +19,7 @@ pub(crate) struct ControlCharacterEscaper;
 impl ControlCharacterEscaper {
     /// Escapes raw C0 control characters in JSON string literals when enabled.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - JSON-like text to scan.
     /// * `enabled` - Whether raw control characters should be escaped.
@@ -61,7 +61,7 @@ impl ControlCharacterEscaper {
 
     /// Returns the required replacement while advancing JSON-string state.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `ch` - Current input character.
     /// * `in_string` - Whether the scanner is currently inside a JSON string.
@@ -97,7 +97,7 @@ impl ControlCharacterEscaper {
 
     /// Maps an ASCII C0 control character to its JSON escape.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `ch` - Character to map.
     ///

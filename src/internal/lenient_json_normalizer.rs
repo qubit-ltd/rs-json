@@ -1,5 +1,5 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
@@ -43,7 +43,7 @@ impl Default for LenientJsonNormalizer {
 impl LenientJsonNormalizer {
     /// Creates a normalizer with the provided lenient decoding options.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `options` - Immutable normalization and error-diagnostic options.
     ///
@@ -69,7 +69,7 @@ impl LenientJsonNormalizer {
 
     /// Normalizes one raw JSON text input into text ready for parsing.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Raw JSON text to normalize.
     ///
@@ -113,7 +113,7 @@ impl LenientJsonNormalizer {
 
     /// Rejects empty text according to the configured whitespace policy.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Raw input to check.
     /// * `raw_input_bytes` - Original raw input length in bytes.
@@ -151,7 +151,7 @@ impl LenientJsonNormalizer {
 
     /// Rejects raw input that exceeds the configured size limit.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Raw input whose byte length is checked.
     ///
@@ -182,7 +182,7 @@ impl LenientJsonNormalizer {
 
     /// Trims a borrowed input slice when trimming is enabled.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Borrowed text to conditionally trim.
     ///
@@ -202,7 +202,7 @@ impl LenientJsonNormalizer {
     /// Trims normalized text while preserving its ownership mode where
     /// possible.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Borrowed or owned normalized text.
     ///
@@ -230,7 +230,7 @@ impl LenientJsonNormalizer {
 
     /// Removes one leading UTF-8 byte order mark when configured.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Text to inspect for a leading byte order mark.
     ///
@@ -250,7 +250,7 @@ impl LenientJsonNormalizer {
 
     /// Removes one supported outer Markdown code fence when configured.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Text to inspect for one outer Markdown code fence.
     ///
@@ -291,7 +291,7 @@ impl LenientJsonNormalizer {
 
     /// Returns a recognized opening Markdown fence when present.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Text beginning at a possible fence opening.
     ///
@@ -321,7 +321,7 @@ impl LenientJsonNormalizer {
 
     /// Returns the end of the first line and the start of the next line.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Text whose first line break is located.
     ///
@@ -353,7 +353,7 @@ impl LenientJsonNormalizer {
 
     /// Returns whether a fenced info string should be treated as JSON.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `tag` - Markdown fence info string.
     ///
@@ -373,7 +373,7 @@ impl LenientJsonNormalizer {
 
     /// Removes a compatible closing fence from content when present.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `content` - Fenced body and possible closing fence.
     /// * `opening_fence` - Opening marker that the closing line must match.
@@ -415,7 +415,7 @@ impl LenientJsonNormalizer {
 
     /// Returns the marker run length when a line starts with the same marker.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `line` - Candidate closing-fence line.
     /// * `marker` - Opening fence marker byte.

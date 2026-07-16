@@ -1,5 +1,5 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
@@ -114,7 +114,7 @@ impl JsonDecodeOptions {
 
     /// Returns a copy with whitespace trimming enabled or disabled.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `enabled` - Whether to remove surrounding whitespace.
     ///
@@ -142,7 +142,7 @@ impl JsonDecodeOptions {
 
     /// Returns a copy with UTF-8 byte order mark stripping configured.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `enabled` - Whether to remove a leading UTF-8 byte order mark.
     ///
@@ -169,7 +169,7 @@ impl JsonDecodeOptions {
 
     /// Returns a copy of these options with a Markdown fence policy.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `markdown_fence_policy` - Policy used to recognize and remove one
     ///   outer Markdown code fence.
@@ -201,7 +201,7 @@ impl JsonDecodeOptions {
 
     /// Returns a copy with JSON-string control character escaping configured.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `enabled` - Whether to escape raw ASCII control characters inside JSON
     ///   strings.
@@ -232,7 +232,7 @@ impl JsonDecodeOptions {
 
     /// Returns a copy of these options with a raw input byte-size limit.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `max_input_bytes` - `Some(limit)` to cap the raw input at `limit`
     ///   bytes, or `None` to remove the limit.
@@ -266,7 +266,7 @@ impl JsonDecodeOptions {
     /// The policy determines whether serde diagnostics derived from input
     /// values are retained in returned errors.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `error_privacy_policy` - Policy applied when constructing decoding
     ///   errors.

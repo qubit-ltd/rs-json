@@ -1,5 +1,5 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
@@ -35,7 +35,7 @@ pub struct LenientJsonDecoder {
 impl LenientJsonDecoder {
     /// Creates a decoder with the exact normalization rules in `options`.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `options` - Immutable normalization and error-diagnostic options.
     ///
@@ -64,7 +64,7 @@ impl LenientJsonDecoder {
     /// Decodes `input` into the target Rust type `T` without a top-level
     /// structure constraint.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Raw JSON text to normalize and deserialize.
     ///
@@ -97,7 +97,7 @@ impl LenientJsonDecoder {
     /// top-level check, preserving serde's duplicate-field and number handling
     /// semantics.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Raw JSON text to normalize and deserialize.
     ///
@@ -124,7 +124,7 @@ impl LenientJsonDecoder {
     /// The elements are deserialized directly from normalized text after a
     /// top-level check.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Raw JSON text to normalize and deserialize.
     ///
@@ -153,7 +153,7 @@ impl LenientJsonDecoder {
     /// This entry point intentionally constructs a JSON DOM because its public
     /// return type is [`Value`].
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Raw JSON text to normalize and parse.
     ///
@@ -179,7 +179,7 @@ impl LenientJsonDecoder {
 
     /// Decodes input while enforcing an object or array top-level contract.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `input` - Raw JSON text to normalize and deserialize.
     /// * `expected` - Required top-level JSON kind.
@@ -231,7 +231,7 @@ impl LenientJsonDecoder {
 
     /// Parses normalized JSON text into a dynamic value.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `normalized` - Normalized JSON text.
     /// * `raw_input_bytes` - Input length before normalization.
@@ -264,7 +264,7 @@ impl LenientJsonDecoder {
 
     /// Validates normalized JSON syntax without constructing a value tree.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `normalized` - Normalized JSON text.
     /// * `raw_input_bytes` - Input length before normalization.
@@ -299,7 +299,7 @@ impl LenientJsonDecoder {
 
     /// Deserializes normalized JSON text into `T`.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `normalized` - Normalized JSON text.
     /// * `raw_input_bytes` - Input length before normalization.
@@ -335,7 +335,7 @@ impl LenientJsonDecoder {
 
     /// Maps a serde error to the stable public decoder error model.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `error` - Serde JSON error to classify.
     /// * `raw_input_bytes` - Input length before normalization.
