@@ -34,6 +34,19 @@ pub enum JsonDecodeErrorKind {
 }
 
 impl fmt::Display for JsonDecodeErrorKind {
+    /// Writes the stable snake-case name of this error category.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - Destination formatter.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the category name is written successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns a formatting error when the destination rejects the write.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = match self {
             Self::InputTooLarge => "input_too_large",
@@ -49,6 +62,20 @@ impl fmt::Display for JsonDecodeErrorKind {
 impl FromStr for JsonDecodeErrorKind {
     type Err = &'static str;
 
+    /// Parses a stable snake-case error category without ASCII case
+    /// sensitivity.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - Category name to parse.
+    ///
+    /// # Returns
+    ///
+    /// The matching error category.
+    ///
+    /// # Errors
+    ///
+    /// Returns a static diagnostic when `value` is not a known category name.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.eq_ignore_ascii_case("input_too_large") {
             Ok(Self::InputTooLarge)

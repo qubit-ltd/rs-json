@@ -24,6 +24,19 @@ pub enum JsonDecodeStage {
 }
 
 impl fmt::Display for JsonDecodeStage {
+    /// Writes the stable snake-case name of this decoder stage.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - Destination formatter.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the stage name is written successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns a formatting error when the destination rejects the write.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Normalize => f.write_str("normalize"),

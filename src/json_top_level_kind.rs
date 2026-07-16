@@ -35,6 +35,15 @@ impl JsonTopLevelKind {
     ///
     /// This helper is used internally by constrained decode methods and may
     /// also be useful to callers inspecting decoded [`Value`] instances.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - JSON value to classify.
+    ///
+    /// # Returns
+    ///
+    /// [`Self::Object`] for objects, [`Self::Array`] for arrays, and
+    /// [`Self::Other`] for scalar-like values.
     #[inline]
     #[must_use]
     pub fn of(value: &Value) -> Self {
@@ -46,6 +55,15 @@ impl JsonTopLevelKind {
     }
 
     /// Classifies validated normalized JSON text by its first JSON token.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - Normalized JSON text to inspect.
+    ///
+    /// # Returns
+    ///
+    /// [`Self::Object`] when the first token is `{`, [`Self::Array`] when it is
+    /// `[`, and [`Self::Other`] otherwise.
     #[inline]
     pub(crate) fn of_normalized_json(value: &str) -> Self {
         match value
@@ -60,13 +78,35 @@ impl JsonTopLevelKind {
 }
 
 impl From<&Value> for JsonTopLevelKind {
-    #[inline]
+    /// Classifies a borrowed dynamic JSON value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - JSON value to classify.
+    ///
+    /// # Returns
+    ///
+    /// The value's coarse top-level kind.
+    #[inline(always)]
     fn from(value: &Value) -> Self {
         Self::of(value)
     }
 }
 
 impl fmt::Display for JsonTopLevelKind {
+    /// Writes the stable lowercase name of this top-level kind.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - Destination formatter.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the kind name is written successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns a formatting error when the destination rejects the write.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = match self {
             Self::Object => "object",
@@ -80,6 +120,19 @@ impl fmt::Display for JsonTopLevelKind {
 impl FromStr for JsonTopLevelKind {
     type Err = &'static str;
 
+    /// Parses a top-level kind name without ASCII case sensitivity.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - Kind name to parse.
+    ///
+    /// # Returns
+    ///
+    /// The matching top-level kind.
+    ///
+    /// # Errors
+    ///
+    /// Returns a static diagnostic when `value` is not a known kind name.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.eq_ignore_ascii_case("object") {
             Ok(Self::Object)

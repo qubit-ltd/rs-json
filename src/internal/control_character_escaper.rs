@@ -18,6 +18,16 @@ pub(crate) struct ControlCharacterEscaper;
 
 impl ControlCharacterEscaper {
     /// Escapes raw C0 control characters in JSON string literals when enabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - JSON-like text to scan.
+    /// * `enabled` - Whether raw control characters should be escaped.
+    ///
+    /// # Returns
+    ///
+    /// Borrowed input when escaping is disabled or no replacement is needed,
+    /// or owned rewritten text after the first replacement.
     #[must_use]
     pub(crate) fn escape<'a>(input: &'a str, enabled: bool) -> Cow<'a, str> {
         if !enabled {
@@ -50,6 +60,17 @@ impl ControlCharacterEscaper {
     }
 
     /// Returns the required replacement while advancing JSON-string state.
+    ///
+    /// # Arguments
+    ///
+    /// * `ch` - Current input character.
+    /// * `in_string` - Whether the scanner is currently inside a JSON string.
+    /// * `in_escape` - Whether an unmatched backslash precedes `ch`.
+    ///
+    /// # Returns
+    ///
+    /// `Some(replacement)` when `ch` is a raw C0 control character requiring
+    /// repair, or `None` when `ch` should be copied unchanged.
     fn replacement(
         ch: char,
         in_string: &mut bool,
@@ -75,6 +96,15 @@ impl ControlCharacterEscaper {
     }
 
     /// Maps an ASCII C0 control character to its JSON escape.
+    ///
+    /// # Arguments
+    ///
+    /// * `ch` - Character to map.
+    ///
+    /// # Returns
+    ///
+    /// `Some(escape)` for `U+0000..=U+001F`, or `None` for other characters.
+    #[inline]
     fn escaped_control_char(ch: char) -> Option<&'static str> {
         match ch {
             '\u{0008}' => Some("\\b"),

@@ -43,6 +43,12 @@ pub struct JsonDecodeOptions {
 
 impl JsonDecodeOptions {
     /// Creates the default lenient option set.
+    ///
+    /// # Returns
+    ///
+    /// An option set that enables every supported normalization rule, applies
+    /// no input-size limit, and redacts input-derived error details.
+    #[inline]
     #[must_use]
     pub const fn lenient() -> Self {
         Self {
@@ -58,6 +64,12 @@ impl JsonDecodeOptions {
     }
 
     /// Creates an option set that disables all normalization rules.
+    ///
+    /// # Returns
+    ///
+    /// An option set that delegates the input to `serde_json` without
+    /// normalization and redacts input-derived error details.
+    #[inline]
     #[must_use]
     pub const fn strict() -> Self {
         Self {
@@ -71,6 +83,12 @@ impl JsonDecodeOptions {
     }
 
     /// Creates lenient options that only strip JSON-like Markdown code fences.
+    ///
+    /// # Returns
+    ///
+    /// A lenient option set that accepts empty, `json`, and `jsonc` fence
+    /// language tags while leaving other fenced blocks unchanged.
+    #[inline]
     #[must_use]
     pub const fn json_code_fences_only() -> Self {
         Self {
@@ -82,59 +100,82 @@ impl JsonDecodeOptions {
     }
 
     /// Returns whether leading and trailing whitespace is removed.
+    ///
+    /// # Returns
+    ///
+    /// `true` when surrounding whitespace is removed; otherwise, `false`.
+    #[inline(always)]
     #[must_use]
     pub const fn trim_whitespace(&self) -> bool {
         self.trim_whitespace
     }
 
-    /// Returns whether a leading UTF-8 byte order mark is removed.
-    #[must_use]
-    pub const fn strip_utf8_bom(&self) -> bool {
-        self.strip_utf8_bom
-    }
-
-    /// Returns the policy used to remove one outer Markdown code fence.
-    #[must_use]
-    pub const fn markdown_fence_policy(&self) -> MarkdownFencePolicy {
-        self.markdown_fence_policy
-    }
-
-    /// Returns whether raw control characters in JSON strings are escaped.
-    #[must_use]
-    pub const fn escape_control_chars_in_strings(&self) -> bool {
-        self.escape_control_chars_in_strings
-    }
-
-    /// Returns the raw input byte-size limit.
-    ///
-    /// `Some(limit)` caps accepted input at `limit` bytes. `None` means no
-    /// limit is enforced by the decoder.
-    #[must_use]
-    pub const fn max_input_bytes(&self) -> Option<usize> {
-        self.max_input_bytes
-    }
-
-    /// Returns the privacy policy applied to decoding error diagnostics.
-    #[must_use]
-    pub const fn error_privacy_policy(&self) -> ErrorPrivacyPolicy {
-        self.error_privacy_policy
-    }
-
     /// Returns a copy with whitespace trimming enabled or disabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - Whether to remove surrounding whitespace.
+    ///
+    /// # Returns
+    ///
+    /// The updated option set.
+    #[inline(always)]
     #[must_use]
     pub const fn with_trim_whitespace(mut self, enabled: bool) -> Self {
         self.trim_whitespace = enabled;
         self
     }
 
+    /// Returns whether a leading UTF-8 byte order mark is removed.
+    ///
+    /// # Returns
+    ///
+    /// `true` when a leading UTF-8 byte order mark is removed; otherwise,
+    /// `false`.
+    #[inline(always)]
+    #[must_use]
+    pub const fn strip_utf8_bom(&self) -> bool {
+        self.strip_utf8_bom
+    }
+
     /// Returns a copy with UTF-8 byte order mark stripping configured.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - Whether to remove a leading UTF-8 byte order mark.
+    ///
+    /// # Returns
+    ///
+    /// The updated option set.
+    #[inline(always)]
     #[must_use]
     pub const fn with_strip_utf8_bom(mut self, enabled: bool) -> Self {
         self.strip_utf8_bom = enabled;
         self
     }
 
+    /// Returns the policy used to remove one outer Markdown code fence.
+    ///
+    /// # Returns
+    ///
+    /// The configured Markdown fence policy.
+    #[inline(always)]
+    #[must_use]
+    pub const fn markdown_fence_policy(&self) -> MarkdownFencePolicy {
+        self.markdown_fence_policy
+    }
+
     /// Returns a copy of these options with a Markdown fence policy.
+    ///
+    /// # Arguments
+    ///
+    /// * `markdown_fence_policy` - Policy used to recognize and remove one
+    ///   outer Markdown code fence.
+    ///
+    /// # Returns
+    ///
+    /// The updated option set.
+    #[inline(always)]
     #[must_use]
     pub const fn with_markdown_fence_policy(
         mut self,
@@ -144,7 +185,29 @@ impl JsonDecodeOptions {
         self
     }
 
+    /// Returns whether raw control characters in JSON strings are escaped.
+    ///
+    /// # Returns
+    ///
+    /// `true` when raw ASCII control characters inside JSON strings are
+    /// escaped; otherwise, `false`.
+    #[inline(always)]
+    #[must_use]
+    pub const fn escape_control_chars_in_strings(&self) -> bool {
+        self.escape_control_chars_in_strings
+    }
+
     /// Returns a copy with JSON-string control character escaping configured.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - Whether to escape raw ASCII control characters inside JSON
+    ///   strings.
+    ///
+    /// # Returns
+    ///
+    /// The updated option set.
+    #[inline(always)]
     #[must_use]
     pub const fn with_escape_control_chars_in_strings(
         mut self,
@@ -154,7 +217,29 @@ impl JsonDecodeOptions {
         self
     }
 
+    /// Returns the raw input byte-size limit.
+    ///
+    /// # Returns
+    ///
+    /// `Some(limit)` when accepted raw input is capped at `limit` bytes, or
+    /// `None` when the decoder enforces no input-size limit.
+    #[inline(always)]
+    #[must_use]
+    pub const fn max_input_bytes(&self) -> Option<usize> {
+        self.max_input_bytes
+    }
+
     /// Returns a copy of these options with a raw input byte-size limit.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_input_bytes` - `Some(limit)` to cap the raw input at `limit`
+    ///   bytes, or `None` to remove the limit.
+    ///
+    /// # Returns
+    ///
+    /// The updated option set.
+    #[inline(always)]
     #[must_use]
     pub const fn with_max_input_bytes(
         mut self,
@@ -164,10 +249,31 @@ impl JsonDecodeOptions {
         self
     }
 
+    /// Returns the privacy policy applied to decoding error diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// The configured error privacy policy.
+    #[inline(always)]
+    #[must_use]
+    pub const fn error_privacy_policy(&self) -> ErrorPrivacyPolicy {
+        self.error_privacy_policy
+    }
+
     /// Returns a copy of these options with the requested error privacy policy.
     ///
     /// The policy determines whether serde diagnostics derived from input
     /// values are retained in returned errors.
+    ///
+    /// # Arguments
+    ///
+    /// * `error_privacy_policy` - Policy applied when constructing decoding
+    ///   errors.
+    ///
+    /// # Returns
+    ///
+    /// The updated option set.
+    #[inline(always)]
     #[must_use]
     pub const fn with_error_privacy_policy(
         mut self,
@@ -179,6 +285,12 @@ impl JsonDecodeOptions {
 }
 
 impl Default for JsonDecodeOptions {
+    /// Creates the default lenient option set.
+    ///
+    /// # Returns
+    ///
+    /// The same option set as [`Self::lenient`].
+    #[inline(always)]
     fn default() -> Self {
         Self::lenient()
     }
