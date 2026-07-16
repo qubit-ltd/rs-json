@@ -1,5 +1,5 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
@@ -36,7 +36,7 @@ impl JsonTopLevelKind {
     /// This helper is used internally by constrained decode methods and may
     /// also be useful to callers inspecting decoded [`Value`] instances.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `value` - JSON value to classify.
     ///
@@ -56,7 +56,7 @@ impl JsonTopLevelKind {
 
     /// Classifies validated normalized JSON text by its first JSON token.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `value` - Normalized JSON text to inspect.
     ///
@@ -81,7 +81,7 @@ impl JsonTopLevelKind {
 impl From<&Value> for JsonTopLevelKind {
     /// Classifies a borrowed dynamic JSON value.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `value` - JSON value to classify.
     ///
@@ -97,7 +97,7 @@ impl From<&Value> for JsonTopLevelKind {
 impl fmt::Display for JsonTopLevelKind {
     /// Writes the stable lowercase name of this top-level kind.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `f` - Destination formatter.
     ///
@@ -123,7 +123,7 @@ impl FromStr for JsonTopLevelKind {
 
     /// Parses a top-level kind name without ASCII case sensitivity.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `value` - Kind name to parse.
     ///

@@ -1,5 +1,5 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
@@ -36,7 +36,7 @@ pub enum JsonDecodeErrorKind {
 impl fmt::Display for JsonDecodeErrorKind {
     /// Writes the stable snake-case name of this error category.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `f` - Destination formatter.
     ///
@@ -65,7 +65,7 @@ impl FromStr for JsonDecodeErrorKind {
     /// Parses a stable snake-case error category without ASCII case
     /// sensitivity.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `value` - Category name to parse.
     ///

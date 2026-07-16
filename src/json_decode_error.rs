@@ -1,5 +1,5 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
@@ -55,7 +55,7 @@ pub struct JsonDecodeError {
 impl JsonDecodeError {
     /// Creates an error for raw input that exceeds the configured size limit.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `raw_input_bytes` - Raw input length in bytes.
     /// * `max_input_bytes` - Configured maximum raw input length.
@@ -90,7 +90,7 @@ impl JsonDecodeError {
 
     /// Creates an error for input that is empty at a normalization boundary.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `raw_input_bytes` - Raw input length in bytes.
     /// * `normalized_input_bytes` - Normalized length when normalization
@@ -124,7 +124,7 @@ impl JsonDecodeError {
 
     /// Creates an error for invalid normalized JSON syntax.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `error` - Serde parser error.
     /// * `raw_input_bytes` - Raw input length in bytes.
@@ -156,7 +156,7 @@ impl JsonDecodeError {
     /// Creates an error for a valid JSON value with an unexpected top-level
     /// kind.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `expected` - Required top-level kind.
     /// * `actual` - Observed top-level kind.
@@ -195,7 +195,7 @@ impl JsonDecodeError {
 
     /// Creates an error for valid JSON that cannot deserialize into the target.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `error` - Serde deserialization error.
     /// * `raw_input_bytes` - Raw input length in bytes.
@@ -226,7 +226,7 @@ impl JsonDecodeError {
 
     /// Creates a decoder error from a serde error and privacy policy.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `kind` - Stable public error category.
     /// * `stage` - Decoder stage that produced the error.
@@ -398,7 +398,7 @@ impl JsonDecodeError {
 
     /// Builds a diagnostic that contains only stable text and parser location.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `prefix` - Stable error-message prefix.
     /// * `line` - One-based parser line, or zero when unavailable.
@@ -427,7 +427,7 @@ impl JsonDecodeError {
 impl PartialEq for JsonDecodeError {
     /// Compares all stable error fields while ignoring the retained source.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `other` - Error to compare with this error.
     ///
@@ -454,7 +454,7 @@ impl Eq for JsonDecodeError {}
 impl fmt::Display for JsonDecodeError {
     /// Writes the configured human-readable diagnostic message.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `f` - Destination formatter.
     ///

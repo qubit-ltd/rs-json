@@ -1,5 +1,5 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
@@ -26,7 +26,7 @@ pub enum JsonDecodeStage {
 impl fmt::Display for JsonDecodeStage {
     /// Writes the stable snake-case name of this decoder stage.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
     /// * `f` - Destination formatter.
     ///
