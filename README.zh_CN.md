@@ -53,6 +53,8 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 - `trim_whitespace`：裁剪首尾空白
 - `strip_utf8_bom`：移除开头的 UTF-8 BOM
 - `markdown_fence_policy`：统一表达禁用、任意语言或仅 JSON 围栏，以及可选或必须闭合
+- `jsonc` 仅作为 Markdown 代码块标签被识别；代码块内容仍按标准 JSON 解析，因此注释和
+  尾随逗号依然无效
 - `escape_control_chars_in_strings`：转义 JSON 字符串字面量里的 ASCII 控制字符
 - `max_input_bytes`：规范化前的输入字节数上限（可选）
 - `error_privacy_policy`：选择默认安全的脱敏错误，或显式启用完整 serde 诊断

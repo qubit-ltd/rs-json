@@ -12,8 +12,8 @@ use std::borrow::Cow;
 /// Escapes raw ASCII control characters occurring within JSON strings.
 ///
 /// The scanner borrows its input unless it finds a replacement. On the first
-/// replacement it allocates once, copies the already-scanned prefix, and
-/// appends all remaining transformed characters.
+/// replacement it lazily creates an output [`String`], copies the already
+/// scanned prefix, and appends all remaining transformed characters.
 pub(crate) struct ControlCharacterEscaper;
 
 impl ControlCharacterEscaper {
@@ -104,7 +104,6 @@ impl ControlCharacterEscaper {
     /// # Returns
     ///
     /// `Some(escape)` for `U+0000..=U+001F`, or `None` for other characters.
-    #[inline]
     fn escaped_control_char(ch: char) -> Option<&'static str> {
         match ch {
             '\u{0008}' => Some("\\b"),

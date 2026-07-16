@@ -24,6 +24,9 @@ pub enum MarkdownFencePolicy {
         closing: MarkdownFenceClosing,
     },
     /// Strips only fences with an empty, `json`, or `jsonc` first info token.
+    ///
+    /// The `jsonc` token is accepted only as a fence label; fenced content must
+    /// still be standard JSON without comments or trailing commas.
     JsonOnly {
         /// Controls whether the opening fence needs a matching closing fence.
         closing: MarkdownFenceClosing,

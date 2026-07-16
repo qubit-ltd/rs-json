@@ -189,7 +189,8 @@ impl LenientJsonNormalizer {
     /// # Returns
     ///
     /// A borrowed view of the trimmed or unchanged input.
-    #[inline(always)]
+    #[inline]
+    #[must_use]
     fn trim_if_enabled<'a>(&self, input: &'a str) -> &'a str {
         if self.options.trim_whitespace() {
             input.trim()
@@ -209,6 +210,7 @@ impl LenientJsonNormalizer {
     ///
     /// Conditionally trimmed text, preserving borrowed storage and retaining
     /// owned storage when no trim is needed.
+    #[must_use]
     fn trim_cow_if_enabled<'a>(&self, input: Cow<'a, str>) -> Cow<'a, str> {
         if !self.options.trim_whitespace() {
             return input;
@@ -236,7 +238,8 @@ impl LenientJsonNormalizer {
     ///
     /// A borrowed view with one leading mark removed when configured, or the
     /// unchanged input.
-    #[inline(always)]
+    #[inline]
+    #[must_use]
     fn strip_utf8_bom<'a>(&self, input: &'a str) -> &'a str {
         if self.options.strip_utf8_bom() {
             input.strip_prefix('\u{feff}').unwrap_or(input)
@@ -255,6 +258,7 @@ impl LenientJsonNormalizer {
     ///
     /// The fenced body when the active policy accepts the fence, or the
     /// unchanged input otherwise.
+    #[must_use]
     fn strip_markdown_code_fence<'a>(&self, input: &'a str) -> &'a str {
         let (json_only, closing) = match self.options.markdown_fence_policy() {
             MarkdownFencePolicy::Disabled => return input,
@@ -356,8 +360,10 @@ impl LenientJsonNormalizer {
     /// # Returns
     ///
     /// `true` for an empty, `json`, or `jsonc` first token, ignoring ASCII
-    /// case; otherwise, `false`.
+    /// case; otherwise, `false`. The `jsonc` token is accepted only as a fence
+    /// label and does not enable non-standard JSON grammar.
     #[inline]
+    #[must_use]
     fn is_json_code_fence_tag(tag: &str) -> bool {
         let language = tag.split_whitespace().next().unwrap_or("");
         language.is_empty()

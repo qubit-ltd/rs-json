@@ -65,6 +65,7 @@ impl JsonTopLevelKind {
     /// [`Self::Object`] when the first token is `{`, [`Self::Array`] when it is
     /// `[`, and [`Self::Other`] otherwise.
     #[inline]
+    #[must_use]
     pub(crate) fn of_normalized_json(value: &str) -> Self {
         match value
             .bytes()
