@@ -44,8 +44,8 @@ LenientJsonDecoder
     |
     |-- decode<T>()                 // normalized text -> T
     |-- decode_value()              // normalized text -> Value
-    |-- decode_object<T>()          // normalized text -> RawValue validation -> T
-    |-- decode_array<T>()           // normalized text -> RawValue validation -> Vec<T>
+    |-- decode_object<T>()          // top-level token check -> direct T decode
+    |-- decode_array<T>()           // top-level token check -> direct Vec<T> decode
     |
     v
 serde_json / typed output
@@ -212,10 +212,11 @@ impl LenientJsonDecoder {
 ### 5.2 行为说明
 
 - `decode<T>()`：不限定顶层结构，规范化后直接反序列化为 `T`。
-- `decode_object<T>()`：先借助 `RawValue` 验证 JSON 并确认顶层为对象，再直接
-  从规范化文本反序列化为 `T`。
-- `decode_array<T>()`：先借助 `RawValue` 验证 JSON 并确认顶层为数组，再直接
-  从规范化文本反序列化为 `Vec<T>`。
+- `decode_object<T>()`：先检查首个 JSON token。若 token 为对象，直接从规范化文本
+  反序列化为 `T`；若 token 不匹配，再借助 `RawValue` 验证完整语法，以区分
+  `InvalidJson` 与 `UnexpectedTopLevel`。
+- `decode_array<T>()`：先检查首个 JSON token。若 token 为数组，直接从规范化文本
+  反序列化为 `Vec<T>`；若 token 不匹配，再借助 `RawValue` 验证完整语法。
 - `decode_value()`：先规范化再直接解析为 `serde_json::Value`。
 
 ## 6. 规范化管线
@@ -283,7 +284,10 @@ rust-common/rs-json/
   │   ├─ json_decode_options.rs
   │   ├─ json_decode_error.rs
   │   ├─ json_decode_error_kind.rs
+  │   ├─ json_decode_stage.rs
   │   ├─ json_top_level_kind.rs
+  │   ├─ markdown_fence_closing.rs
+  │   ├─ markdown_fence_policy.rs
   │   └─ internal/
   │       ├─ control_character_escaper.rs
   │       ├─ lenient_json_normalizer.rs
@@ -291,13 +295,27 @@ rust-common/rs-json/
   ├─ tests/
   │   ├─ mod.rs
   │   ├─ error_privacy_policy_tests.rs
+  │   ├─ internal/
+  │   │   ├─ mod.rs
+  │   │   └─ lenient_json_normalizer_tests.rs
   │   ├─ lenient_json_decoder_tests.rs
   │   ├─ json_decode_error_kind_tests.rs
   │   ├─ json_decode_error_tests.rs
+  │   ├─ json_decode_stage_tests.rs
   │   ├─ lib_tests.rs
-  │   ├─ lenient_json_normalizer_tests.rs
   │   ├─ json_decode_options_tests.rs
-  │   └─ json_top_level_kind_tests.rs
+  │   ├─ json_top_level_kind_tests.rs
+  │   ├─ markdown_fence_closing_tests.rs
+  │   └─ markdown_fence_policy_tests.rs
+  ├─ benches/
+  │   └─ decoder_bench.rs
+  ├─ fuzz/
+  │   └─ fuzz_targets/
+  │       └─ decoder.rs
+  ├─ .github/
+  │   └─ workflows/
+  │       ├─ ci.yml
+  │       └─ fuzz.yml
   └─ doc/
       ├─ json_prd.zh_CN.md
       └─ json_design.zh_CN.md
@@ -319,8 +337,14 @@ rust-common/rs-json/
 
 ### 9.3 规范化测试
 
-- `tests/lenient_json_normalizer_tests.rs`：BOM、混合换行代码块、反斜杠后控制字符、
-  空输入诊断和 trim 行为。
+- `tests/internal/lenient_json_normalizer_tests.rs`：通过公开 decoder 行为覆盖 BOM、
+  混合换行代码块、反斜杠后控制字符、空输入诊断和 trim 行为，不扩大内部实现可见性。
+
+### 9.4 性能与模糊测试
+
+- `benches/decoder_bench.rs`：覆盖普通 JSON、围栏 JSON 和原始控制字符输入的公开解码路径。
+- `fuzz/fuzz_targets/decoder.rs`：覆盖默认、严格、仅 JSON 围栏和必须闭合围栏策略；
+  `.github/workflows/fuzz.yml` 定时执行有时限的 fuzz，不进入每个 pull request 的快速检查。
 
 ## 10. 接入与发布边界
 
