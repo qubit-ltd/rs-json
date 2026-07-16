@@ -163,7 +163,7 @@
 - 隐私模型与当前实现一致：默认 `Redacted`，`Detailed` 需显式启用。
 - 解码入口与实现一致：`decode` / `decode_object` / `decode_array` / `decode_value` 均通过
   内部统一规范化。
-- 解析流程与实现一致：`normalize` 托管在 `lenient_json_normalizer.rs`，对外不暴露底层 helper。
+- 解析流程与实现一致：`normalize` 托管在 `internal/lenient_json_normalizer.rs`，对外不暴露底层 helper。
 - 错误模型与实现一致：`JsonDecodeErrorKind` 与 `JsonTopLevelKind` 已对齐。
 - 复用与对象语义一致：`LenientJsonDecoder` 持有不可变的
   `LenientJsonNormalizer`，可安全多次复用。

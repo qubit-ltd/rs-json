@@ -153,6 +153,25 @@ fn main() {
 }
 ```
 
+### Set an Input Limit for Untrusted Sources
+
+`JsonDecodeOptions::default()` deliberately leaves `max_input_bytes` unset so
+the crate does not impose an application-specific limit. When inputs cross a
+trust boundary, configure a limit appropriate to the caller's memory and
+latency budget.
+
+```rust
+use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
+
+let decoder = LenientJsonDecoder::new(
+    JsonDecodeOptions::default().with_max_input_bytes(Some(1_048_576)),
+);
+let value = decoder.decode_value("{\"ok\":true}")?;
+
+assert_eq!(value["ok"], true);
+# Ok::<(), qubit_json::JsonDecodeError>(())
+```
+
 ### Opt In to Detailed Error Diagnostics
 
 Detailed serde diagnostics may include values from the input. Enable them only
@@ -226,7 +245,26 @@ This README reflects the current object model:
 - Public decoding APIs are `decode`, `decode_object`, `decode_array`,
   `decode_value`.
 - Normalization and error handling are implemented in
-  `src/lenient_json_normalizer.rs`
-  and `src/json_decode_error.rs`, which are covered by tests in `tests/`.
+  `src/internal/lenient_json_normalizer.rs` and `src/json_decode_error.rs`,
+  which are covered by tests in `tests/`.
 - Product requirements and implementation behavior are aligned with
   `doc/json_prd.zh_CN.md` and `doc/json_design.zh_CN.md`.
+
+## Development Validation
+
+Run the repository checks with `./align-ci.sh` followed by `./ci-check.sh`.
+Criterion benchmarks are compiled with:
+
+```bash
+cargo bench --bench decoder_bench --no-run
+```
+
+The optional fuzz target is development tooling and is not a runtime
+dependency. Install `cargo-fuzz`, then build or run it from the repository
+root:
+
+```bash
+cargo install cargo-fuzz
+(cd fuzz && cargo fuzz build decoder)
+(cd fuzz && cargo fuzz run decoder)
+```
