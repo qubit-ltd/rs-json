@@ -320,12 +320,12 @@ Run:
 ```bash
 git status --short
 git --no-pager diff --check
-git --no-pager log -4 --oneline
+git --no-pager log --oneline d84f873..HEAD
 ```
 
-Expected: an empty status after the behavior, repository-wide style,
-specification-correction, and repository-alignment commits; no whitespace
-errors are reported.
+Expected: an empty status, no whitespace errors, and a history range containing
+all English grouped in-scope commits for the behavior change, repository-wide
+Rust style, repository alignment, and documentation/specification corrections.
 
 - [ ] **Step 6: Verify the final repository state**
 
@@ -333,9 +333,10 @@ Run:
 
 ```bash
 git status --short
-git --no-pager log -4 --oneline
+git --no-pager diff --check
+git --no-pager log --oneline d84f873..HEAD
 ```
 
-Expected: an empty status and four relevant English grouped commits for the
-behavior change, repository-wide style alignment, specification correction,
-and repository-prescribed alignment.
+Expected: an empty status, no whitespace errors, and a history range containing
+all English grouped in-scope commits for the behavior change, repository-wide
+Rust style, repository alignment, and documentation/specification corrections.
