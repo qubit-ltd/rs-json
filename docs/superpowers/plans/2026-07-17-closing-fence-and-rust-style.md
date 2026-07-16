@@ -142,7 +142,28 @@ cargo test --test tests invalid_closing_fence_indentation -- --nocapture
 
 Expected: 2 passed, 0 failed.
 
-- [ ] **Step 6: Run the full consolidated test target**
+- [ ] **Step 6: Add permanent terminal Unicode-whitespace coverage**
+
+Add two independent external tests through
+`LenientJsonDecoder::decode_value`, using the complete input
+`"```json\n{\"a\":1}\n```\u{00a0}"`:
+
+- default `trim_whitespace` accepts the terminal NBSP and returns
+  `json!({"a": 1})`;
+- `JsonDecodeOptions::default().with_trim_whitespace(false)` preserves the NBSP,
+  so decoding returns `JsonDecodeErrorKind::InvalidJson`.
+
+Run:
+
+```bash
+cargo test --test tests terminal_unicode_whitespace -- --nocapture
+```
+
+Expected: 2 passed, 0 failed against the existing production implementation.
+This is coverage-only regression testing of user-confirmed behavior; do not
+claim a RED phase or modify production code.
+
+- [ ] **Step 7: Run the full consolidated test target**
 
 Run:
 
@@ -152,7 +173,7 @@ cargo test --test tests
 
 Expected: all tests pass with no warnings.
 
-- [ ] **Step 7: Commit the behavioral fix**
+- [ ] **Step 8: Commit the behavioral fix**
 
 ```bash
 git add src/internal/lenient_json_normalizer.rs tests/internal/lenient_json_normalizer_tests.rs
