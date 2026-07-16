@@ -18,13 +18,10 @@ include = [
     "/LICENSE",
     "/README.md",
     "/README.zh_CN.md",
-    "/RUST_CODING_STYLE.md",
-    "/RUST_CODING_STYLE.zh_CN.md",
-    "/doc/**/user_guide*.md",
-    "/examples/**",
-    "/resources/**",
+    "/doc/**",
     "/src/**",
     "/tests/**",
+    "/benches/**",
 ]
 
 [lib]
@@ -40,8 +37,13 @@ serde = "1.0"
 serde_json = { version = "1.0", features = ["raw_value"] }
 
 [dev-dependencies]
+criterion = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+[[bench]]
+name = "decoder_bench"
+harness = false
 
 [profile.release]
 opt-level = 3
