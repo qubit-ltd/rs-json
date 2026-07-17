@@ -5,8 +5,13 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for private normalization behavior observed through public APIs.
+//! Defines the message fixture used by decoder tests.
 
-mod control_character_escaper_tests;
-mod lenient_json_normalizer_tests;
-mod markdown_fence_tests;
+use serde::Deserialize;
+
+/// Typed text payload used by normalization tests.
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+pub(crate) struct Message {
+    /// Stores normalized message text.
+    pub(crate) text: String,
+}

@@ -5,8 +5,14 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for private normalization behavior observed through public APIs.
+//! Shared typed fixtures for public decoder tests.
 
-mod control_character_escaper_tests;
-mod lenient_json_normalizer_tests;
-mod markdown_fence_tests;
+mod exact_integer;
+mod message;
+mod single_value;
+mod user;
+
+pub(crate) use exact_integer::ExactInteger;
+pub(crate) use message::Message;
+pub(crate) use single_value::SingleValue;
+pub(crate) use user::User;

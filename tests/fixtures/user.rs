@@ -5,8 +5,15 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for private normalization behavior observed through public APIs.
+//! Defines the user fixture used by decoder tests.
 
-mod control_character_escaper_tests;
-mod lenient_json_normalizer_tests;
-mod markdown_fence_tests;
+use serde::Deserialize;
+
+/// Typed user payload used by decoder tests.
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+pub(crate) struct User {
+    /// Stores the user name.
+    pub(crate) name: String,
+    /// Stores the user age.
+    pub(crate) age: u8,
+}

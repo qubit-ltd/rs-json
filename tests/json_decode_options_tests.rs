@@ -21,7 +21,7 @@ fn test_default_enables_all_mvp_rules() {
     assert!(options.strip_utf8_bom());
     assert_eq!(
         options.markdown_fence_policy(),
-        MarkdownFencePolicy::Any {
+        MarkdownFencePolicy::JsonOnly {
             closing: MarkdownFenceClosing::Optional,
         },
     );

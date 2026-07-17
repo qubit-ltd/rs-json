@@ -18,6 +18,7 @@ fn test_decode_error_kind_display_uses_snake_case_names() {
         "input_too_large"
     );
     assert_eq!(JsonDecodeErrorKind::EmptyInput.to_string(), "empty_input");
+    assert_eq!(JsonDecodeErrorKind::InvalidUtf8.to_string(), "invalid_utf8");
     assert_eq!(JsonDecodeErrorKind::InvalidJson.to_string(), "invalid_json");
     assert_eq!(
         JsonDecodeErrorKind::UnexpectedTopLevel.to_string(),
@@ -35,6 +36,10 @@ fn test_decode_error_kind_from_str() {
     assert_eq!(
         JsonDecodeErrorKind::from_str("empty_input").unwrap(),
         JsonDecodeErrorKind::EmptyInput
+    );
+    assert_eq!(
+        JsonDecodeErrorKind::from_str("INVALID_UTF8").unwrap(),
+        JsonDecodeErrorKind::InvalidUtf8
     );
     assert_eq!(
         JsonDecodeErrorKind::from_str("INVALID_JSON").unwrap(),

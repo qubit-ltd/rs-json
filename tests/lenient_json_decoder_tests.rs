@@ -7,38 +7,22 @@
 // =============================================================================
 //! Tests for the public API in `lenient_json_decoder.rs`.
 
-use serde::Deserialize;
 use serde_json::json;
 
+use crate::fixtures::{
+    ExactInteger,
+    Message,
+    SingleValue,
+    User,
+};
 use qubit_json::{
     JsonDecodeErrorKind,
     JsonDecodeOptions,
+    JsonDecodeStage,
     JsonTopLevelKind,
     LenientJsonDecoder,
     MarkdownFencePolicy,
 };
-
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-struct User {
-    name: String,
-    age: u8,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-struct Message {
-    text: String,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-struct ExactInteger {
-    value: u128,
-}
-
-#[derive(Debug, Deserialize)]
-struct SingleValue {
-    #[serde(rename = "value")]
-    _value: u8,
-}
 
 #[test]
 fn test_new_exposes_configured_options() {
@@ -76,6 +60,36 @@ fn test_decode_typed_value_succeeds() {
             age: 30,
         }
     );
+}
+
+#[test]
+fn test_decode_slice_decodes_valid_utf8_without_changing_semantics() {
+    let value: serde_json::Value = LenientJsonDecoder::default()
+        .decode_slice(b"{\"ok\":true}")
+        .expect("valid UTF-8 JSON bytes must decode");
+    assert_eq!(value, serde_json::json!({"ok": true}));
+}
+
+#[test]
+fn test_decode_slice_checks_raw_size_before_utf8() {
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::strict().with_max_input_bytes(Some(1)),
+    );
+    let error = decoder
+        .decode_slice::<serde_json::Value>(&[0xff, 0xfe])
+        .expect_err("raw size must be checked before UTF-8");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
+}
+
+#[test]
+fn test_decode_slice_classifies_invalid_utf8() {
+    let error = LenientJsonDecoder::default()
+        .decode_slice::<serde_json::Value>(&[0xff])
+        .expect_err("invalid UTF-8 must fail before normalization");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
+    assert_eq!(error.stage(), JsonDecodeStage::DecodeText);
+    assert_eq!(error.raw_input_bytes(), 1);
+    assert_eq!(error.normalized_input_bytes(), None);
 }
 
 #[test]

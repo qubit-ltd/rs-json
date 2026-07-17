@@ -5,8 +5,13 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for private normalization behavior observed through public APIs.
+//! Defines the exact integer fixture used by decoder tests.
 
-mod control_character_escaper_tests;
-mod lenient_json_normalizer_tests;
-mod markdown_fence_tests;
+use serde::Deserialize;
+
+/// Payload used to verify lossless `u128` deserialization.
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+pub(crate) struct ExactInteger {
+    /// Stores the exact integer value.
+    pub(crate) value: u128,
+}
