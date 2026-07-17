@@ -64,12 +64,17 @@ impl JsonDecodeOptions {
         }
     }
 
-    /// Creates an option set that disables all normalization rules.
+    /// Creates an option set that disables all text-rewriting rules.
+    ///
+    /// The decoder still applies empty-input classification, an optional raw
+    /// input-size limit, the configured privacy policy, and stable error
+    /// mapping before or around parsing and deserialization.
     ///
     /// # Returns
     ///
-    /// An option set that delegates the input to `serde_json` without
-    /// normalization and redacts input-derived error details.
+    /// An option set that leaves input text unchanged, applies no size limit,
+    /// delegates parsing and deserialization to `serde_json`, and redacts
+    /// input-derived error details.
     #[inline]
     pub const fn strict() -> Self {
         Self {

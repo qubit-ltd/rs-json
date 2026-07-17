@@ -54,7 +54,9 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 ### `JsonDecodeOptions`
 
 - Immutable presets, getters, and value-style builders for every option
-- Presets: `lenient()` and `strict()`
+- Presets: `lenient()` and `strict()`; strict mode disables text rewriting but
+  retains empty-input classification, optional size limits, privacy handling,
+  and stable error mapping
 - `trim_whitespace`: trims leading and trailing whitespace
 - `strip_utf8_bom`: strips a leading UTF-8 BOM
 - `markdown_fence_policy`: selects disabled, any-language, or JSON-only fence

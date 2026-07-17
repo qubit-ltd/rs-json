@@ -49,7 +49,8 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 ### `JsonDecodeOptions`
 
 - 每个选项都提供不可变 getter 和值式 builder
-- 预设：`lenient()`、`strict()`
+- 预设：`lenient()`、`strict()`；严格模式禁用文本改写，但仍保留空输入分类、
+  可选大小限制、隐私处理与稳定错误映射
 - `trim_whitespace`：裁剪首尾空白
 - `strip_utf8_bom`：移除开头的 UTF-8 BOM
 - `markdown_fence_policy`：统一表达禁用、任意语言或仅 JSON 围栏，以及可选或必须闭合
