@@ -510,6 +510,7 @@ impl fmt::Display for JsonDecodeError {
     ///
     /// Returns a formatting error when the destination formatter rejects the
     /// write.
+    #[inline(always)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)
     }
@@ -522,6 +523,7 @@ impl Error for JsonDecodeError {
     ///
     /// `Some(source)` when detailed diagnostics retained a UTF-8 or serde
     /// error, or `None` for redacted and source-free failures.
+    #[inline(always)]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         self.source
             .as_deref()
