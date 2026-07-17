@@ -4,7 +4,7 @@
 
 - 文档版本：`v3.1`
 - 创建日期：`2026-04-12`
-- 更新日期：`2026-07-17`
+- 更新日期：`2026-07-18`
 - 对齐 PRD：`json_prd.zh_CN.md`
 
 ## 1. 背景与目标
@@ -43,6 +43,7 @@ LenientJsonDecoder
     |    `-- error_privacy_policy
     |
     |-- decode<T>()                 // normalized text -> T
+    |-- decode_slice<T>()           // raw UTF-8 bytes -> T
     |-- decode_value()              // normalized text -> Value
     |-- decode_object<T>()          // top-level token check -> direct T decode
     |-- decode_array<T>()           // top-level token check -> direct Vec<T> decode
@@ -114,7 +115,8 @@ pub struct JsonDecodeOptions {
 getter，并提供以下值式 builder：
 
 - `JsonDecodeOptions::lenient()`：返回默认宽松配置。
-- `JsonDecodeOptions::strict()`：禁用所有规范化规则。
+- `JsonDecodeOptions::strict()`：禁用所有文本改写规则，但保留空输入分类、可选原始
+  输入大小限制、隐私策略与稳定错误映射。
 - `with_trim_whitespace(enabled)`。
 - `with_strip_utf8_bom(enabled)`。
 - `with_markdown_fence_policy(policy)`。
@@ -359,7 +361,8 @@ rust-common/rs-json/
 ### 9.4 性能与模糊测试
 
 - `benches/decoder_bench.rs`：覆盖普通 JSON、围栏 JSON 和原始控制字符输入的公开解码路径。
-- `fuzz/fuzz_targets/decoder.rs`：覆盖默认、严格、任意可选闭合围栏和仅 JSON 必须闭合围栏策略；
+- `fuzz/fuzz_targets/decoder.rs`：覆盖默认、严格、任意可选闭合围栏和仅 JSON 必须闭合围栏策略，
+  并对严格字节解码路径与 `serde_json` 执行接受性及结果差分检查；
   `.github/workflows/fuzz.yml` 定时执行有时限的 fuzz，不进入每个 pull request 的快速检查。
 
 ## 10. 接入与发布边界

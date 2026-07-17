@@ -5,8 +5,8 @@
 - 文档名称：`rs-json` 产品需求文档（PRD）
 - 文档版本：`v3.1`
 - 创建日期：`2026-04-12`
-- 更新日期：`2026-07-17`
-- 状态：`Draft`
+- 更新日期：`2026-07-18`
+- 状态：`Implemented`
 - 对齐设计文档：`json_design.zh_CN.md`
 
 ## 1. 产品定义
@@ -30,8 +30,8 @@
 2. **可复用配置**
    - 通过 `JsonDecodeOptions` 固化解码策略。
 3. **稳定解码入口**
-   - 提供 `decode<T>()`、`decode_object<T>()`、`decode_array<T>()`
-     与 `decode_value()` 四类主要入口。
+   - 提供 `decode<T>()`、`decode_slice<T>()`、`decode_object<T>()`、
+     `decode_array<T>()` 与 `decode_value()` 五个主要入口。
 4. **一致错误模型**
    - 通过 `JsonDecodeError` 与 `JsonDecodeErrorKind` 表达空输入、语法错误、
      顶层结构冲突、反序列化失败。
@@ -60,7 +60,7 @@
 
 1. `LenientJsonDecoder` 对象与默认构造能力。
 2. `LenientJsonDecoder::new(options)` 与 `LenientJsonDecoder::default()`。
-3. 四个公开解码方法。
+3. 五个公开解码方法。
 4. `JsonDecodeOptions` 配置项与默认值。
 5. `JsonDecodeError`、`JsonDecodeErrorKind`、`JsonTopLevelKind` 与
    `ErrorPrivacyPolicy`。
@@ -163,8 +163,8 @@
 
 - 配置模型与当前实现一致：`JsonDecodeOptions` 与默认值与代码保持一致。
 - 隐私模型与当前实现一致：默认 `Redacted`，`Detailed` 需显式启用。
-- 解码入口与实现一致：`decode` / `decode_object` / `decode_array` / `decode_value` 均通过
-  内部统一规范化。
+- 解码入口与实现一致：`decode` / `decode_slice` / `decode_object` /
+  `decode_array` / `decode_value` 均通过内部统一规范化。
 - 解析流程与实现一致：`normalize` 托管在 `internal/lenient_json_normalizer.rs`，对外不暴露底层 helper。
 - 错误模型与实现一致：`JsonDecodeErrorKind` 与 `JsonTopLevelKind` 已对齐。
 - 复用与对象语义一致：`LenientJsonDecoder` 持有不可变的
