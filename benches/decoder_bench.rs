@@ -15,7 +15,10 @@ use criterion::{
     criterion_group,
     criterion_main,
 };
-use qubit_json::LenientJsonDecoder;
+use qubit_json::{
+    JsonDecodeOptions,
+    LenientJsonDecoder,
+};
 use serde::Deserialize;
 
 /// Typed value used by constrained-decoder benchmarks.
@@ -30,9 +33,40 @@ struct BenchmarkRecord {
 /// Runs the public decoder benchmarks over representative input normalization
 /// paths.
 fn benchmark_decoder(c: &mut Criterion) {
-    let decoder = LenientJsonDecoder::default();
+    let default_decoder = LenientJsonDecoder::default();
+    let strict_decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
+    let plain_input = r#"{"id":7,"text":"plain"}"#;
+    let mut comparison = c.benchmark_group("plain-comparison");
+    comparison.bench_function("serde_json", |bencher| {
+        bencher.iter(|| {
+            consume_record(
+                serde_json::from_str::<BenchmarkRecord>(black_box(plain_input))
+                    .expect("strict benchmark input must decode"),
+            )
+        });
+    });
+    comparison.bench_function("strict_decoder", |bencher| {
+        bencher.iter(|| {
+            consume_record(
+                strict_decoder
+                    .decode::<BenchmarkRecord>(black_box(plain_input))
+                    .expect("strict decoder benchmark input must decode"),
+            )
+        });
+    });
+    comparison.bench_function("default_decoder", |bencher| {
+        bencher.iter(|| {
+            consume_record(
+                default_decoder
+                    .decode::<BenchmarkRecord>(black_box(plain_input))
+                    .expect("default decoder benchmark input must decode"),
+            )
+        });
+    });
+    comparison.finish();
+
     let cases = [
-        ("plain", r#"{"id":7,"text":"plain"}"#),
+        ("plain", plain_input),
         ("fenced", "```json\n{\"id\":7,\"text\":\"fenced\"}\n```"),
         ("raw-control", "{\"id\":7,\"text\":\"line one\nline two\"}"),
     ];
@@ -42,7 +76,7 @@ fn benchmark_decoder(c: &mut Criterion) {
         group.bench_function("decode", |bencher| {
             bencher.iter(|| {
                 consume_record(
-                    decoder
+                    default_decoder
                         .decode::<BenchmarkRecord>(black_box(input))
                         .expect("benchmark input must decode"),
                 )
@@ -51,7 +85,7 @@ fn benchmark_decoder(c: &mut Criterion) {
         group.bench_function("decode_object", |bencher| {
             bencher.iter(|| {
                 consume_record(
-                    decoder
+                    default_decoder
                         .decode_object::<BenchmarkRecord>(black_box(input))
                         .expect("benchmark input must decode as an object"),
                 )
@@ -59,7 +93,7 @@ fn benchmark_decoder(c: &mut Criterion) {
         });
         group.bench_function("decode_value", |bencher| {
             bencher.iter(|| {
-                decoder
+                default_decoder
                     .decode_value(black_box(input))
                     .expect("benchmark input must decode as a value")
             });
@@ -70,7 +104,7 @@ fn benchmark_decoder(c: &mut Criterion) {
     let array_input = r#"[{"id":7,"text":"array"}]"#;
     c.bench_function("array/decode_array", |bencher| {
         bencher.iter(|| {
-            let records = decoder
+            let records = default_decoder
                 .decode_array::<BenchmarkRecord>(black_box(array_input))
                 .expect("benchmark input must decode as an array");
             for record in records {
