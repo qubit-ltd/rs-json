@@ -39,6 +39,31 @@ fn test_default_uses_default_options() {
 }
 
 #[test]
+fn test_strict_decoder_preserves_serde_json_grammar() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
+
+    let canonical: serde_json::Value = decoder
+        .decode(" \n{\"ok\":true}\t")
+        .expect("strict mode must preserve whitespace accepted by serde_json");
+    assert_eq!(canonical, serde_json::json!({"ok": true}));
+
+    for input in [
+        "\u{feff}{\"ok\":true}",
+        "```json\n{\"ok\":true}\n```",
+        "{\"text\":\"line one\nline two\"}",
+    ] {
+        let error = decoder
+            .decode_value(input)
+            .expect_err("strict mode must reject lenient-only input forms");
+        assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+        assert_eq!(
+            error.privacy_policy(),
+            qubit_json::ErrorPrivacyPolicy::Redacted,
+        );
+    }
+}
+
+#[test]
 fn test_decode_value_parses_normalized_json() {
     let decoder = LenientJsonDecoder::default();
     let value = decoder

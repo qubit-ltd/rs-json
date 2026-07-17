@@ -7,6 +7,8 @@
 // =============================================================================
 #![no_main]
 
+mod internal;
+
 use libfuzzer_sys::fuzz_target;
 use qubit_json::{
     JsonDecodeErrorKind,
@@ -15,11 +17,8 @@ use qubit_json::{
     MarkdownFenceClosing,
     MarkdownFencePolicy,
 };
-use serde::Deserialize;
 
-/// Minimal typed payload used to exercise typed decoder entry points.
-#[derive(Deserialize)]
-struct FuzzRecord;
+use internal::FuzzRecord;
 
 fuzz_target!(|data: &[u8]| {
     let default_decoder = LenientJsonDecoder::default();
@@ -49,14 +48,19 @@ fuzz_target!(|data: &[u8]| {
     let decoders = [
         default_decoder.clone(),
         LenientJsonDecoder::new(JsonDecodeOptions::strict()),
-        LenientJsonDecoder::new(JsonDecodeOptions::json_code_fences_only()),
         LenientJsonDecoder::new(
-            JsonDecodeOptions::json_code_fences_only()
-                .with_markdown_fence_policy(
-                    MarkdownFencePolicy::JsonOnly {
-                        closing: MarkdownFenceClosing::Required,
-                    },
-                ),
+            JsonDecodeOptions::lenient().with_markdown_fence_policy(
+                MarkdownFencePolicy::Any {
+                    closing: MarkdownFenceClosing::Optional,
+                },
+            ),
+        ),
+        LenientJsonDecoder::new(
+            JsonDecodeOptions::lenient().with_markdown_fence_policy(
+                MarkdownFencePolicy::JsonOnly {
+                    closing: MarkdownFenceClosing::Required,
+                },
+            ),
         ),
     ];
 

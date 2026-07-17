@@ -49,7 +49,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 ### `JsonDecodeOptions`
 
 - 每个选项都提供不可变 getter 和值式 builder
-- 预设：`lenient()`、`strict()`、`json_code_fences_only()`
+- 预设：`lenient()`、`strict()`
 - `trim_whitespace`：裁剪首尾空白
 - `strip_utf8_bom`：移除开头的 UTF-8 BOM
 - `markdown_fence_policy`：统一表达禁用、任意语言或仅 JSON 围栏，以及可选或必须闭合
@@ -87,7 +87,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 
 ```toml
 [dependencies]
-qubit-json = "0.5"
+qubit-json = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -141,7 +141,7 @@ use qubit_json::{LenientJsonDecoder, JsonDecodeOptions};
 
 fn main() {
     let decoder = LenientJsonDecoder::new(
-        JsonDecodeOptions::json_code_fences_only()
+        JsonDecodeOptions::lenient()
             .with_max_input_bytes(Some(1024)),
     );
 

@@ -54,7 +54,7 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 ### `JsonDecodeOptions`
 
 - Immutable presets, getters, and value-style builders for every option
-- Presets: `lenient()`, `strict()`, and `json_code_fences_only()`
+- Presets: `lenient()` and `strict()`
 - `trim_whitespace`: trims leading and trailing whitespace
 - `strip_utf8_bom`: strips a leading UTF-8 BOM
 - `markdown_fence_policy`: selects disabled, any-language, or JSON-only fence
@@ -92,7 +92,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qubit-json = "0.5"
+qubit-json = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -146,7 +146,7 @@ use qubit_json::{LenientJsonDecoder, JsonDecodeOptions};
 
 fn main() {
     let decoder = LenientJsonDecoder::new(
-        JsonDecodeOptions::json_code_fences_only()
+        JsonDecodeOptions::lenient()
             .with_max_input_bytes(Some(1024)),
     );
 
