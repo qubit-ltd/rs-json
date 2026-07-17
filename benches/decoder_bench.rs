@@ -7,6 +7,8 @@
 // =============================================================================
 //! Criterion benchmarks for public JSON decoding entry points.
 
+mod internal;
+
 use criterion::{
     BenchmarkId,
     Criterion,
@@ -19,16 +21,8 @@ use qubit_json::{
     JsonDecodeOptions,
     LenientJsonDecoder,
 };
-use serde::Deserialize;
 
-/// Typed value used by constrained-decoder benchmarks.
-#[derive(Deserialize)]
-struct BenchmarkRecord {
-    /// Identifies the benchmark record.
-    id: u64,
-    /// Stores a representative short text value.
-    text: String,
-}
+use internal::BenchmarkRecord;
 
 /// Runs the public decoder benchmarks over representative input normalization
 /// paths.

@@ -9,10 +9,12 @@
 
 mod exact_integer;
 mod message;
+mod public_choice;
 mod single_value;
 mod user;
 
 pub(crate) use exact_integer::ExactInteger;
 pub(crate) use message::Message;
+pub(crate) use public_choice::PublicChoice;
 pub(crate) use single_value::SingleValue;
 pub(crate) use user::User;
