@@ -232,9 +232,8 @@ impl LenientJsonDecoder {
 6. `strip_markdown_code_fence(input)`：根据 `markdown_fence_policy` 可配置去除
    外层代码块。
 7. `trim_if_enabled(input)`：去除代码块后再次按需裁剪。
-8. `escape_control_chars_in_json_strings(input)`：可配置转义字符串内控制字符。
-9. `trim_cow_if_enabled(input)`：规范化后再次处理尾部空白。
-10. 最终空值检查并返回 `Cow<'_, str>`。
+8. `ControlCharacterEscaper::escape(input, enabled)`：可配置转义字符串内控制字符。
+9. 最终空值检查并返回 `Cow<'_, str>`。
 
 该管线通过 `LenientJsonNormalizer::normalize()` 单一入口触发，保证顺序不变。
 
@@ -246,12 +245,12 @@ impl LenientJsonDecoder {
   - opening fence 前最多允许 3 个空格缩进。
   - 支持语言标签和无标签两种 fence 开头。
   - JSON-only 模式按 info string 的首个空白分隔 token 判断是否为 JSON-like。
-  - 若存在同类 marker、单独成行、长度不短于 opening fence 的结束 fence，
-    尝试一并去除。
+  - closing fence 前最多允许 3 个 ASCII 空格缩进；tab、非 ASCII 空白或 4 个及以上空格不构成 closing fence。
+  - closing marker 后仅允许 ASCII 空格或 tab；marker 类型必须相同，且长度不得短于 opening fence。
   - 查找 closing line 时分别取最后一个 LF 和 CR，并使用索引较大的换行，支持正文
     和结束 fence 使用混合换行。
   - 不存在有效结束 fence 时，默认仍移除开头并保留剩余内容；严格模式下保持输入不变。
-- `escape_control_chars_in_json_strings`
+- `ControlCharacterEscaper::escape`
   - 通过字符串状态机识别 `in_string` 与 `in_escape`。
   - 仅处理 JSON 字符串中的 `0x00..=0x1F`。
   - 已有合法转义序列不二次转义。
@@ -297,6 +296,7 @@ rust-common/rs-json/
   │   ├─ error_privacy_policy_tests.rs
   │   ├─ internal/
   │   │   ├─ mod.rs
+  │   │   ├─ control_character_escaper_tests.rs
   │   │   └─ lenient_json_normalizer_tests.rs
   │   ├─ lenient_json_decoder_tests.rs
   │   ├─ json_decode_error_kind_tests.rs
@@ -337,8 +337,8 @@ rust-common/rs-json/
 
 ### 9.3 规范化测试
 
-- `tests/internal/lenient_json_normalizer_tests.rs`：通过公开 decoder 行为覆盖 BOM、
-  混合换行代码块、反斜杠后控制字符、空输入诊断和 trim 行为，不扩大内部实现可见性。
+- `tests/internal/control_character_escaper_tests.rs`：通过公开 decoder 行为覆盖字符串状态、已有转义、全部 C0 控制字符、反斜杠奇偶语义和字符串外控制字符。
+- `tests/internal/lenient_json_normalizer_tests.rs`：通过公开 decoder 行为覆盖 BOM、围栏换行、空输入诊断、trim 与控制字符修复的管线交互，不扩大内部实现可见性。
 
 ### 9.4 性能与模糊测试
 
