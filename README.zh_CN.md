@@ -41,6 +41,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 
 - 可复用的解码器对象，内部持有不可变配置
 - `decode<T>()`：把任意 JSON 顶层值解码为 `T`
+- `decode_slice<T>()`：校验 UTF-8 字节并解码为 `T`
 - `decode_value()`：解码为 `serde_json::Value`
 - `decode_object<T>()`：要求顶层必须是 JSON 对象，并直接从规范化文本反序列化 `T`
 - `decode_array<T>()`：要求顶层必须是 JSON 数组，并直接从规范化文本反序列化元素
@@ -52,6 +53,8 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 - `trim_whitespace`：裁剪首尾空白
 - `strip_utf8_bom`：移除开头的 UTF-8 BOM
 - `markdown_fence_policy`：统一表达禁用、任意语言或仅 JSON 围栏，以及可选或必须闭合
+- 默认只接受空标签、`json` 和 `jsonc` 围栏；接受任意语言标签必须显式选择
+  `MarkdownFencePolicy::Any`
 - `jsonc` 仅作为 Markdown 代码块标签被识别；代码块内容仍按标准 JSON 解析，因此注释和
   尾随逗号依然无效
 - `escape_control_chars_in_strings`：转义 JSON 字符串字面量里的 ASCII 控制字符
@@ -65,6 +68,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 
 - `InputTooLarge`：原始输入大小超过配置上限
 - `EmptyInput`：输入在规范化之后为空
+- `InvalidUtf8`：原始字节输入不是合法 UTF-8
 - `InvalidJson`：规范化后的文本不是合法 JSON 语法
 - `UnexpectedTopLevel`：JSON 顶层类型和调用的方法约束不一致
 - `Deserialize`：JSON 语法合法，但无法反序列化为目标类型
@@ -74,8 +78,8 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 - `privacy_policy()` 记录每个错误实际采用的隐私策略
 - 默认 `Redacted` 策略不会在解析/反序列化消息中保留 serde 提供的输入片段，
   `Error::source()` 返回 `None`
-- `Detailed` 会保留完整 serde 消息与 source，因此可能暴露输入值；仅应在受控诊断
-  环境中显式启用
+- `Detailed` 会保留完整 UTF-8 或 serde source，因此可能暴露输入派生诊断；
+  仅应在受控环境中显式启用
 
 ## 安装
 
@@ -83,7 +87,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 
 ```toml
 [dependencies]
-qubit-json = "0.4"
+qubit-json = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -153,6 +157,9 @@ fn main() {
 
 `JsonDecodeOptions::default()` 有意不设置 `max_input_bytes`，避免库强加与
 应用场景无关的限制。当输入跨越信任边界时，应根据调用方的内存和延迟预算配置上限。
+
+该上限约束原始输入，而不是规范化后的分配大小。单个原始 ASCII 控制字节转义为
+`\\u00XX` 时，内容最坏可从 1 字节扩展为 6 字节，此外还有分配自身的开销。
 
 ```rust
 use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
@@ -229,7 +236,8 @@ Qubit JSON 适合这些情况：
 本文档与当前实现保持一致：
 
 - `LenientJsonDecoder` 通过内部的 `LenientJsonNormalizer` 完成输入规范化。
-- 对外公开能力为 `decode`、`decode_object`、`decode_array`、`decode_value`。
+- 对外公开能力为 `decode`、`decode_object`、`decode_array`、`decode_value`、
+  `decode_slice`。
 - 规范化与错误模型由 `src/internal/lenient_json_normalizer.rs`、`src/json_decode_error.rs` 实现，并有
   `tests/` 下对应测试覆盖。
 - 需求与实现口径与
