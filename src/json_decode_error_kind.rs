@@ -23,6 +23,8 @@ pub enum JsonDecodeErrorKind {
     InputTooLarge,
     /// Indicates that the input became empty after normalization.
     EmptyInput,
+    /// Indicates that the raw byte input is not valid UTF-8 text.
+    InvalidUtf8,
     /// Indicates that the normalized text is not valid JSON syntax.
     InvalidJson,
     /// Indicates that the parsed top-level JSON kind is not the one required
@@ -51,6 +53,7 @@ impl fmt::Display for JsonDecodeErrorKind {
         let name = match self {
             Self::InputTooLarge => "input_too_large",
             Self::EmptyInput => "empty_input",
+            Self::InvalidUtf8 => "invalid_utf8",
             Self::InvalidJson => "invalid_json",
             Self::UnexpectedTopLevel => "unexpected_top_level",
             Self::Deserialize => "deserialize",
@@ -81,6 +84,8 @@ impl FromStr for JsonDecodeErrorKind {
             Ok(Self::InputTooLarge)
         } else if value.eq_ignore_ascii_case("empty_input") {
             Ok(Self::EmptyInput)
+        } else if value.eq_ignore_ascii_case("invalid_utf8") {
+            Ok(Self::InvalidUtf8)
         } else if value.eq_ignore_ascii_case("invalid_json") {
             Ok(Self::InvalidJson)
         } else if value.eq_ignore_ascii_case("unexpected_top_level") {

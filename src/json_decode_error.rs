@@ -8,6 +8,7 @@
 //! Defines the [`JsonDecodeError`] type used by the public decoder API.
 
 use std::{
+    error::Error,
     fmt,
     sync::Arc,
 };
@@ -48,11 +49,53 @@ pub struct JsonDecodeError {
     normalized_line: Option<usize>,
     /// Stores the one-based parser column in normalized text when available.
     normalized_column: Option<usize>,
-    /// Stores the detailed serde error when diagnostics permit retaining it.
-    source: Option<Arc<serde_json::Error>>,
+    /// Stores the detailed source when diagnostics permit retaining it.
+    source: Option<Arc<dyn Error + Send + Sync>>,
 }
 
 impl JsonDecodeError {
+    /// Creates an error for raw bytes that are not valid UTF-8.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - UTF-8 validation error.
+    /// * `raw_input_bytes` - Raw input length in bytes.
+    /// * `privacy_policy` - Policy controlling retained diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// An invalid-UTF-8 error that retains the source only in detailed mode.
+    #[must_use]
+    pub(crate) fn invalid_utf8(
+        error: std::str::Utf8Error,
+        raw_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
+    ) -> Self {
+        let (message, source) = match privacy_policy {
+            ErrorPrivacyPolicy::Redacted => {
+                ("Failed to decode JSON input as UTF-8".to_string(), None)
+            }
+            ErrorPrivacyPolicy::Detailed => (
+                format!("Failed to decode JSON input as UTF-8: {error}"),
+                Some(Arc::new(error) as Arc<dyn Error + Send + Sync>),
+            ),
+        };
+        Self {
+            kind: JsonDecodeErrorKind::InvalidUtf8,
+            stage: JsonDecodeStage::DecodeText,
+            privacy_policy,
+            message,
+            expected_top_level: None,
+            actual_top_level: None,
+            raw_input_bytes,
+            normalized_input_bytes: None,
+            max_input_bytes: None,
+            normalized_line: None,
+            normalized_column: None,
+            source,
+        }
+    }
+
     /// Creates an error for raw input that exceeds the configured size limit.
     ///
     /// # Parameters
@@ -256,9 +299,10 @@ impl JsonDecodeError {
             ErrorPrivacyPolicy::Redacted => {
                 (Self::redacted_message(prefix, line, column), None)
             }
-            ErrorPrivacyPolicy::Detailed => {
-                (format!("{prefix}: {error}"), Some(Arc::new(error)))
-            }
+            ErrorPrivacyPolicy::Detailed => (
+                format!("{prefix}: {error}"),
+                Some(Arc::new(error) as Arc<dyn Error + Send + Sync>),
+            ),
         };
         Self {
             kind,
@@ -471,16 +515,16 @@ impl fmt::Display for JsonDecodeError {
     }
 }
 
-impl std::error::Error for JsonDecodeError {
-    /// Returns the retained serde error under detailed privacy mode.
+impl Error for JsonDecodeError {
+    /// Returns the retained decoder source under detailed privacy mode.
     ///
     /// # Returns
     ///
-    /// `Some(source)` when detailed diagnostics retained a serde error, or
-    /// `None` for redacted and non-serde failures.
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+    /// `Some(source)` when detailed diagnostics retained a UTF-8 or serde
+    /// error, or `None` for redacted and source-free failures.
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
         self.source
             .as_deref()
-            .map(|error| error as &(dyn std::error::Error + 'static))
+            .map(|error| error as &(dyn Error + 'static))
     }
 }

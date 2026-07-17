@@ -13,6 +13,8 @@ use std::fmt;
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeStage {
+    /// The error happened while decoding raw bytes as UTF-8 text.
+    DecodeText,
     /// The error happened while normalizing raw input text.
     Normalize,
     /// The error happened while parsing normalized text as JSON syntax.
@@ -39,6 +41,7 @@ impl fmt::Display for JsonDecodeStage {
     /// Returns a formatting error when the destination rejects the write.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::DecodeText => f.write_str("decode_text"),
             Self::Normalize => f.write_str("normalize"),
             Self::Parse => f.write_str("parse"),
             Self::TopLevelCheck => f.write_str("top_level_check"),

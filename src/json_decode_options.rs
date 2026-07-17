@@ -18,6 +18,7 @@ use crate::{
 /// Each field controls one normalization rule applied before parsing JSON.
 /// Defaults are intentionally conservative and cover the most common
 /// non-fully-trusted text inputs without attempting aggressive repair.
+#[must_use = "JSON decoding options have no effect until used to construct a decoder"]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JsonDecodeOptions {
     /// Controls whether leading and trailing whitespace is removed before any
@@ -35,7 +36,8 @@ pub struct JsonDecodeOptions {
     ///
     /// When set to `Some(limit)`, any input whose byte length is greater than
     /// `limit` is rejected before further processing. When set to `None`, no
-    /// size limit is enforced.
+    /// size limit is enforced. This does not bound normalized allocation size:
+    /// escaping a raw control byte can expand it to six ASCII bytes.
     max_input_bytes: Option<usize>,
     /// Controls whether decoding errors retain input-derived serde details.
     error_privacy_policy: ErrorPrivacyPolicy,
@@ -49,12 +51,11 @@ impl JsonDecodeOptions {
     /// An option set that enables every supported normalization rule, applies
     /// no input-size limit, and redacts input-derived error details.
     #[inline]
-    #[must_use]
     pub const fn lenient() -> Self {
         Self {
             trim_whitespace: true,
             strip_utf8_bom: true,
-            markdown_fence_policy: MarkdownFencePolicy::Any {
+            markdown_fence_policy: MarkdownFencePolicy::JsonOnly {
                 closing: MarkdownFenceClosing::Optional,
             },
             escape_control_chars_in_strings: true,
@@ -70,7 +71,6 @@ impl JsonDecodeOptions {
     /// An option set that delegates the input to `serde_json` without
     /// normalization and redacts input-derived error details.
     #[inline]
-    #[must_use]
     pub const fn strict() -> Self {
         Self {
             trim_whitespace: false,
@@ -91,7 +91,6 @@ impl JsonDecodeOptions {
     /// token is only a fence label; fenced content must still be standard JSON
     /// without comments or trailing commas.
     #[inline]
-    #[must_use]
     pub const fn json_code_fences_only() -> Self {
         Self {
             markdown_fence_policy: MarkdownFencePolicy::JsonOnly {
@@ -122,7 +121,6 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    #[must_use]
     pub const fn with_trim_whitespace(mut self, enabled: bool) -> Self {
         self.trim_whitespace = enabled;
         self
@@ -150,7 +148,6 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    #[must_use]
     pub const fn with_strip_utf8_bom(mut self, enabled: bool) -> Self {
         self.strip_utf8_bom = enabled;
         self
@@ -178,7 +175,6 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    #[must_use]
     pub const fn with_markdown_fence_policy(
         mut self,
         markdown_fence_policy: MarkdownFencePolicy,
@@ -210,7 +206,6 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    #[must_use]
     pub const fn with_escape_control_chars_in_strings(
         mut self,
         enabled: bool,
@@ -241,7 +236,6 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    #[must_use]
     pub const fn with_max_input_bytes(
         mut self,
         max_input_bytes: Option<usize>,
@@ -275,7 +269,6 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    #[must_use]
     pub const fn with_error_privacy_policy(
         mut self,
         error_privacy_policy: ErrorPrivacyPolicy,
