@@ -130,6 +130,24 @@ fn test_decode_value_strips_code_fence_with_closing_fence() {
 }
 
 #[test]
+fn test_decode_value_strips_code_fence_with_crlf_line_endings() {
+    let decoder = LenientJsonDecoder::default();
+    let value = decoder
+        .decode_value("```json\r\n{\"a\":1}\r\n```")
+        .expect("default decoder should accept CRLF fenced JSON");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
+fn test_decode_value_strips_code_fence_with_cr_only_line_endings() {
+    let decoder = LenientJsonDecoder::default();
+    let value = decoder
+        .decode_value("```json\r{\"a\":1}\r```")
+        .expect("default decoder should accept CR-only fenced JSON");
+    assert_eq!(value, json!({"a": 1}));
+}
+
+#[test]
 fn test_decode_value_strips_code_fence_with_mixed_line_endings_lf_then_cr() {
     let decoder = LenientJsonDecoder::default();
     let value = decoder
