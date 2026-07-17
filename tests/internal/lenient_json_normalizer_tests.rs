@@ -195,6 +195,16 @@ fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid()
     }
 }
 
+/// Generates a deterministic noisy JSON-like candidate.
+///
+/// # Parameters
+///
+/// * `seed` - Mutable generator state advanced while building the candidate.
+///
+/// # Returns
+///
+/// A JSON-like string that may contain fences, a BOM, control characters, or
+/// malformed syntax.
 fn generate_noisy_json_candidate(seed: &mut u64) -> String {
     const ALPHABET: &[char] = &[
         '{', '}', '[', ']', ':', ',', '"', '\\', '`', ' ', '\t', '\n', '\r',
@@ -217,6 +227,15 @@ fn generate_noisy_json_candidate(seed: &mut u64) -> String {
     }
 }
 
+/// Advances and returns the deterministic pseudo-random generator state.
+///
+/// # Parameters
+///
+/// * `seed` - Mutable state updated using the fixed linear-congruential step.
+///
+/// # Returns
+///
+/// The next deterministic pseudo-random value.
 fn next_u64(seed: &mut u64) -> u64 {
     *seed = seed
         .wrapping_mul(6364136223846793005)
