@@ -54,6 +54,18 @@
 //! assert_eq!(detailed.privacy_policy(), ErrorPrivacyPolicy::Detailed);
 //! assert!(std::error::Error::source(&detailed).is_some());
 //! ```
+//!
+//! # Must-use configuration values
+//!
+//! ```compile_fail
+//! #![deny(unused_must_use)]
+//! qubit_json::JsonDecodeOptions::default();
+//! ```
+//!
+//! ```compile_fail
+//! #![deny(unused_must_use)]
+//! qubit_json::LenientJsonDecoder::default();
+//! ```
 
 #![deny(missing_docs)]
 

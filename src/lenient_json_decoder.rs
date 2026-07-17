@@ -26,6 +26,7 @@ use crate::{
 ///
 /// `LenientJsonDecoder` applies a small set of predictable normalization rules
 /// before delegating actual parsing and deserialization to `serde_json`.
+#[must_use = "a JSON decoder must be used to decode input"]
 #[derive(Debug, Clone, Default)]
 pub struct LenientJsonDecoder {
     /// Stores the configured normalization pipeline.
@@ -43,7 +44,6 @@ impl LenientJsonDecoder {
     ///
     /// A decoder configured with `options`.
     #[inline(always)]
-    #[must_use]
     pub const fn new(options: JsonDecodeOptions) -> Self {
         Self {
             normalizer: LenientJsonNormalizer::new(options),
@@ -56,7 +56,6 @@ impl LenientJsonDecoder {
     ///
     /// The option set supplied when the decoder was created.
     #[inline(always)]
-    #[must_use]
     pub const fn options(&self) -> &JsonDecodeOptions {
         self.normalizer.options()
     }
@@ -89,6 +88,48 @@ impl LenientJsonDecoder {
             normalized.len(),
             privacy_policy,
         )
+    }
+
+    /// Decodes UTF-8 input bytes into the target Rust type.
+    ///
+    /// The configured raw byte limit is enforced before UTF-8 validation.
+    /// Valid UTF-8 is borrowed and delegated to the string decoder.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Raw JSON bytes to validate, normalize, and deserialize.
+    ///
+    /// # Returns
+    ///
+    /// The deserialized target value.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JSON decode error when the raw byte limit is exceeded, the
+    /// bytes are not valid UTF-8, or subsequent JSON decoding fails.
+    pub fn decode_slice<T>(&self, input: &[u8]) -> Result<T, JsonDecodeError>
+    where
+        T: DeserializeOwned,
+    {
+        let raw_input_bytes = input.len();
+        let privacy_policy = self.options().error_privacy_policy();
+        if let Some(max_input_bytes) = self.options().max_input_bytes()
+            && raw_input_bytes > max_input_bytes
+        {
+            return Err(JsonDecodeError::input_too_large(
+                raw_input_bytes,
+                max_input_bytes,
+                privacy_policy,
+            ));
+        }
+        let input = std::str::from_utf8(input).map_err(|error| {
+            JsonDecodeError::invalid_utf8(
+                error,
+                raw_input_bytes,
+                privacy_policy,
+            )
+        })?;
+        self.decode(input)
     }
 
     /// Decodes `input` into `T`, requiring a top-level JSON object.
@@ -246,6 +287,7 @@ impl LenientJsonDecoder {
     ///
     /// Returns [`JsonDecodeErrorKind::InvalidJson`](crate::JsonDecodeErrorKind::InvalidJson)
     /// when `normalized` is not valid JSON.
+    #[inline]
     fn parse_value(
         normalized: &str,
         raw_input_bytes: usize,
@@ -279,6 +321,7 @@ impl LenientJsonDecoder {
     ///
     /// Returns [`JsonDecodeErrorKind::InvalidJson`](crate::JsonDecodeErrorKind::InvalidJson)
     /// when validation fails.
+    #[inline]
     fn validate_json(
         normalized: &str,
         raw_input_bytes: usize,
@@ -314,6 +357,7 @@ impl LenientJsonDecoder {
     ///
     /// Returns [`JsonDecodeError`] classified as invalid JSON for syntax and
     /// end-of-input failures, or as a deserialization failure for data errors.
+    #[inline]
     fn deserialize_normalized<T>(
         normalized: &str,
         raw_input_bytes: usize,
