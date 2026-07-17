@@ -41,6 +41,20 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
     }
 
+    let strict_result = LenientJsonDecoder::new(JsonDecodeOptions::strict())
+        .decode_slice::<serde_json::Value>(data);
+    let serde_result = serde_json::from_slice::<serde_json::Value>(data);
+    match (strict_result, serde_result) {
+        (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
+        (Err(_), Err(_)) => {}
+        (Ok(_), Err(_)) => {
+            panic!("strict decoder accepted input rejected by serde_json");
+        }
+        (Err(_), Ok(_)) => {
+            panic!("strict decoder rejected input accepted by serde_json");
+        }
+    }
+
     let Ok(input) = std::str::from_utf8(data) else {
         return;
     };
