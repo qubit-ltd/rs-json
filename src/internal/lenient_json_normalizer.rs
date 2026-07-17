@@ -98,7 +98,6 @@ impl LenientJsonNormalizer {
             input,
             self.options.escape_control_chars_in_strings(),
         );
-        let input = self.trim_cow_if_enabled(input);
 
         if input.is_empty() {
             Err(JsonDecodeError::empty_input(
@@ -196,35 +195,6 @@ impl LenientJsonNormalizer {
             input.trim()
         } else {
             input
-        }
-    }
-
-    /// Trims normalized text while preserving its ownership mode where
-    /// possible.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Borrowed or owned normalized text.
-    ///
-    /// # Returns
-    ///
-    /// Conditionally trimmed text, preserving borrowed storage and retaining
-    /// owned storage when no trim is needed.
-    #[must_use]
-    fn trim_cow_if_enabled<'a>(&self, input: Cow<'a, str>) -> Cow<'a, str> {
-        if !self.options.trim_whitespace() {
-            return input;
-        }
-        match input {
-            Cow::Borrowed(text) => Cow::Borrowed(text.trim()),
-            Cow::Owned(text) => {
-                let trimmed = text.trim();
-                if trimmed.len() == text.len() {
-                    Cow::Owned(text)
-                } else {
-                    Cow::Owned(trimmed.to_string())
-                }
-            }
         }
     }
 
@@ -330,25 +300,18 @@ impl LenientJsonNormalizer {
     /// `Some((line_end, next_line_start))` for LF, CRLF, or CR input, or
     /// `None` when no line break exists.
     fn first_line_break(input: &str) -> Option<(usize, usize)> {
-        let newline = input.find('\n');
-        let carriage_return = input.find('\r');
-        match (newline, carriage_return) {
-            (Some(newline), Some(carriage_return))
-                if carriage_return < newline =>
-            {
-                let content_start = if newline == carriage_return + 1 {
-                    newline + 1
-                } else {
-                    carriage_return + 1
-                };
-                Some((carriage_return, content_start))
-            }
-            (Some(newline), _) => Some((newline, newline + 1)),
-            (None, Some(carriage_return)) => {
-                Some((carriage_return, carriage_return + 1))
-            }
-            (None, None) => None,
-        }
+        let bytes = input.as_bytes();
+        let line_end = bytes
+            .iter()
+            .position(|byte| matches!(*byte, b'\n' | b'\r'))?;
+        let next_line_start = if bytes[line_end] == b'\r'
+            && bytes.get(line_end + 1) == Some(&b'\n')
+        {
+            line_end + 2
+        } else {
+            line_end + 1
+        };
+        Some((line_end, next_line_start))
     }
 
     /// Returns whether a fenced info string should be treated as JSON.
@@ -380,8 +343,9 @@ impl LenientJsonNormalizer {
     ///
     /// # Returns
     ///
-    /// `Some(body)` when the final non-whitespace line is a compatible closing
-    /// fence, or `None` otherwise.
+    /// `Some(body)` when, after ignoring trailing ASCII spaces, tabs, CRs, and
+    /// LFs, the final line begins with zero to three ASCII spaces and contains
+    /// a compatible closing marker run; otherwise, `None`.
     fn strip_markdown_closing_fence(
         content: &str,
         opening_fence: MarkdownFence,

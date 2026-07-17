@@ -536,12 +536,12 @@ fn test_decode_value_with_trim_disabled_and_escape_enabled_still_decodes_owned_o
 }
 
 #[test]
-fn test_decode_value_trims_owned_output_after_repair() {
+fn test_decode_value_trims_before_control_character_repair() {
     let decoder = LenientJsonDecoder::default();
     let value = decoder
         .decode_value("```json\n  {\"text\":\"a\nb\"}  \n```")
         .expect(
-            "trim should still apply after repair allocates an owned string",
+            "outer whitespace should be removed before repair allocates an owned string",
         );
     assert_eq!(value, json!({"text": "a\nb"}));
 }
