@@ -7,8 +7,6 @@
 // =============================================================================
 //! Tests for the public [`qubit_json::JsonDecodeError`] type.
 
-use serde::Deserialize;
-
 use qubit_json::{
     ErrorPrivacyPolicy,
     JsonDecodeErrorKind,
@@ -18,10 +16,7 @@ use qubit_json::{
     LenientJsonDecoder,
 };
 
-#[derive(Debug, Deserialize)]
-enum PublicChoice {
-    Allowed,
-}
+use crate::fixtures::PublicChoice;
 
 #[test]
 fn test_error_display_for_empty_input_uses_message() {

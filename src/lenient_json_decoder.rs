@@ -56,6 +56,7 @@ impl LenientJsonDecoder {
     ///
     /// The option set supplied when the decoder was created.
     #[inline(always)]
+    #[must_use = "the decoder options should be inspected or retained"]
     pub const fn options(&self) -> &JsonDecodeOptions {
         self.normalizer.options()
     }
