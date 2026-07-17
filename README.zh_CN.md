@@ -3,7 +3,6 @@
 [![Rust CI](https://github.com/qubit-ltd/rs-json/actions/workflows/ci.yml/badge.svg)](https://github.com/qubit-ltd/rs-json/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://qubit-ltd.github.io/rs-json/coverage-badge.json)](https://qubit-ltd.github.io/rs-json/coverage/)
 [![Crates.io](https://img.shields.io/crates/v/qubit-json.svg?color=blue)](https://crates.io/crates/qubit-json)
-[![docs.rs](https://img.shields.io/docsrs/qubit-json?logo=docs.rs)](https://docs.rs/qubit-json)
 [![Rust](https://img.shields.io/badge/rust-1.94+-blue.svg?logo=rust)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![English Document](https://img.shields.io/badge/Document-English-blue.svg)](README.md)
@@ -150,6 +149,23 @@ fn main() {
 }
 ```
 
+### 为不可信来源设置输入上限
+
+`JsonDecodeOptions::default()` 有意不设置 `max_input_bytes`，避免库强加与
+应用场景无关的限制。当输入跨越信任边界时，应根据调用方的内存和延迟预算配置上限。
+
+```rust
+use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
+
+let decoder = LenientJsonDecoder::new(
+    JsonDecodeOptions::default().with_max_input_bytes(Some(1_048_576)),
+);
+let value = decoder.decode_value("{\"ok\":true}")?;
+
+assert_eq!(value["ok"], true);
+# Ok::<(), qubit_json::JsonDecodeError>(())
+```
+
 ### 显式启用详细错误诊断
 
 完整 serde 诊断可能包含输入值。只有当诊断存储及其读者均可信时才应启用。
@@ -186,7 +202,6 @@ fn main() {
 6. 移除最外层反引号或波浪线 Markdown 代码块
 7. 再次裁剪首尾空白
 8. 转义 JSON 字符串字面量中的 ASCII 控制字符
-9. 再次裁剪首尾空白
 
 这个库不会做下面这些事情：
 
@@ -235,6 +250,36 @@ cargo install cargo-fuzz
 (cd fuzz && cargo fuzz run decoder)
 ```
 
+## 测试
+
+```bash
+# 使用默认的空 feature 集测试核心 API
+cargo test --no-default-features
+
+# 测试核心 API 和正则校验
+cargo test --all-features
+
+# 运行项目 CI 检查
+./ci-check.sh
+
+# 检查代码覆盖率
+./coverage.sh
+```
+
 ## 许可证
 
-本项目基于 Apache 2.0 许可证发布。详见 [LICENSE](LICENSE)。
+Copyright (c) 2025 - 2026. Haixing Hu. All rights reserved.
+
+本项目基于 Apache License 2.0 授权。完整许可证文本请参阅
+[LICENSE](LICENSE)。
+
+## 贡献
+
+欢迎贡献。请遵循 Rust API 指南，及时更新公共 API 文档与测试，并在提交
+Pull Request 前运行 `./align-ci.sh`格式化代码，运行`./ci-check.sh`对齐CI要求。
+
+## 作者
+
+**Haixing Hu** - *Qubit Co. Ltd.*
+
+仓库地址：[https://github.com/qubit-ltd/rs-json](https://github.com/qubit-ltd/rs-json)
