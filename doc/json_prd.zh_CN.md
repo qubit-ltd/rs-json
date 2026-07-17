@@ -99,7 +99,7 @@
 
 - 验收标准
   - 规范化顺序固定为：
-    `require_within_size_limit -> require_non_empty -> trim -> strip_bom -> trim -> strip_fence -> trim -> escape_control_chars -> trim`。
+    `require_within_size_limit -> require_non_empty -> trim -> strip_bom -> trim -> strip_fence -> trim -> escape_control_chars`。
   - 不发生修改时尽量复用输入，减少分配。
 
 ### PRD-RSJSON-004：`decode<T>()`
@@ -174,6 +174,7 @@
 - 公开能力必须在测试目录中可观测：
   - `tests/lenient_json_decoder_tests.rs`
   - `tests/internal/lenient_json_normalizer_tests.rs`
+  - `tests/internal/control_character_escaper_tests.rs`
   - `tests/json_decode_options_tests.rs`
   - `tests/error_privacy_policy_tests.rs`
   - `tests/json_decode_error_tests.rs`

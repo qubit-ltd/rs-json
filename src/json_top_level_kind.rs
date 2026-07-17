@@ -54,7 +54,10 @@ impl JsonTopLevelKind {
         }
     }
 
-    /// Classifies validated normalized JSON text by its first JSON token.
+    /// Provisionally classifies normalized JSON text by its first JSON token.
+    ///
+    /// This helper does not validate JSON syntax. The decoder uses the result
+    /// only as a pre-parse top-level-kind hint.
     ///
     /// # Parameters
     ///
