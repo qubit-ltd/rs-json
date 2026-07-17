@@ -7,4 +7,5 @@
 // =============================================================================
 //! Tests for private normalization behavior observed through public APIs.
 
+mod control_character_escaper_tests;
 mod lenient_json_normalizer_tests;
