@@ -150,6 +150,30 @@ fn test_default_invalid_json_error_does_not_expose_serde_source() {
 }
 
 #[test]
+fn test_invalid_utf8_redacted_error_discards_source() {
+    let error = LenientJsonDecoder::default()
+        .decode_slice::<serde_json::Value>(&[0xff])
+        .expect_err("invalid UTF-8 must fail");
+    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
+    assert!(std::error::Error::source(&error).is_none());
+    assert!(!format!("{error:?}").contains("255"));
+}
+
+#[test]
+fn test_invalid_utf8_detailed_error_retains_utf8_source() {
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::strict()
+            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+    );
+    let error = decoder
+        .decode_slice::<serde_json::Value>(&[0xff])
+        .expect_err("invalid UTF-8 must fail");
+    let source = std::error::Error::source(&error)
+        .expect("detailed errors must retain Utf8Error");
+    assert!(source.downcast_ref::<std::str::Utf8Error>().is_some());
+}
+
+#[test]
 fn test_normalization_errors_retain_the_configured_privacy_policy() {
     let redacted = LenientJsonDecoder::default()
         .decode_value("")

@@ -5,8 +5,14 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for private normalization behavior observed through public APIs.
+//! Defines the duplicate-field fixture used by decoder tests.
 
-mod control_character_escaper_tests;
-mod lenient_json_normalizer_tests;
-mod markdown_fence_tests;
+use serde::Deserialize;
+
+/// Payload used to verify serde duplicate-field rejection.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SingleValue {
+    /// Stores the sole expected value.
+    #[serde(rename = "value")]
+    _value: u8,
+}

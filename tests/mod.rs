@@ -8,6 +8,7 @@
 //! Integration test entry point for `qubit-json`.
 
 mod error_privacy_policy_tests;
+mod fixtures;
 mod internal;
 mod json_decode_error_kind_tests;
 mod json_decode_error_tests;
