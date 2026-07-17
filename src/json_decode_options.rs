@@ -82,24 +82,6 @@ impl JsonDecodeOptions {
         }
     }
 
-    /// Creates lenient options that only strip JSON-like Markdown code fences.
-    ///
-    /// # Returns
-    ///
-    /// A lenient option set that accepts empty, `json`, and `jsonc` fence
-    /// language tags while leaving other fenced blocks unchanged. The `jsonc`
-    /// token is only a fence label; fenced content must still be standard JSON
-    /// without comments or trailing commas.
-    #[inline]
-    pub const fn json_code_fences_only() -> Self {
-        Self {
-            markdown_fence_policy: MarkdownFencePolicy::JsonOnly {
-                closing: MarkdownFenceClosing::Optional,
-            },
-            ..Self::lenient()
-        }
-    }
-
     /// Returns whether leading and trailing whitespace is removed.
     ///
     /// # Returns

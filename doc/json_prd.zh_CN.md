@@ -3,9 +3,9 @@
 ## 文档信息
 
 - 文档名称：`rs-json` 产品需求文档（PRD）
-- 文档版本：`v3.0`
+- 文档版本：`v3.1`
 - 创建日期：`2026-04-12`
-- 更新日期：`2026-07-15`
+- 更新日期：`2026-07-17`
 - 状态：`Draft`
 - 对齐设计文档：`json_design.zh_CN.md`
 
@@ -177,6 +177,7 @@
   - `tests/lenient_json_decoder_tests.rs`
   - `tests/internal/lenient_json_normalizer_tests.rs`
   - `tests/internal/control_character_escaper_tests.rs`
+  - `tests/internal/markdown_fence_tests.rs`
   - `tests/json_decode_options_tests.rs`
   - `tests/error_privacy_policy_tests.rs`
   - `tests/json_decode_error_tests.rs`

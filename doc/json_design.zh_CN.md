@@ -2,9 +2,9 @@
 
 ## 版本信息
 
-- 文档版本：`v3.0`
+- 文档版本：`v3.1`
 - 创建日期：`2026-04-12`
-- 更新日期：`2026-07-15`
+- 更新日期：`2026-07-17`
 - 对齐 PRD：`json_prd.zh_CN.md`
 
 ## 1. 背景与目标
@@ -56,6 +56,7 @@ serde_json / typed output
 1. 对外以对象 API 为中心，不以工具函数列表为中心。
 2. 规范化作为解码内部阶段，保持对象边界稳定。
 3. 内部组件按职责拆分：`internal/lenient_json_normalizer.rs` 承载预处理策略，
+   `internal/markdown_fence.rs` 负责 Markdown 围栏识别与剥离，
    `internal/control_character_escaper.rs` 以单次、惰性分配扫描处理字符串内 C0 控制字符。
 
 ## 4. 核心对象模型
@@ -114,8 +115,6 @@ getter，并提供以下值式 builder：
 
 - `JsonDecodeOptions::lenient()`：返回默认宽松配置。
 - `JsonDecodeOptions::strict()`：禁用所有规范化规则。
-- `JsonDecodeOptions::json_code_fences_only()`：保留默认宽松行为，但仅移除
-  info string 首个 token 为 JSON-like 的 Markdown code fence。
 - `with_trim_whitespace(enabled)`。
 - `with_strip_utf8_bom(enabled)`。
 - `with_markdown_fence_policy(policy)`。
@@ -228,7 +227,8 @@ impl LenientJsonDecoder {
 
 ## 6. 规范化管线
 
-实现统一在 `src/internal/lenient_json_normalizer.rs`，对外不直接暴露独立函数 API。
+管线编排统一在 `src/internal/lenient_json_normalizer.rs`，领域行为委托给对应内部对象，
+对外不直接暴露独立函数 API。
 核心处理顺序如下：
 
 1. `require_within_size_limit(input)`：按字节数上限拒绝过大输入。
@@ -236,8 +236,8 @@ impl LenientJsonDecoder {
 3. `trim_if_enabled(input)`：首尾空白清理。
 4. `strip_utf8_bom(input)`：可配置移除 UTF-8 BOM。
 5. `trim_if_enabled(input)`：移除 BOM 后再次按需裁剪。
-6. `strip_markdown_code_fence(input)`：根据 `markdown_fence_policy` 可配置去除
-   外层代码块。
+6. `MarkdownFence::strip_outer(input, policy)`：根据
+   `markdown_fence_policy` 可配置去除外层代码块。
 7. `trim_if_enabled(input)`：去除代码块后再次按需裁剪。
 8. `ControlCharacterEscaper::escape(input, enabled)`：可配置转义字符串内控制字符。
 9. 最终空值检查并返回 `Cow<'_, str>`。
@@ -304,7 +304,8 @@ rust-common/rs-json/
   │   ├─ internal/
   │   │   ├─ mod.rs
   │   │   ├─ control_character_escaper_tests.rs
-  │   │   └─ lenient_json_normalizer_tests.rs
+  │   │   ├─ lenient_json_normalizer_tests.rs
+  │   │   └─ markdown_fence_tests.rs
   │   ├─ lenient_json_decoder_tests.rs
   │   ├─ json_decode_error_kind_tests.rs
   │   ├─ json_decode_error_tests.rs
@@ -315,10 +316,16 @@ rust-common/rs-json/
   │   ├─ markdown_fence_closing_tests.rs
   │   └─ markdown_fence_policy_tests.rs
   ├─ benches/
-  │   └─ decoder_bench.rs
+  │   ├─ decoder_bench.rs
+  │   └─ internal/
+  │       ├─ mod.rs
+  │       └─ benchmark_record.rs
   ├─ fuzz/
   │   └─ fuzz_targets/
-  │       └─ decoder.rs
+  │       ├─ decoder.rs
+  │       └─ internal/
+  │           ├─ mod.rs
+  │           └─ fuzz_record.rs
   ├─ .github/
   │   └─ workflows/
   │       ├─ ci.yml
@@ -347,11 +354,12 @@ rust-common/rs-json/
 
 - `tests/internal/control_character_escaper_tests.rs`：通过公开 decoder 行为覆盖字符串状态、已有转义、全部 C0 控制字符、反斜杠奇偶语义和字符串外控制字符。
 - `tests/internal/lenient_json_normalizer_tests.rs`：通过公开 decoder 行为覆盖 BOM、围栏换行、空输入诊断、trim 与控制字符修复的管线交互，不扩大内部实现可见性。
+- `tests/internal/markdown_fence_tests.rs`：通过公开 decoder 行为覆盖围栏 marker、缩进、info string、换行和闭合策略。
 
 ### 9.4 性能与模糊测试
 
 - `benches/decoder_bench.rs`：覆盖普通 JSON、围栏 JSON 和原始控制字符输入的公开解码路径。
-- `fuzz/fuzz_targets/decoder.rs`：覆盖默认、严格、仅 JSON 围栏和必须闭合围栏策略；
+- `fuzz/fuzz_targets/decoder.rs`：覆盖默认、严格、任意可选闭合围栏和仅 JSON 必须闭合围栏策略；
   `.github/workflows/fuzz.yml` 定时执行有时限的 fuzz，不进入每个 pull request 的快速检查。
 
 ## 10. 接入与发布边界
