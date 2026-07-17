@@ -9,6 +9,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use qubit_json::{
+    JsonDecodeErrorKind,
     JsonDecodeOptions,
     LenientJsonDecoder,
     MarkdownFenceClosing,
@@ -21,12 +22,32 @@ use serde::Deserialize;
 struct FuzzRecord;
 
 fuzz_target!(|data: &[u8]| {
+    let default_decoder = LenientJsonDecoder::default();
+    if let Ok(value) =
+        default_decoder.decode_slice::<serde_json::Value>(data)
+    {
+        let encoded = serde_json::to_vec(&value)
+            .expect("serde_json::Value must serialize");
+        let _: serde_json::Value = serde_json::from_slice(&encoded)
+            .expect("successful decoder output must be strict JSON");
+    }
+    if !data.is_empty() {
+        let bounded = LenientJsonDecoder::new(
+            JsonDecodeOptions::strict()
+                .with_max_input_bytes(Some(data.len() - 1)),
+        );
+        let error = bounded
+            .decode_slice::<serde_json::Value>(data)
+            .expect_err("an input above its raw byte limit must fail");
+        assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
+    }
+
     let Ok(input) = std::str::from_utf8(data) else {
         return;
     };
 
     let decoders = [
-        LenientJsonDecoder::default(),
+        default_decoder.clone(),
         LenientJsonDecoder::new(JsonDecodeOptions::strict()),
         LenientJsonDecoder::new(JsonDecodeOptions::json_code_fences_only()),
         LenientJsonDecoder::new(
@@ -44,5 +65,27 @@ fuzz_target!(|data: &[u8]| {
         let _ = decoder.decode_object::<FuzzRecord>(input);
         let _ = decoder.decode_array::<FuzzRecord>(input);
         let _ = decoder.decode_value(input);
+    }
+
+    if let Ok(value) =
+        default_decoder.decode_object::<serde_json::Value>(input)
+    {
+        assert!(value.is_object());
+    }
+    if let Ok(values) =
+        default_decoder.decode_array::<serde_json::Value>(input)
+    {
+        let encoded = serde_json::to_vec(&values)
+            .expect("decoded array elements must serialize");
+        let reparsed: serde_json::Value = serde_json::from_slice(&encoded)
+            .expect("decoded array must remain strict JSON");
+        assert!(reparsed.is_array());
+    }
+    if input.contains("TOP_SECRET")
+        && let Err(error) = default_decoder.decode::<FuzzRecord>(input)
+    {
+        assert!(!error.message().contains("TOP_SECRET"));
+        assert!(!error.to_string().contains("TOP_SECRET"));
+        assert!(!format!("{error:?}").contains("TOP_SECRET"));
     }
 });
