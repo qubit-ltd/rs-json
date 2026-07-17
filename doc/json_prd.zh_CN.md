@@ -92,7 +92,7 @@
   - `with_max_input_bytes(Some(limit))` 设置限制，传入 `None` 可清除限制。
   - `markdown_fence_policy` 用单一枚举表达禁用、任意语言和仅 JSON 围栏，以及
     可选或必须闭合，避免多个布尔字段组合出矛盾状态。
-  - 默认值覆盖高频轻度脏数据场景。
+  - 默认只移除空标签、`json` 或 `jsonc` 围栏；任意语言需显式选择 `Any`。
   - 默认实例与配置实例行为可回归验证。
 
 ### PRD-RSJSON-003：统一规范化顺序
@@ -108,6 +108,8 @@
   - 可将规范化后的文本反序列化为任意 `T: DeserializeOwned`。
   - 与 `decode_object`、`decode_array` 区分顶层约束责任。
   - 区分 `InvalidJson` 与 `Deserialize` 两类失败。
+  - `decode_slice<T>()` 先按原始字节执行大小限制，再校验 UTF-8，并复用
+    相同的字符串解码管线。
 
 ### PRD-RSJSON-005：`decode_object<T>()`
 
@@ -134,7 +136,7 @@
 ### PRD-RSJSON-008：错误模型稳定性
 
 - 验收标准
-  - 支持 `InputTooLarge`、`EmptyInput`、`InvalidJson`、
+  - 支持 `InputTooLarge`、`EmptyInput`、`InvalidUtf8`、`InvalidJson`、
     `UnexpectedTopLevel`、`Deserialize`。
   - 保留失败阶段、行列号和输入字节数信息用于排障。
   - 初始空输入的规范化长度为 `None`；完整管线处理后变为空时为 `Some(0)`。
@@ -145,7 +147,7 @@
   - `ErrorPrivacyPolicy::Redacted` 为所有预设和默认配置的策略。
   - `Redacted` 的 `message`、`Display`、`Debug` 和标准错误链均不保留
     serde 提供的输入派生内容，但继续提供结构化行列信息。
-  - `Detailed` 只能显式配置，并保留完整 serde 消息和标准 error source。
+  - `Detailed` 只能显式配置，并保留完整 UTF-8 或 serde 标准 error source。
   - 每个 `JsonDecodeError` 均通过 `privacy_policy()` 暴露实际生效策略。
 
 ## 7. 风险与约束

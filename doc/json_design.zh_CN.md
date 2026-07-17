@@ -127,7 +127,7 @@ getter，并提供以下值式 builder：
 
 - `trim_whitespace = true`
 - `strip_utf8_bom = true`
-- `markdown_fence_policy = Any { closing: Optional }`
+- `markdown_fence_policy = JsonOnly { closing: Optional }`
 - `escape_control_chars_in_strings = true`
 - `max_input_bytes = None`
 - `error_privacy_policy = ErrorPrivacyPolicy::Redacted`
@@ -144,6 +144,7 @@ pub enum JsonTopLevelKind { Object, Array, Other }
 pub enum JsonDecodeErrorKind {
     InputTooLarge,
     EmptyInput,
+    InvalidUtf8,
     InvalidJson,
     UnexpectedTopLevel,
     Deserialize,
@@ -162,14 +163,14 @@ pub enum ErrorPrivacyPolicy {
 pub struct JsonDecodeError {
     // all fields are private; immutable accessors expose diagnostics
     privacy_policy: ErrorPrivacyPolicy,
-    source: Option<Arc<serde_json::Error>>,
+    source: Option<Arc<dyn Error + Send + Sync>>,
 }
 ```
 
 设计说明：
 
 1. `JsonDecodeError` 承担错误场景聚合与诊断信息承载。
-2. `stage` 用于标识失败发生在规范化、解析、顶层检查或反序列化阶段。
+2. `stage` 用于标识失败发生在字节转文本、规范化、解析、顶层检查或反序列化阶段。
 3. `normalized_line()`/`normalized_column()` 用于解析和反序列化阶段定位，
    坐标相对于规范化后的 JSON 文本，无法定位时保持 `None`。
 4. `expected_top_level`/`actual_top_level` 仅用于 `UnexpectedTopLevel`。
@@ -197,6 +198,10 @@ impl LenientJsonDecoder {
     where
         T: serde::de::DeserializeOwned;
 
+    pub fn decode_slice<T>(&self, input: &[u8]) -> Result<T, JsonDecodeError>
+    where
+        T: serde::de::DeserializeOwned;
+
     pub fn decode_object<T>(&self, input: &str) -> Result<T, JsonDecodeError>
     where
         T: serde::de::DeserializeOwned;
@@ -212,6 +217,8 @@ impl LenientJsonDecoder {
 ### 5.2 行为说明
 
 - `decode<T>()`：不限定顶层结构，规范化后直接反序列化为 `T`。
+- `decode_slice<T>()`：先按原始字节检查上限，再校验 UTF-8 并复用
+  `decode<T>()`；有效输入不复制。
 - `decode_object<T>()`：先检查首个 JSON token。若 token 为对象，直接从规范化文本
   反序列化为 `T`；若 token 不匹配，再借助 `RawValue` 验证完整语法，以区分
   `InvalidJson` 与 `UnexpectedTopLevel`。
@@ -326,7 +333,8 @@ rust-common/rs-json/
 ### 9.1 解码路径测试
 
 - `tests/lenient_json_decoder_tests.rs`
-  - `decode`、`decode_object`、`decode_array`、`decode_value` 的正常与失败路径。
+  - `decode`、`decode_slice`、`decode_object`、`decode_array`、
+    `decode_value` 的正常与失败路径。
 
 ### 9.2 配置与错误模型测试
 

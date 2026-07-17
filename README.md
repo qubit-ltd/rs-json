@@ -44,6 +44,7 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 
 - Reusable decoder object that holds immutable decoding options
 - `decode<T>()`: decodes any JSON top-level value into `T`
+- `decode_slice<T>()`: validates UTF-8 bytes and decodes them into `T`
 - `decode_value()`: decodes into `serde_json::Value`
 - `decode_object<T>()`: requires a top-level JSON object and deserializes `T`
   directly from normalized text
@@ -58,6 +59,8 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `strip_utf8_bom`: strips a leading UTF-8 BOM
 - `markdown_fence_policy`: selects disabled, any-language, or JSON-only fence
   stripping, together with an optional or required closing fence
+- The default accepts only empty, `json`, and `jsonc` fence labels.
+  Any-language stripping requires an explicit `MarkdownFencePolicy::Any`.
 - `jsonc` is accepted only as a Markdown fence label; fenced content is still
   parsed as standard JSON, so comments and trailing commas remain invalid
 - `escape_control_chars_in_strings`: escapes ASCII control characters inside
@@ -70,6 +73,7 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 
 - `InputTooLarge`: raw input size exceeds configured limit
 - `EmptyInput`: input becomes empty after normalization
+- `InvalidUtf8`: raw byte input is not valid UTF-8
 - `InvalidJson`: normalized text is not valid JSON syntax
 - `UnexpectedTopLevel`: top-level JSON kind does not match the requested method
 - `Deserialize`: JSON is valid but cannot be deserialized into the target type
@@ -79,8 +83,8 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `privacy_policy()` records the policy applied to every returned error
 - under the default `Redacted` policy, parser/deserializer messages do not
   contain serde-provided input fragments and `Error::source()` is `None`
-- `Detailed` preserves the complete serde message and source and may therefore
-  expose input values; use it only in controlled diagnostic environments
+- `Detailed` preserves the complete UTF-8 or serde source and may therefore
+  expose input-derived diagnostics; use it only in controlled environments
 
 ## Installation
 
@@ -88,7 +92,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qubit-json = "0.4"
+qubit-json = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -160,6 +164,10 @@ fn main() {
 the crate does not impose an application-specific limit. When inputs cross a
 trust boundary, configure a limit appropriate to the caller's memory and
 latency budget.
+
+The limit applies to raw input, not normalized allocation size. Escaping one
+raw ASCII control byte as `\\u00XX` can expand content from one byte to six
+bytes, in addition to the allocation's own overhead.
 
 ```rust
 use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
@@ -238,7 +246,7 @@ This README reflects the current object model:
 
 - `LenientJsonDecoder` owns an internal `LenientJsonNormalizer`.
 - Public decoding APIs are `decode`, `decode_object`, `decode_array`,
-  `decode_value`.
+  `decode_value`, and `decode_slice`.
 - Normalization and error handling are implemented in
   `src/internal/lenient_json_normalizer.rs` and `src/json_decode_error.rs`,
   which are covered by tests in `tests/`.
