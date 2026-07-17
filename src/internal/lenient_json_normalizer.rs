@@ -12,8 +12,6 @@ use std::borrow::Cow;
 use crate::{
     JsonDecodeError,
     JsonDecodeOptions,
-    MarkdownFenceClosing,
-    MarkdownFencePolicy,
 };
 
 use super::{
@@ -62,6 +60,7 @@ impl LenientJsonNormalizer {
     ///
     /// The immutable normalization options.
     #[inline(always)]
+    #[must_use = "the normalizer options should be inspected or retained"]
     pub(crate) const fn options(&self) -> &JsonDecodeOptions {
         &self.options
     }
@@ -91,7 +90,10 @@ impl LenientJsonNormalizer {
         let input = self.trim_if_enabled(input);
         let input = self.strip_utf8_bom(input);
         let input = self.trim_if_enabled(input);
-        let input = self.strip_markdown_code_fence(input);
+        let input = MarkdownFence::strip_outer(
+            input,
+            self.options.markdown_fence_policy(),
+        );
         let input = self.trim_if_enabled(input);
         let input = ControlCharacterEscaper::escape(
             input,
@@ -215,179 +217,5 @@ impl LenientJsonNormalizer {
         } else {
             input
         }
-    }
-
-    /// Removes one supported outer Markdown code fence when configured.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Text to inspect for one outer Markdown code fence.
-    ///
-    /// # Returns
-    ///
-    /// The fenced body when the active policy accepts the fence, or the
-    /// unchanged input otherwise.
-    #[must_use]
-    fn strip_markdown_code_fence<'a>(&self, input: &'a str) -> &'a str {
-        let (json_only, closing) = match self.options.markdown_fence_policy() {
-            MarkdownFencePolicy::Disabled => return input,
-            MarkdownFencePolicy::Any { closing } => (false, closing),
-            MarkdownFencePolicy::JsonOnly { closing } => (true, closing),
-        };
-        let Some(opening_fence) = Self::opening_markdown_fence(input) else {
-            return input;
-        };
-        let Some((line_end, content_start)) = Self::first_line_break(input)
-        else {
-            return input;
-        };
-        let opening_tag = input[opening_fence.marker_end..line_end].trim();
-        if json_only && !Self::is_json_code_fence_tag(opening_tag) {
-            return input;
-        }
-        let content = &input[content_start..];
-        if let Some(without_close) =
-            Self::strip_markdown_closing_fence(content, opening_fence)
-        {
-            return without_close;
-        }
-        if closing == MarkdownFenceClosing::Required {
-            input
-        } else {
-            content
-        }
-    }
-
-    /// Returns a recognized opening Markdown fence when present.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Text beginning at a possible fence opening.
-    ///
-    /// # Returns
-    ///
-    /// `Some(fence)` when `input` begins with a supported marker after at most
-    /// three spaces, or `None` otherwise.
-    fn opening_markdown_fence(input: &str) -> Option<MarkdownFence> {
-        let indent_len = input.bytes().take_while(|byte| *byte == b' ').count();
-        if indent_len > 3 {
-            return None;
-        }
-        let marker = *input.as_bytes().get(indent_len)?;
-        if marker != b'`' && marker != b'~' {
-            return None;
-        }
-        let marker_len = input[indent_len..]
-            .bytes()
-            .take_while(|byte| *byte == marker)
-            .count();
-        (marker_len >= 3).then_some(MarkdownFence {
-            marker,
-            marker_len,
-            marker_end: indent_len + marker_len,
-        })
-    }
-
-    /// Returns the end of the first line and the start of the next line.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Text whose first line break is located.
-    ///
-    /// # Returns
-    ///
-    /// `Some((line_end, next_line_start))` for LF, CRLF, or CR input, or
-    /// `None` when no line break exists.
-    fn first_line_break(input: &str) -> Option<(usize, usize)> {
-        let bytes = input.as_bytes();
-        let line_end = bytes
-            .iter()
-            .position(|byte| matches!(*byte, b'\n' | b'\r'))?;
-        let next_line_start = if bytes[line_end] == b'\r'
-            && bytes.get(line_end + 1) == Some(&b'\n')
-        {
-            line_end + 2
-        } else {
-            line_end + 1
-        };
-        Some((line_end, next_line_start))
-    }
-
-    /// Returns whether a fenced info string should be treated as JSON.
-    ///
-    /// # Parameters
-    ///
-    /// * `tag` - Markdown fence info string.
-    ///
-    /// # Returns
-    ///
-    /// `true` for an empty, `json`, or `jsonc` first token, ignoring ASCII
-    /// case; otherwise, `false`. The `jsonc` token is accepted only as a fence
-    /// label and does not enable non-standard JSON grammar.
-    #[inline]
-    #[must_use]
-    fn is_json_code_fence_tag(tag: &str) -> bool {
-        let language = tag.split_whitespace().next().unwrap_or("");
-        language.is_empty()
-            || language.eq_ignore_ascii_case("json")
-            || language.eq_ignore_ascii_case("jsonc")
-    }
-
-    /// Removes a compatible closing fence from content when present.
-    ///
-    /// # Parameters
-    ///
-    /// * `content` - Fenced body and possible closing fence.
-    /// * `opening_fence` - Opening marker that the closing line must match.
-    ///
-    /// # Returns
-    ///
-    /// `Some(body)` when, after ignoring trailing ASCII spaces, tabs, CRs, and
-    /// LFs, the final line begins with zero to three ASCII spaces and contains
-    /// a compatible closing marker run; otherwise, `None`.
-    fn strip_markdown_closing_fence(
-        content: &str,
-        opening_fence: MarkdownFence,
-    ) -> Option<&str> {
-        let trimmed_end = content.trim_end_matches([' ', '\t', '\n', '\r']);
-        let closing_line_start = trimmed_end
-            .rfind('\n')
-            .max(trimmed_end.rfind('\r'))
-            .map_or(0, |index| index + 1);
-        let closing_line = &trimmed_end[closing_line_start..];
-        let indent_len = closing_line
-            .bytes()
-            .take_while(|byte| *byte == b' ')
-            .count();
-        if indent_len > 3 {
-            return None;
-        }
-        let marker_line = &closing_line[indent_len..];
-        let closing_len =
-            Self::same_marker_fence_len(marker_line, opening_fence.marker)?;
-        if closing_len == marker_line.len()
-            && closing_len >= opening_fence.marker_len
-        {
-            Some(&content[..closing_line_start])
-        } else {
-            None
-        }
-    }
-
-    /// Returns the marker run length when a line starts with the same marker.
-    ///
-    /// # Parameters
-    ///
-    /// * `line` - Candidate closing-fence line.
-    /// * `marker` - Opening fence marker byte.
-    ///
-    /// # Returns
-    ///
-    /// `Some(length)` for a run of at least three matching marker bytes, or
-    /// `None` otherwise.
-    #[inline]
-    fn same_marker_fence_len(line: &str, marker: u8) -> Option<usize> {
-        let count = line.bytes().take_while(|byte| *byte == marker).count();
-        (count >= 3).then_some(count)
     }
 }
