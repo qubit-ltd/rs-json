@@ -59,6 +59,41 @@ fn benchmark_decoder(c: &mut Criterion) {
     });
     comparison.finish();
 
+    let plain_bytes = plain_input.as_bytes();
+    let mut bytes_comparison = c.benchmark_group("plain-bytes-comparison");
+    bytes_comparison.bench_function("serde_json_from_slice", |bencher| {
+        bencher.iter(|| {
+            consume_record(
+                serde_json::from_slice::<BenchmarkRecord>(black_box(
+                    plain_bytes,
+                ))
+                .expect("strict benchmark input must decode"),
+            )
+        });
+    });
+    bytes_comparison.bench_function("strict_decoder_decode_slice", |bencher| {
+        bencher.iter(|| {
+            consume_record(
+                strict_decoder
+                    .decode_slice::<BenchmarkRecord>(black_box(plain_bytes))
+                    .expect("strict decoder benchmark input must decode"),
+            )
+        });
+    });
+    bytes_comparison.bench_function(
+        "default_decoder_decode_slice",
+        |bencher| {
+            bencher.iter(|| {
+                consume_record(
+                    default_decoder
+                        .decode_slice::<BenchmarkRecord>(black_box(plain_bytes))
+                        .expect("default decoder benchmark input must decode"),
+                )
+            });
+        },
+    );
+    bytes_comparison.finish();
+
     let cases = [
         ("plain", plain_input),
         ("fenced", "```json\n{\"id\":7,\"text\":\"fenced\"}\n```"),
