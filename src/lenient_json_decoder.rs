@@ -93,8 +93,10 @@ impl LenientJsonDecoder {
 
     /// Decodes UTF-8 input bytes into the target Rust type.
     ///
-    /// The configured raw byte limit is enforced before UTF-8 validation.
-    /// Valid UTF-8 is borrowed and delegated to the string decoder.
+    /// The configured raw byte limit is enforced first. When every text rewrite
+    /// is disabled, valid JSON bytes are deserialized directly. Failed direct
+    /// attempts still pass through UTF-8 validation and the stable error
+    /// mapper.
     ///
     /// # Parameters
     ///
@@ -122,6 +124,11 @@ impl LenientJsonDecoder {
                 max_input_bytes,
                 privacy_policy,
             ));
+        }
+        if self.options().text_rewrites_disabled()
+            && let Ok(value) = serde_json::from_slice(input)
+        {
+            return Ok(value);
         }
         let input = std::str::from_utf8(input).map_err(|error| {
             JsonDecodeError::invalid_utf8(

@@ -16,6 +16,7 @@ use crate::fixtures::{
     User,
 };
 use qubit_json::{
+    ErrorPrivacyPolicy,
     JsonDecodeErrorKind,
     JsonDecodeOptions,
     JsonDecodeStage,
@@ -93,6 +94,42 @@ fn test_decode_slice_decodes_valid_utf8_without_changing_semantics() {
         .decode_slice(b"{\"ok\":true}")
         .expect("valid UTF-8 JSON bytes must decode");
     assert_eq!(value, serde_json::json!({"ok": true}));
+}
+
+#[test]
+fn test_decode_slice_accepts_non_rewrite_strict_overrides() {
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::strict()
+            .with_max_input_bytes(Some(64))
+            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+    );
+    let value: serde_json::Value = decoder
+        .decode_slice(b"{\"ok\":true}")
+        .expect("non-rewrite options must preserve successful byte decoding");
+    assert_eq!(value, serde_json::json!({"ok": true}));
+}
+
+#[test]
+fn test_decode_slice_preserves_deserialize_error_mapping() {
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::strict()
+            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+    );
+    let error = decoder.decode_slice::<Message>(b"{\"text\":7}").expect_err(
+        "valid JSON with the wrong field type must fail deserialization",
+    );
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Detailed);
+    assert!(std::error::Error::source(&error).is_some());
+}
+
+#[test]
+fn test_decode_slice_preserves_invalid_json_mapping() {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
+    let error = decoder
+        .decode_slice::<Message>(b"{\"text\":\"broken\"")
+        .expect_err("malformed typed JSON must remain an invalid JSON error");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 #[test]

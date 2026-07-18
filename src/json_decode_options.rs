@@ -263,6 +263,27 @@ impl JsonDecodeOptions {
         self.error_privacy_policy = error_privacy_policy;
         self
     }
+
+    /// Returns whether every text-rewriting rule is disabled.
+    ///
+    /// Size limits and error privacy do not rewrite input and therefore do not
+    /// affect this result.
+    ///
+    /// # Returns
+    ///
+    /// `true` when byte input can be parsed without text normalization;
+    /// otherwise, `false`.
+    #[inline(always)]
+    #[must_use]
+    pub(crate) const fn text_rewrites_disabled(&self) -> bool {
+        !self.trim_whitespace
+            && !self.strip_utf8_bom
+            && matches!(
+                self.markdown_fence_policy,
+                MarkdownFencePolicy::Disabled
+            )
+            && !self.escape_control_chars_in_strings
+    }
 }
 
 impl Default for JsonDecodeOptions {
