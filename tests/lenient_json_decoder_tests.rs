@@ -10,10 +10,14 @@
 use serde_json::json;
 
 use crate::fixtures::{
+    ByteBuffer,
+    CountedFailure,
     ExactInteger,
     Message,
     SingleValue,
     User,
+    deserialize_calls,
+    reset_deserialize_calls,
 };
 use qubit_json::{
     ErrorPrivacyPolicy,
@@ -94,6 +98,26 @@ fn test_decode_slice_decodes_valid_utf8_without_changing_semantics() {
         .decode_slice(b"{\"ok\":true}")
         .expect("valid UTF-8 JSON bytes must decode");
     assert_eq!(value, serde_json::json!({"ok": true}));
+}
+
+#[test]
+fn test_decode_slice_rejects_invalid_utf8_for_byte_target() {
+    let error = LenientJsonDecoder::new(JsonDecodeOptions::strict())
+        .decode_slice::<ByteBuffer>(b"\"\xff\"")
+        .expect_err(
+            "invalid UTF-8 must be rejected before byte deserialization",
+        );
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
+}
+
+#[test]
+fn test_decode_slice_invokes_target_deserializer_once_on_failure() {
+    reset_deserialize_calls();
+    let error = LenientJsonDecoder::new(JsonDecodeOptions::strict())
+        .decode_slice::<CountedFailure>(br#""value""#)
+        .expect_err("the counted target intentionally rejects valid JSON");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(deserialize_calls(), 1);
 }
 
 #[test]
