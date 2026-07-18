@@ -108,8 +108,9 @@
   - 可将规范化后的文本反序列化为任意 `T: DeserializeOwned`。
   - 与 `decode_object`、`decode_array` 区分顶层约束责任。
   - 区分 `InvalidJson` 与 `Deserialize` 两类失败。
-  - `decode_slice<T>()` 先按原始字节执行大小限制，再校验 UTF-8，并复用
-    相同的字符串解码管线。
+  - `decode_slice<T>()` 先按原始字节执行大小限制，再完整校验 UTF-8，并复用
+    相同的字符串解码管线。UTF-8 校验必须发生在调用目标类型的反序列化逻辑
+    之前，任何选项组合都不得绕过该校验。
 
 ### PRD-RSJSON-005：`decode_object<T>()`
 
