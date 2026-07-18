@@ -357,7 +357,8 @@ impl LenientJsonDecoder {
     /// # Errors
     ///
     /// Returns [`JsonDecodeError`] classified as invalid JSON for syntax and
-    /// end-of-input failures, or as a deserialization failure for data errors.
+    /// end-of-input failures. A data error is classified as a deserialization
+    /// failure only when complete syntax validation succeeds.
     #[inline]
     fn deserialize_normalized<T>(
         normalized: &str,
@@ -370,6 +371,7 @@ impl LenientJsonDecoder {
     {
         serde_json::from_str(normalized).map_err(|error| {
             Self::map_decode_error(
+                normalized,
                 error,
                 raw_input_bytes,
                 normalized_input_bytes,
@@ -382,6 +384,7 @@ impl LenientJsonDecoder {
     ///
     /// # Parameters
     ///
+    /// * `normalized` - Complete normalized JSON text.
     /// * `error` - Serde JSON error to classify.
     /// * `raw_input_bytes` - Input length before normalization.
     /// * `normalized_input_bytes` - Normalized text length.
@@ -389,22 +392,31 @@ impl LenientJsonDecoder {
     ///
     /// # Returns
     ///
-    /// A deserialization error for serde data failures, or an invalid-JSON
-    /// error for IO, syntax, and end-of-input failures.
+    /// A deserialization error for data failures in otherwise valid JSON, or
+    /// an invalid-JSON error when complete syntax validation fails.
     #[must_use]
     fn map_decode_error(
+        normalized: &str,
         error: serde_json::Error,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
         privacy_policy: ErrorPrivacyPolicy,
     ) -> JsonDecodeError {
         match error.classify() {
-            Category::Data => JsonDecodeError::deserialize(
-                error,
+            Category::Data => match Self::validate_json(
+                normalized,
                 raw_input_bytes,
                 normalized_input_bytes,
                 privacy_policy,
-            ),
+            ) {
+                Ok(()) => JsonDecodeError::deserialize(
+                    error,
+                    raw_input_bytes,
+                    normalized_input_bytes,
+                    privacy_policy,
+                ),
+                Err(error) => error,
+            },
             Category::Io | Category::Syntax | Category::Eof => {
                 JsonDecodeError::invalid_json(
                     error,

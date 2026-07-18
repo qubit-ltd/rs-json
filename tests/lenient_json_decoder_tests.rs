@@ -294,6 +294,40 @@ fn test_decode_reports_deserialize_error() {
 }
 
 #[test]
+fn test_decode_reports_invalid_json_when_data_error_precedes_syntax_error() {
+    let error = LenientJsonDecoder::default()
+        .decode::<SingleValue>("{\"value\":\"wrong\",")
+        .expect_err(
+            "incomplete JSON must take precedence over a field type error",
+        );
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), JsonDecodeStage::Parse);
+}
+
+#[test]
+fn test_decode_object_reports_invalid_json_when_data_error_precedes_syntax_error()
+ {
+    let error = LenientJsonDecoder::default()
+        .decode_object::<SingleValue>("{\"value\":\"wrong\",")
+        .expect_err("incomplete object JSON must take precedence over a field type error");
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), JsonDecodeStage::Parse);
+}
+
+#[test]
+fn test_decode_array_reports_invalid_json_when_data_error_precedes_syntax_error()
+ {
+    let error = LenientJsonDecoder::default()
+        .decode_array::<u8>("[\"wrong\",")
+        .expect_err("incomplete array JSON must take precedence over an element type error");
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), JsonDecodeStage::Parse);
+}
+
+#[test]
 fn test_decode_object_reports_invalid_json_for_non_token_start() {
     let decoder = LenientJsonDecoder::new(
         JsonDecodeOptions::default()
