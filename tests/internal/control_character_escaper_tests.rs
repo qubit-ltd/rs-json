@@ -15,6 +15,11 @@ use qubit_json::{
     LenientJsonDecoder,
 };
 
+/// Verifies that decode value preserves existing escapes.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_preserves_existing_escapes() {
     let decoder = LenientJsonDecoder::default();
@@ -24,6 +29,11 @@ fn test_decode_value_preserves_existing_escapes() {
     assert_eq!(value, json!({"text": "a\nb"}));
 }
 
+/// Verifies that decode value escapes control chars in strings.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_escapes_control_chars_in_strings() {
     let decoder = LenientJsonDecoder::default();
@@ -33,6 +43,11 @@ fn test_decode_value_escapes_control_chars_in_strings() {
     assert_eq!(value, json!({"text": "a\nb"}));
 }
 
+/// Verifies that decode value can disable control char escaping.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_can_disable_control_char_escaping() {
     let decoder = LenientJsonDecoder::new(
@@ -45,6 +60,11 @@ fn test_decode_value_can_disable_control_char_escaping() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value covers all supported control char escapes.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_covers_all_supported_control_char_escapes() {
     let control_chars = [
@@ -65,6 +85,11 @@ fn test_decode_value_covers_all_supported_control_char_escapes() {
     assert_eq!(value, json!({"text": control_text}));
 }
 
+/// Verifies that decode value escapes control char after unmatched backslash.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_escapes_control_char_after_unmatched_backslash() {
     let decoder = LenientJsonDecoder::default();
@@ -90,6 +115,12 @@ fn test_decode_value_escapes_control_char_after_unmatched_backslash() {
     }
 }
 
+/// Verifies that decode value escapes control chars after odd and even
+/// backslashes.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_escapes_control_chars_after_odd_and_even_backslashes() {
     let decoder = LenientJsonDecoder::default();
@@ -117,6 +148,12 @@ fn test_decode_value_escapes_control_chars_after_odd_and_even_backslashes() {
     }
 }
 
+/// Verifies that decode value leaves non whitespace controls outside strings
+/// invalid.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_leaves_non_whitespace_controls_outside_strings_invalid() {
     let error = LenientJsonDecoder::default()

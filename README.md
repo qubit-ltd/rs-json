@@ -258,7 +258,9 @@ This README reflects the current object model:
 ## Development Validation
 
 Run the repository checks with `./align-ci.sh` followed by `./ci-check.sh`.
-Criterion benchmarks are compiled with:
+Criterion benchmarks cover small public-entry comparisons, HTTP-style strict
+byte decoding, LLM-style lenient typed decoding up to 1 MiB, normalization
+density, and representative failure paths. Compile them with:
 
 ```bash
 cargo bench --bench decoder_bench --no-run
@@ -267,8 +269,8 @@ cargo bench --bench decoder_bench --no-run
 The optional fuzz target is development tooling and is not a runtime
 dependency. It exercises the default, strict, JSON-only, and required-closing
 decoder policies. A bounded run is scheduled by `.github/workflows/fuzz.yml`;
-install `cargo-fuzz` to build or run the same target locally from the
-repository root:
+failures retain their reproduction artifacts. Install `cargo-fuzz` to build or
+run the same target locally from the repository root:
 
 ```bash
 cargo install cargo-fuzz

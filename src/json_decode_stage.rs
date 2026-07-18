@@ -10,6 +10,20 @@
 use std::fmt;
 
 /// Identifies the decoding stage where an error was produced.
+///
+/// # Examples
+///
+/// ```compile_fail
+/// #![deny(unused_must_use)]
+/// use qubit_json::JsonDecodeStage;
+///
+/// fn decode_stage() -> JsonDecodeStage {
+///     JsonDecodeStage::Parse
+/// }
+///
+/// decode_stage();
+/// ```
+#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeStage {

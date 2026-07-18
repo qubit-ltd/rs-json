@@ -7,6 +7,6 @@
 // =============================================================================
 //! Private implementation details for lenient JSON normalization.
 
-pub(crate) mod control_character_escaper;
+mod control_character_escaper;
 pub(crate) mod lenient_json_normalizer;
-pub(crate) mod markdown_fence;
+mod markdown_fence;

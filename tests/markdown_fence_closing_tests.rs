@@ -9,6 +9,11 @@
 
 use qubit_json::MarkdownFenceClosing;
 
+/// Verifies that markdown fence closing is copy and equatable.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_markdown_fence_closing_is_copy_and_equatable() {
     let closing = MarkdownFenceClosing::Required;

@@ -16,6 +16,20 @@ use std::{
 ///
 /// This type is intended for callers that need stable, programmatic branching
 /// without depending on full error messages produced by lower-level parsers.
+///
+/// # Examples
+///
+/// ```compile_fail
+/// #![deny(unused_must_use)]
+/// use qubit_json::JsonDecodeErrorKind;
+///
+/// fn error_kind() -> JsonDecodeErrorKind {
+///     JsonDecodeErrorKind::InvalidJson
+/// }
+///
+/// error_kind();
+/// ```
+#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeErrorKind {

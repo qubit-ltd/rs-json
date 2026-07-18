@@ -18,6 +18,11 @@ use qubit_json::{
 
 use crate::fixtures::PublicChoice;
 
+/// Verifies that error display for empty input uses message.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_display_for_empty_input_uses_message() {
     let error = LenientJsonDecoder::default()
@@ -30,6 +35,11 @@ fn test_error_display_for_empty_input_uses_message() {
     assert!(std::error::Error::source(&error).is_none());
 }
 
+/// Verifies that error display for input too large uses message.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_display_for_input_too_large_uses_message() {
     let decoder = LenientJsonDecoder::new(
@@ -47,6 +57,11 @@ fn test_error_display_for_input_too_large_uses_message() {
     assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
 }
 
+/// Verifies that error exposes top level mismatch context.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_exposes_top_level_mismatch_context() {
     let error = LenientJsonDecoder::default()
@@ -63,6 +78,12 @@ fn test_error_exposes_top_level_mismatch_context() {
     );
 }
 
+/// Verifies that error exposes immutable normalized diagnostics without
+/// duplicate location.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_location()
  {
@@ -82,6 +103,11 @@ fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_locatio
     assert!(std::error::Error::source(&error).is_none());
 }
 
+/// Verifies that error source for invalid json preserves serde error.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_source_for_invalid_json_preserves_serde_error() {
     let decoder = LenientJsonDecoder::new(
@@ -96,6 +122,11 @@ fn test_error_source_for_invalid_json_preserves_serde_error() {
     assert!(source.to_string().contains("EOF"));
 }
 
+/// Verifies that default error privacy redacts input derived serde details.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_default_error_privacy_redacts_input_derived_serde_details() {
     const SECRET: &str = "TOP_SECRET_VALUE";
@@ -113,6 +144,11 @@ fn test_default_error_privacy_redacts_input_derived_serde_details() {
     assert_eq!(error.normalized_column(), Some(18));
 }
 
+/// Verifies that detailed error privacy preserves input derived serde details.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
     const SECRET: &str = "TOP_SECRET_VALUE";
@@ -134,6 +170,11 @@ fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
     assert!(source.to_string().contains(SECRET));
 }
 
+/// Verifies that default invalid json error does not expose serde source.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_default_invalid_json_error_does_not_expose_serde_source() {
     let error = LenientJsonDecoder::default()
@@ -144,6 +185,11 @@ fn test_default_invalid_json_error_does_not_expose_serde_source() {
     assert!(std::error::Error::source(&error).is_none());
 }
 
+/// Verifies that invalid utf8 redacted error discards source.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_invalid_utf8_redacted_error_discards_source() {
     let error = LenientJsonDecoder::default()
@@ -154,6 +200,11 @@ fn test_invalid_utf8_redacted_error_discards_source() {
     assert!(!format!("{error:?}").contains("255"));
 }
 
+/// Verifies that invalid utf8 detailed error retains utf8 source.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_invalid_utf8_detailed_error_retains_utf8_source() {
     let decoder = LenientJsonDecoder::new(
@@ -168,6 +219,11 @@ fn test_invalid_utf8_detailed_error_retains_utf8_source() {
     assert!(source.downcast_ref::<std::str::Utf8Error>().is_some());
 }
 
+/// Verifies that normalization errors retain the configured privacy policy.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_normalization_errors_retain_the_configured_privacy_policy() {
     let redacted = LenientJsonDecoder::default()
@@ -184,6 +240,11 @@ fn test_normalization_errors_retain_the_configured_privacy_policy() {
     assert_eq!(detailed.privacy_policy(), ErrorPrivacyPolicy::Detailed);
 }
 
+/// Verifies that error display for deserialize error uses context message.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_display_for_deserialize_error_uses_context_message() {
     let error = LenientJsonDecoder::default()
@@ -200,6 +261,11 @@ fn test_error_display_for_deserialize_error_uses_context_message() {
     assert!(std::error::Error::source(&error).is_none());
 }
 
+/// Verifies that error partial eq compares all stable fields.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_partial_eq_compares_all_stable_fields() {
     let decoder = LenientJsonDecoder::default();

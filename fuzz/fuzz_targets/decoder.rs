@@ -6,13 +6,18 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 #![no_main]
+//! Exercises decoder acceptance, error-model, privacy, and shape invariants over
+//! arbitrary byte input.
 
 mod internal;
 
 use libfuzzer_sys::fuzz_target;
 use qubit_json::{
+    ErrorPrivacyPolicy,
+    JsonDecodeError,
     JsonDecodeErrorKind,
     JsonDecodeOptions,
+    JsonDecodeStage,
     LenientJsonDecoder,
     MarkdownFenceClosing,
     MarkdownFencePolicy,
@@ -20,15 +25,48 @@ use qubit_json::{
 
 use internal::FuzzRecord;
 
+/// Verifies stable diagnostics shared by every redacted decoder configuration.
+///
+/// # Parameters
+///
+/// * `error` - Decoder error whose public invariants are checked.
+/// * `raw_input_bytes` - Expected raw input length in bytes.
+///
+/// # Panics
+///
+/// Panics when the error exposes inconsistent metadata, stage mapping, privacy,
+/// or source retention.
+fn assert_error_invariants(
+    error: &JsonDecodeError,
+    raw_input_bytes: usize,
+) {
+    assert_eq!(error.raw_input_bytes(), raw_input_bytes);
+    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
+    assert!(std::error::Error::source(error).is_none());
+    let expected_stage = match error.kind() {
+        JsonDecodeErrorKind::InputTooLarge
+        | JsonDecodeErrorKind::EmptyInput => JsonDecodeStage::Normalize,
+        JsonDecodeErrorKind::InvalidUtf8 => JsonDecodeStage::DecodeText,
+        JsonDecodeErrorKind::InvalidJson => JsonDecodeStage::Parse,
+        JsonDecodeErrorKind::UnexpectedTopLevel => {
+            JsonDecodeStage::TopLevelCheck
+        }
+        JsonDecodeErrorKind::Deserialize => JsonDecodeStage::Deserialize,
+        _ => return,
+    };
+    assert_eq!(error.stage(), expected_stage);
+}
+
 fuzz_target!(|data: &[u8]| {
     let default_decoder = LenientJsonDecoder::default();
-    if let Ok(value) =
-        default_decoder.decode_slice::<serde_json::Value>(data)
-    {
-        let encoded = serde_json::to_vec(&value)
-            .expect("serde_json::Value must serialize");
-        let _: serde_json::Value = serde_json::from_slice(&encoded)
-            .expect("successful decoder output must be strict JSON");
+    match default_decoder.decode_slice::<serde_json::Value>(data) {
+        Ok(value) => {
+            let encoded = serde_json::to_vec(&value)
+                .expect("serde_json::Value must serialize");
+            let _: serde_json::Value = serde_json::from_slice(&encoded)
+                .expect("successful decoder output must be strict JSON");
+        }
+        Err(error) => assert_error_invariants(&error, data.len()),
     }
     if !data.is_empty() {
         let bounded = LenientJsonDecoder::new(
@@ -39,6 +77,7 @@ fuzz_target!(|data: &[u8]| {
             .decode_slice::<serde_json::Value>(data)
             .expect_err("an input above its raw byte limit must fail");
         assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
+        assert_error_invariants(&error, data.len());
     }
 
     let strict_result = LenientJsonDecoder::new(JsonDecodeOptions::strict())
@@ -46,7 +85,7 @@ fuzz_target!(|data: &[u8]| {
     let serde_result = serde_json::from_slice::<serde_json::Value>(data);
     match (strict_result, serde_result) {
         (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
-        (Err(_), Err(_)) => {}
+        (Err(error), Err(_)) => assert_error_invariants(&error, data.len()),
         (Ok(_), Err(_)) => {
             panic!("strict decoder accepted input rejected by serde_json");
         }
@@ -79,10 +118,18 @@ fuzz_target!(|data: &[u8]| {
     ];
 
     for decoder in decoders {
-        let _ = decoder.decode::<FuzzRecord>(input);
-        let _ = decoder.decode_object::<FuzzRecord>(input);
-        let _ = decoder.decode_array::<FuzzRecord>(input);
-        let _ = decoder.decode_value(input);
+        if let Err(error) = decoder.decode::<FuzzRecord>(input) {
+            assert_error_invariants(&error, input.len());
+        }
+        if let Err(error) = decoder.decode_object::<FuzzRecord>(input) {
+            assert_error_invariants(&error, input.len());
+        }
+        if let Err(error) = decoder.decode_array::<FuzzRecord>(input) {
+            assert_error_invariants(&error, input.len());
+        }
+        if let Err(error) = decoder.decode_value(input) {
+            assert_error_invariants(&error, input.len());
+        }
     }
 
     if let Ok(value) =

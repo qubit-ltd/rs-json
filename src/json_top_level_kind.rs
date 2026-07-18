@@ -18,6 +18,20 @@ use serde_json::Value;
 ///
 /// The decoder uses this type to report whether the parsed value is an object,
 /// an array, or any other scalar-like JSON value.
+///
+/// # Examples
+///
+/// ```compile_fail
+/// #![deny(unused_must_use)]
+/// use qubit_json::JsonTopLevelKind;
+///
+/// fn top_level_kind() -> JsonTopLevelKind {
+///     JsonTopLevelKind::Other
+/// }
+///
+/// top_level_kind();
+/// ```
+#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonTopLevelKind {
@@ -45,7 +59,6 @@ impl JsonTopLevelKind {
     /// [`Self::Object`] for objects, [`Self::Array`] for arrays, and
     /// [`Self::Other`] for scalar-like values.
     #[inline]
-    #[must_use]
     pub fn of(value: &Value) -> Self {
         match value {
             Value::Object(_) => Self::Object,
@@ -68,7 +81,6 @@ impl JsonTopLevelKind {
     /// [`Self::Object`] when the first token is `{`, [`Self::Array`] when it is
     /// `[`, and [`Self::Other`] otherwise.
     #[inline]
-    #[must_use]
     pub(crate) fn of_normalized_json(value: &str) -> Self {
         match value
             .bytes()

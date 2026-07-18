@@ -19,6 +19,11 @@ use qubit_json::{
     MarkdownFencePolicy,
 };
 
+/// Verifies that decode value reports empty input for empty string.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_empty_input_for_empty_string() {
     let decoder = LenientJsonDecoder::default();
@@ -29,6 +34,11 @@ fn test_decode_value_reports_empty_input_for_empty_string() {
     assert_eq!(error.normalized_input_bytes(), None);
 }
 
+/// Verifies that decode value reports empty input for whitespace by default.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_empty_input_for_whitespace_by_default() {
     let decoder = LenientJsonDecoder::default();
@@ -39,6 +49,11 @@ fn test_decode_value_reports_empty_input_for_whitespace_by_default() {
     assert_eq!(error.normalized_input_bytes(), None);
 }
 
+/// Verifies that decode value respects input size limit.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_respects_input_size_limit() {
     let decoder = LenientJsonDecoder::new(
@@ -54,6 +69,11 @@ fn test_decode_value_respects_input_size_limit() {
     assert!(error.to_string().contains("6 bytes"));
 }
 
+/// Verifies that decode value accepts input at size limit.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_accepts_input_at_size_limit() {
     let decoder = LenientJsonDecoder::new(
@@ -65,6 +85,11 @@ fn test_decode_value_accepts_input_at_size_limit() {
     assert_eq!(value, json!([1, 2, 3]));
 }
 
+/// Verifies that decode value size limit runs before parser error mapping.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
     let decoder = LenientJsonDecoder::new(
@@ -76,6 +101,11 @@ fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
 }
 
+/// Verifies that decode value strips utf8 bom by default.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_utf8_bom_by_default() {
     let decoder = LenientJsonDecoder::default();
@@ -85,6 +115,11 @@ fn test_decode_value_strips_utf8_bom_by_default() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value reports empty input when only bom is present.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
     let decoder = LenientJsonDecoder::default();
@@ -95,6 +130,11 @@ fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
     assert_eq!(error.normalized_input_bytes(), Some(0));
 }
 
+/// Verifies that decode value can leave utf8 bom when disabled.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_can_leave_utf8_bom_when_disabled() {
     let decoder = LenientJsonDecoder::new(
@@ -106,6 +146,11 @@ fn test_decode_value_can_leave_utf8_bom_when_disabled() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value trims surrounding whitespace by default.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_trims_surrounding_whitespace_by_default() {
     let decoder = LenientJsonDecoder::default();
@@ -115,6 +160,12 @@ fn test_decode_value_trims_surrounding_whitespace_by_default() {
     assert_eq!(value, json!({"text": "abc"}));
 }
 
+/// Verifies that decode value reports invalid json for whitespace when trimming
+/// disabled.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled()
  {
@@ -129,6 +180,12 @@ fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled(
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value accepts terminal unicode whitespace when trimming
+/// enabled.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_accepts_terminal_unicode_whitespace_when_trimming_enabled()
 {
@@ -139,6 +196,12 @@ fn test_decode_value_accepts_terminal_unicode_whitespace_when_trimming_enabled()
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value rejects terminal unicode whitespace when trimming
+/// disabled.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled()
  {
@@ -153,6 +216,12 @@ fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled(
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value randomized inputs do not panic and round trip
+/// when valid.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid()
 {
@@ -243,6 +312,12 @@ fn next_u64(seed: &mut u64) -> u64 {
     *seed
 }
 
+/// Verifies that decode value with trim disabled and escape enabled still
+/// decodes owned output.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_with_trim_disabled_and_escape_enabled_still_decodes_owned_output()
  {
@@ -258,6 +333,11 @@ fn test_decode_value_with_trim_disabled_and_escape_enabled_still_decodes_owned_o
     assert_eq!(value, json!({"text": "a\nb"}));
 }
 
+/// Verifies that decode value trims before control character repair.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_trims_before_control_character_repair() {
     let decoder = LenientJsonDecoder::default();

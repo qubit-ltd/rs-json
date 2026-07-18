@@ -14,6 +14,11 @@ use qubit_json::{
     MarkdownFencePolicy,
 };
 
+/// Verifies that default enables all mvp rules.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_default_enables_all_mvp_rules() {
     let options = JsonDecodeOptions::default();
@@ -30,11 +35,21 @@ fn test_default_enables_all_mvp_rules() {
     assert_eq!(options.error_privacy_policy(), ErrorPrivacyPolicy::Redacted,);
 }
 
+/// Verifies that lenient matches default options.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_lenient_matches_default_options() {
     assert_eq!(JsonDecodeOptions::lenient(), JsonDecodeOptions::default());
 }
 
+/// Verifies that strict disables all normalization rules.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_strict_disables_all_normalization_rules() {
     let options = JsonDecodeOptions::strict();
@@ -49,6 +64,11 @@ fn test_strict_disables_all_normalization_rules() {
     assert_eq!(options.error_privacy_policy(), ErrorPrivacyPolicy::Redacted,);
 }
 
+/// Verifies that builders set requested policies.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_builders_set_requested_policies() {
     let markdown_fence_policy = MarkdownFencePolicy::Any {
@@ -70,6 +90,11 @@ fn test_builders_set_requested_policies() {
     assert_eq!(options.with_max_input_bytes(None).max_input_bytes(), None,);
 }
 
+/// Verifies that options are copy and equatable.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_options_are_copy_and_equatable() {
     let options = JsonDecodeOptions::default();

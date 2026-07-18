@@ -17,3 +17,35 @@ jobs:
   rust-ci:
     uses: qubit-ltd/rs-ci/.github/workflows/rust-ci.yml@5147ae214056f0a517513d5e4880577e33a2bc5d
     secrets: inherit
+
+  coverage-thresholds:
+    name: Enforce coverage thresholds
+    needs: rust-ci
+    if: ${{ always() && needs.rust-ci.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download coverage reports
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-reports
+
+      - name: Check per-source coverage thresholds
+        run: |
+          set -euo pipefail
+          failures=$(jq -r '
+            .data[].files[]
+            | .filename as $file
+            | .summary as $summary
+            | select(
+                (($summary.functions.count > 0) and ($summary.functions.percent < 100))
+                or (($summary.lines.count > 0) and ($summary.lines.percent <= 95))
+                or (($summary.regions.count > 0) and ($summary.regions.percent <= 95))
+              )
+            | "\($file): functions=\($summary.functions.percent)%, lines=\($summary.lines.percent)%, regions=\($summary.regions.percent)%"
+          ' coverage.json)
+          if [ -n "$failures" ]; then
+            echo "Per-source coverage thresholds failed:" >&2
+            echo "$failures" >&2
+            exit 1
+          fi
+          echo "Coverage thresholds satisfied: functions >= 100%, lines > 95%, regions > 95%."

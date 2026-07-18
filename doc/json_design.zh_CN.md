@@ -361,10 +361,12 @@ rust-common/rs-json/
 
 ### 9.4 性能与模糊测试
 
-- `benches/decoder_bench.rs`：覆盖普通 JSON、围栏 JSON 和原始控制字符输入的公开解码路径。
+- `benches/decoder_bench.rs`：覆盖普通 JSON、围栏 JSON、原始控制字符输入，并按 1 KiB、
+  64 KiB、1 MiB 评估严格字节解码与宽松类型解码，以及代表性失败路径。
 - `fuzz/fuzz_targets/decoder.rs`：覆盖默认、严格、任意可选闭合围栏和仅 JSON 必须闭合围栏策略，
-  并对严格字节解码路径与 `serde_json` 执行接受性及结果差分检查；
-  `.github/workflows/fuzz.yml` 定时执行有时限的 fuzz，不进入每个 pull request 的快速检查。
+  对严格字节解码路径与 `serde_json` 执行接受性及结果差分检查，并验证错误 stage、原始长度和
+  默认脱敏 source 等稳定不变量；`.github/workflows/fuzz.yml` 定时执行有时限的 fuzz，失败时
+  上传复现产物，不进入每个 pull request 的快速检查。
 
 ## 10. 接入与发布边界
 
