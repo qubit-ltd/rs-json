@@ -218,8 +218,9 @@ impl LenientJsonDecoder {
 ### 5.2 行为说明
 
 - `decode<T>()`：不限定顶层结构，规范化后直接反序列化为 `T`。
-- `decode_slice<T>()`：先按原始字节检查上限，再校验 UTF-8 并复用
-  `decode<T>()`；有效输入不复制。
+- `decode_slice<T>()`：先按原始字节检查上限，再完整校验 UTF-8，借用为
+  `&str` 后复用 `decode<T>()`；校验发生在目标类型反序列化之前，任何选项组合
+  都不得绕过，有效输入不复制。
 - `decode_object<T>()`：先检查首个 JSON token。若 token 为对象，直接从规范化文本
   反序列化为 `T`；若 token 不匹配，再借助 `RawValue` 验证完整语法，以区分
   `InvalidJson` 与 `UnexpectedTopLevel`。
