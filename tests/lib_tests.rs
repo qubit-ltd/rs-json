@@ -17,6 +17,11 @@ use qubit_json::{
     LenientJsonDecoder,
 };
 
+/// Verifies that the crate re-exports its documented public API types.
+///
+/// # Panics
+///
+/// Panics when an exported type does not preserve its documented behavior.
 #[test]
 fn test_lib_exports_public_types() {
     let decoder = LenientJsonDecoder::default();
@@ -33,4 +38,36 @@ fn test_lib_exports_public_types() {
     assert_eq!(error.kind(), error_kind);
     assert_eq!(error.stage(), JsonDecodeStage::Normalize);
     assert_eq!(privacy_policy, ErrorPrivacyPolicy::default());
+}
+
+/// Verifies that pull-request CI enforces the repository's coverage thresholds.
+///
+/// # Panics
+///
+/// Panics when the workflow does not download and validate the coverage report.
+#[test]
+fn test_ci_workflow_enforces_coverage_thresholds() {
+    let workflow = include_str!("../.github/workflows/ci.yml");
+
+    assert!(workflow.contains("coverage-thresholds:"));
+    assert!(workflow.contains("needs: rust-ci"));
+    assert!(workflow.contains("actions/download-artifact@v8"));
+    assert!(workflow.contains("name: coverage-reports"));
+    assert!(workflow.contains("functions.percent < 100"));
+    assert!(workflow.contains("lines.percent <= 95"));
+    assert!(workflow.contains("regions.percent <= 95"));
+}
+
+/// Verifies that scheduled fuzz failures preserve their reproduction artifacts.
+///
+/// # Panics
+///
+/// Panics when the workflow does not upload decoder fuzz artifacts on failure.
+#[test]
+fn test_fuzz_workflow_uploads_failure_artifacts() {
+    let workflow = include_str!("../.github/workflows/fuzz.yml");
+
+    assert!(workflow.contains("if: failure()"));
+    assert!(workflow.contains("actions/upload-artifact@v7"));
+    assert!(workflow.contains("fuzz/artifacts/**"));
 }

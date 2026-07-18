@@ -73,8 +73,8 @@ impl LenientJsonNormalizer {
     ///
     /// # Returns
     ///
-    /// Borrowed input when no rewrite is needed, or owned normalized text when
-    /// control characters require escaping.
+    /// A borrowed view when normalization can be represented as a slice of the
+    /// original input, or owned text when control characters require escaping.
     ///
     /// # Errors
     ///

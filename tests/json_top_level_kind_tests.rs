@@ -12,6 +12,11 @@ use serde_json::json;
 use qubit_json::JsonTopLevelKind;
 use std::str::FromStr;
 
+/// Verifies that top level kind classifies values.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_top_level_kind_classifies_values() {
     assert_eq!(JsonTopLevelKind::of(&json!({})), JsonTopLevelKind::Object);
@@ -19,12 +24,22 @@ fn test_top_level_kind_classifies_values() {
     assert_eq!(JsonTopLevelKind::of(&json!(true)), JsonTopLevelKind::Other);
 }
 
+/// Verifies that top level kind from matches of.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_top_level_kind_from_matches_of() {
     let value = json!([1, 2, 3]);
     assert_eq!(JsonTopLevelKind::from(&value), JsonTopLevelKind::of(&value));
 }
 
+/// Verifies that top level kind display uses lowercase names.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_top_level_kind_display_uses_lowercase_names() {
     assert_eq!(JsonTopLevelKind::Object.to_string(), "object");
@@ -32,19 +47,28 @@ fn test_top_level_kind_display_uses_lowercase_names() {
     assert_eq!(JsonTopLevelKind::Other.to_string(), "other");
 }
 
+/// Verifies that top level kind from str.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_top_level_kind_from_str() {
     assert_eq!(
-        JsonTopLevelKind::from_str("object").unwrap(),
+        JsonTopLevelKind::from_str("object").expect("object must parse"),
         JsonTopLevelKind::Object
     );
     assert_eq!(
-        JsonTopLevelKind::from_str("ARRAY").unwrap(),
+        JsonTopLevelKind::from_str("ARRAY")
+            .expect("ARRAY must parse without case sensitivity"),
         JsonTopLevelKind::Array
     );
     assert_eq!(
-        JsonTopLevelKind::from_str("other").unwrap(),
+        JsonTopLevelKind::from_str("other").expect("other must parse"),
         JsonTopLevelKind::Other
     );
-    assert!(JsonTopLevelKind::from_str("dict").is_err());
+    assert_eq!(
+        JsonTopLevelKind::from_str("dict"),
+        Err("unknown JsonTopLevelKind"),
+    );
 }

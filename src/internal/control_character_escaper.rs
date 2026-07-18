@@ -14,7 +14,7 @@ use std::borrow::Cow;
 /// The scanner borrows its input unless it finds a replacement. On the first
 /// replacement it lazily creates an output [`String`], copies the already
 /// scanned prefix, and appends all remaining transformed characters.
-pub(crate) struct ControlCharacterEscaper;
+pub(super) struct ControlCharacterEscaper;
 
 impl ControlCharacterEscaper {
     /// Escapes raw C0 control characters in JSON string literals when enabled.
@@ -29,7 +29,7 @@ impl ControlCharacterEscaper {
     /// Borrowed input when escaping is disabled or no replacement is needed,
     /// or owned rewritten text after the first replacement.
     #[must_use]
-    pub(crate) fn escape<'a>(input: &'a str, enabled: bool) -> Cow<'a, str> {
+    pub(super) fn escape<'a>(input: &'a str, enabled: bool) -> Cow<'a, str> {
         if !enabled {
             return Cow::Borrowed(input);
         }

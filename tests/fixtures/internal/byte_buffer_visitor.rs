@@ -31,6 +31,10 @@ impl<'de> Visitor<'de> for ByteBufferVisitor {
     /// # Returns
     ///
     /// The formatter result.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter's error when it rejects the expectation text.
     #[inline(always)]
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("a JSON byte string")

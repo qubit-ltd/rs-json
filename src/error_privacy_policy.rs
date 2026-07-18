@@ -11,6 +11,20 @@
 ///
 /// Redacted diagnostics are safe by default. Detailed diagnostics are intended
 /// only for controlled environments because they may contain input values.
+///
+/// # Examples
+///
+/// ```compile_fail
+/// #![deny(unused_must_use)]
+/// use qubit_json::ErrorPrivacyPolicy;
+///
+/// fn configured_policy() -> ErrorPrivacyPolicy {
+///     ErrorPrivacyPolicy::Redacted
+/// }
+///
+/// configured_policy();
+/// ```
+#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ErrorPrivacyPolicy {

@@ -326,7 +326,6 @@ impl JsonDecodeError {
     ///
     /// The stable error category.
     #[inline(always)]
-    #[must_use]
     pub const fn kind(&self) -> JsonDecodeErrorKind {
         self.kind
     }
@@ -337,7 +336,6 @@ impl JsonDecodeError {
     ///
     /// The decoder stage where the failure occurred.
     #[inline(always)]
-    #[must_use]
     pub const fn stage(&self) -> JsonDecodeStage {
         self.stage
     }
@@ -348,7 +346,6 @@ impl JsonDecodeError {
     ///
     /// The effective error privacy policy.
     #[inline(always)]
-    #[must_use]
     pub const fn privacy_policy(&self) -> ErrorPrivacyPolicy {
         self.privacy_policy
     }

@@ -9,11 +9,21 @@
 
 use qubit_json::ErrorPrivacyPolicy;
 
+/// Verifies that default is redacted.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_default_is_redacted() {
     assert_eq!(ErrorPrivacyPolicy::default(), ErrorPrivacyPolicy::Redacted,);
 }
 
+/// Verifies that policy is copy and equatable.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_policy_is_copy_and_equatable() {
     let policy = ErrorPrivacyPolicy::Detailed;

@@ -31,3 +31,12 @@ jobs:
       - name: Fuzz decoder
         working-directory: fuzz
         run: cargo +nightly-2026-06-05 fuzz run decoder -- -max_total_time=300
+
+      - name: Upload decoder fuzz artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: decoder-fuzz-artifacts
+          path: fuzz/artifacts/**
+          if-no-files-found: warn
+          retention-days: 14

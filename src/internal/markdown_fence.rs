@@ -14,7 +14,7 @@ use crate::{
 
 /// Describes one recognized Markdown code-fence opening line.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct MarkdownFence {
+pub(super) struct MarkdownFence {
     /// Stores the byte marker used by the fence.
     marker: u8,
     /// Stores the number of repeated marker bytes in the opening fence.
@@ -66,7 +66,7 @@ impl MarkdownFence {
     /// The fenced body when the active policy accepts the fence, or the
     /// unchanged input otherwise.
     #[must_use]
-    pub(crate) fn strip_outer(
+    pub(super) fn strip_outer(
         input: &str,
         policy: MarkdownFencePolicy,
     ) -> &str {

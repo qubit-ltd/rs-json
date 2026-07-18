@@ -8,6 +8,20 @@
 //! Defines the closing-fence requirement for Markdown fence normalization.
 
 /// Specifies whether an opening Markdown code fence needs a closing fence.
+///
+/// # Examples
+///
+/// ```compile_fail
+/// #![deny(unused_must_use)]
+/// use qubit_json::MarkdownFenceClosing;
+///
+/// fn closing_policy() -> MarkdownFenceClosing {
+///     MarkdownFenceClosing::Optional
+/// }
+///
+/// closing_policy();
+/// ```
+#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MarkdownFenceClosing {

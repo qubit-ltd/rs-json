@@ -12,6 +12,11 @@ use qubit_json::{
     MarkdownFencePolicy,
 };
 
+/// Verifies that markdown fence policy is copy and equatable.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_markdown_fence_policy_is_copy_and_equatable() {
     let policy = MarkdownFencePolicy::JsonOnly {

@@ -13,6 +13,20 @@ use crate::MarkdownFenceClosing;
 ///
 /// The policy combines fence-language acceptance and closing-fence requirements
 /// so callers cannot configure contradictory combinations of independent flags.
+///
+/// # Examples
+///
+/// ```compile_fail
+/// #![deny(unused_must_use)]
+/// use qubit_json::MarkdownFencePolicy;
+///
+/// fn fence_policy() -> MarkdownFencePolicy {
+///     MarkdownFencePolicy::Disabled
+/// }
+///
+/// fence_policy();
+/// ```
+#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MarkdownFencePolicy {

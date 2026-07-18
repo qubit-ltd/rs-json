@@ -15,9 +15,9 @@ use crate::{
 
 /// Configuration switches for [`crate::LenientJsonDecoder`].
 ///
-/// Each field controls one normalization rule applied before parsing JSON.
-/// Defaults are intentionally conservative and cover the most common
-/// non-fully-trusted text inputs without attempting aggressive repair.
+/// Its fields control text normalization, raw input limits, and error
+/// diagnostics. Defaults are intentionally conservative and cover the most
+/// common non-fully-trusted text inputs without attempting aggressive repair.
 #[must_use = "JSON decoding options have no effect until used to construct a decoder"]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JsonDecodeOptions {
@@ -146,7 +146,6 @@ impl JsonDecodeOptions {
     ///
     /// The configured Markdown fence policy.
     #[inline(always)]
-    #[must_use]
     pub const fn markdown_fence_policy(&self) -> MarkdownFencePolicy {
         self.markdown_fence_policy
     }
@@ -237,7 +236,6 @@ impl JsonDecodeOptions {
     ///
     /// The configured error privacy policy.
     #[inline(always)]
-    #[must_use]
     pub const fn error_privacy_policy(&self) -> ErrorPrivacyPolicy {
         self.error_privacy_policy
     }

@@ -9,6 +9,11 @@
 
 use qubit_json::JsonDecodeStage;
 
+/// Verifies that decode stage display uses snake case tokens.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_stage_display_uses_snake_case_tokens() {
     assert_eq!(JsonDecodeStage::DecodeText.to_string(), "decode_text");

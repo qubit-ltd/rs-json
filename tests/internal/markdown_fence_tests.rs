@@ -17,16 +17,26 @@ use qubit_json::{
     MarkdownFencePolicy,
 };
 
+/// Verifies that decode value default rejects non json markdown fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
-fn test_default_rejects_non_json_markdown_fence() {
+fn test_decode_value_default_rejects_non_json_markdown_fence() {
     let error = LenientJsonDecoder::default()
         .decode_value("~~~python\n{\"ok\":true}\n~~~")
         .expect_err("default decoder must reject a non-JSON fence label");
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value explicit any accepts non json markdown fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
-fn test_explicit_any_accepts_non_json_markdown_fence() {
+fn test_decode_value_explicit_any_accepts_non_json_markdown_fence() {
     let decoder = LenientJsonDecoder::new(
         JsonDecodeOptions::default().with_markdown_fence_policy(
             MarkdownFencePolicy::Any {
@@ -40,6 +50,11 @@ fn test_explicit_any_accepts_non_json_markdown_fence() {
     assert_eq!(value, serde_json::json!({"ok": true}));
 }
 
+/// Verifies that decode value strips code fence with closing fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_code_fence_with_closing_fence() {
     let decoder = LenientJsonDecoder::default();
@@ -49,6 +64,11 @@ fn test_decode_value_strips_code_fence_with_closing_fence() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value strips code fence with crlf line endings.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_code_fence_with_crlf_line_endings() {
     let decoder = LenientJsonDecoder::default();
@@ -58,6 +78,11 @@ fn test_decode_value_strips_code_fence_with_crlf_line_endings() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value strips code fence with cr only line endings.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_code_fence_with_cr_only_line_endings() {
     let decoder = LenientJsonDecoder::default();
@@ -67,6 +92,12 @@ fn test_decode_value_strips_code_fence_with_cr_only_line_endings() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value strips code fence with mixed line endings lf then
+/// cr.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_code_fence_with_mixed_line_endings_lf_then_cr() {
     let decoder = LenientJsonDecoder::default();
@@ -76,6 +107,12 @@ fn test_decode_value_strips_code_fence_with_mixed_line_endings_lf_then_cr() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value strips code fence with mixed line endings cr then
+/// lf.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_code_fence_with_mixed_line_endings_cr_then_lf() {
     let decoder = LenientJsonDecoder::default();
@@ -85,6 +122,11 @@ fn test_decode_value_strips_code_fence_with_mixed_line_endings_cr_then_lf() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value strips tilde code fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_tilde_code_fence() {
     let decoder = LenientJsonDecoder::default();
@@ -94,6 +136,12 @@ fn test_decode_value_strips_tilde_code_fence() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value strips indented code fence when trimming
+/// disabled.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_indented_code_fence_when_trimming_disabled() {
     let decoder = LenientJsonDecoder::new(
@@ -105,6 +153,12 @@ fn test_decode_value_strips_indented_code_fence_when_trimming_disabled() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value rejects deeply indented code fence when trimming
+/// disabled.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_rejects_deeply_indented_code_fence_when_trimming_disabled()
 {
@@ -117,6 +171,11 @@ fn test_decode_value_rejects_deeply_indented_code_fence_when_trimming_disabled()
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value strips code fence with more than three backticks.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_code_fence_with_more_than_three_backticks() {
     let decoder = LenientJsonDecoder::default();
@@ -126,6 +185,11 @@ fn test_decode_value_strips_code_fence_with_more_than_three_backticks() {
     assert_eq!(value, json!({"text": "```"}));
 }
 
+/// Verifies that decode value strips code fence with longer closing fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_code_fence_with_longer_closing_fence() {
     let decoder = LenientJsonDecoder::default();
@@ -135,6 +199,11 @@ fn test_decode_value_strips_code_fence_with_longer_closing_fence() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value strips code fence with indented closing fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_code_fence_with_indented_closing_fence() {
     let decoder = LenientJsonDecoder::default();
@@ -144,6 +213,12 @@ fn test_decode_value_strips_code_fence_with_indented_closing_fence() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value rejects invalid closing fence indentation with
+/// optional policy.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_policy()
  {
@@ -157,6 +232,12 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_pol
     }
 }
 
+/// Verifies that decode value rejects invalid closing fence indentation with
+/// required policy.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_policy()
  {
@@ -176,6 +257,11 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_pol
     }
 }
 
+/// Verifies that decode value rejects closing fence shorter than opening fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_rejects_closing_fence_shorter_than_opening_fence() {
     let decoder = LenientJsonDecoder::new(
@@ -191,6 +277,11 @@ fn test_decode_value_rejects_closing_fence_shorter_than_opening_fence() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value strips code fence without closing fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_code_fence_without_closing_fence() {
     let decoder = LenientJsonDecoder::default();
@@ -200,6 +291,11 @@ fn test_decode_value_strips_code_fence_without_closing_fence() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value can require closing code fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_can_require_closing_code_fence() {
     let decoder = LenientJsonDecoder::new(
@@ -215,6 +311,11 @@ fn test_decode_value_can_require_closing_code_fence() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value allows strict closing code fence when present.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_allows_strict_closing_code_fence_when_present() {
     let decoder = LenientJsonDecoder::new(
@@ -230,6 +331,11 @@ fn test_decode_value_allows_strict_closing_code_fence_when_present() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value can restrict code fence to json language tags.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_can_restrict_code_fence_to_json_language_tags() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions::lenient());
@@ -241,6 +347,11 @@ fn test_decode_value_can_restrict_code_fence_to_json_language_tags() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value json only mode accepts longer json code fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_json_only_mode_accepts_longer_json_code_fence() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions::lenient());
@@ -250,6 +361,11 @@ fn test_decode_value_json_only_mode_accepts_longer_json_code_fence() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value json only mode accepts jsonc code fence.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_json_only_mode_accepts_jsonc_code_fence() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions::lenient());
@@ -259,6 +375,11 @@ fn test_decode_value_json_only_mode_accepts_jsonc_code_fence() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value json only mode accepts empty code fence tag.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_json_only_mode_accepts_empty_code_fence_tag() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions::lenient());
@@ -268,6 +389,11 @@ fn test_decode_value_json_only_mode_accepts_empty_code_fence_tag() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value json only mode accepts json info string.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_json_only_mode_accepts_json_info_string() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions::lenient());
@@ -279,6 +405,12 @@ fn test_decode_value_json_only_mode_accepts_json_info_string() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that decode value json only mode rejects non json info string first
+/// token.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_json_only_mode_rejects_non_json_info_string_first_token() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions::lenient());
@@ -288,6 +420,12 @@ fn test_decode_value_json_only_mode_rejects_non_json_info_string_first_token() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value does not accept inline closing ticks as fence
+/// end.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_does_not_accept_inline_closing_ticks_as_fence_end() {
     let decoder = LenientJsonDecoder::default();
@@ -297,6 +435,12 @@ fn test_decode_value_does_not_accept_inline_closing_ticks_as_fence_end() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value reports invalid json for code fence without
+/// newline.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_invalid_json_for_code_fence_without_newline() {
     let decoder = LenientJsonDecoder::new(
@@ -308,6 +452,11 @@ fn test_decode_value_reports_invalid_json_for_code_fence_without_newline() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value reports empty input for empty code fence body.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_empty_input_for_empty_code_fence_body() {
     let decoder = LenientJsonDecoder::default();
@@ -318,6 +467,11 @@ fn test_decode_value_reports_empty_input_for_empty_code_fence_body() {
     assert_eq!(error.normalized_input_bytes(), Some(0));
 }
 
+/// Verifies that decode value can disable code fence stripping.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_can_disable_code_fence_stripping() {
     let decoder = LenientJsonDecoder::new(
@@ -330,6 +484,11 @@ fn test_decode_value_can_disable_code_fence_stripping() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
+/// Verifies that decode value handles uppercase code fence language tag.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_handles_uppercase_code_fence_language_tag() {
     let decoder = LenientJsonDecoder::default();
