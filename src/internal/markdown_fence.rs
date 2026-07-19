@@ -156,8 +156,8 @@ impl MarkdownFence {
     fn strip_closing<'a>(&self, content: &'a str) -> Option<&'a str> {
         let trimmed_end = content.trim_end_matches([' ', '\t', '\n', '\r']);
         let closing_line_start = trimmed_end
-            .rfind('\n')
-            .max(trimmed_end.rfind('\r'))
+            .bytes()
+            .rposition(|byte| matches!(byte, b'\n' | b'\r'))
             .map_or(0, |index| index + 1);
         let closing_line = &trimmed_end[closing_line_start..];
         let indent_len = closing_line
