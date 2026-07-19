@@ -69,23 +69,22 @@
 
 #![deny(missing_docs)]
 
-mod error_privacy_policy;
+mod error;
 mod internal;
-mod json_decode_error;
-mod json_decode_error_kind;
-mod json_decode_options;
-mod json_decode_stage;
 mod json_top_level_kind;
 mod lenient_json_decoder;
-mod markdown_fence_closing;
-mod markdown_fence_policy;
+mod options;
 
-pub use error_privacy_policy::ErrorPrivacyPolicy;
-pub use json_decode_error::JsonDecodeError;
-pub use json_decode_error_kind::JsonDecodeErrorKind;
-pub use json_decode_options::JsonDecodeOptions;
-pub use json_decode_stage::JsonDecodeStage;
+pub use error::{
+    ErrorPrivacyPolicy,
+    JsonDecodeError,
+    JsonDecodeErrorKind,
+    JsonDecodeStage,
+};
 pub use json_top_level_kind::JsonTopLevelKind;
 pub use lenient_json_decoder::LenientJsonDecoder;
-pub use markdown_fence_closing::MarkdownFenceClosing;
-pub use markdown_fence_policy::MarkdownFencePolicy;
+pub use options::{
+    JsonDecodeOptions,
+    MarkdownFenceClosing,
+    MarkdownFencePolicy,
+};
