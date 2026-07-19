@@ -76,6 +76,10 @@ impl LenientJsonDecoder {
     ///
     /// Returns [`JsonDecodeError`] when input normalization, JSON parsing, or
     /// target deserialization fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     pub fn decode<T>(&self, input: &str) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
@@ -108,6 +112,10 @@ impl LenientJsonDecoder {
     ///
     /// Returns a JSON decode error when the raw byte limit is exceeded, the
     /// bytes are not valid UTF-8, or subsequent JSON decoding fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     pub fn decode_slice<T>(&self, input: &[u8]) -> Result<T, JsonDecodeError>
     where
         T: DeserializeOwned,
@@ -153,6 +161,10 @@ impl LenientJsonDecoder {
     /// Returns [`JsonDecodeError`] when normalization or parsing fails, when
     /// the top-level value is not an object, or when the object cannot be
     /// deserialized into `T`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     #[inline(always)]
     pub fn decode_object<T>(&self, input: &str) -> Result<T, JsonDecodeError>
     where
@@ -179,6 +191,10 @@ impl LenientJsonDecoder {
     /// Returns [`JsonDecodeError`] when normalization or parsing fails, when
     /// the top-level value is not an array, or when an element cannot be
     /// deserialized into `T`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     #[inline(always)]
     pub fn decode_array<T>(
         &self,
