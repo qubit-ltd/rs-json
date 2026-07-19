@@ -186,7 +186,6 @@ impl MarkdownFence {
     ///
     /// `Some(length)` for a run of at least three matching marker bytes, or
     /// `None` otherwise.
-    #[inline]
     fn matching_marker_len(&self, line: &str) -> Option<usize> {
         let count =
             line.bytes().take_while(|byte| *byte == self.marker).count();
