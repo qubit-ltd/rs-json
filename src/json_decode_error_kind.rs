@@ -63,7 +63,6 @@ impl fmt::Display for JsonDecodeErrorKind {
     /// # Errors
     ///
     /// Returns a formatting error when the destination rejects the write.
-    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = match self {
             Self::InputTooLarge => "input_too_large",
