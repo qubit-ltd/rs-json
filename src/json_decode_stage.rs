@@ -53,7 +53,6 @@ impl fmt::Display for JsonDecodeStage {
     /// # Errors
     ///
     /// Returns a formatting error when the destination rejects the write.
-    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DecodeText => f.write_str("decode_text"),
