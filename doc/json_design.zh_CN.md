@@ -251,14 +251,15 @@ impl LenientJsonDecoder {
 
 - `strip_markdown_code_fence`（由 `markdown_fence_policy` 决定启用、语言范围和
   闭合要求）
-  - 仅处理以 3 个或更多反引号或波浪线开头的输入。
-  - opening fence 前最多允许 3 个空格缩进。
+  - 在管线先执行外层 trim 后，仅处理以 3 个或更多反引号或波浪线开头的输入。
+  - opening fence 前只允许 0—3 个 ASCII 空格缩进；tab、非 ASCII 空白或 4 个及
+    以上空格不构成 opening fence。
   - 支持语言标签和无标签两种 fence 开头。
   - JSON-only 模式按 info string 的首个空白分隔 token 判断是否为 JSON-like。
   - closing fence 前最多允许 3 个 ASCII 空格缩进；tab、非 ASCII 空白或 4 个及以上空格不构成 closing fence。
   - closing marker 后仅允许 ASCII 空格或 tab；marker 类型必须相同，且长度不得短于 opening fence。
-  - 查找 closing line 时分别取最后一个 LF 和 CR，并使用索引较大的换行，支持正文
-    和结束 fence 使用混合换行。
+  - 查找 closing line 时从末尾定位最后一个 LF 或 CR，支持正文和结束 fence 使用
+    混合换行。
   - 不存在有效结束 fence 时，默认仍移除开头并保留剩余内容；严格模式下保持输入不变。
 - `ControlCharacterEscaper::escape`
   - 通过字符串状态机识别 `in_string` 与 `in_escape`。
