@@ -43,6 +43,20 @@ fn test_decode_value_escapes_control_chars_in_strings() {
     assert_eq!(value, json!({"text": "a\nb"}));
 }
 
+/// Verifies that decode value preserves UTF-8 after an escaped control char.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
+#[test]
+fn test_decode_value_preserves_utf8_after_escaped_control_char() {
+    let decoder = LenientJsonDecoder::default();
+    let value = decoder
+        .decode_value("{\"text\":\"first\n你好😀\nlast\\nend\"}")
+        .expect("control escaping should preserve following UTF-8 text");
+    assert_eq!(value, json!({"text": "first\n你好😀\nlast\nend"}));
+}
+
 /// Verifies that decode value can disable control char escaping.
 ///
 /// # Panics

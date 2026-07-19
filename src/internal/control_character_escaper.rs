@@ -12,8 +12,8 @@ use std::borrow::Cow;
 /// Escapes raw ASCII control characters occurring within JSON strings.
 ///
 /// The scanner borrows its input unless it finds a replacement. On the first
-/// replacement it lazily creates an output [`String`], copies the already
-/// scanned prefix, and appends all remaining transformed characters.
+/// replacement it lazily creates an output [`String`] and copies unchanged
+/// UTF-8 byte ranges between replacements.
 pub(super) struct ControlCharacterEscaper;
 
 impl ControlCharacterEscaper {
@@ -36,60 +36,71 @@ impl ControlCharacterEscaper {
 
         let mut in_string = false;
         let mut in_escape = false;
+        let mut copy_start = 0;
         let mut output: Option<String> = None;
 
-        for (index, ch) in input.char_indices() {
+        for (index, byte) in input.bytes().enumerate() {
             let replacement =
-                Self::replacement(ch, &mut in_string, &mut in_escape);
+                Self::replacement(byte, &mut in_string, &mut in_escape);
             let Some(replacement) = replacement else {
-                if let Some(output) = output.as_mut() {
-                    output.push(ch);
-                }
                 continue;
             };
 
-            let output = output.get_or_insert_with(|| {
-                let mut result = String::with_capacity(input.len() + 5);
-                result.push_str(&input[..index]);
-                result
-            });
+            let output = output
+                .get_or_insert_with(|| String::with_capacity(input.len() + 5));
+            let unchanged = &input[copy_start..index];
+            match unchanged.as_bytes() {
+                [] => {}
+                [byte] => {
+                    // A valid one-byte UTF-8 slice is necessarily ASCII.
+                    output.push(char::from(*byte));
+                }
+                _ => output.push_str(unchanged),
+            }
             output.push_str(replacement);
+            copy_start = index + 1;
         }
 
-        output.map_or_else(|| Cow::Borrowed(input), Cow::Owned)
+        output.map_or_else(
+            || Cow::Borrowed(input),
+            |mut output| {
+                output.push_str(&input[copy_start..]);
+                Cow::Owned(output)
+            },
+        )
     }
 
     /// Returns the required replacement while advancing JSON-string state.
     ///
     /// # Parameters
     ///
-    /// * `ch` - Current input character.
+    /// * `byte` - Current input byte.
     /// * `in_string` - Whether the scanner is currently inside a JSON string.
-    /// * `in_escape` - Whether an unmatched backslash precedes `ch`.
+    /// * `in_escape` - Whether an unmatched backslash precedes `byte`.
     ///
     /// # Returns
     ///
-    /// `Some(replacement)` when `ch` is a raw C0 control character requiring
-    /// repair, or `None` when `ch` should be copied unchanged.
+    /// `Some(replacement)` when `byte` is a raw C0 control character
+    /// requiring repair, or `None` when it should be copied unchanged.
     fn replacement(
-        ch: char,
+        byte: u8,
         in_string: &mut bool,
         in_escape: &mut bool,
     ) -> Option<&'static str> {
         if *in_string {
             if *in_escape {
                 *in_escape = false;
-                return Self::escaped_control_char(ch)
+                return Self::escaped_control_byte(byte)
                     .map(|escape| &escape[1..]);
             }
-            if ch == '\\' {
+            if byte == b'\\' {
                 *in_escape = true;
-            } else if ch == '"' {
+            } else if byte == b'"' {
                 *in_string = false;
             } else {
-                return Self::escaped_control_char(ch);
+                return Self::escaped_control_byte(byte);
             }
-        } else if ch == '"' {
+        } else if byte == b'"' {
             *in_string = true;
         }
         None
@@ -99,45 +110,45 @@ impl ControlCharacterEscaper {
     ///
     /// # Parameters
     ///
-    /// * `ch` - Character to map.
+    /// * `byte` - Byte to map.
     ///
     /// # Returns
     ///
-    /// `Some(escape)` for `U+0000..=U+001F`, or `None` for other characters.
-    fn escaped_control_char(ch: char) -> Option<&'static str> {
-        match ch {
-            '\u{0008}' => Some("\\b"),
-            '\u{0009}' => Some("\\t"),
-            '\u{000a}' => Some("\\n"),
-            '\u{000c}' => Some("\\f"),
-            '\u{000d}' => Some("\\r"),
-            '\u{0000}' => Some("\\u0000"),
-            '\u{0001}' => Some("\\u0001"),
-            '\u{0002}' => Some("\\u0002"),
-            '\u{0003}' => Some("\\u0003"),
-            '\u{0004}' => Some("\\u0004"),
-            '\u{0005}' => Some("\\u0005"),
-            '\u{0006}' => Some("\\u0006"),
-            '\u{0007}' => Some("\\u0007"),
-            '\u{000b}' => Some("\\u000b"),
-            '\u{000e}' => Some("\\u000e"),
-            '\u{000f}' => Some("\\u000f"),
-            '\u{0010}' => Some("\\u0010"),
-            '\u{0011}' => Some("\\u0011"),
-            '\u{0012}' => Some("\\u0012"),
-            '\u{0013}' => Some("\\u0013"),
-            '\u{0014}' => Some("\\u0014"),
-            '\u{0015}' => Some("\\u0015"),
-            '\u{0016}' => Some("\\u0016"),
-            '\u{0017}' => Some("\\u0017"),
-            '\u{0018}' => Some("\\u0018"),
-            '\u{0019}' => Some("\\u0019"),
-            '\u{001a}' => Some("\\u001a"),
-            '\u{001b}' => Some("\\u001b"),
-            '\u{001c}' => Some("\\u001c"),
-            '\u{001d}' => Some("\\u001d"),
-            '\u{001e}' => Some("\\u001e"),
-            '\u{001f}' => Some("\\u001f"),
+    /// `Some(escape)` for `0x00..=0x1f`, or `None` for other bytes.
+    fn escaped_control_byte(byte: u8) -> Option<&'static str> {
+        match byte {
+            b'\x08' => Some("\\b"),
+            b'\x09' => Some("\\t"),
+            b'\x0a' => Some("\\n"),
+            b'\x0c' => Some("\\f"),
+            b'\x0d' => Some("\\r"),
+            b'\x00' => Some("\\u0000"),
+            b'\x01' => Some("\\u0001"),
+            b'\x02' => Some("\\u0002"),
+            b'\x03' => Some("\\u0003"),
+            b'\x04' => Some("\\u0004"),
+            b'\x05' => Some("\\u0005"),
+            b'\x06' => Some("\\u0006"),
+            b'\x07' => Some("\\u0007"),
+            b'\x0b' => Some("\\u000b"),
+            b'\x0e' => Some("\\u000e"),
+            b'\x0f' => Some("\\u000f"),
+            b'\x10' => Some("\\u0010"),
+            b'\x11' => Some("\\u0011"),
+            b'\x12' => Some("\\u0012"),
+            b'\x13' => Some("\\u0013"),
+            b'\x14' => Some("\\u0014"),
+            b'\x15' => Some("\\u0015"),
+            b'\x16' => Some("\\u0016"),
+            b'\x17' => Some("\\u0017"),
+            b'\x18' => Some("\\u0018"),
+            b'\x19' => Some("\\u0019"),
+            b'\x1a' => Some("\\u001a"),
+            b'\x1b' => Some("\\u001b"),
+            b'\x1c' => Some("\\u001c"),
+            b'\x1d' => Some("\\u001d"),
+            b'\x1e' => Some("\\u001e"),
+            b'\x1f' => Some("\\u001f"),
             _ => None,
         }
     }
