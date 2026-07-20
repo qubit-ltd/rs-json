@@ -24,9 +24,11 @@ fn test_default_enables_all_mvp_rules() {
     let options = JsonDecodeOptions::default();
     assert!(options.trim_whitespace());
     assert!(options.strip_utf8_bom());
+    let markdown_fence_policy: &MarkdownFencePolicy =
+        options.markdown_fence_policy();
     assert_eq!(
-        options.markdown_fence_policy(),
-        MarkdownFencePolicy::JsonOnly {
+        markdown_fence_policy,
+        &MarkdownFencePolicy::JsonOnly {
             closing: MarkdownFenceClosing::Optional,
         },
     );
@@ -57,7 +59,7 @@ fn test_strict_disables_all_normalization_rules() {
     assert!(!options.strip_utf8_bom());
     assert_eq!(
         options.markdown_fence_policy(),
-        MarkdownFencePolicy::Disabled,
+        &MarkdownFencePolicy::Disabled,
     );
     assert!(!options.escape_control_chars_in_strings());
     assert_eq!(options.max_input_bytes(), None);
@@ -77,27 +79,27 @@ fn test_builders_set_requested_policies() {
     let options = JsonDecodeOptions::strict()
         .with_trim_whitespace(true)
         .with_strip_utf8_bom(true)
-        .with_markdown_fence_policy(markdown_fence_policy)
+        .with_markdown_fence_policy(markdown_fence_policy.clone())
         .with_escape_control_chars_in_strings(true)
         .with_max_input_bytes(Some(64))
         .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed);
     assert!(options.trim_whitespace());
     assert!(options.strip_utf8_bom());
-    assert_eq!(options.markdown_fence_policy(), markdown_fence_policy);
+    assert_eq!(options.markdown_fence_policy(), &markdown_fence_policy);
     assert!(options.escape_control_chars_in_strings());
     assert_eq!(options.max_input_bytes(), Some(64));
     assert_eq!(options.error_privacy_policy(), ErrorPrivacyPolicy::Detailed,);
     assert_eq!(options.with_max_input_bytes(None).max_input_bytes(), None,);
 }
 
-/// Verifies that options are copy and equatable.
+/// Verifies that options are cloneable and equatable.
 ///
 /// # Panics
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_options_are_copy_and_equatable() {
+fn test_options_are_clone_and_equatable() {
     let options = JsonDecodeOptions::default();
-    let copied = options;
-    assert_eq!(options, copied);
+    let cloned = options.clone();
+    assert_eq!(options, cloned);
 }

@@ -38,7 +38,7 @@ use qubit_json::{
 fn test_new_exposes_configured_options() {
     let options = JsonDecodeOptions::default()
         .with_markdown_fence_policy(MarkdownFencePolicy::Disabled);
-    let decoder = LenientJsonDecoder::new(options);
+    let decoder = LenientJsonDecoder::new(options.clone());
     assert_eq!(decoder.options(), &options);
 }
 

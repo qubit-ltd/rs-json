@@ -77,7 +77,7 @@ pub struct LenientJsonDecoder {
 
 1. 提供统一的公开解码入口。
 2. 共享并复用同一套 `LenientJsonNormalizer` 行为。
-3. 对 `&self` 调用提供可复用、可复制的行为。
+3. 对 `&self` 调用提供可复用、可克隆的行为。
 
 ### 4.2 `LenientJsonNormalizer`（内部对象）
 
@@ -85,7 +85,7 @@ pub struct LenientJsonDecoder {
 `normalize()`。
 
 ```rust
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct LenientJsonNormalizer {
     options: JsonDecodeOptions,
 }
@@ -100,7 +100,7 @@ pub(crate) struct LenientJsonNormalizer {
 ### 4.3 配置对象
 
 ```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JsonDecodeOptions {
     trim_whitespace: bool,
     strip_utf8_bom: bool,

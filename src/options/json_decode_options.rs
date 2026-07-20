@@ -18,8 +18,18 @@ use crate::{
 /// Its fields control text normalization, raw input limits, and error
 /// diagnostics. Defaults are intentionally conservative and cover the most
 /// common non-fully-trusted text inputs without attempting aggressive repair.
+///
+/// # Examples
+///
+/// ```compile_fail
+/// use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
+///
+/// let options = JsonDecodeOptions::strict();
+/// let _decoder = LenientJsonDecoder::new(options);
+/// let _moved_options = options;
+/// ```
 #[must_use = "JSON decoding options have no effect until used to construct a decoder"]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JsonDecodeOptions {
     /// Controls whether leading and trailing whitespace is removed before any
     /// other normalization step is applied.
@@ -98,7 +108,7 @@ impl JsonDecodeOptions {
         self.trim_whitespace
     }
 
-    /// Returns a copy with whitespace trimming enabled or disabled.
+    /// Returns these options with whitespace trimming enabled or disabled.
     ///
     /// # Parameters
     ///
@@ -125,7 +135,7 @@ impl JsonDecodeOptions {
         self.strip_utf8_bom
     }
 
-    /// Returns a copy with UTF-8 byte order mark stripping configured.
+    /// Returns these options with UTF-8 byte order mark stripping configured.
     ///
     /// # Parameters
     ///
@@ -145,12 +155,23 @@ impl JsonDecodeOptions {
     /// # Returns
     ///
     /// The configured Markdown fence policy.
+    ///
+    /// # Examples
+    ///
+    /// ```compile_fail
+    /// #![deny(unused_must_use)]
+    /// use qubit_json::JsonDecodeOptions;
+    ///
+    /// let options = JsonDecodeOptions::strict();
+    /// options.markdown_fence_policy();
+    /// ```
     #[inline(always)]
-    pub const fn markdown_fence_policy(&self) -> MarkdownFencePolicy {
-        self.markdown_fence_policy
+    #[must_use = "the configured Markdown fence policy should be inspected"]
+    pub const fn markdown_fence_policy(&self) -> &MarkdownFencePolicy {
+        &self.markdown_fence_policy
     }
 
-    /// Returns a copy of these options with a Markdown fence policy.
+    /// Returns these options with a Markdown fence policy.
     ///
     /// # Parameters
     ///
@@ -181,7 +202,8 @@ impl JsonDecodeOptions {
         self.escape_control_chars_in_strings
     }
 
-    /// Returns a copy with JSON-string control character escaping configured.
+    /// Returns these options with JSON-string control character escaping
+    /// configured.
     ///
     /// # Parameters
     ///
@@ -211,7 +233,7 @@ impl JsonDecodeOptions {
         self.max_input_bytes
     }
 
-    /// Returns a copy of these options with a raw input byte-size limit.
+    /// Returns these options with a raw input byte-size limit.
     ///
     /// # Parameters
     ///
@@ -240,7 +262,7 @@ impl JsonDecodeOptions {
         self.error_privacy_policy
     }
 
-    /// Returns a copy of these options with the requested error privacy policy.
+    /// Returns these options with the requested error privacy policy.
     ///
     /// The policy determines whether serde diagnostics derived from input
     /// values are retained in returned errors.

@@ -66,14 +66,14 @@ impl MarkdownFence {
     /// The fenced body when the active policy accepts the fence, or the
     /// unchanged input otherwise.
     #[must_use]
-    pub(super) fn strip_outer(
-        input: &str,
-        policy: MarkdownFencePolicy,
-    ) -> &str {
+    pub(super) fn strip_outer<'a>(
+        input: &'a str,
+        policy: &MarkdownFencePolicy,
+    ) -> &'a str {
         let (json_only, closing) = match policy {
             MarkdownFencePolicy::Disabled => return input,
-            MarkdownFencePolicy::Any { closing } => (false, closing),
-            MarkdownFencePolicy::JsonOnly { closing } => (true, closing),
+            MarkdownFencePolicy::Any { closing } => (false, *closing),
+            MarkdownFencePolicy::JsonOnly { closing } => (true, *closing),
         };
         let Some(opening_fence) = Self::parse_opening(input) else {
             return input;
