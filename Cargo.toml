@@ -18,6 +18,8 @@ include = [
     "/LICENSE",
     "/README.md",
     "/README.zh_CN.md",
+    "/.github/workflows/ci.yml",
+    "/.github/workflows/fuzz.yml",
     "/doc/**",
     "/src/**",
     "/tests/**",
