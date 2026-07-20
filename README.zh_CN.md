@@ -239,7 +239,7 @@ Qubit JSON 适合这些情况：
 - `LenientJsonDecoder` 通过内部的 `LenientJsonNormalizer` 完成输入规范化。
 - 对外公开能力为 `decode`、`decode_object`、`decode_array`、`decode_value`、
   `decode_slice`。
-- 规范化与错误模型由 `src/internal/lenient_json_normalizer.rs`、`src/json_decode_error.rs` 实现，并有
+- 规范化与错误模型由 `src/internal/lenient_json_normalizer.rs`、`src/error/json_decode_error.rs` 实现，并有
   `tests/` 下对应测试覆盖。
 - 需求与实现口径与
   `doc/json_prd.zh_CN.md` 和 `doc/json_design.zh_CN.md` 对齐。

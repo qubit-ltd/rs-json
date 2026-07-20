@@ -250,7 +250,7 @@ This README reflects the current object model:
 - Public decoding APIs are `decode`, `decode_object`, `decode_array`,
   `decode_value`, and `decode_slice`.
 - Normalization and error handling are implemented in
-  `src/internal/lenient_json_normalizer.rs` and `src/json_decode_error.rs`,
+  `src/internal/lenient_json_normalizer.rs` and `src/error/json_decode_error.rs`,
   which are covered by tests in `tests/`.
 - Product requirements and implementation behavior are aligned with
   `doc/json_prd.zh_CN.md` and `doc/json_design.zh_CN.md`.

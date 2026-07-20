@@ -273,7 +273,7 @@ impl LenientJsonDecoder {
 
 ## 7. 与实现对齐性
 
-1. `internal/lenient_json_normalizer.rs` 采用 `LenientJsonNormalizer` 对象模型，而非全局函数集合。
+1. `src/internal/lenient_json_normalizer.rs` 采用 `LenientJsonNormalizer` 对象模型，而非全局函数集合。
 2. `lenient_json_decoder.rs` 使用单一 `normalize` 调用，避免重复逻辑。
 3. `decode_object` 与 `decode_array` 通过 `JsonTopLevelKind` 做一致约束检查。
 4. 错误映射路径：
@@ -289,36 +289,56 @@ impl LenientJsonDecoder {
 rust-common/rs-json/
   ├─ src/
   │   ├─ lib.rs
-  │   ├─ error_privacy_policy.rs
   │   ├─ lenient_json_decoder.rs
-  │   ├─ json_decode_options.rs
-  │   ├─ json_decode_error.rs
-  │   ├─ json_decode_error_kind.rs
-  │   ├─ json_decode_stage.rs
   │   ├─ json_top_level_kind.rs
-  │   ├─ markdown_fence_closing.rs
-  │   ├─ markdown_fence_policy.rs
+  │   ├─ error/
+  │   │   ├─ mod.rs
+  │   │   ├─ error_privacy_policy.rs
+  │   │   ├─ json_decode_error.rs
+  │   │   ├─ json_decode_error_kind.rs
+  │   │   └─ json_decode_stage.rs
+  │   ├─ options/
+  │   │   ├─ mod.rs
+  │   │   ├─ json_decode_options.rs
+  │   │   ├─ markdown_fence_closing.rs
+  │   │   └─ markdown_fence_policy.rs
   │   └─ internal/
   │       ├─ control_character_escaper.rs
   │       ├─ lenient_json_normalizer.rs
   │       └─ markdown_fence.rs
   ├─ tests/
   │   ├─ mod.rs
-  │   ├─ error_privacy_policy_tests.rs
+  │   ├─ lib_tests.rs
+  │   ├─ fixtures/
+  │   │   ├─ mod.rs
+  │   │   ├─ byte_buffer.rs
+  │   │   ├─ counted_failure.rs
+  │   │   ├─ exact_integer.rs
+  │   │   ├─ message.rs
+  │   │   ├─ public_choice.rs
+  │   │   ├─ single_value.rs
+  │   │   ├─ user.rs
+  │   │   └─ internal/
+  │   │       ├─ mod.rs
+  │   │       └─ byte_buffer_visitor.rs
+  │   ├─ error/
+  │   │   ├─ mod.rs
+  │   │   ├─ error_privacy_policy_tests.rs
+  │   │   ├─ json_decode_error_kind_tests.rs
+  │   │   ├─ json_decode_error_tests.rs
+  │   │   └─ json_decode_stage_tests.rs
   │   ├─ internal/
   │   │   ├─ mod.rs
   │   │   ├─ control_character_escaper_tests.rs
   │   │   ├─ lenient_json_normalizer_tests.rs
   │   │   └─ markdown_fence_tests.rs
   │   ├─ lenient_json_decoder_tests.rs
-  │   ├─ json_decode_error_kind_tests.rs
-  │   ├─ json_decode_error_tests.rs
-  │   ├─ json_decode_stage_tests.rs
-  │   ├─ lib_tests.rs
-  │   ├─ json_decode_options_tests.rs
   │   ├─ json_top_level_kind_tests.rs
-  │   ├─ markdown_fence_closing_tests.rs
-  │   └─ markdown_fence_policy_tests.rs
+  │   └─ options/
+  │       ├─ mod.rs
+  │       ├─ json_decode_options_tests.rs
+  │       ├─ markdown_fence_closing_tests.rs
+  │       └─ markdown_fence_policy_tests.rs
   ├─ benches/
   │   ├─ decoder_bench.rs
   │   └─ internal/
@@ -349,9 +369,9 @@ rust-common/rs-json/
 
 ### 9.2 配置与错误模型测试
 
-- `tests/json_decode_options_tests.rs`：预设、getter、builder 与可清除大小限制。
-- `tests/error_privacy_policy_tests.rs`：隐私策略默认值和类型契约。
-- `tests/json_decode_error_tests.rs`、`tests/json_decode_error_kind_tests.rs`、`tests/json_top_level_kind_tests.rs`：
+- `tests/options/json_decode_options_tests.rs`：预设、getter、builder 与可清除大小限制。
+- `tests/error/error_privacy_policy_tests.rs`：隐私策略默认值和类型契约。
+- `tests/error/json_decode_error_tests.rs`、`tests/error/json_decode_error_kind_tests.rs`、`tests/json_top_level_kind_tests.rs`：
   - 错误种类、顶层类型映射、默认脱敏和显式详细诊断。
 
 ### 9.3 规范化测试

@@ -166,7 +166,7 @@
 - 隐私模型与当前实现一致：默认 `Redacted`，`Detailed` 需显式启用。
 - 解码入口与实现一致：`decode` / `decode_slice` / `decode_object` /
   `decode_array` / `decode_value` 均通过内部统一规范化。
-- 解析流程与实现一致：`normalize` 托管在 `internal/lenient_json_normalizer.rs`，对外不暴露底层 helper。
+- 解析流程与实现一致：`normalize` 托管在 `src/internal/lenient_json_normalizer.rs`，对外不暴露底层 helper。
 - 错误模型与实现一致：`JsonDecodeErrorKind` 与 `JsonTopLevelKind` 已对齐。
 - 复用与对象语义一致：`LenientJsonDecoder` 持有不可变的
   `LenientJsonNormalizer`，可安全多次复用。
@@ -179,14 +179,14 @@
   - `tests/internal/lenient_json_normalizer_tests.rs`
   - `tests/internal/control_character_escaper_tests.rs`
   - `tests/internal/markdown_fence_tests.rs`
-  - `tests/json_decode_options_tests.rs`
-  - `tests/error_privacy_policy_tests.rs`
-  - `tests/json_decode_error_tests.rs`
+  - `tests/options/json_decode_options_tests.rs`
+  - `tests/error/error_privacy_policy_tests.rs`
+  - `tests/error/json_decode_error_tests.rs`
   - `tests/json_top_level_kind_tests.rs`
-  - `tests/json_decode_error_kind_tests.rs`
-  - `tests/json_decode_stage_tests.rs`
-  - `tests/markdown_fence_closing_tests.rs`
-  - `tests/markdown_fence_policy_tests.rs`
+  - `tests/error/json_decode_error_kind_tests.rs`
+  - `tests/error/json_decode_stage_tests.rs`
+  - `tests/options/markdown_fence_closing_tests.rs`
+  - `tests/options/markdown_fence_policy_tests.rs`
 
 - `benches/decoder_bench.rs` 提供公开解码路径的 Criterion 基准。
 - `fuzz/fuzz_targets/decoder.rs` 覆盖主要配置组合，并由
