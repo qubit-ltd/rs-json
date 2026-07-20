@@ -28,7 +28,7 @@ use crate::MarkdownFenceClosing;
 /// ```
 #[must_use]
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MarkdownFencePolicy {
     /// Leaves Markdown code fences unchanged.
     Disabled,

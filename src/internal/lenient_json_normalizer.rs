@@ -20,7 +20,7 @@ use super::{
 };
 
 /// Normalizes one raw JSON text input before JSON parsing.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct LenientJsonNormalizer {
     /// Stores the option set used by the normalizer.
     options: JsonDecodeOptions,
