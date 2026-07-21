@@ -20,6 +20,15 @@ use crate::{
     JsonTopLevelKind,
 };
 
+/// Identifies the size limit that rejected JSON input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum JsonInputSizeLimit {
+    /// Stores the configured raw input byte limit.
+    Raw(usize),
+    /// Stores the configured normalized JSON byte limit.
+    Normalized(usize),
+}
+
 /// Error returned when lenient JSON decoding fails.
 ///
 /// This type exposes immutable diagnostics so its error category, stage, and
@@ -43,8 +52,8 @@ pub struct JsonDecodeError {
     raw_input_bytes: usize,
     /// Stores the normalized byte length when normalization completed.
     normalized_input_bytes: Option<usize>,
-    /// Stores the configured raw input limit for size failures.
-    max_input_bytes: Option<usize>,
+    /// Stores the configured size limit that rejected the input.
+    size_limit: Option<JsonInputSizeLimit>,
     /// Stores the one-based parser line in normalized text when available.
     normalized_line: Option<usize>,
     /// Stores the one-based parser column in normalized text when available.
@@ -89,7 +98,7 @@ impl JsonDecodeError {
             actual_top_level: None,
             raw_input_bytes,
             normalized_input_bytes: None,
-            max_input_bytes: None,
+            size_limit: None,
             normalized_line: None,
             normalized_column: None,
             source,
@@ -124,7 +133,48 @@ impl JsonDecodeError {
             actual_top_level: None,
             raw_input_bytes,
             normalized_input_bytes: None,
-            max_input_bytes: Some(max_input_bytes),
+            size_limit: Some(JsonInputSizeLimit::Raw(max_input_bytes)),
+            normalized_line: None,
+            normalized_column: None,
+            source: None,
+        }
+    }
+
+    /// Creates an error for normalized input that exceeds its configured limit.
+    ///
+    /// # Parameters
+    ///
+    /// * `raw_input_bytes` - Raw input length in bytes.
+    /// * `normalized_input_bytes` - Calculated normalized input length in
+    ///   bytes.
+    /// * `max_normalized_bytes` - Configured maximum normalized input length.
+    /// * `privacy_policy` - Privacy policy active during normalization.
+    ///
+    /// # Returns
+    ///
+    /// An input-too-large error containing the supplied normalized size
+    /// diagnostics.
+    #[must_use]
+    pub(crate) fn normalized_input_too_large(
+        raw_input_bytes: usize,
+        normalized_input_bytes: usize,
+        max_normalized_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
+    ) -> Self {
+        Self {
+            kind: JsonDecodeErrorKind::InputTooLarge,
+            stage: JsonDecodeStage::Normalize,
+            privacy_policy,
+            message: format!(
+                "Normalized JSON input is too large: {normalized_input_bytes} bytes exceed configured limit {max_normalized_bytes} bytes"
+            ),
+            expected_top_level: None,
+            actual_top_level: None,
+            raw_input_bytes,
+            normalized_input_bytes: Some(normalized_input_bytes),
+            size_limit: Some(JsonInputSizeLimit::Normalized(
+                max_normalized_bytes,
+            )),
             normalized_line: None,
             normalized_column: None,
             source: None,
@@ -158,7 +208,7 @@ impl JsonDecodeError {
             actual_top_level: None,
             raw_input_bytes,
             normalized_input_bytes,
-            max_input_bytes: None,
+            size_limit: None,
             normalized_line: None,
             normalized_column: None,
             source: None,
@@ -229,7 +279,7 @@ impl JsonDecodeError {
             actual_top_level: Some(actual),
             raw_input_bytes,
             normalized_input_bytes: Some(normalized_input_bytes),
-            max_input_bytes: None,
+            size_limit: None,
             normalized_line: None,
             normalized_column: None,
             source: None,
@@ -313,7 +363,7 @@ impl JsonDecodeError {
             actual_top_level: None,
             raw_input_bytes,
             normalized_input_bytes: Some(normalized_input_bytes),
-            max_input_bytes: None,
+            size_limit: None,
             normalized_line: (line > 0).then_some(line),
             normalized_column: (column > 0).then_some(column),
             source,
@@ -412,7 +462,24 @@ impl JsonDecodeError {
     /// `Some(limit)` for an input-too-large error, or `None` for other errors.
     #[inline(always)]
     pub const fn max_input_bytes(&self) -> Option<usize> {
-        self.max_input_bytes
+        match self.size_limit {
+            Some(JsonInputSizeLimit::Raw(limit)) => Some(limit),
+            Some(JsonInputSizeLimit::Normalized(_)) | None => None,
+        }
+    }
+
+    /// Returns the configured normalized-input limit for a size failure.
+    ///
+    /// # Returns
+    ///
+    /// `Some(limit)` when normalized JSON exceeded its configured limit, or
+    /// `None` for raw-size and non-size failures.
+    #[inline(always)]
+    pub const fn max_normalized_bytes(&self) -> Option<usize> {
+        match self.size_limit {
+            Some(JsonInputSizeLimit::Normalized(limit)) => Some(limit),
+            Some(JsonInputSizeLimit::Raw(_)) | None => None,
+        }
     }
 
     /// Returns the parser line in normalized JSON text.
@@ -484,7 +551,7 @@ impl PartialEq for JsonDecodeError {
             && self.actual_top_level == other.actual_top_level
             && self.raw_input_bytes == other.raw_input_bytes
             && self.normalized_input_bytes == other.normalized_input_bytes
-            && self.max_input_bytes == other.max_input_bytes
+            && self.size_limit == other.size_limit
             && self.normalized_line == other.normalized_line
             && self.normalized_column == other.normalized_column
     }

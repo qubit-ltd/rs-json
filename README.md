@@ -68,19 +68,22 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `escape_control_chars_in_strings`: escapes ASCII control characters inside
   JSON string literals
 - `max_input_bytes`: optional byte-size limit applied before normalization
+- `max_normalized_bytes`: optional byte-size limit applied to normalized JSON
+  before control-character repair allocates text
 - `error_privacy_policy`: selects safe redacted errors (the default) or
   explicitly requested detailed serde diagnostics
 
 ### Explicit Error Model
 
-- `InputTooLarge`: raw input size exceeds configured limit
+- `InputTooLarge`: raw or normalized input size exceeds its configured limit
 - `EmptyInput`: input becomes empty after normalization
 - `InvalidUtf8`: raw byte input is not valid UTF-8
 - `InvalidJson`: normalized text is not valid JSON syntax
 - `UnexpectedTopLevel`: top-level JSON kind does not match the requested method
 - `Deserialize`: JSON is valid but cannot be deserialized into the target type
 - `JsonDecodeError` exposes immutable accessors for the failure kind, stage,
-  message, top-level context, raw and normalized byte sizes, and input limit
+  message, top-level context, raw and normalized byte sizes, and both input
+  limits
 - parser line and column accessors refer to normalized JSON text
 - `privacy_policy()` records the policy applied to every returned error
 - under the default `Redacted` policy, parser/deserializer messages do not
@@ -166,20 +169,23 @@ fn main() {
 
 ### Set an Input Limit for Untrusted Sources
 
-`JsonDecodeOptions::default()` deliberately leaves `max_input_bytes` unset so
-the crate does not impose an application-specific limit. When inputs cross a
-trust boundary, configure a limit appropriate to the caller's memory and
-latency budget.
+`JsonDecodeOptions::default()` deliberately leaves `max_input_bytes` and
+`max_normalized_bytes` unset so the crate does not impose application-specific
+limits. When inputs cross a trust boundary, configure limits appropriate to the
+caller's memory and latency budget.
 
-The limit applies to raw input, not normalized allocation size. Escaping one
-raw ASCII control byte as `\\u00XX` can expand content from one byte to six
-bytes, in addition to the allocation's own overhead.
+`max_input_bytes` applies to raw input. `max_normalized_bytes` applies after
+trimming and fence removal, and is checked before control-character repair
+allocates text. Escaping one raw ASCII control byte as `\\u00XX` can expand
+content from one byte to six bytes.
 
 ```rust
 use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
 
 let decoder = LenientJsonDecoder::new(
-    JsonDecodeOptions::default().with_max_input_bytes(Some(1_048_576)),
+    JsonDecodeOptions::default()
+        .with_max_input_bytes(Some(1_048_576))
+        .with_max_normalized_bytes(Some(6_291_456)),
 );
 let value = decoder.decode_value("{\"ok\":true}")?;
 
@@ -223,7 +229,8 @@ When enabled, the decoder applies the following pipeline before parsing:
 5. trim surrounding whitespace again
 6. strip one outer backtick or tilde Markdown code fence
 7. trim surrounding whitespace again
-8. escape ASCII control characters inside JSON string literals
+8. enforce the optional normalized JSON byte-size limit before allocation
+9. escape ASCII control characters inside JSON string literals
 
 The decoder does not:
 

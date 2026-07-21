@@ -60,14 +60,15 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
   尾随逗号依然无效
 - `escape_control_chars_in_strings`：转义 JSON 字符串字面量里的 ASCII 控制字符
 - `max_input_bytes`：规范化前的输入字节数上限（可选）
+- `max_normalized_bytes`：规范化后 JSON 的字节数上限（可选），在控制字符修复分配前检查
 - `error_privacy_policy`：选择默认安全的脱敏错误，或显式启用完整 serde 诊断
 
-默认配置不会设置 `max_input_bytes`，避免库替应用强加资源上限。来自不可信边界的输入应由
-调用方按自身内存与延迟预算，通过 `with_max_input_bytes(Some(limit))` 显式限制。
+默认配置不会设置 `max_input_bytes` 和 `max_normalized_bytes`，避免库替应用强加资源上限。
+来自不可信边界的输入应由调用方按自身内存与延迟预算显式限制。
 
 ### 显式错误模型
 
-- `InputTooLarge`：原始输入大小超过配置上限
+- `InputTooLarge`：原始或规范化后的输入大小超过对应配置上限
 - `EmptyInput`：输入在规范化之后为空
 - `InvalidUtf8`：原始字节输入不是合法 UTF-8
 - `InvalidJson`：规范化后的文本不是合法 JSON 语法
@@ -159,17 +160,21 @@ fn main() {
 
 ### 为不可信来源设置输入上限
 
-`JsonDecodeOptions::default()` 有意不设置 `max_input_bytes`，避免库强加与
-应用场景无关的限制。当输入跨越信任边界时，应根据调用方的内存和延迟预算配置上限。
+`JsonDecodeOptions::default()` 有意不设置 `max_input_bytes` 和
+`max_normalized_bytes`，避免库强加与应用场景无关的限制。当输入跨越信任边界时，应根据调用方的
+内存和延迟预算配置上限。
 
-该上限约束原始输入，而不是规范化后的分配大小。单个原始 ASCII 控制字节转义为
-`\\u00XX` 时，内容最坏可从 1 字节扩展为 6 字节，此外还有分配自身的开销。
+`max_input_bytes` 约束原始输入。`max_normalized_bytes` 在裁剪和移除代码块之后、控制字符
+修复分配之前约束规范化后的 JSON。单个原始 ASCII 控制字节转义为 `\\u00XX` 时，内容最坏
+可从 1 字节扩展为 6 字节。
 
 ```rust
 use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
 
 let decoder = LenientJsonDecoder::new(
-    JsonDecodeOptions::default().with_max_input_bytes(Some(1_048_576)),
+    JsonDecodeOptions::default()
+        .with_max_input_bytes(Some(1_048_576))
+        .with_max_normalized_bytes(Some(6_291_456)),
 );
 let value = decoder.decode_value("{\"ok\":true}")?;
 
@@ -212,7 +217,8 @@ fn main() {
 5. 再次裁剪首尾空白
 6. 移除最外层反引号或波浪线 Markdown 代码块
 7. 再次裁剪首尾空白
-8. 转义 JSON 字符串字面量中的 ASCII 控制字符
+8. 在分配前校验规范化后 JSON 的可选字节数上限
+9. 转义 JSON 字符串字面量中的 ASCII 控制字符
 
 这个库不会做下面这些事情：
 

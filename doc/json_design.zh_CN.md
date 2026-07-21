@@ -40,6 +40,7 @@ LenientJsonDecoder
     |    |-- markdown_fence_policy
     |    |-- escape_control_chars_in_strings
     |    |-- max_input_bytes
+    |    |-- max_normalized_bytes
     |    `-- error_privacy_policy
     |
     |-- decode<T>()                 // normalized text -> T
@@ -108,6 +109,7 @@ pub struct JsonDecodeOptions {
     markdown_fence_policy: MarkdownFencePolicy,
     escape_control_chars_in_strings: bool,
     max_input_bytes: Option<usize>,
+    max_normalized_bytes: Option<usize>,
     error_privacy_policy: ErrorPrivacyPolicy,
 }
 ```
@@ -123,6 +125,8 @@ getter，并提供以下值式 builder：
 - `with_markdown_fence_policy(policy)`。
 - `with_escape_control_chars_in_strings(enabled)`。
 - `with_max_input_bytes(Some(limit))` 设置上限，`with_max_input_bytes(None)` 清除上限。
+- `with_max_normalized_bytes(Some(limit))` 设置规范化后 JSON 上限，
+  `with_max_normalized_bytes(None)` 清除上限。
 - `with_error_privacy_policy(policy)`。
 
 默认值：
@@ -132,6 +136,7 @@ getter，并提供以下值式 builder：
 - `markdown_fence_policy = JsonOnly { closing: Optional }`
 - `escape_control_chars_in_strings = true`
 - `max_input_bytes = None`
+- `max_normalized_bytes = None`
 - `error_privacy_policy = ErrorPrivacyPolicy::Redacted`
 
 ### 4.4 错误模型
@@ -176,8 +181,8 @@ pub struct JsonDecodeError {
 3. `normalized_line()`/`normalized_column()` 用于解析和反序列化阶段定位，
    坐标相对于规范化后的 JSON 文本，无法定位时保持 `None`。
 4. `expected_top_level`/`actual_top_level` 仅用于 `UnexpectedTopLevel`。
-5. `raw_input_bytes()`、`normalized_input_bytes()` 与 `max_input_bytes()` 用于
-   输入大小限制和解析诊断。
+5. `raw_input_bytes()`、`normalized_input_bytes()`、`max_input_bytes()` 与
+   `max_normalized_bytes()` 用于输入大小限制和解析诊断。
 6. `privacy_policy()` 记录错误构造时实际生效的诊断策略，并参与稳定字段相等性
    比较。
 7. 默认 `Redacted` 在错误构造时只保留稳定前缀和规范化后行列，不格式化或保存

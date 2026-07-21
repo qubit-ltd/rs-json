@@ -101,6 +101,50 @@ fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
 }
 
+/// Verifies that decode value rejects control-character expansion above the
+/// normalized-size limit before allocating repaired JSON text.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
+#[test]
+fn test_decode_value_rejects_control_character_expansion_above_normalized_size_limit() {
+    let input = "\"\u{0000}\"";
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default().with_max_normalized_bytes(Some(7)),
+    );
+
+    let error = decoder
+        .decode::<String>(input)
+        .expect_err("control-character expansion above the normalized limit must fail");
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
+    assert_eq!(error.stage(), JsonDecodeStage::Normalize);
+    assert_eq!(error.raw_input_bytes(), input.len());
+    assert_eq!(error.normalized_input_bytes(), Some(8));
+    assert_eq!(error.max_input_bytes(), None);
+    assert_eq!(error.max_normalized_bytes(), Some(7));
+}
+
+/// Verifies that decode value accepts control-character expansion at the
+/// normalized-size limit.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
+#[test]
+fn test_decode_value_accepts_control_character_expansion_at_normalized_size_limit() {
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default().with_max_normalized_bytes(Some(8)),
+    );
+
+    let value = decoder
+        .decode::<String>("\"\u{0000}\"")
+        .expect("control-character expansion at the normalized limit must decode");
+
+    assert_eq!(value, "\u{0000}");
+}
+
 /// Verifies that decode value strips utf8 bom by default.
 ///
 /// # Panics
