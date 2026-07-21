@@ -251,6 +251,11 @@ impl LenientJsonDecoder {
     /// Returns [`JsonDecodeError`] when normalization or parsing fails, when
     /// the validated top-level kind differs from `expected`, or when target
     /// deserialization fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics from `T`'s `Deserialize` implementation or visitor methods are
+    /// not caught and propagate to the caller.
     fn decode_with_top_level<T>(
         &self,
         input: &str,
@@ -375,6 +380,11 @@ impl LenientJsonDecoder {
     /// Returns [`JsonDecodeError`] classified as invalid JSON for syntax and
     /// end-of-input failures. A data error is classified as a deserialization
     /// failure only when complete syntax validation succeeds.
+    ///
+    /// # Panics
+    ///
+    /// Panics from `T`'s `Deserialize` implementation or visitor methods are
+    /// not caught and propagate to the caller.
     #[inline]
     fn deserialize_normalized<T>(
         normalized: &str,
