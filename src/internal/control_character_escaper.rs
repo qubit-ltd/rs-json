@@ -33,6 +33,9 @@ impl ControlCharacterEscaper {
         if !enabled {
             return Cow::Borrowed(input);
         }
+        if !input.as_bytes().iter().any(|byte| *byte < 0x20) {
+            return Cow::Borrowed(input);
+        }
 
         let mut in_string = false;
         let mut in_escape = false;
