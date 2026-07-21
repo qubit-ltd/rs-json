@@ -95,6 +95,9 @@ serde = { version = "1.0", features = ["derive"] }
 只有在像下面第一个快速开始示例那样，为强类型解码派生 `Deserialize` 时，才需要
 直接添加 `serde` 依赖。
 
+若你的代码直接使用 `serde_json::Value` 或 `serde_json` 宏，请自行声明
+`serde_json` 直接依赖；本 crate 有意不再导出它。
+
 ## 快速开始
 
 ### 从 Markdown 代码块中解码 JSON 对象

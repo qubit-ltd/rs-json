@@ -101,6 +101,10 @@ serde = { version = "1.0", features = ["derive"] }
 The direct `serde` dependency is only needed when deriving `Deserialize` for
 typed decoding, as shown in the first quick-start example below.
 
+If your code names `serde_json::Value` or uses `serde_json` macros, add
+`serde_json` as a direct dependency. This crate intentionally does not
+re-export it.
+
 ## Quick Start
 
 ### Decode a JSON Object from a Markdown Code Fence
