@@ -58,7 +58,8 @@ serde_json / typed output
 2. 规范化作为解码内部阶段，保持对象边界稳定。
 3. 内部组件按职责拆分：`internal/lenient_json_normalizer.rs` 承载预处理策略，
    `internal/markdown_fence.rs` 负责 Markdown 围栏识别与剥离，
-   `internal/control_character_escaper.rs` 以单次、惰性分配扫描处理字符串内 C0 控制字符。
+   `internal/control_character_escaper.rs` 先以 C0 快速预检跳过不含控制字符的输入；命中后
+   进行状态扫描，并仅在首次替换时惰性分配处理字符串内 C0 控制字符。
 
 ## 4. 核心对象模型
 
