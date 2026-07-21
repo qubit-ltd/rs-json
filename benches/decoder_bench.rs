@@ -165,12 +165,12 @@ fn benchmark_decoder(c: &mut Criterion) {
 fn benchmark_downstream_scaling(c: &mut Criterion) {
     let strict_decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
     let default_decoder = LenientJsonDecoder::default();
-    let mut strict_group = c.benchmark_group("downstream-strict-bytes");
+    let mut plain_group = c.benchmark_group("downstream-plain-bytes");
 
     for payload_bytes in [1_024_usize, 65_536, 1_048_576] {
         let input = benchmark_record_input(payload_bytes, None);
-        strict_group.throughput(Throughput::Bytes(input.len() as u64));
-        strict_group.bench_with_input(
+        plain_group.throughput(Throughput::Bytes(input.len() as u64));
+        plain_group.bench_with_input(
             BenchmarkId::new("serde_json_from_slice", payload_bytes),
             &input,
             |bencher, input| {
@@ -184,8 +184,8 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
                 });
             },
         );
-        strict_group.bench_with_input(
-            BenchmarkId::new("decoder_decode_slice", payload_bytes),
+        plain_group.bench_with_input(
+            BenchmarkId::new("strict_decoder_decode_slice", payload_bytes),
             &input,
             |bencher, input| {
                 bencher.iter(|| {
@@ -201,17 +201,39 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
                 });
             },
         );
+        plain_group.bench_with_input(
+            BenchmarkId::new("default_decoder_decode_slice", payload_bytes),
+            &input,
+            |bencher, input| {
+                bencher.iter(|| {
+                    consume_record(
+                        default_decoder
+                            .decode_slice::<BenchmarkRecord>(black_box(
+                                input.as_bytes(),
+                            ))
+                            .expect(
+                                "default decoder byte benchmark input must decode",
+                            ),
+                    )
+                });
+            },
+        );
     }
-    strict_group.finish();
+    plain_group.finish();
 
     let mut lenient_group = c.benchmark_group("downstream-lenient-typed");
     for payload_bytes in [1_024_usize, 65_536, 1_048_576] {
         let plain = benchmark_record_input(payload_bytes, None);
         let fenced = format!("```json\n{plain}\n```");
+        let pretty = format!(
+            "{{\n  \"id\": 7,\n  \"text\": \"{}\"\n}}",
+            "a".repeat(payload_bytes),
+        );
         let sparse_control = benchmark_record_input(payload_bytes, Some(1_024));
         for (name, input) in [
             ("plain", plain),
             ("fenced", fenced),
+            ("pretty", pretty),
             ("sparse-control", sparse_control),
         ] {
             lenient_group.throughput(Throughput::Bytes(input.len() as u64));
