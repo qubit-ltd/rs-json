@@ -313,7 +313,8 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
     });
     for payload_bytes in [65_536_usize, 1_048_576] {
         let plain = benchmark_record_input(payload_bytes, None);
-        let first_field_type_error = plain.replacen("\"id\":7", "\"id\":\"wrong\"", 1);
+        let first_field_type_error =
+            plain.replacen("\"id\":7", "\"id\":\"wrong\"", 1);
         let last_field_type_error = format!(
             "{{\"text\":\"{}\",\"id\":\"wrong\"}}",
             "a".repeat(payload_bytes),
