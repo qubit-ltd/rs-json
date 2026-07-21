@@ -250,8 +250,8 @@ Qubit JSON 适合这些情况：
 ## 开发验证
 
 先运行 `./align-ci.sh`，再运行 `./ci-check.sh`。Criterion 基准覆盖小输入公开入口对比、
-HTTP 风格严格字节解码、最大 1 MiB 的 LLM 风格宽松类型解码、规范化密度和代表性失败路径，
-可通过 `cargo bench --bench decoder_bench --no-run` 编译。
+HTTP 风格严格字节解码（包含复用解码器和按次构造解码器）、最大 1 MiB 的 LLM 风格宽松类型解码、
+规范化密度和代表性失败路径，可通过 `cargo bench --bench decoder_bench --no-run` 编译。
 
 可选 fuzz 目标仅用于开发，不会成为运行时依赖。它覆盖默认、严格、仅 JSON 围栏和
 必须闭合围栏四类策略，并由 `.github/workflows/fuzz.yml` 定时执行有时限的运行；失败时会保留

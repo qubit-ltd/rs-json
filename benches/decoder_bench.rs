@@ -154,6 +154,11 @@ fn benchmark_decoder(c: &mut Criterion) {
 
 /// Runs size-scaling benchmarks that mirror the HTTP and LLM SDK consumers.
 ///
+/// The strict byte benchmarks include both a reused decoder and a decoder
+/// constructed inside the measured iteration. The latter mirrors the current
+/// `rs-http` call sites, which configure strict decoding immediately before
+/// each response or SSE payload is decoded.
+///
 /// # Parameters
 ///
 /// * `c` - Criterion context used to register downstream-shaped benchmarks.
@@ -191,6 +196,29 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
                 bencher.iter(|| {
                     consume_record(
                         strict_decoder
+                            .decode_slice::<BenchmarkRecord>(black_box(
+                                input.as_bytes(),
+                            ))
+                            .expect(
+                                "strict decoder byte benchmark input must decode",
+                            ),
+                    )
+                });
+            },
+        );
+        plain_group.bench_with_input(
+            BenchmarkId::new(
+                "strict_decoder_construct_and_decode_slice",
+                payload_bytes,
+            ),
+            &input,
+            |bencher, input| {
+                bencher.iter(|| {
+                    let decoder = LenientJsonDecoder::new(
+                        JsonDecodeOptions::strict(),
+                    );
+                    consume_record(
+                        decoder
                             .decode_slice::<BenchmarkRecord>(black_box(
                                 input.as_bytes(),
                             ))
