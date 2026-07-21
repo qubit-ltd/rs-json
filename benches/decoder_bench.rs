@@ -311,6 +311,37 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             )
         });
     });
+    for payload_bytes in [65_536_usize, 1_048_576] {
+        let plain = benchmark_record_input(payload_bytes, None);
+        let first_field_type_error = plain.replacen("\"id\":7", "\"id\":\"wrong\"", 1);
+        let last_field_type_error = format!(
+            "{{\"text\":\"{}\",\"id\":\"wrong\"}}",
+            "a".repeat(payload_bytes),
+        );
+
+        for (name, input) in [
+            ("first-field-type-error", first_field_type_error),
+            ("last-field-type-error", last_field_type_error),
+        ] {
+            failure_group.throughput(Throughput::Bytes(input.len() as u64));
+            failure_group.bench_with_input(
+                BenchmarkId::new(name, payload_bytes),
+                &input,
+                |bencher, input| {
+                    bencher.iter(|| {
+                        black_box(
+                            strict_decoder
+                                .decode_slice::<BenchmarkRecord>(black_box(input.as_bytes()))
+                                .map_or_else(
+                                    |error| error,
+                                    |_| panic!("type-mismatched benchmark input must fail"),
+                                ),
+                        )
+                    });
+                },
+            );
+        }
+    }
     failure_group.finish();
 }
 
