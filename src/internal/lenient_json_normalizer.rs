@@ -87,6 +87,9 @@ impl LenientJsonNormalizer {
         let raw_input_bytes = input.len();
         self.require_within_size_limit(input)?;
         let input = self.require_non_empty(input, raw_input_bytes)?;
+        // Keep strict decoding on this shared pipeline: disabled stages return
+        // the input unchanged, while a dedicated bypass added option checks
+        // without a stable A/B benefit for downstream-sized inputs.
         let input = self.trim_if_enabled(input);
         let input = self.strip_utf8_bom(input);
         let input = self.trim_if_enabled(input);
