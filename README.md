@@ -263,8 +263,9 @@ This README reflects the current object model:
 
 Run the repository checks with `./align-ci.sh` followed by `./ci-check.sh`.
 Criterion benchmarks cover small public-entry comparisons, HTTP-style strict
-byte decoding, LLM-style lenient typed decoding up to 1 MiB, normalization
-density, and representative failure paths. Compile them with:
+byte decoding (with both reused and per-call decoder construction), LLM-style
+lenient typed decoding up to 1 MiB, normalization density, and representative
+failure paths. Compile them with:
 
 ```bash
 cargo bench --bench decoder_bench --no-run
