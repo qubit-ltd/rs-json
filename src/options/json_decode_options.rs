@@ -15,7 +15,7 @@ use crate::{
 
 /// Configuration switches for [`crate::LenientJsonDecoder`].
 ///
-/// Its fields control text normalization, raw input limits, and error
+/// Its fields control text normalization, input limits, and error
 /// diagnostics. Defaults are intentionally conservative and cover the most
 /// common non-fully-trusted text inputs without attempting aggressive repair.
 ///
@@ -49,6 +49,12 @@ pub struct JsonDecodeOptions {
     /// size limit is enforced. This does not bound normalized allocation size:
     /// escaping a raw control byte can expand it to six ASCII bytes.
     max_input_bytes: Option<usize>,
+    /// Caps the normalized JSON byte size before the decoder allocates repaired
+    /// text for raw control characters.
+    ///
+    /// When set to `Some(limit)`, the final normalized text must not exceed
+    /// `limit` bytes. When set to `None`, no normalized-size limit is enforced.
+    max_normalized_bytes: Option<usize>,
     /// Controls whether decoding errors retain input-derived serde details.
     error_privacy_policy: ErrorPrivacyPolicy,
 }
@@ -70,6 +76,7 @@ impl JsonDecodeOptions {
             },
             escape_control_chars_in_strings: true,
             max_input_bytes: None,
+            max_normalized_bytes: None,
             error_privacy_policy: ErrorPrivacyPolicy::Redacted,
         }
     }
@@ -93,6 +100,7 @@ impl JsonDecodeOptions {
             markdown_fence_policy: MarkdownFencePolicy::Disabled,
             escape_control_chars_in_strings: false,
             max_input_bytes: None,
+            max_normalized_bytes: None,
             error_privacy_policy: ErrorPrivacyPolicy::Redacted,
         }
     }
@@ -249,6 +257,40 @@ impl JsonDecodeOptions {
         max_input_bytes: Option<usize>,
     ) -> Self {
         self.max_input_bytes = max_input_bytes;
+        self
+    }
+
+    /// Returns the normalized JSON byte-size limit.
+    ///
+    /// # Returns
+    ///
+    /// `Some(limit)` when normalized JSON is capped at `limit` bytes, or
+    /// `None` when the decoder enforces no normalized-size limit.
+    #[inline(always)]
+    pub const fn max_normalized_bytes(&self) -> Option<usize> {
+        self.max_normalized_bytes
+    }
+
+    /// Returns these options with a normalized JSON byte-size limit.
+    ///
+    /// The decoder calculates the normalized size before allocating repaired
+    /// text for raw control characters, so this limit also bounds the
+    /// allocation caused by supported control-character escaping.
+    ///
+    /// # Parameters
+    ///
+    /// * `max_normalized_bytes` - `Some(limit)` to cap normalized JSON at
+    ///   `limit` bytes, or `None` to remove the limit.
+    ///
+    /// # Returns
+    ///
+    /// The updated option set.
+    #[inline(always)]
+    pub const fn with_max_normalized_bytes(
+        mut self,
+        max_normalized_bytes: Option<usize>,
+    ) -> Self {
+        self.max_normalized_bytes = max_normalized_bytes;
         self
     }
 

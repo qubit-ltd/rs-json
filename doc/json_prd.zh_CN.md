@@ -87,9 +87,11 @@
 - 验收标准
   - 配置字段包含 `trim_whitespace`、`strip_utf8_bom`、
     `markdown_fence_policy`、`escape_control_chars_in_strings`、
-    `max_input_bytes`、`error_privacy_policy`。
+    `max_input_bytes`、`max_normalized_bytes`、`error_privacy_policy`。
   - 所有字段保持私有，每个选项均有只读 getter 和值式 `with_*` builder。
   - `with_max_input_bytes(Some(limit))` 设置限制，传入 `None` 可清除限制。
+  - `with_max_normalized_bytes(Some(limit))` 在控制字符修复分配前限制规范化后 JSON
+    字节数，传入 `None` 可清除限制。
   - `markdown_fence_policy` 用单一枚举表达禁用、任意语言和仅 JSON 围栏，以及
     可选或必须闭合，避免多个布尔字段组合出矛盾状态。
   - 默认只移除空标签、`json` 或 `jsonc` 围栏；任意语言需显式选择 `Any`。

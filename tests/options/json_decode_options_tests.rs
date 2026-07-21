@@ -34,6 +34,7 @@ fn test_default_enables_all_mvp_rules() {
     );
     assert!(options.escape_control_chars_in_strings());
     assert_eq!(options.max_input_bytes(), None);
+    assert_eq!(options.max_normalized_bytes(), None);
     assert_eq!(options.error_privacy_policy(), ErrorPrivacyPolicy::Redacted,);
 }
 
@@ -63,6 +64,7 @@ fn test_strict_disables_all_normalization_rules() {
     );
     assert!(!options.escape_control_chars_in_strings());
     assert_eq!(options.max_input_bytes(), None);
+    assert_eq!(options.max_normalized_bytes(), None);
     assert_eq!(options.error_privacy_policy(), ErrorPrivacyPolicy::Redacted,);
 }
 
@@ -82,14 +84,25 @@ fn test_builders_set_requested_policies() {
         .with_markdown_fence_policy(markdown_fence_policy.clone())
         .with_escape_control_chars_in_strings(true)
         .with_max_input_bytes(Some(64))
+        .with_max_normalized_bytes(Some(128))
         .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed);
     assert!(options.trim_whitespace());
     assert!(options.strip_utf8_bom());
     assert_eq!(options.markdown_fence_policy(), &markdown_fence_policy);
     assert!(options.escape_control_chars_in_strings());
     assert_eq!(options.max_input_bytes(), Some(64));
+    assert_eq!(options.max_normalized_bytes(), Some(128));
     assert_eq!(options.error_privacy_policy(), ErrorPrivacyPolicy::Detailed,);
-    assert_eq!(options.with_max_input_bytes(None).max_input_bytes(), None,);
+    assert_eq!(
+        options.clone().with_max_input_bytes(None).max_input_bytes(),
+        None,
+    );
+    assert_eq!(
+        options
+            .with_max_normalized_bytes(None)
+            .max_normalized_bytes(),
+        None,
+    );
 }
 
 /// Verifies that options are cloneable and equatable.

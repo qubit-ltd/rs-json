@@ -78,8 +78,8 @@ impl LenientJsonNormalizer {
     ///
     /// # Errors
     ///
-    /// Returns [`JsonDecodeError`] when the raw input exceeds its configured
-    /// limit or becomes empty at a normalization boundary.
+    /// Returns [`JsonDecodeError`] when the raw or normalized input exceeds its
+    /// configured limit or becomes empty at a normalization boundary.
     pub(crate) fn normalize<'a>(
         &self,
         input: &'a str,
@@ -98,6 +98,7 @@ impl LenientJsonNormalizer {
             self.options.markdown_fence_policy(),
         );
         let input = self.trim_if_enabled(input);
+        self.require_within_normalized_size_limit(input, raw_input_bytes)?;
         let input = ControlCharacterEscaper::escape(
             input,
             self.options.escape_control_chars_in_strings(),
@@ -175,6 +176,44 @@ impl LenientJsonNormalizer {
             if size > limit {
                 return Err(JsonDecodeError::input_too_large(
                     size,
+                    limit,
+                    self.options.error_privacy_policy(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Rejects normalized input that exceeds the configured size limit.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Text after non-allocating normalization steps.
+    /// * `raw_input_bytes` - Original raw input length in bytes.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when normalized text is within the limit or no limit is
+    /// configured.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] before allocating repaired control-character
+    /// escapes when the normalized text would exceed the configured limit.
+    fn require_within_normalized_size_limit(
+        &self,
+        input: &str,
+        raw_input_bytes: usize,
+    ) -> Result<(), JsonDecodeError> {
+        if let Some(limit) = self.options.max_normalized_bytes() {
+            let normalized_input_bytes = ControlCharacterEscaper::normalized_len(
+                input,
+                self.options.escape_control_chars_in_strings(),
+            );
+            if normalized_input_bytes > limit {
+                return Err(JsonDecodeError::normalized_input_too_large(
+                    raw_input_bytes,
+                    normalized_input_bytes,
                     limit,
                     self.options.error_privacy_policy(),
                 ));

@@ -33,7 +33,8 @@ use std::{
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeErrorKind {
-    /// Indicates that the raw input size exceeds the configured maximum.
+    /// Indicates that raw or normalized input size exceeds a configured
+    /// maximum.
     InputTooLarge,
     /// Indicates that the input became empty after normalization.
     EmptyInput,

@@ -57,6 +57,31 @@ fn test_error_display_for_input_too_large_uses_message() {
     assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
 }
 
+/// Verifies that error display for normalized input too large exposes both
+/// normalized size diagnostics and the dedicated limit.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
+#[test]
+fn test_error_display_for_normalized_input_too_large_uses_message() {
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default().with_max_normalized_bytes(Some(7)),
+    );
+    let error = decoder
+        .decode::<String>("\"\u{0000}\"")
+        .expect_err("oversized normalized input should return an input-too-large error");
+    assert_eq!(
+        error.to_string(),
+        "Normalized JSON input is too large: 8 bytes exceed configured limit 7 bytes"
+    );
+    assert_eq!(error.raw_input_bytes(), 3);
+    assert_eq!(error.normalized_input_bytes(), Some(8));
+    assert_eq!(error.max_input_bytes(), None);
+    assert_eq!(error.max_normalized_bytes(), Some(7));
+    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
+}
+
 /// Verifies that error exposes top level mismatch context.
 ///
 /// # Panics

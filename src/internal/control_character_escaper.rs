@@ -17,6 +17,41 @@ use std::borrow::Cow;
 pub(super) struct ControlCharacterEscaper;
 
 impl ControlCharacterEscaper {
+    /// Returns the byte length produced by control-character escaping.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - JSON-like text to scan.
+    /// * `enabled` - Whether raw control characters should be escaped.
+    ///
+    /// # Returns
+    ///
+    /// The input length when escaping is disabled or no replacement is needed;
+    /// otherwise, the length of the repaired JSON text. The calculation does
+    /// not allocate.
+    #[must_use]
+    pub(super) fn normalized_len(input: &str, enabled: bool) -> usize {
+        if !enabled || !input.as_bytes().iter().any(|byte| *byte < 0x20) {
+            return input.len();
+        }
+
+        let mut in_string = false;
+        let mut in_escape = false;
+        let mut normalized_len = input.len();
+
+        for byte in input.bytes() {
+            if let Some(replacement) =
+                Self::replacement(byte, &mut in_string, &mut in_escape)
+            {
+                normalized_len = normalized_len.saturating_add(
+                    replacement.len().saturating_sub(1),
+                );
+            }
+        }
+
+        normalized_len
+    }
+
     /// Escapes raw C0 control characters in JSON string literals when enabled.
     ///
     /// # Parameters
