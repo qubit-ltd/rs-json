@@ -12,6 +12,7 @@ use serde_json::json;
 use qubit_json::{
     JsonDecodeErrorKind,
     JsonDecodeOptions,
+    JsonDecodeStage,
     LenientJsonDecoder,
 };
 
@@ -97,6 +98,39 @@ fn test_decode_value_covers_all_supported_control_char_escapes() {
         "all supported ASCII control characters should be escaped successfully",
     );
     assert_eq!(value, json!({"text": control_text}));
+}
+
+/// Verifies that the normalized-size limit accounts for every C0 escape.
+///
+/// # Panics
+///
+/// Panics when the configured boundary or error metadata is not observed.
+#[test]
+fn test_decode_value_bounds_all_control_character_escapes_by_normalized_size() {
+    let control_chars: String = (0_u8..=0x1f).map(char::from).collect();
+    let json_input = format!("{{\"text\":\"{control_chars}\"}}");
+    let normalized_bytes =
+        "{\"text\":\"".len() + (5 * 2) + (27 * 6) + "\"}".len();
+
+    let accepted = LenientJsonDecoder::new(
+        JsonDecodeOptions::default()
+            .with_max_normalized_bytes(Some(normalized_bytes)),
+    )
+    .decode_value(&json_input)
+    .expect("all C0 replacements should fit exactly at their normalized limit");
+    assert_eq!(accepted, json!({"text": control_chars}));
+
+    let error = LenientJsonDecoder::new(
+        JsonDecodeOptions::default()
+            .with_max_normalized_bytes(Some(normalized_bytes - 1)),
+    )
+    .decode_value(&json_input)
+    .expect_err("one byte below the C0 replacement size must fail");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
+    assert_eq!(error.stage(), JsonDecodeStage::Normalize);
+    assert_eq!(error.normalized_input_bytes(), Some(normalized_bytes));
+    assert_eq!(error.max_normalized_bytes(), Some(normalized_bytes - 1));
+    assert_eq!(error.max_input_bytes(), None);
 }
 
 /// Verifies that decode value escapes control char after unmatched backslash.

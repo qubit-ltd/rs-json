@@ -115,6 +115,10 @@ fuzz_target!(|data: &[u8]| {
                 },
             ),
         ),
+        LenientJsonDecoder::new(
+            JsonDecodeOptions::lenient()
+                .with_max_normalized_bytes(Some(input.len())),
+        ),
     ];
 
     for decoder in decoders {
