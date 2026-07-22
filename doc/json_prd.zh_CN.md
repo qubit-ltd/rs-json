@@ -101,7 +101,7 @@
 
 - 验收标准
   - 规范化顺序固定为：
-    `require_within_size_limit -> require_non_empty -> trim -> strip_bom -> trim -> strip_fence -> trim -> escape_control_chars`。
+    `require_within_size_limit -> require_non_empty -> trim -> strip_bom -> trim -> strip_fence -> trim -> require_within_normalized_size_limit -> escape_control_chars`。
   - 不发生修改时尽量复用输入，减少分配。
 
 ### PRD-RSJSON-004：`decode<T>()`

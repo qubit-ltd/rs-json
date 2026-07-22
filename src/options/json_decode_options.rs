@@ -49,11 +49,12 @@ pub struct JsonDecodeOptions {
     /// size limit is enforced. This does not bound normalized allocation size:
     /// escaping a raw control byte can expand it to six ASCII bytes.
     max_input_bytes: Option<usize>,
-    /// Caps the normalized JSON byte size before the decoder allocates repaired
-    /// text for raw control characters.
+    /// Caps the normalized JSON byte size before the decoder allocates
+    /// repaired text for raw control characters.
     ///
     /// When set to `Some(limit)`, the final normalized text must not exceed
-    /// `limit` bytes. When set to `None`, no normalized-size limit is enforced.
+    /// `limit` bytes. When set to `None`, no normalized-size limit is
+    /// enforced.
     max_normalized_bytes: Option<usize>,
     /// Controls whether decoding errors retain input-derived serde details.
     error_privacy_policy: ErrorPrivacyPolicy,
@@ -83,13 +84,14 @@ impl JsonDecodeOptions {
 
     /// Creates an option set that disables all text-rewriting rules.
     ///
-    /// The decoder still applies empty-input classification, an optional raw
-    /// input-size limit, the configured privacy policy, and stable error
-    /// mapping before or around parsing and deserialization.
+    /// The decoder still applies empty-input classification, optional raw and
+    /// normalized input-size limits, the configured privacy policy, and stable
+    /// error mapping before or around parsing and deserialization.
     ///
     /// # Returns
     ///
-    /// An option set that leaves input text unchanged, applies no size limit,
+    /// An option set that leaves input text unchanged, applies no raw or
+    /// normalized size limit,
     /// delegates parsing and deserialization to `serde_json`, and redacts
     /// input-derived error details.
     #[inline]
