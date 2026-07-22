@@ -163,6 +163,26 @@ fn test_decode_value_escapes_control_char_after_unmatched_backslash() {
     }
 }
 
+/// Verifies that an equal-length unmatched-backslash repair still occurs when
+/// a normalized-size limit is configured.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
+#[test]
+fn test_decode_value_repairs_equal_length_escape_at_normalized_size_limit() {
+    let json_input = "{\"text\":\"\\\n\"}";
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default()
+            .with_max_normalized_bytes(Some(json_input.len())),
+    );
+
+    let value = decoder.decode_value(json_input).expect(
+        "equal-length repair should still run with a normalized-size limit",
+    );
+    assert_eq!(value, json!({"text": "\n"}));
+}
+
 /// Verifies that decode value escapes control chars after odd and even
 /// backslashes.
 ///
