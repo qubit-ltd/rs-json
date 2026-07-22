@@ -183,6 +183,7 @@
   - `tests/internal/markdown_fence_tests.rs`
   - `tests/options/json_decode_options_tests.rs`
   - `tests/error/error_privacy_policy_tests.rs`
+  - `tests/error/internal/json_input_size_limit_tests.rs`
   - `tests/error/json_decode_error_tests.rs`
   - `tests/json_top_level_kind_tests.rs`
   - `tests/error/json_decode_error_kind_tests.rs`

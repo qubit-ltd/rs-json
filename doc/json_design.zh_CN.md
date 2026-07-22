@@ -305,6 +305,9 @@ rust-common/rs-json/
   │   ├─ error/
   │   │   ├─ mod.rs
   │   │   ├─ error_privacy_policy.rs
+  │   │   ├─ internal/
+  │   │   │   ├─ mod.rs
+  │   │   │   └─ json_input_size_limit.rs
   │   │   ├─ json_decode_error.rs
   │   │   ├─ json_decode_error_kind.rs
   │   │   └─ json_decode_stage.rs
@@ -335,6 +338,9 @@ rust-common/rs-json/
   │   ├─ error/
   │   │   ├─ mod.rs
   │   │   ├─ error_privacy_policy_tests.rs
+  │   │   ├─ internal/
+  │   │   │   ├─ mod.rs
+  │   │   │   └─ json_input_size_limit_tests.rs
   │   │   ├─ json_decode_error_kind_tests.rs
   │   │   ├─ json_decode_error_tests.rs
   │   │   └─ json_decode_stage_tests.rs
