@@ -30,7 +30,7 @@ impl ControlCharacterEscaper {
     /// replacement is required. The calculation does not allocate.
     #[must_use]
     pub(super) fn scan(input: &str, enabled: bool) -> (usize, bool) {
-        if !enabled || !input.as_bytes().iter().any(|byte| *byte < 0x20) {
+        if !enabled || !Self::contains_ascii_control(input) {
             return (input.len(), false);
         }
 
@@ -68,7 +68,7 @@ impl ControlCharacterEscaper {
         if !enabled {
             return Cow::Borrowed(input);
         }
-        if !input.as_bytes().iter().any(|byte| *byte < 0x20) {
+        if !Self::contains_ascii_control(input) {
             return Cow::Borrowed(input);
         }
 
@@ -98,6 +98,32 @@ impl ControlCharacterEscaper {
         }
 
         Self::rewrite(input, normalized_len)
+    }
+
+    /// Reports whether the input contains at least one ASCII C0 byte.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - JSON-like UTF-8 text to inspect without allocation.
+    ///
+    /// # Returns
+    ///
+    /// `true` when a byte is below `0x20`; otherwise `false`. Eight-byte
+    /// chunks are checked together, while the short remainder is checked byte
+    /// by byte. Setting each byte's high bit before subtracting `0x20` prevents
+    /// cross-byte borrows, so UTF-8 bytes are never treated as C0 controls.
+    #[inline]
+    fn contains_ascii_control(input: &str) -> bool {
+        const HIGH_BITS: u64 = 0x8080_8080_8080_8080;
+        const CONTROL_OFFSET: u64 = 0x2020_2020_2020_2020;
+
+        let (chunks, remainder) = input.as_bytes().as_chunks::<8>();
+        chunks.iter().any(|chunk| {
+            let bytes = u64::from_ne_bytes(*chunk);
+            let high_bits =
+                (bytes | HIGH_BITS).wrapping_sub(CONTROL_OFFSET) & HIGH_BITS;
+            high_bits != HIGH_BITS
+        }) || remainder.iter().any(|byte| *byte < 0x20)
     }
 
     /// Rewrites raw C0 controls using the requested initial capacity.
