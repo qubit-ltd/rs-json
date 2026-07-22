@@ -423,8 +423,6 @@ fn test_decode_value_trims_before_control_character_repair() {
     let decoder = LenientJsonDecoder::default();
     let value = decoder
         .decode_value("```json\n  {\"text\":\"a\nb\"}  \n```")
-        .expect(
-            "outer whitespace should be removed before repair allocates an owned string",
-        );
+        .expect("outer whitespace should be removed before repair allocates an owned string");
     assert_eq!(value, json!({"text": "a\nb"}));
 }
