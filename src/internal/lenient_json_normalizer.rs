@@ -206,10 +206,11 @@ impl LenientJsonNormalizer {
         raw_input_bytes: usize,
     ) -> Result<(), JsonDecodeError> {
         if let Some(limit) = self.options.max_normalized_bytes() {
-            let normalized_input_bytes = ControlCharacterEscaper::normalized_len(
-                input,
-                self.options.escape_control_chars_in_strings(),
-            );
+            let normalized_input_bytes =
+                ControlCharacterEscaper::normalized_len(
+                    input,
+                    self.options.escape_control_chars_in_strings(),
+                );
             if normalized_input_bytes > limit {
                 return Err(JsonDecodeError::normalized_input_too_large(
                     raw_input_bytes,

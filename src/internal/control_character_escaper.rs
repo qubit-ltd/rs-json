@@ -43,9 +43,8 @@ impl ControlCharacterEscaper {
             if let Some(replacement) =
                 Self::replacement(byte, &mut in_string, &mut in_escape)
             {
-                normalized_len = normalized_len.saturating_add(
-                    replacement.len().saturating_sub(1),
-                );
+                normalized_len = normalized_len
+                    .saturating_add(replacement.len().saturating_sub(1));
             }
         }
 
