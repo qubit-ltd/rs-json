@@ -8,6 +8,7 @@
 //! Error types returned by the lenient JSON decoder.
 
 mod error_privacy_policy;
+mod internal;
 mod json_decode_error;
 mod json_decode_error_kind;
 mod json_decode_stage;

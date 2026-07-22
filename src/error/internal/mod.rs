@@ -5,10 +5,8 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for decoder error types and diagnostics.
+//! Private support types for JSON decoding errors.
 
-mod error_privacy_policy_tests;
-mod internal;
-mod json_decode_error_kind_tests;
-mod json_decode_error_tests;
-mod json_decode_stage_tests;
+mod json_input_size_limit;
+
+pub(super) use json_input_size_limit::JsonInputSizeLimit;
