@@ -108,15 +108,16 @@ fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_decode_value_rejects_control_character_expansion_above_normalized_size_limit() {
+fn test_decode_value_rejects_control_character_expansion_above_normalized_size_limit()
+ {
     let input = "\"\u{0000}\"";
     let decoder = LenientJsonDecoder::new(
         JsonDecodeOptions::default().with_max_normalized_bytes(Some(7)),
     );
 
-    let error = decoder
-        .decode::<String>(input)
-        .expect_err("control-character expansion above the normalized limit must fail");
+    let error = decoder.decode::<String>(input).expect_err(
+        "control-character expansion above the normalized limit must fail",
+    );
 
     assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
     assert_eq!(error.stage(), JsonDecodeStage::Normalize);
@@ -133,16 +134,51 @@ fn test_decode_value_rejects_control_character_expansion_above_normalized_size_l
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_decode_value_accepts_control_character_expansion_at_normalized_size_limit() {
+fn test_decode_value_accepts_control_character_expansion_at_normalized_size_limit()
+ {
     let decoder = LenientJsonDecoder::new(
         JsonDecodeOptions::default().with_max_normalized_bytes(Some(8)),
     );
 
-    let value = decoder
-        .decode::<String>("\"\u{0000}\"")
-        .expect("control-character expansion at the normalized limit must decode");
+    let value = decoder.decode::<String>("\"\u{0000}\"").expect(
+        "control-character expansion at the normalized limit must decode",
+    );
 
     assert_eq!(value, "\u{0000}");
+}
+
+/// Verifies that the normalized-size limit runs after fences and whitespace
+/// are removed.
+///
+/// # Panics
+///
+/// Panics when the post-fence normalized boundary or metadata is not observed.
+#[test]
+fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
+    let input = "\n```json\n\"\u{0000}\"\n```\n";
+    let normalized_bytes = "\"\\u0000\"".len();
+
+    let accepted = LenientJsonDecoder::new(
+        JsonDecodeOptions::default()
+            .with_max_normalized_bytes(Some(normalized_bytes)),
+    )
+    .decode::<String>(input)
+    .expect(
+        "fence and whitespace should not count toward the normalized limit",
+    );
+    assert_eq!(accepted, "\u{0000}");
+
+    let error = LenientJsonDecoder::new(
+        JsonDecodeOptions::default()
+            .with_max_normalized_bytes(Some(normalized_bytes - 1)),
+    )
+    .decode::<String>(input)
+    .expect_err("one byte below the post-fence normalized size must fail");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
+    assert_eq!(error.stage(), JsonDecodeStage::Normalize);
+    assert_eq!(error.raw_input_bytes(), input.len());
+    assert_eq!(error.normalized_input_bytes(), Some(normalized_bytes));
+    assert_eq!(error.max_normalized_bytes(), Some(normalized_bytes - 1));
 }
 
 /// Verifies that decode value strips utf8 bom by default.
