@@ -392,6 +392,15 @@ fn benchmark_control_character_scaling(c: &mut Criterion) {
             [("plain", None), ("sparse", Some(1_024)), ("dense", Some(2))]
         {
             let input = control_character_input(payload_bytes, control_stride);
+            let normalized_limit = normalized_control_character_input_bytes(
+                input.len(),
+                payload_bytes,
+                control_stride,
+            );
+            let bounded_decoder = LenientJsonDecoder::new(
+                JsonDecodeOptions::default()
+                    .with_max_normalized_bytes(Some(normalized_limit)),
+            );
             group.throughput(Throughput::Bytes(input.len() as u64));
             group.bench_with_input(
                 BenchmarkId::new(name, payload_bytes),
@@ -408,9 +417,52 @@ fn benchmark_control_character_scaling(c: &mut Criterion) {
                     });
                 },
             );
+            group.bench_with_input(
+                BenchmarkId::new(format!("{name}-normalized-limit"), payload_bytes),
+                &input,
+                |bencher, input| {
+                    bencher.iter(|| {
+                        black_box(
+                            bounded_decoder
+                                .decode_value(black_box(input.as_str()))
+                                .expect(
+                                    "bounded benchmark input must decode as a value",
+                                ),
+                        )
+                    });
+                },
+            );
         }
     }
     group.finish();
+}
+
+/// Returns the exact normalized byte size for a generated control input.
+///
+/// # Parameters
+///
+/// * `input_bytes` - Raw byte size of the generated JSON object.
+/// * `payload_bytes` - Number of bytes in its JSON string payload.
+/// * `control_stride` - Optional spacing between raw NUL characters.
+///
+/// # Returns
+///
+/// The repaired JSON byte size, where every raw NUL expands from one byte to
+/// the six-byte `\\u0000` escape.
+///
+/// # Panics
+///
+/// Panics when `control_stride` is `Some(0)`.
+fn normalized_control_character_input_bytes(
+    input_bytes: usize,
+    payload_bytes: usize,
+    control_stride: Option<usize>,
+) -> usize {
+    let control_count = control_stride.map_or(0, |stride| {
+        assert_ne!(stride, 0, "control stride must be nonzero");
+        payload_bytes.div_ceil(stride)
+    });
+    input_bytes + (control_count * 5)
 }
 
 /// Builds a JSON object whose string payload has the requested control density.
