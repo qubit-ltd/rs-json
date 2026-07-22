@@ -20,14 +20,7 @@ use crate::{
     JsonTopLevelKind,
 };
 
-/// Identifies the size limit that rejected JSON input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum JsonInputSizeLimit {
-    /// Stores the configured raw input byte limit.
-    Raw(usize),
-    /// Stores the configured normalized JSON byte limit.
-    Normalized(usize),
-}
+use super::internal::JsonInputSizeLimit;
 
 /// Error returned when lenient JSON decoding fails.
 ///
@@ -459,7 +452,8 @@ impl JsonDecodeError {
     ///
     /// # Returns
     ///
-    /// `Some(limit)` for an input-too-large error, or `None` for other errors.
+    /// `Some(limit)` when raw input exceeded its configured limit, or `None`
+    /// for normalized-size and non-size failures.
     #[inline(always)]
     pub const fn max_input_bytes(&self) -> Option<usize> {
         match self.size_limit {
