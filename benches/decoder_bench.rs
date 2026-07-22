@@ -196,35 +196,22 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
                 bencher.iter(|| {
                     consume_record(
                         strict_decoder
-                            .decode_slice::<BenchmarkRecord>(black_box(
-                                input.as_bytes(),
-                            ))
-                            .expect(
-                                "strict decoder byte benchmark input must decode",
-                            ),
+                            .decode_slice::<BenchmarkRecord>(black_box(input.as_bytes()))
+                            .expect("strict decoder byte benchmark input must decode"),
                     )
                 });
             },
         );
         plain_group.bench_with_input(
-            BenchmarkId::new(
-                "strict_decoder_construct_and_decode_slice",
-                payload_bytes,
-            ),
+            BenchmarkId::new("strict_decoder_construct_and_decode_slice", payload_bytes),
             &input,
             |bencher, input| {
                 bencher.iter(|| {
-                    let decoder = LenientJsonDecoder::new(
-                        JsonDecodeOptions::strict(),
-                    );
+                    let decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
                     consume_record(
                         decoder
-                            .decode_slice::<BenchmarkRecord>(black_box(
-                                input.as_bytes(),
-                            ))
-                            .expect(
-                                "strict decoder byte benchmark input must decode",
-                            ),
+                            .decode_slice::<BenchmarkRecord>(black_box(input.as_bytes()))
+                            .expect("strict decoder byte benchmark input must decode"),
                     )
                 });
             },
@@ -236,12 +223,8 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
                 bencher.iter(|| {
                     consume_record(
                         default_decoder
-                            .decode_slice::<BenchmarkRecord>(black_box(
-                                input.as_bytes(),
-                            ))
-                            .expect(
-                                "default decoder byte benchmark input must decode",
-                            ),
+                            .decode_slice::<BenchmarkRecord>(black_box(input.as_bytes()))
+                            .expect("default decoder byte benchmark input must decode"),
                     )
                 });
             },
@@ -311,16 +294,10 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
         bencher.iter(|| {
             black_box(
                 default_decoder
-                    .decode_object::<BenchmarkRecord>(black_box(
-                        wrong_top_level.as_str(),
-                    ))
+                    .decode_object::<BenchmarkRecord>(black_box(wrong_top_level.as_str()))
                     .map_or_else(
                         |error| error,
-                        |_| {
-                            panic!(
-                                "array benchmark input must fail object decoding"
-                            )
-                        },
+                        |_| panic!("array benchmark input must fail object decoding"),
                     ),
             )
         });
@@ -425,9 +402,7 @@ fn benchmark_control_character_scaling(c: &mut Criterion) {
                         black_box(
                             bounded_decoder
                                 .decode_value(black_box(input.as_str()))
-                                .expect(
-                                    "bounded benchmark input must decode as a value",
-                                ),
+                                .expect("bounded benchmark input must decode as a value"),
                         )
                     });
                 },
