@@ -248,8 +248,10 @@ impl LenientJsonDecoder {
 6. `MarkdownFence::strip_outer(input, policy)`：根据
    `markdown_fence_policy` 可配置去除外层代码块。
 7. `trim_if_enabled(input)`：去除代码块后再次按需裁剪。
-8. `ControlCharacterEscaper::escape(input, enabled)`：可配置转义字符串内控制字符。
-9. 最终空值检查并返回 `Cow<'_, str>`。
+8. `require_within_normalized_size_limit(input, raw_input_bytes)`：按配置的
+   `max_normalized_bytes` 预计算控制字符修复后的字节数，并在分配修复文本前拒绝超限输入。
+9. `ControlCharacterEscaper::escape(input, enabled)`：可配置转义字符串内控制字符。
+10. 最终空值检查并返回 `Cow<'_, str>`。
 
 该管线通过 `LenientJsonNormalizer::normalize()` 单一入口触发，保证顺序不变。
 
