@@ -136,6 +136,21 @@ fn test_decode_value_strips_tilde_code_fence() {
     assert_eq!(value, json!({"a": 1}));
 }
 
+/// Verifies that default trimming removes deep indentation before opening-fence
+/// recognition.
+///
+/// # Panics
+///
+/// Panics when the expected behavior is not observed.
+#[test]
+fn test_decode_value_strips_deeply_indented_opening_fence_after_trimming() {
+    let decoder = LenientJsonDecoder::default();
+    let value = decoder.decode_value("    ```json\n{\"a\":1}\n```").expect(
+        "default trimming should remove opening-fence indentation first",
+    );
+    assert_eq!(value, json!({"a": 1}));
+}
+
 /// Verifies that decode value strips indented code fence when trimming
 /// disabled.
 ///

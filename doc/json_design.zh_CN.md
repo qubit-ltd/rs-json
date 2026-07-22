@@ -249,8 +249,10 @@ impl LenientJsonDecoder {
    `markdown_fence_policy` 可配置去除外层代码块。
 7. `trim_if_enabled(input)`：去除代码块后再次按需裁剪。
 8. `require_within_normalized_size_limit(input, raw_input_bytes)`：按配置的
-   `max_normalized_bytes` 预计算控制字符修复后的字节数，并在分配修复文本前拒绝超限输入。
-9. `ControlCharacterEscaper::escape(input, enabled)`：可配置转义字符串内控制字符。
+   `max_normalized_bytes` 预计算控制字符修复后的字节数和是否需要修复，在分配修复
+   文本前拒绝超限输入，并将扫描结果交给转义阶段复用。
+9. `ControlCharacterEscaper::escape(input, enabled)`：可配置转义字符串内控制字符；
+   配置了规范化大小限制时，通过 `escape_with_scan` 复用上一步扫描结果并精确预分配。
 10. 最终空值检查并返回 `Cow<'_, str>`。
 
 该管线通过 `LenientJsonNormalizer::normalize()` 单一入口触发，保证顺序不变。
@@ -259,9 +261,10 @@ impl LenientJsonDecoder {
 
 - `strip_markdown_code_fence`（由 `markdown_fence_policy` 决定启用、语言范围和
   闭合要求）
-  - 在管线先执行外层 trim 后，仅处理以 3 个或更多反引号或波浪线开头的输入。
-  - opening fence 前只允许 0—3 个 ASCII 空格缩进；tab、非 ASCII 空白或 4 个及
-    以上空格不构成 opening fence。
+  - 启用 trim 时，先移除整个输入的外层空白，再识别以 3 个或更多反引号或波浪线
+    开头的输入；因此 opening fence 原始行首的任意深度空白会先被移除。
+  - 禁用 trim 时，opening fence 前只允许 0—3 个 ASCII 空格缩进；tab、非 ASCII
+    空白或 4 个及以上空格不构成 opening fence。
   - 支持语言标签和无标签两种 fence 开头。
   - JSON-only 模式按 info string 的首个空白分隔 token 判断是否为 JSON-like。
   - closing fence 前最多允许 3 个 ASCII 空格缩进；tab、非 ASCII 空白或 4 个及以上空格不构成 closing fence。
