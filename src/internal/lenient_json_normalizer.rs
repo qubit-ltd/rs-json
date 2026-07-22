@@ -98,11 +98,21 @@ impl LenientJsonNormalizer {
             self.options.markdown_fence_policy(),
         );
         let input = self.trim_if_enabled(input);
-        self.require_within_normalized_size_limit(input, raw_input_bytes)?;
-        let input = ControlCharacterEscaper::escape(
-            input,
-            self.options.escape_control_chars_in_strings(),
-        );
+        let control_character_scan =
+            self.require_within_normalized_size_limit(input, raw_input_bytes)?;
+        let input = match control_character_scan {
+            Some((normalized_len, needs_escape)) => {
+                ControlCharacterEscaper::escape_with_scan(
+                    input,
+                    normalized_len,
+                    needs_escape,
+                )
+            }
+            None => ControlCharacterEscaper::escape(
+                input,
+                self.options.escape_control_chars_in_strings(),
+            ),
+        };
 
         if input.is_empty() {
             Err(JsonDecodeError::empty_input(
@@ -193,8 +203,8 @@ impl LenientJsonNormalizer {
     ///
     /// # Returns
     ///
-    /// `Ok(())` when normalized text is within the limit or no limit is
-    /// configured.
+    /// `Ok(Some((normalized_len, needs_escape)))` when normalized text is
+    /// within a configured limit, or `Ok(None)` when no limit is configured.
     ///
     /// # Errors
     ///
@@ -204,10 +214,10 @@ impl LenientJsonNormalizer {
         &self,
         input: &str,
         raw_input_bytes: usize,
-    ) -> Result<(), JsonDecodeError> {
+    ) -> Result<Option<(usize, bool)>, JsonDecodeError> {
         if let Some(limit) = self.options.max_normalized_bytes() {
-            let normalized_input_bytes =
-                ControlCharacterEscaper::normalized_len(
+            let (normalized_input_bytes, needs_escape) =
+                ControlCharacterEscaper::scan(
                     input,
                     self.options.escape_control_chars_in_strings(),
                 );
@@ -219,8 +229,9 @@ impl LenientJsonNormalizer {
                     self.options.error_privacy_policy(),
                 ));
             }
+            return Ok(Some((normalized_input_bytes, needs_escape)));
         }
-        Ok(())
+        Ok(None)
     }
 
     /// Trims a borrowed input slice when trimming is enabled.

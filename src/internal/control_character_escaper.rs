@@ -17,7 +17,7 @@ use std::borrow::Cow;
 pub(super) struct ControlCharacterEscaper;
 
 impl ControlCharacterEscaper {
-    /// Returns the byte length produced by control-character escaping.
+    /// Scans the input for control-character escaping requirements.
     ///
     /// # Parameters
     ///
@@ -26,29 +26,30 @@ impl ControlCharacterEscaper {
     ///
     /// # Returns
     ///
-    /// The input length when escaping is disabled or no replacement is needed;
-    /// otherwise, the length of the repaired JSON text. The calculation does
-    /// not allocate.
+    /// A tuple containing the repaired byte length and whether at least one
+    /// replacement is required. The calculation does not allocate.
     #[must_use]
-    pub(super) fn normalized_len(input: &str, enabled: bool) -> usize {
+    pub(super) fn scan(input: &str, enabled: bool) -> (usize, bool) {
         if !enabled || !input.as_bytes().iter().any(|byte| *byte < 0x20) {
-            return input.len();
+            return (input.len(), false);
         }
 
         let mut in_string = false;
         let mut in_escape = false;
         let mut normalized_len = input.len();
+        let mut needs_escape = false;
 
         for byte in input.bytes() {
             if let Some(replacement) =
                 Self::replacement(byte, &mut in_string, &mut in_escape)
             {
+                needs_escape = true;
                 normalized_len = normalized_len
                     .saturating_add(replacement.len().saturating_sub(1));
             }
         }
 
-        normalized_len
+        (normalized_len, needs_escape)
     }
 
     /// Escapes raw C0 control characters in JSON string literals when enabled.
@@ -71,6 +72,46 @@ impl ControlCharacterEscaper {
             return Cow::Borrowed(input);
         }
 
+        Self::rewrite(input, input.len() + 5)
+    }
+
+    /// Escapes input using results from a preceding [`Self::scan`] call.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - The same JSON-like text previously passed to [`Self::scan`].
+    /// * `normalized_len` - Repaired byte length returned by [`Self::scan`].
+    /// * `needs_escape` - Replacement flag returned by [`Self::scan`].
+    ///
+    /// # Returns
+    ///
+    /// Borrowed input when no replacement is needed, or owned rewritten text
+    /// with exact preallocated capacity otherwise.
+    #[must_use]
+    pub(super) fn escape_with_scan<'a>(
+        input: &'a str,
+        normalized_len: usize,
+        needs_escape: bool,
+    ) -> Cow<'a, str> {
+        if !needs_escape {
+            return Cow::Borrowed(input);
+        }
+
+        Self::rewrite(input, normalized_len)
+    }
+
+    /// Rewrites raw C0 controls using the requested initial capacity.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - JSON-like text known to contain a possible replacement.
+    /// * `capacity` - Initial capacity for the lazily allocated output.
+    ///
+    /// # Returns
+    ///
+    /// Borrowed input when state-aware scanning finds no replacement, or owned
+    /// rewritten text otherwise.
+    fn rewrite<'a>(input: &'a str, capacity: usize) -> Cow<'a, str> {
         let mut in_string = false;
         let mut in_escape = false;
         let mut copy_start = 0;
@@ -83,8 +124,8 @@ impl ControlCharacterEscaper {
                 continue;
             };
 
-            let output = output
-                .get_or_insert_with(|| String::with_capacity(input.len() + 5));
+            let output =
+                output.get_or_insert_with(|| String::with_capacity(capacity));
             let unchanged = &input[copy_start..index];
             match unchanged.as_bytes() {
                 [] => {}
