@@ -85,6 +85,8 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
   message, top-level context, raw and normalized byte sizes, and both input
   limits
 - parser line and column accessors refer to normalized JSON text
+- invalid UTF-8 errors expose the safe byte offset and, when known, invalid
+  sequence length through `utf8_valid_up_to()` and `utf8_error_len()`
 - `privacy_policy()` records the policy applied to every returned error
 - under the default `Redacted` policy, parser/deserializer messages do not
   contain serde-provided input fragments and `Error::source()` is `None`
@@ -287,7 +289,7 @@ run the same target locally from the repository root:
 ```bash
 cargo install cargo-fuzz
 (cd fuzz && cargo fuzz build decoder)
-(cd fuzz && cargo fuzz run decoder)
+(cd fuzz && cargo fuzz run decoder -- -max_len=4096)
 ```
 
 ## Testing
