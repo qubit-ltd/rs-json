@@ -7,6 +7,8 @@
 // =============================================================================
 //! Tests for the public [`qubit_json::JsonDecodeError`] type.
 
+use serde_json::Value;
+
 use qubit_json::{
     ErrorPrivacyPolicy,
     JsonDecodeErrorKind,
@@ -32,6 +34,8 @@ fn test_error_display_for_empty_input_uses_message() {
     assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
     assert_eq!(error.raw_input_bytes(), 0);
     assert_eq!(error.normalized_input_bytes(), None);
+    assert_eq!(error.utf8_valid_up_to(), None);
+    assert_eq!(error.utf8_error_len(), None);
     assert!(std::error::Error::source(&error).is_none());
 }
 
@@ -163,19 +167,41 @@ fn test_default_invalid_json_error_does_not_expose_serde_source() {
     assert!(std::error::Error::source(&error).is_none());
 }
 
-/// Verifies that invalid utf8 redacted error discards source.
+/// Verifies that invalid utf8 redacted error does not expose its source.
 ///
 /// # Panics
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_invalid_utf8_redacted_error_discards_source() {
+fn test_invalid_utf8_redacted_error_does_not_expose_source() {
     let error = LenientJsonDecoder::default()
         .decode_slice::<serde_json::Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail");
     assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
+    assert_eq!(error.utf8_valid_up_to(), Some(0));
+    assert_eq!(error.utf8_error_len(), Some(1));
     assert!(std::error::Error::source(&error).is_none());
     assert!(!format!("{error:?}").contains("255"));
+}
+
+/// Verifies that invalid UTF-8 exposes safe byte-position diagnostics.
+///
+/// # Panics
+///
+/// Panics when the decoder omits the valid prefix or invalid sequence length.
+#[test]
+fn test_invalid_utf8_exposes_safe_position_diagnostics() {
+    let definite = LenientJsonDecoder::default()
+        .decode_slice::<serde_json::Value>(&[b'{', 0xff])
+        .expect_err("invalid UTF-8 must fail");
+    assert_eq!(definite.utf8_valid_up_to(), Some(1));
+    assert_eq!(definite.utf8_error_len(), Some(1));
+
+    let incomplete = LenientJsonDecoder::default()
+        .decode_slice::<serde_json::Value>(&[0xe2, 0x82])
+        .expect_err("incomplete UTF-8 must fail");
+    assert_eq!(incomplete.utf8_valid_up_to(), Some(0));
+    assert_eq!(incomplete.utf8_error_len(), None);
 }
 
 /// Verifies that invalid utf8 detailed error retains utf8 source.
@@ -192,6 +218,8 @@ fn test_invalid_utf8_detailed_error_retains_utf8_source() {
     let error = decoder
         .decode_slice::<serde_json::Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail");
+    assert_eq!(error.utf8_valid_up_to(), Some(0));
+    assert_eq!(error.utf8_error_len(), Some(1));
     let source = std::error::Error::source(&error)
         .expect("detailed errors must retain Utf8Error");
     assert!(source.downcast_ref::<std::str::Utf8Error>().is_some());
@@ -267,4 +295,12 @@ fn test_error_partial_eq_compares_all_stable_fields() {
     .decode_value("")
     .expect_err("empty input should return normalization error");
     assert_ne!(third, detailed);
+
+    let invalid_utf8_at_start = decoder
+        .decode_slice::<Value>(&[0xff])
+        .expect_err("invalid UTF-8 should return a decode error");
+    let invalid_utf8_after_prefix = decoder
+        .decode_slice::<Value>(&[b'a', 0xff])
+        .expect_err("invalid UTF-8 should return a decode error");
+    assert_ne!(invalid_utf8_at_start, invalid_utf8_after_prefix);
 }

@@ -51,7 +51,7 @@ pub struct JsonDecodeError {
     normalized_line: Option<usize>,
     /// Stores the one-based parser column in normalized text when available.
     normalized_column: Option<usize>,
-    /// Stores the detailed source when diagnostics permit retaining it.
+    /// Stores internal error details exposed only when diagnostics permit it.
     source: Option<Arc<dyn Error + Send + Sync>>,
 }
 
@@ -66,22 +66,23 @@ impl JsonDecodeError {
     ///
     /// # Returns
     ///
-    /// An invalid-UTF-8 error that retains the source only in detailed mode.
+    /// An invalid-UTF-8 error that exposes the source only in detailed mode.
     #[must_use]
     pub(crate) fn invalid_utf8(
         error: std::str::Utf8Error,
         raw_input_bytes: usize,
         privacy_policy: ErrorPrivacyPolicy,
     ) -> Self {
-        let (message, source) = match privacy_policy {
+        let utf8_error = Arc::new(error);
+        let message = match privacy_policy {
             ErrorPrivacyPolicy::Redacted => {
-                ("Failed to decode JSON input as UTF-8".to_string(), None)
+                "Failed to decode JSON input as UTF-8".to_string()
             }
-            ErrorPrivacyPolicy::Detailed => (
-                format!("Failed to decode JSON input as UTF-8: {error}"),
-                Some(Arc::new(error) as Arc<dyn Error + Send + Sync>),
-            ),
+            ErrorPrivacyPolicy::Detailed => {
+                format!("Failed to decode JSON input as UTF-8: {utf8_error}")
+            }
         };
+        let source = Some(utf8_error as Arc<dyn Error + Send + Sync>);
         Self {
             kind: JsonDecodeErrorKind::InvalidUtf8,
             stage: JsonDecodeStage::DecodeText,
@@ -437,6 +438,34 @@ impl JsonDecodeError {
         self.raw_input_bytes
     }
 
+    /// Returns the valid UTF-8 prefix length for invalid byte input.
+    ///
+    /// # Returns
+    ///
+    /// `Some(length)` for [`JsonDecodeErrorKind::InvalidUtf8`], including zero
+    /// when the first byte is invalid; otherwise, `None`.
+    #[inline(always)]
+    pub fn utf8_valid_up_to(&self) -> Option<usize> {
+        self.source
+            .as_deref()
+            .and_then(|error| error.downcast_ref::<std::str::Utf8Error>())
+            .map(std::str::Utf8Error::valid_up_to)
+    }
+
+    /// Returns the known length of the invalid UTF-8 sequence.
+    ///
+    /// # Returns
+    ///
+    /// `Some(length)` when the invalid sequence length is known, or `None` for
+    /// an incomplete trailing sequence and for non-UTF-8 errors.
+    #[inline(always)]
+    pub fn utf8_error_len(&self) -> Option<usize> {
+        self.source
+            .as_deref()
+            .and_then(|error| error.downcast_ref::<std::str::Utf8Error>())
+            .and_then(std::str::Utf8Error::error_len)
+    }
+
     /// Returns the byte length of normalized JSON text.
     ///
     /// # Returns
@@ -544,6 +573,8 @@ impl PartialEq for JsonDecodeError {
             && self.expected_top_level == other.expected_top_level
             && self.actual_top_level == other.actual_top_level
             && self.raw_input_bytes == other.raw_input_bytes
+            && self.utf8_valid_up_to() == other.utf8_valid_up_to()
+            && self.utf8_error_len() == other.utf8_error_len()
             && self.normalized_input_bytes == other.normalized_input_bytes
             && self.size_limit == other.size_limit
             && self.normalized_line == other.normalized_line
@@ -575,16 +606,20 @@ impl fmt::Display for JsonDecodeError {
 }
 
 impl Error for JsonDecodeError {
-    /// Returns the retained decoder source under detailed privacy mode.
+    /// Returns the decoder source under detailed privacy mode.
     ///
     /// # Returns
     ///
-    /// `Some(source)` when detailed diagnostics retained a UTF-8 or serde
+    /// `Some(source)` when detailed diagnostics expose a UTF-8 or serde
     /// error, or `None` for redacted and source-free failures.
     #[inline(always)]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.source
-            .as_deref()
-            .map(|error| error as &(dyn Error + 'static))
+        match self.privacy_policy {
+            ErrorPrivacyPolicy::Redacted => None,
+            ErrorPrivacyPolicy::Detailed => self
+                .source
+                .as_deref()
+                .map(|error| error as &(dyn Error + 'static)),
+        }
     }
 }
