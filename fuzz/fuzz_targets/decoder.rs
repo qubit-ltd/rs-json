@@ -6,8 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 #![no_main]
-//! Exercises decoder acceptance, error-model, privacy, and shape invariants over
-//! arbitrary byte input.
+//! Exercises decoder acceptance, error-model, privacy, and shape invariants
+//! over arbitrary byte input.
 
 mod internal;
 
@@ -36,10 +36,7 @@ use internal::FuzzRecord;
 ///
 /// Panics when the error exposes inconsistent metadata, stage mapping, privacy,
 /// or source retention.
-fn assert_error_invariants(
-    error: &JsonDecodeError,
-    raw_input_bytes: usize,
-) {
+fn assert_error_invariants(error: &JsonDecodeError, raw_input_bytes: usize) {
     assert_eq!(error.raw_input_bytes(), raw_input_bytes);
     assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
     assert!(std::error::Error::source(error).is_none());
@@ -136,13 +133,11 @@ fuzz_target!(|data: &[u8]| {
         }
     }
 
-    if let Ok(value) =
-        default_decoder.decode_object::<serde_json::Value>(input)
+    if let Ok(value) = default_decoder.decode_object::<serde_json::Value>(input)
     {
         assert!(value.is_object());
     }
-    if let Ok(values) =
-        default_decoder.decode_array::<serde_json::Value>(input)
+    if let Ok(values) = default_decoder.decode_array::<serde_json::Value>(input)
     {
         let encoded = serde_json::to_vec(&values)
             .expect("decoded array elements must serialize");
