@@ -15,12 +15,21 @@ concurrency:
 jobs:
   decoder:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
           submodules: recursive
+
+      - name: Restore decoder fuzz corpus
+        uses: actions/cache/restore@v4
+        with:
+          path: fuzz/corpus/decoder
+          key: decoder-fuzz-corpus-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            decoder-fuzz-corpus-${{ runner.os }}-
 
       - name: Install Rust nightly
         run: rustup toolchain install nightly-2026-06-05 --profile minimal
@@ -31,6 +40,13 @@ jobs:
       - name: Fuzz decoder
         working-directory: fuzz
         run: cargo +nightly-2026-06-05 fuzz run decoder -- -max_total_time=300 -max_len=4096
+
+      - name: Save decoder fuzz corpus
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: fuzz/corpus/decoder
+          key: decoder-fuzz-corpus-${{ runner.os }}-${{ github.run_id }}
 
       - name: Upload decoder fuzz artifacts
         if: failure()
