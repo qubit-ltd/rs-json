@@ -108,22 +108,11 @@ impl ControlCharacterEscaper {
     ///
     /// # Returns
     ///
-    /// `true` when a byte is below `0x20`; otherwise `false`. Eight-byte
-    /// chunks are checked together, while the short remainder is checked byte
-    /// by byte. Setting each byte's high bit before subtracting `0x20` prevents
-    /// cross-byte borrows, so UTF-8 bytes are never treated as C0 controls.
+    /// `true` when a byte is below `0x20`; otherwise `false`. UTF-8
+    /// continuation bytes are never classified as C0 controls.
     #[inline]
     fn contains_ascii_control(input: &str) -> bool {
-        const HIGH_BITS: u64 = 0x8080_8080_8080_8080;
-        const CONTROL_OFFSET: u64 = 0x2020_2020_2020_2020;
-
-        let (chunks, remainder) = input.as_bytes().as_chunks::<8>();
-        chunks.iter().any(|chunk| {
-            let bytes = u64::from_ne_bytes(*chunk);
-            let high_bits =
-                (bytes | HIGH_BITS).wrapping_sub(CONTROL_OFFSET) & HIGH_BITS;
-            high_bits != HIGH_BITS
-        }) || remainder.iter().any(|byte| *byte < 0x20)
+        input.as_bytes().iter().any(|byte| *byte < 0x20)
     }
 
     /// Rewrites raw C0 controls using the requested initial capacity.

@@ -235,6 +235,7 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
     let mut lenient_group = c.benchmark_group("downstream-lenient-typed");
     for payload_bytes in [1_024_usize, 65_536, 1_048_576] {
         let plain = benchmark_record_input(payload_bytes, None);
+        let unicode = benchmark_unicode_record_input(payload_bytes);
         let fenced = format!("```json\n{plain}\n```");
         let pretty = format!(
             "{{\n  \"id\": 7,\n  \"text\": \"{}\"\n}}",
@@ -243,6 +244,7 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
         let sparse_control = benchmark_record_input(payload_bytes, Some(1_024));
         for (name, input) in [
             ("plain", plain),
+            ("unicode-no-control", unicode),
             ("fenced", fenced),
             ("pretty", pretty),
             ("sparse-control", sparse_control),
@@ -501,6 +503,26 @@ fn benchmark_record_input(
     }
     input.push_str("\"}");
     input
+}
+
+/// Builds a JSON record whose text contains valid multibyte UTF-8 only.
+///
+/// # Parameters
+///
+/// * `payload_bytes` - Approximate UTF-8 payload size in bytes.
+///
+/// # Returns
+///
+/// A valid JSON object containing no ASCII C0 control bytes.
+#[must_use]
+fn benchmark_unicode_record_input(payload_bytes: usize) -> String {
+    const CHARACTER: &str = "一";
+
+    let repetitions = payload_bytes.div_ceil(CHARACTER.len());
+    format!(
+        "{{\"id\":7,\"text\":\"{}\"}}",
+        CHARACTER.repeat(repetitions),
+    )
 }
 
 /// Consumes deserialized fields so the benchmark exercises the complete result.
