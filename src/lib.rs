@@ -27,9 +27,11 @@
 //!
 //! # Error privacy
 //!
-//! Errors are redacted by default: input-derived serde details are discarded
-//! from the message, debug representation, and standard error source. Detailed
-//! diagnostics must be enabled explicitly and may expose input values.
+//! Errors are redacted by default: input-derived serde messages and values are
+//! excluded from the message, debug representation, and standard error source.
+//! Safe structural metadata, including parser locations and UTF-8 failure
+//! offsets, remains available. Detailed diagnostics must be enabled explicitly
+//! and may expose input values.
 //!
 //! ```rust
 //! use qubit_json::{
