@@ -25,6 +25,9 @@ use qubit_json::{
 
 use internal::FuzzRecord;
 
+/// Maximum byte length exercised by the decoder fuzz harness.
+const MAX_FUZZ_INPUT_BYTES: usize = 4_096;
+
 /// Verifies stable diagnostics shared by every redacted decoder configuration.
 ///
 /// # Parameters
@@ -55,6 +58,10 @@ fn assert_error_invariants(error: &JsonDecodeError, raw_input_bytes: usize) {
 }
 
 fuzz_target!(|data: &[u8]| {
+    if data.len() > MAX_FUZZ_INPUT_BYTES {
+        return;
+    }
+
     let default_decoder = LenientJsonDecoder::default();
     match default_decoder.decode_slice::<serde_json::Value>(data) {
         Ok(value) => {

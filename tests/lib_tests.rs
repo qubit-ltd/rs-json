@@ -80,3 +80,16 @@ fn test_fuzz_workflow_preserves_decoder_corpus() {
     assert!(workflow.contains("actions/upload-artifact@v7"));
     assert!(workflow.contains("fuzz/artifacts/**"));
 }
+
+/// Verifies that the decoder fuzz target enforces its own input bound.
+///
+/// # Panics
+///
+/// Panics when the harness relies only on external libFuzzer arguments.
+#[test]
+fn test_decoder_fuzz_target_enforces_internal_input_bound() {
+    let target = include_str!("../fuzz/fuzz_targets/decoder.rs");
+
+    assert!(target.contains("const MAX_FUZZ_INPUT_BYTES: usize = 4_096;"));
+    assert!(target.contains("if data.len() > MAX_FUZZ_INPUT_BYTES {"));
+}
