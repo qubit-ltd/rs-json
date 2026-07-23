@@ -58,15 +58,16 @@ fn test_ci_workflow_enforces_coverage_thresholds() {
     assert!(workflow.contains("regions.percent <= 95"));
 }
 
-/// Verifies that scheduled fuzz failures preserve their reproduction artifacts.
+/// Verifies that scheduled fuzzing bounds inputs and preserves failure artifacts.
 ///
 /// # Panics
 ///
-/// Panics when the workflow does not upload decoder fuzz artifacts on failure.
+/// Panics when the workflow omits the input bound or decoder failure artifacts.
 #[test]
 fn test_fuzz_workflow_uploads_failure_artifacts() {
     let workflow = include_str!("../.github/workflows/fuzz.yml");
 
+    assert!(workflow.contains("-max_len=4096"));
     assert!(workflow.contains("if: failure()"));
     assert!(workflow.contains("actions/upload-artifact@v7"));
     assert!(workflow.contains("fuzz/artifacts/**"));

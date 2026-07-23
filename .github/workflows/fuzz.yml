@@ -30,7 +30,7 @@ jobs:
 
       - name: Fuzz decoder
         working-directory: fuzz
-        run: cargo +nightly-2026-06-05 fuzz run decoder -- -max_total_time=300
+        run: cargo +nightly-2026-06-05 fuzz run decoder -- -max_total_time=300 -max_len=4096
 
       - name: Upload decoder fuzz artifacts
         if: failure()
