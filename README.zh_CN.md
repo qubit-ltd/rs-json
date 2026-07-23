@@ -77,6 +77,8 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 - `JsonDecodeError` 通过不可变访问器提供失败种类、阶段、消息、顶层上下文、原始与
   规范化字节数及输入上限
 - 解析行列访问器对应规范化后的 JSON 文本
+- 非法 UTF-8 错误通过 `utf8_valid_up_to()` 和 `utf8_error_len()` 提供安全的
+  字节偏移及可确定时的非法序列长度
 - `privacy_policy()` 记录每个错误实际采用的隐私策略
 - 默认 `Redacted` 策略不会在解析/反序列化消息中保留 serde 提供的输入片段，
   `Error::source()` 返回 `None`
@@ -267,7 +269,7 @@ HTTP 风格严格字节解码（包含复用解码器和按次构造解码器）
 ```bash
 cargo install cargo-fuzz
 (cd fuzz && cargo fuzz build decoder)
-(cd fuzz && cargo fuzz run decoder)
+(cd fuzz && cargo fuzz run decoder -- -max_len=4096)
 ```
 
 ## 测试
