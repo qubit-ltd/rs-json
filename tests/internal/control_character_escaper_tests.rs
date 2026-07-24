@@ -131,6 +131,52 @@ fn test_decode_value_escapes_each_control_char_at_each_chunk_offset() {
     }
 }
 
+/// Verifies string and escape state across every chunk boundary offset.
+///
+/// # Panics
+///
+/// Panics when legal outer whitespace changes string state, an escaped quote
+/// closes the string, or a raw string newline is not repaired.
+#[test]
+fn test_decode_value_preserves_state_across_each_chunk_boundary_offset() {
+    for prefix_len in 0..=24 {
+        let prefix = "a".repeat(prefix_len);
+        let mut json_input = format!(
+            "\n{{\n  \"text\":\"{prefix}escaped quote: \\\"; escaped slash: \\\\; ",
+        );
+        json_input.push('\n');
+        json_input.push_str("tail\"\n}\r\n");
+        let expected = json!({
+            "text": format!(
+                "{prefix}escaped quote: \"; escaped slash: \\; \ntail",
+            ),
+        });
+
+        let decoded = LenientJsonDecoder::default()
+            .decode_value(&json_input)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "state transitions at prefix offset {prefix_len} should \
+                     decode: {error}"
+                )
+            });
+        assert_eq!(decoded, expected);
+
+        let bounded = LenientJsonDecoder::new(
+            JsonDecodeOptions::default()
+                .with_max_normalized_bytes(Some(json_input.len() + 1)),
+        )
+        .decode_value(&json_input)
+        .unwrap_or_else(|error| {
+            panic!(
+                "bounded state transitions at prefix offset {prefix_len} \
+                 should decode: {error}"
+            )
+        });
+        assert_eq!(bounded, expected);
+    }
+}
+
 /// Verifies that the normalized-size limit accounts for every C0 escape.
 ///
 /// # Panics
