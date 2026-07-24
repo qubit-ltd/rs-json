@@ -7,6 +7,11 @@
 // =============================================================================
 //! Smoke tests for crate-level exports in `lib.rs`.
 
+use crate::fixtures::{
+    MAX_FUZZ_INPUT_BYTES,
+    is_fuzz_input_within_limit,
+};
+
 use qubit_json::{
     ErrorPrivacyPolicy,
     JsonDecodeError,
@@ -95,34 +100,31 @@ fn test_readme_fuzz_commands_match_workflow_contract() {
     ];
 
     for readme in readmes {
+        assert!(readme.contains(
+            "rustup toolchain install nightly-2026-06-05 --profile minimal",
+        ));
         assert!(
-            readme.contains(
-                "rustup toolchain install nightly-2026-06-05 --profile minimal",
-            )
-        );
-        assert!(
-            readme.contains("cargo install cargo-fuzz --version 0.13.2 --locked")
+            readme
+                .contains("cargo install cargo-fuzz --version 0.13.2 --locked")
         );
         assert!(
             readme.contains("cargo +nightly-2026-06-05 fuzz build decoder")
         );
-        assert!(
-            readme.contains(
-                "cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096",
-            )
-        );
+        assert!(readme.contains(
+            "cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096",
+        ));
     }
 }
 
-/// Verifies that the decoder fuzz target enforces its own input bound.
+/// Verifies that the decoder fuzz target accepts its exact input bound.
 ///
 /// # Panics
 ///
-/// Panics when the harness relies only on external libFuzzer arguments.
+/// Panics when the shared fuzz input boundary changes or is not inclusive.
 #[test]
-fn test_decoder_fuzz_target_enforces_internal_input_bound() {
-    let target = include_str!("../fuzz/fuzz_targets/decoder.rs");
-
-    assert!(target.contains("const MAX_FUZZ_INPUT_BYTES: usize = 4_096;"));
-    assert!(target.contains("if data.len() > MAX_FUZZ_INPUT_BYTES {"));
+fn test_decoder_fuzz_input_limit_includes_exact_boundary() {
+    assert_eq!(MAX_FUZZ_INPUT_BYTES, 4_096);
+    assert!(is_fuzz_input_within_limit(&vec![0; 4_095]));
+    assert!(is_fuzz_input_within_limit(&vec![0; 4_096]));
+    assert!(!is_fuzz_input_within_limit(&vec![0; 4_097]));
 }
