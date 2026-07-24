@@ -39,53 +39,74 @@ fn benchmark_decoder(c: &mut Criterion) {
     let default_decoder = LenientJsonDecoder::default();
     let strict_decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
     let plain_input = r#"{"id":7,"text":"plain"}"#;
+    consume_record(
+        serde_json::from_str::<BenchmarkRecord>(plain_input)
+            .expect("strict benchmark input must decode"),
+    );
+    consume_record(
+        strict_decoder
+            .decode::<BenchmarkRecord>(plain_input)
+            .expect("strict decoder benchmark input must decode"),
+    );
+    consume_record(
+        default_decoder
+            .decode::<BenchmarkRecord>(plain_input)
+            .expect("default decoder benchmark input must decode"),
+    );
     let mut comparison = c.benchmark_group("plain-comparison");
     comparison.bench_function("serde_json", |bencher| {
         bencher.iter(|| {
-            consume_record(
-                serde_json::from_str::<BenchmarkRecord>(black_box(plain_input))
-                    .expect("strict benchmark input must decode"),
-            )
+            black_box(serde_json::from_str::<BenchmarkRecord>(black_box(
+                plain_input,
+            )))
         });
     });
     comparison.bench_function("strict_decoder", |bencher| {
         bencher.iter(|| {
-            consume_record(
+            black_box(
                 strict_decoder
-                    .decode::<BenchmarkRecord>(black_box(plain_input))
-                    .expect("strict decoder benchmark input must decode"),
+                    .decode::<BenchmarkRecord>(black_box(plain_input)),
             )
         });
     });
     comparison.bench_function("default_decoder", |bencher| {
         bencher.iter(|| {
-            consume_record(
+            black_box(
                 default_decoder
-                    .decode::<BenchmarkRecord>(black_box(plain_input))
-                    .expect("default decoder benchmark input must decode"),
+                    .decode::<BenchmarkRecord>(black_box(plain_input)),
             )
         });
     });
     comparison.finish();
 
     let plain_bytes = plain_input.as_bytes();
+    consume_record(
+        serde_json::from_slice::<BenchmarkRecord>(plain_bytes)
+            .expect("strict benchmark input must decode"),
+    );
+    consume_record(
+        strict_decoder
+            .decode_slice::<BenchmarkRecord>(plain_bytes)
+            .expect("strict decoder benchmark input must decode"),
+    );
+    consume_record(
+        default_decoder
+            .decode_slice::<BenchmarkRecord>(plain_bytes)
+            .expect("default decoder benchmark input must decode"),
+    );
     let mut bytes_comparison = c.benchmark_group("plain-bytes-comparison");
     bytes_comparison.bench_function("serde_json_from_slice", |bencher| {
         bencher.iter(|| {
-            consume_record(
-                serde_json::from_slice::<BenchmarkRecord>(black_box(
-                    plain_bytes,
-                ))
-                .expect("strict benchmark input must decode"),
-            )
+            black_box(serde_json::from_slice::<BenchmarkRecord>(black_box(
+                plain_bytes,
+            )))
         });
     });
     bytes_comparison.bench_function("strict_decoder_decode_slice", |bencher| {
         bencher.iter(|| {
-            consume_record(
+            black_box(
                 strict_decoder
-                    .decode_slice::<BenchmarkRecord>(black_box(plain_bytes))
-                    .expect("strict decoder benchmark input must decode"),
+                    .decode_slice::<BenchmarkRecord>(black_box(plain_bytes)),
             )
         });
     });
@@ -93,10 +114,10 @@ fn benchmark_decoder(c: &mut Criterion) {
         "default_decoder_decode_slice",
         |bencher| {
             bencher.iter(|| {
-                consume_record(
-                    default_decoder
-                        .decode_slice::<BenchmarkRecord>(black_box(plain_bytes))
-                        .expect("default decoder benchmark input must decode"),
+                black_box(
+                    default_decoder.decode_slice::<BenchmarkRecord>(black_box(
+                        plain_bytes,
+                    )),
                 )
             });
         },
@@ -110,44 +131,56 @@ fn benchmark_decoder(c: &mut Criterion) {
     ];
 
     for (name, input) in cases {
+        consume_record(
+            default_decoder
+                .decode::<BenchmarkRecord>(input)
+                .expect("benchmark input must decode"),
+        );
+        consume_record(
+            default_decoder
+                .decode_object::<BenchmarkRecord>(input)
+                .expect("benchmark input must decode as an object"),
+        );
+        default_decoder
+            .decode_value(input)
+            .expect("benchmark input must decode as a value");
         let mut group = c.benchmark_group(name);
         group.bench_function("decode", |bencher| {
             bencher.iter(|| {
-                consume_record(
-                    default_decoder
-                        .decode::<BenchmarkRecord>(black_box(input))
-                        .expect("benchmark input must decode"),
+                black_box(
+                    default_decoder.decode::<BenchmarkRecord>(black_box(input)),
                 )
             });
         });
         group.bench_function("decode_object", |bencher| {
             bencher.iter(|| {
-                consume_record(
+                black_box(
                     default_decoder
-                        .decode_object::<BenchmarkRecord>(black_box(input))
-                        .expect("benchmark input must decode as an object"),
+                        .decode_object::<BenchmarkRecord>(black_box(input)),
                 )
             });
         });
         group.bench_function("decode_value", |bencher| {
             bencher.iter(|| {
-                default_decoder
-                    .decode_value(black_box(input))
-                    .expect("benchmark input must decode as a value")
+                black_box(default_decoder.decode_value(black_box(input)))
             });
         });
         group.finish();
     }
 
     let array_input = r#"[{"id":7,"text":"array"}]"#;
+    for record in default_decoder
+        .decode_array::<BenchmarkRecord>(array_input)
+        .expect("benchmark input must decode as an array")
+    {
+        consume_record(record);
+    }
     c.bench_function("array/decode_array", |bencher| {
         bencher.iter(|| {
-            let records = default_decoder
-                .decode_array::<BenchmarkRecord>(black_box(array_input))
-                .expect("benchmark input must decode as an array");
-            for record in records {
-                consume_record(record);
-            }
+            black_box(
+                default_decoder
+                    .decode_array::<BenchmarkRecord>(black_box(array_input)),
+            )
         });
     });
 }
@@ -174,18 +207,36 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
 
     for payload_bytes in [1_024_usize, 65_536, 1_048_576] {
         let input = benchmark_record_input(payload_bytes, None);
+        consume_record(
+            serde_json::from_slice::<BenchmarkRecord>(input.as_bytes())
+                .expect("strict byte benchmark input must decode"),
+        );
+        consume_record(
+            strict_decoder
+                .decode_slice::<BenchmarkRecord>(input.as_bytes())
+                .expect("strict decoder byte benchmark input must decode"),
+        );
+        consume_record(
+            LenientJsonDecoder::new(JsonDecodeOptions::strict())
+                .decode_slice::<BenchmarkRecord>(input.as_bytes())
+                .expect(
+                    "constructed strict decoder benchmark input must decode",
+                ),
+        );
+        consume_record(
+            default_decoder
+                .decode_slice::<BenchmarkRecord>(input.as_bytes())
+                .expect("default decoder byte benchmark input must decode"),
+        );
         plain_group.throughput(Throughput::Bytes(input.len() as u64));
         plain_group.bench_with_input(
             BenchmarkId::new("serde_json_from_slice", payload_bytes),
             &input,
             |bencher, input| {
                 bencher.iter(|| {
-                    consume_record(
-                        serde_json::from_slice::<BenchmarkRecord>(black_box(
-                            input.as_bytes(),
-                        ))
-                        .expect("strict byte benchmark input must decode"),
-                    )
+                    black_box(serde_json::from_slice::<BenchmarkRecord>(
+                        black_box(input.as_bytes()),
+                    ))
                 });
             },
         );
@@ -194,25 +245,25 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             &input,
             |bencher, input| {
                 bencher.iter(|| {
-                    consume_record(
-                        strict_decoder
-                            .decode_slice::<BenchmarkRecord>(black_box(input.as_bytes()))
-                            .expect("strict decoder byte benchmark input must decode"),
-                    )
+                    black_box(strict_decoder.decode_slice::<BenchmarkRecord>(
+                        black_box(input.as_bytes()),
+                    ))
                 });
             },
         );
         plain_group.bench_with_input(
-            BenchmarkId::new("strict_decoder_construct_and_decode_slice", payload_bytes),
+            BenchmarkId::new(
+                "strict_decoder_construct_and_decode_slice",
+                payload_bytes,
+            ),
             &input,
             |bencher, input| {
                 bencher.iter(|| {
-                    let decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
-                    consume_record(
-                        decoder
-                            .decode_slice::<BenchmarkRecord>(black_box(input.as_bytes()))
-                            .expect("strict decoder byte benchmark input must decode"),
-                    )
+                    let decoder =
+                        LenientJsonDecoder::new(JsonDecodeOptions::strict());
+                    black_box(decoder.decode_slice::<BenchmarkRecord>(
+                        black_box(input.as_bytes()),
+                    ))
                 });
             },
         );
@@ -221,11 +272,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             &input,
             |bencher, input| {
                 bencher.iter(|| {
-                    consume_record(
-                        default_decoder
-                            .decode_slice::<BenchmarkRecord>(black_box(input.as_bytes()))
-                            .expect("default decoder byte benchmark input must decode"),
-                    )
+                    black_box(default_decoder.decode_slice::<BenchmarkRecord>(
+                        black_box(input.as_bytes()),
+                    ))
                 });
             },
         );
@@ -249,20 +298,21 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             ("pretty", pretty),
             ("sparse-control", sparse_control),
         ] {
+            consume_record(
+                default_decoder
+                    .decode_object::<BenchmarkRecord>(&input)
+                    .expect("lenient typed benchmark input must decode"),
+            );
             lenient_group.throughput(Throughput::Bytes(input.len() as u64));
             lenient_group.bench_with_input(
                 BenchmarkId::new(name, payload_bytes),
                 &input,
                 |bencher, input| {
                     bencher.iter(|| {
-                        consume_record(
-                            default_decoder
-                                .decode_object::<BenchmarkRecord>(black_box(
-                                    input.as_str(),
-                                ))
-                                .expect(
-                                    "lenient typed benchmark input must decode",
-                                ),
+                        black_box(
+                            default_decoder.decode_object::<BenchmarkRecord>(
+                                black_box(input.as_str()),
+                            ),
                         )
                     });
                 },
@@ -278,43 +328,47 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
     let bounded_decoder = LenientJsonDecoder::new(
         JsonDecodeOptions::strict().with_max_input_bytes(Some(plain.len() - 1)),
     );
+    assert!(
+        default_decoder
+            .decode_object::<BenchmarkRecord>(malformed)
+            .is_err(),
+        "malformed benchmark input must fail",
+    );
+    assert!(
+        default_decoder
+            .decode_object::<BenchmarkRecord>(&wrong_top_level)
+            .is_err(),
+        "array benchmark input must fail object decoding",
+    );
+    assert!(
+        bounded_decoder
+            .decode_slice::<BenchmarkRecord>(plain.as_bytes())
+            .is_err(),
+        "oversized benchmark input must fail",
+    );
     let mut failure_group = c.benchmark_group("downstream-failures");
     failure_group.throughput(Throughput::Bytes(plain.len() as u64));
     failure_group.bench_function("invalid-json", |bencher| {
         bencher.iter(|| {
             black_box(
                 default_decoder
-                    .decode_object::<BenchmarkRecord>(black_box(malformed))
-                    .map_or_else(
-                        |error| error,
-                        |_| panic!("malformed benchmark input must fail"),
-                    ),
+                    .decode_object::<BenchmarkRecord>(black_box(malformed)),
             )
         });
     });
     failure_group.bench_function("top-level-mismatch", |bencher| {
         bencher.iter(|| {
-            black_box(
-                default_decoder
-                    .decode_object::<BenchmarkRecord>(black_box(wrong_top_level.as_str()))
-                    .map_or_else(
-                        |error| error,
-                        |_| panic!("array benchmark input must fail object decoding"),
-                    ),
-            )
+            black_box(default_decoder.decode_object::<BenchmarkRecord>(
+                black_box(wrong_top_level.as_str()),
+            ))
         });
     });
     failure_group.bench_function("size-limit-rejection", |bencher| {
         bencher.iter(|| {
             black_box(
-                bounded_decoder
-                    .decode_slice::<BenchmarkRecord>(black_box(
-                        plain.as_bytes(),
-                    ))
-                    .map_or_else(
-                        |error| error,
-                        |_| panic!("oversized benchmark input must fail"),
-                    ),
+                bounded_decoder.decode_slice::<BenchmarkRecord>(black_box(
+                    plain.as_bytes(),
+                )),
             )
         });
     });
@@ -331,6 +385,12 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             ("first-field-type-error", first_field_type_error),
             ("last-field-type-error", last_field_type_error),
         ] {
+            assert!(
+                strict_decoder
+                    .decode_slice::<BenchmarkRecord>(input.as_bytes())
+                    .is_err(),
+                "type-mismatched benchmark input must fail",
+            );
             failure_group.throughput(Throughput::Bytes(input.len() as u64));
             failure_group.bench_with_input(
                 BenchmarkId::new(name, payload_bytes),
@@ -338,12 +398,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
                 |bencher, input| {
                     bencher.iter(|| {
                         black_box(
-                            strict_decoder
-                                .decode_slice::<BenchmarkRecord>(black_box(input.as_bytes()))
-                                .map_or_else(
-                                    |error| error,
-                                    |_| panic!("type-mismatched benchmark input must fail"),
-                                ),
+                            strict_decoder.decode_slice::<BenchmarkRecord>(
+                                black_box(input.as_bytes()),
+                            ),
                         )
                     });
                 },
@@ -366,7 +423,7 @@ fn benchmark_control_character_scaling(c: &mut Criterion) {
     let decoder = LenientJsonDecoder::default();
     let mut group = c.benchmark_group("control-characters");
 
-    for payload_bytes in [1_024_usize, 65_536] {
+    for payload_bytes in [1_024_usize, 65_536, 1_048_576] {
         for (name, control_stride) in
             [("plain", None), ("sparse", Some(1_024)), ("dense", Some(2))]
         {
@@ -380,6 +437,12 @@ fn benchmark_control_character_scaling(c: &mut Criterion) {
                 JsonDecodeOptions::default()
                     .with_max_normalized_bytes(Some(normalized_limit)),
             );
+            decoder
+                .decode_value(&input)
+                .expect("benchmark input must decode as a value");
+            bounded_decoder
+                .decode_value(&input)
+                .expect("bounded benchmark input must decode as a value");
             group.throughput(Throughput::Bytes(input.len() as u64));
             group.bench_with_input(
                 BenchmarkId::new(name, payload_bytes),
@@ -387,24 +450,22 @@ fn benchmark_control_character_scaling(c: &mut Criterion) {
                 |bencher, input| {
                     bencher.iter(|| {
                         black_box(
-                            decoder
-                                .decode_value(black_box(input.as_str()))
-                                .expect(
-                                    "benchmark input must decode as a value",
-                                ),
+                            decoder.decode_value(black_box(input.as_str())),
                         )
                     });
                 },
             );
             group.bench_with_input(
-                BenchmarkId::new(format!("{name}-normalized-limit"), payload_bytes),
+                BenchmarkId::new(
+                    format!("{name}-normalized-limit"),
+                    payload_bytes,
+                ),
                 &input,
                 |bencher, input| {
                     bencher.iter(|| {
                         black_box(
                             bounded_decoder
-                                .decode_value(black_box(input.as_str()))
-                                .expect("bounded benchmark input must decode as a value"),
+                                .decode_value(black_box(input.as_str())),
                         )
                     });
                 },
