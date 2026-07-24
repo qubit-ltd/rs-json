@@ -287,9 +287,10 @@ failures retain their reproduction artifacts. Install `cargo-fuzz` to build or
 run the same target locally from the repository root:
 
 ```bash
-cargo install cargo-fuzz
-(cd fuzz && cargo fuzz build decoder)
-(cd fuzz && cargo fuzz run decoder -- -max_len=4096)
+rustup toolchain install nightly-2026-06-05 --profile minimal
+cargo install cargo-fuzz --version 0.13.2 --locked
+(cd fuzz && cargo +nightly-2026-06-05 fuzz build decoder)
+(cd fuzz && cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096)
 ```
 
 ## Testing
