@@ -100,6 +100,37 @@ fn test_decode_value_covers_all_supported_control_char_escapes() {
     assert_eq!(value, json!({"text": control_text}));
 }
 
+/// Verifies that every C0 byte is repaired at every chunk boundary offset.
+///
+/// # Panics
+///
+/// Panics when a control byte is not repaired at the expected offset.
+#[test]
+fn test_decode_value_escapes_each_control_char_at_each_chunk_offset() {
+    let decoder = LenientJsonDecoder::default();
+
+    for prefix_len in 0..=24 {
+        for control_code in 0_u8..=0x1f {
+            let control = char::from(control_code);
+            let prefix = "a".repeat(prefix_len);
+            let json_input =
+                format!("{{\"text\":\"{prefix}{control}suffix\"}}");
+            let decoded =
+                decoder.decode_value(&json_input).unwrap_or_else(|error| {
+                    panic!(
+                        "U+{control_code:04X} at payload offset {prefix_len} \
+                     should be repaired: {error}"
+                    )
+                });
+            assert_eq!(
+                decoded,
+                json!({"text": format!("{prefix}{control}suffix")}),
+                "unexpected result for U+{control_code:04X} at payload offset {prefix_len}",
+            );
+        }
+    }
+}
+
 /// Verifies that the normalized-size limit accounts for every C0 escape.
 ///
 /// # Panics
