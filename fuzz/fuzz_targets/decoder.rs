@@ -9,6 +9,8 @@
 //! Exercises decoder acceptance, error-model, privacy, and shape invariants
 //! over arbitrary byte input.
 
+#[path = "../../tests/fixtures/internal/fuzz_input_limit.rs"]
+mod fuzz_input_limit;
 mod internal;
 
 use libfuzzer_sys::fuzz_target;
@@ -23,10 +25,8 @@ use qubit_json::{
     MarkdownFencePolicy,
 };
 
+use fuzz_input_limit::is_fuzz_input_within_limit;
 use internal::FuzzRecord;
-
-/// Maximum byte length exercised by the decoder fuzz harness.
-const MAX_FUZZ_INPUT_BYTES: usize = 4_096;
 
 /// Verifies stable diagnostics shared by every redacted decoder configuration.
 ///
@@ -58,7 +58,7 @@ fn assert_error_invariants(error: &JsonDecodeError, raw_input_bytes: usize) {
 }
 
 fuzz_target!(|data: &[u8]| {
-    if data.len() > MAX_FUZZ_INPUT_BYTES {
+    if !is_fuzz_input_within_limit(data) {
         return;
     }
 

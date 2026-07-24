@@ -23,6 +23,10 @@ pub(crate) use counted_failure::{
     reset_deserialize_calls,
 };
 pub(crate) use exact_integer::ExactInteger;
+pub(crate) use internal::{
+    MAX_FUZZ_INPUT_BYTES,
+    is_fuzz_input_within_limit,
+};
 pub(crate) use message::Message;
 pub(crate) use public_choice::PublicChoice;
 pub(crate) use single_value::SingleValue;

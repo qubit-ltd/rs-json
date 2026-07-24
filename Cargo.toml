@@ -18,12 +18,18 @@ include = [
     "/LICENSE",
     "/README.md",
     "/README.zh_CN.md",
-    "/.github/workflows/ci.yml",
-    "/.github/workflows/fuzz.yml",
-    "/doc/**",
     "/src/**",
+    "/doc/**",
     "/tests/**",
     "/benches/**",
+    "/.github/workflows/ci.yml",
+    "/.github/workflows/fuzz.yml",
+]
+
+[package.metadata.rs-ci]
+package-include-extra = [
+    "/.github/workflows/ci.yml",
+    "/.github/workflows/fuzz.yml",
 ]
 
 [lib]
