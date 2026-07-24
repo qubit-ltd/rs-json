@@ -112,7 +112,19 @@ impl ControlCharacterEscaper {
     /// continuation bytes are never classified as C0 controls.
     #[inline]
     fn contains_ascii_control(input: &str) -> bool {
-        input.as_bytes().iter().any(|byte| *byte < 0x20)
+        const HIGH_BITS: u64 = 0x8080_8080_8080_8080;
+        const CONTROL_OFFSET: u64 = 0x2020_2020_2020_2020;
+
+        let (chunks, remainder) = input.as_bytes().as_chunks::<8>();
+        chunks.iter().any(|chunk| {
+            let bytes = u64::from_ne_bytes(*chunk);
+            // Setting each high bit prevents cross-byte borrows; restoring the
+            // original high bits keeps UTF-8 bytes out of the C0 range.
+            let non_control_high_bits =
+                ((bytes | HIGH_BITS).wrapping_sub(CONTROL_OFFSET) | bytes)
+                    & HIGH_BITS;
+            non_control_high_bits != HIGH_BITS
+        }) || remainder.iter().any(|byte| *byte < 0x20)
     }
 
     /// Rewrites raw C0 controls using the requested initial capacity.
