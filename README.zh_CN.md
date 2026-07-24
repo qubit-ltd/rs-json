@@ -267,9 +267,10 @@ HTTP 风格严格字节解码（包含复用解码器和按次构造解码器）
 安装 `cargo-fuzz` 后，可在仓库根目录构建或运行同一目标：
 
 ```bash
-cargo install cargo-fuzz
-(cd fuzz && cargo fuzz build decoder)
-(cd fuzz && cargo fuzz run decoder -- -max_len=4096)
+rustup toolchain install nightly-2026-06-05 --profile minimal
+cargo install cargo-fuzz --version 0.13.2 --locked
+(cd fuzz && cargo +nightly-2026-06-05 fuzz build decoder)
+(cd fuzz && cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096)
 ```
 
 ## 测试

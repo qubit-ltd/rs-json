@@ -81,6 +81,39 @@ fn test_fuzz_workflow_preserves_decoder_corpus() {
     assert!(workflow.contains("fuzz/artifacts/**"));
 }
 
+/// Verifies that both README files use the pinned local fuzz toolchain.
+///
+/// # Panics
+///
+/// Panics when either README drifts from the scheduled fuzz workflow's
+/// toolchain, `cargo-fuzz` version, or bounded decoder command.
+#[test]
+fn test_readme_fuzz_commands_match_workflow_contract() {
+    let readmes = [
+        include_str!("../README.md"),
+        include_str!("../README.zh_CN.md"),
+    ];
+
+    for readme in readmes {
+        assert!(
+            readme.contains(
+                "rustup toolchain install nightly-2026-06-05 --profile minimal",
+            )
+        );
+        assert!(
+            readme.contains("cargo install cargo-fuzz --version 0.13.2 --locked")
+        );
+        assert!(
+            readme.contains("cargo +nightly-2026-06-05 fuzz build decoder")
+        );
+        assert!(
+            readme.contains(
+                "cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096",
+            )
+        );
+    }
+}
+
 /// Verifies that the decoder fuzz target enforces its own input bound.
 ///
 /// # Panics
