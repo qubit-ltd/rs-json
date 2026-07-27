@@ -99,7 +99,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qubit-json = "0.6"
+qubit-json = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
