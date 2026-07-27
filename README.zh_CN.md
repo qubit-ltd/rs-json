@@ -91,7 +91,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 
 ```toml
 [dependencies]
-qubit-json = "0.6"
+qubit-json = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
