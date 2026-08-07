@@ -77,16 +77,12 @@ mod json_top_level_kind;
 mod lenient_json_decoder;
 mod options;
 
-pub use error::{
-    ErrorPrivacyPolicy,
-    JsonDecodeError,
-    JsonDecodeErrorKind,
-    JsonDecodeStage,
-};
+pub use error::ErrorPrivacyPolicy;
+pub use error::JsonDecodeError;
+pub use error::JsonDecodeErrorKind;
+pub use error::JsonDecodeStage;
 pub use json_top_level_kind::JsonTopLevelKind;
 pub use lenient_json_decoder::LenientJsonDecoder;
-pub use options::{
-    JsonDecodeOptions,
-    MarkdownFenceClosing,
-    MarkdownFencePolicy,
-};
+pub use options::JsonDecodeOptions;
+pub use options::MarkdownFenceClosing;
+pub use options::MarkdownFencePolicy;

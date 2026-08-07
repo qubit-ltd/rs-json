@@ -7,12 +7,10 @@
 // =============================================================================
 //! Tests for [`qubit_json::JsonDecodeOptions`].
 
-use qubit_json::{
-    ErrorPrivacyPolicy,
-    JsonDecodeOptions,
-    MarkdownFenceClosing,
-    MarkdownFencePolicy,
-};
+use qubit_json::ErrorPrivacyPolicy;
+use qubit_json::JsonDecodeOptions;
+use qubit_json::MarkdownFenceClosing;
+use qubit_json::MarkdownFencePolicy;
 
 /// Verifies that default enables all mvp rules.
 ///

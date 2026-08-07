@@ -9,10 +9,8 @@
 
 use std::fmt;
 
-use serde::de::{
-    self,
-    Visitor,
-};
+use serde::de;
+use serde::de::Visitor;
 
 use crate::fixtures::ByteBuffer;
 

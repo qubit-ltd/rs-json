@@ -9,20 +9,16 @@
 
 mod internal;
 
-use criterion::{
-    BenchmarkId,
-    Criterion,
-    Throughput,
-    criterion_group,
-    criterion_main,
-};
-use qubit_json::{
-    JsonDecodeOptions,
-    LenientJsonDecoder,
-};
 use std::hint::black_box;
 
+use criterion::BenchmarkId;
+use criterion::Criterion;
+use criterion::Throughput;
+use criterion::criterion_group;
+use criterion::criterion_main;
 use internal::BenchmarkRecord;
+use qubit_json::JsonDecodeOptions;
+use qubit_json::LenientJsonDecoder;
 
 /// Runs the public decoder benchmarks over representative input normalization
 /// paths.

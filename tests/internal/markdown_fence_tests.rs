@@ -7,15 +7,12 @@
 // =============================================================================
 //! Tests for Markdown fence normalization behavior.
 
+use qubit_json::JsonDecodeErrorKind;
+use qubit_json::JsonDecodeOptions;
+use qubit_json::LenientJsonDecoder;
+use qubit_json::MarkdownFenceClosing;
+use qubit_json::MarkdownFencePolicy;
 use serde_json::json;
-
-use qubit_json::{
-    JsonDecodeErrorKind,
-    JsonDecodeOptions,
-    LenientJsonDecoder,
-    MarkdownFenceClosing,
-    MarkdownFencePolicy,
-};
 
 /// Verifies that decode value default rejects non json markdown fence.
 ///
@@ -47,7 +44,7 @@ fn test_decode_value_explicit_any_accepts_non_json_markdown_fence() {
     let value = decoder
         .decode_value("~~~python\n{\"ok\":true}\n~~~")
         .expect("explicit Any must preserve the 0.4 compatibility behavior");
-    assert_eq!(value, serde_json::json!({"ok": true}));
+    assert_eq!(value, json!({"ok": true}));
 }
 
 /// Verifies that decode value strips code fence with closing fence.

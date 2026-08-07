@@ -8,19 +8,17 @@
 //! Defines the [`LenientJsonDecoder`] type and its public decoding methods.
 
 use serde::de::DeserializeOwned;
-use serde_json::{
-    Value,
-    error::Category,
-    value::RawValue,
-};
+use serde_json::Error;
+use serde_json::Value;
+use serde_json::error::Category;
+use serde_json::from_str;
+use serde_json::value::RawValue;
 
-use crate::{
-    ErrorPrivacyPolicy,
-    JsonDecodeError,
-    JsonDecodeOptions,
-    JsonTopLevelKind,
-    internal::lenient_json_normalizer::LenientJsonNormalizer,
-};
+use crate::ErrorPrivacyPolicy;
+use crate::JsonDecodeError;
+use crate::JsonDecodeOptions;
+use crate::JsonTopLevelKind;
+use crate::internal::lenient_json_normalizer::LenientJsonNormalizer;
 
 /// A configurable JSON decoder for non-fully-trusted text inputs.
 ///
@@ -316,7 +314,7 @@ impl LenientJsonDecoder {
         normalized_input_bytes: usize,
         privacy_policy: ErrorPrivacyPolicy,
     ) -> Result<Value, JsonDecodeError> {
-        serde_json::from_str(normalized).map_err(|error| {
+        from_str(normalized).map_err(|error| {
             JsonDecodeError::invalid_json(
                 error,
                 raw_input_bytes,
@@ -350,15 +348,14 @@ impl LenientJsonDecoder {
         normalized_input_bytes: usize,
         privacy_policy: ErrorPrivacyPolicy,
     ) -> Result<(), JsonDecodeError> {
-        let _: &RawValue =
-            serde_json::from_str(normalized).map_err(|error| {
-                JsonDecodeError::invalid_json(
-                    error,
-                    raw_input_bytes,
-                    normalized_input_bytes,
-                    privacy_policy,
-                )
-            })?;
+        let _: &RawValue = from_str(normalized).map_err(|error| {
+            JsonDecodeError::invalid_json(
+                error,
+                raw_input_bytes,
+                normalized_input_bytes,
+                privacy_policy,
+            )
+        })?;
         Ok(())
     }
 
@@ -395,7 +392,7 @@ impl LenientJsonDecoder {
     where
         T: DeserializeOwned,
     {
-        serde_json::from_str(normalized).map_err(|error| {
+        from_str(normalized).map_err(|error| {
             Self::map_decode_error(
                 normalized,
                 error,
@@ -423,7 +420,7 @@ impl LenientJsonDecoder {
     #[must_use]
     fn map_decode_error(
         normalized: &str,
-        error: serde_json::Error,
+        error: Error,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
         privacy_policy: ErrorPrivacyPolicy,

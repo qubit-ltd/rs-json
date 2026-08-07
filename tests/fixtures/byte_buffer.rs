@@ -7,10 +7,8 @@
 // =============================================================================
 //! Defines the byte-oriented target used by decoder regression tests.
 
-use serde::{
-    Deserialize,
-    Deserializer,
-};
+use serde::Deserialize;
+use serde::Deserializer;
 
 use super::internal::ByteBufferVisitor;
 

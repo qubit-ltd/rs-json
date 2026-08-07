@@ -9,15 +9,10 @@
 
 use std::borrow::Cow;
 
-use crate::{
-    JsonDecodeError,
-    JsonDecodeOptions,
-};
-
-use super::{
-    control_character_escaper::ControlCharacterEscaper,
-    markdown_fence::MarkdownFence,
-};
+use super::control_character_escaper::ControlCharacterEscaper;
+use super::markdown_fence::MarkdownFence;
+use crate::JsonDecodeError;
+use crate::JsonDecodeOptions;
 
 /// Normalizes one raw JSON text input before JSON parsing.
 #[derive(Debug, Clone)]

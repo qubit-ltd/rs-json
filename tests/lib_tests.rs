@@ -7,20 +7,16 @@
 // =============================================================================
 //! Smoke tests for crate-level exports in `lib.rs`.
 
-use crate::fixtures::{
-    MAX_FUZZ_INPUT_BYTES,
-    is_fuzz_input_within_limit,
-};
+use qubit_json::ErrorPrivacyPolicy;
+use qubit_json::JsonDecodeError;
+use qubit_json::JsonDecodeErrorKind;
+use qubit_json::JsonDecodeOptions;
+use qubit_json::JsonDecodeStage;
+use qubit_json::JsonTopLevelKind;
+use qubit_json::LenientJsonDecoder;
 
-use qubit_json::{
-    ErrorPrivacyPolicy,
-    JsonDecodeError,
-    JsonDecodeErrorKind,
-    JsonDecodeOptions,
-    JsonDecodeStage,
-    JsonTopLevelKind,
-    LenientJsonDecoder,
-};
+use crate::fixtures::MAX_FUZZ_INPUT_BYTES;
+use crate::fixtures::is_fuzz_input_within_limit;
 
 /// Verifies that the crate re-exports its documented public API types.
 ///
