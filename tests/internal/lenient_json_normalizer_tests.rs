@@ -8,16 +8,14 @@
 //! Tests for normalization behavior implemented in
 //! `lenient_json_normalizer.rs`.
 
+use qubit_json::JsonDecodeErrorKind;
+use qubit_json::JsonDecodeOptions;
+use qubit_json::JsonDecodeStage;
+use qubit_json::LenientJsonDecoder;
+use qubit_json::MarkdownFenceClosing;
+use qubit_json::MarkdownFencePolicy;
 use serde_json::json;
-
-use qubit_json::{
-    JsonDecodeErrorKind,
-    JsonDecodeOptions,
-    JsonDecodeStage,
-    LenientJsonDecoder,
-    MarkdownFenceClosing,
-    MarkdownFencePolicy,
-};
+use serde_json::to_string;
 
 /// Verifies that decode value reports empty input for empty string.
 ///
@@ -333,7 +331,7 @@ fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid()
 
             if let Ok(value) = result.expect("catch_unwind returned no result")
             {
-                let canonical = serde_json::to_string(&value)
+                let canonical = to_string(&value)
                     .expect("serializing a decoded JSON value should not fail");
                 let reparsed = decoder.decode_value(&canonical).expect(
                     "canonical JSON should be decodable by the same decoder",

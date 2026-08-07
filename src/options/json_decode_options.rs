@@ -7,11 +7,9 @@
 // =============================================================================
 //! Defines the option type used to configure the lenient JSON decoder.
 
-use crate::{
-    ErrorPrivacyPolicy,
-    MarkdownFenceClosing,
-    MarkdownFencePolicy,
-};
+use crate::ErrorPrivacyPolicy;
+use crate::MarkdownFenceClosing;
+use crate::MarkdownFencePolicy;
 
 /// Configuration switches for [`crate::LenientJsonDecoder`].
 ///

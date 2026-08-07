@@ -7,16 +7,12 @@
 // =============================================================================
 //! Defines the counted failure target used by decoder regression tests.
 
-use std::sync::atomic::{
-    AtomicUsize,
-    Ordering,
-};
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
-use serde::{
-    Deserialize,
-    Deserializer,
-    de,
-};
+use serde::Deserialize;
+use serde::Deserializer;
+use serde::de;
 
 /// Counts target deserialization attempts made by decoder calls.
 static DESERIALIZE_CALLS: AtomicUsize = AtomicUsize::new(0);

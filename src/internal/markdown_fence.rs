@@ -7,10 +7,8 @@
 // =============================================================================
 //! Defines the private representation of a Markdown opening fence.
 
-use crate::{
-    MarkdownFenceClosing,
-    MarkdownFencePolicy,
-};
+use crate::MarkdownFenceClosing;
+use crate::MarkdownFencePolicy;
 
 /// Describes one recognized Markdown code-fence opening line.
 #[derive(Debug, Clone, Copy)]

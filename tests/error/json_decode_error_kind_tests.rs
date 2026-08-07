@@ -8,8 +8,9 @@
 //! Tests for the public `JsonDecodeErrorKind` type in
 //! `json_decode_error_kind.rs`.
 
-use qubit_json::JsonDecodeErrorKind;
 use std::str::FromStr;
+
+use qubit_json::JsonDecodeErrorKind;
 
 /// Verifies that decode error kind display uses snake case names.
 ///

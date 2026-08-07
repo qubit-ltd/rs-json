@@ -11,7 +11,5 @@ mod byte_buffer_visitor;
 mod fuzz_input_limit;
 
 pub(crate) use byte_buffer_visitor::ByteBufferVisitor;
-pub(crate) use fuzz_input_limit::{
-    MAX_FUZZ_INPUT_BYTES,
-    is_fuzz_input_within_limit,
-};
+pub(crate) use fuzz_input_limit::MAX_FUZZ_INPUT_BYTES;
+pub(crate) use fuzz_input_limit::is_fuzz_input_within_limit;

@@ -7,10 +7,8 @@
 // =============================================================================
 //! Tests for [`qubit_json::MarkdownFencePolicy`].
 
-use qubit_json::{
-    MarkdownFenceClosing,
-    MarkdownFencePolicy,
-};
+use qubit_json::MarkdownFenceClosing;
+use qubit_json::MarkdownFencePolicy;
 
 /// Verifies that markdown fence policy is cloneable and equatable.
 ///

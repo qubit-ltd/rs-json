@@ -7,10 +7,10 @@
 // =============================================================================
 //! Tests for the public `JsonTopLevelKind` type in `json_top_level_kind.rs`.
 
-use serde_json::json;
+use std::str::FromStr;
 
 use qubit_json::JsonTopLevelKind;
-use std::str::FromStr;
+use serde_json::json;
 
 /// Verifies that top level kind classifies values.
 ///

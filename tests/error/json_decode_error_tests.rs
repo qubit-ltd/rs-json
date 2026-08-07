@@ -7,16 +7,13 @@
 // =============================================================================
 //! Tests for the public [`qubit_json::JsonDecodeError`] type.
 
+use qubit_json::ErrorPrivacyPolicy;
+use qubit_json::JsonDecodeErrorKind;
+use qubit_json::JsonDecodeOptions;
+use qubit_json::JsonDecodeStage;
+use qubit_json::JsonTopLevelKind;
+use qubit_json::LenientJsonDecoder;
 use serde_json::Value;
-
-use qubit_json::{
-    ErrorPrivacyPolicy,
-    JsonDecodeErrorKind,
-    JsonDecodeOptions,
-    JsonDecodeStage,
-    JsonTopLevelKind,
-    LenientJsonDecoder,
-};
 
 use crate::fixtures::PublicChoice;
 
@@ -47,7 +44,7 @@ fn test_error_display_for_empty_input_uses_message() {
 #[test]
 fn test_error_exposes_top_level_mismatch_context() {
     let error = LenientJsonDecoder::default()
-        .decode_object::<serde_json::Value>("[]")
+        .decode_object::<Value>("[]")
         .expect_err("top-level array should fail an object contract");
     assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Object));
     assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Array));
@@ -175,7 +172,7 @@ fn test_default_invalid_json_error_does_not_expose_serde_source() {
 #[test]
 fn test_invalid_utf8_redacted_error_does_not_expose_source() {
     let error = LenientJsonDecoder::default()
-        .decode_slice::<serde_json::Value>(&[0xff])
+        .decode_slice::<Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail");
     assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
     assert_eq!(error.utf8_valid_up_to(), Some(0));
@@ -192,13 +189,13 @@ fn test_invalid_utf8_redacted_error_does_not_expose_source() {
 #[test]
 fn test_invalid_utf8_exposes_safe_position_diagnostics() {
     let definite = LenientJsonDecoder::default()
-        .decode_slice::<serde_json::Value>(&[b'{', 0xff])
+        .decode_slice::<Value>(&[b'{', 0xff])
         .expect_err("invalid UTF-8 must fail");
     assert_eq!(definite.utf8_valid_up_to(), Some(1));
     assert_eq!(definite.utf8_error_len(), Some(1));
 
     let incomplete = LenientJsonDecoder::default()
-        .decode_slice::<serde_json::Value>(&[0xe2, 0x82])
+        .decode_slice::<Value>(&[0xe2, 0x82])
         .expect_err("incomplete UTF-8 must fail");
     assert_eq!(incomplete.utf8_valid_up_to(), Some(0));
     assert_eq!(incomplete.utf8_error_len(), None);
@@ -216,7 +213,7 @@ fn test_invalid_utf8_detailed_error_retains_utf8_source() {
             .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
     );
     let error = decoder
-        .decode_slice::<serde_json::Value>(&[0xff])
+        .decode_slice::<Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail");
     assert_eq!(error.utf8_valid_up_to(), Some(0));
     assert_eq!(error.utf8_error_len(), Some(1));

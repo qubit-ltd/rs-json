@@ -7,27 +7,24 @@
 // =============================================================================
 //! Tests for the public API in `lenient_json_decoder.rs`.
 
+use qubit_json::ErrorPrivacyPolicy;
+use qubit_json::JsonDecodeErrorKind;
+use qubit_json::JsonDecodeOptions;
+use qubit_json::JsonDecodeStage;
+use qubit_json::JsonTopLevelKind;
+use qubit_json::LenientJsonDecoder;
+use qubit_json::MarkdownFencePolicy;
+use serde_json::Value;
 use serde_json::json;
 
-use crate::fixtures::{
-    ByteBuffer,
-    CountedFailure,
-    ExactInteger,
-    Message,
-    SingleValue,
-    User,
-    deserialize_calls,
-    reset_deserialize_calls,
-};
-use qubit_json::{
-    ErrorPrivacyPolicy,
-    JsonDecodeErrorKind,
-    JsonDecodeOptions,
-    JsonDecodeStage,
-    JsonTopLevelKind,
-    LenientJsonDecoder,
-    MarkdownFencePolicy,
-};
+use crate::fixtures::ByteBuffer;
+use crate::fixtures::CountedFailure;
+use crate::fixtures::ExactInteger;
+use crate::fixtures::Message;
+use crate::fixtures::SingleValue;
+use crate::fixtures::User;
+use crate::fixtures::deserialize_calls;
+use crate::fixtures::reset_deserialize_calls;
 
 /// Verifies that new exposes configured options.
 ///
@@ -62,10 +59,10 @@ fn test_default_uses_default_options() {
 fn test_strict_decoder_preserves_serde_json_grammar() {
     let decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
 
-    let canonical: serde_json::Value = decoder
+    let canonical: Value = decoder
         .decode(" \n{\"ok\":true}\t")
         .expect("strict mode must preserve whitespace accepted by serde_json");
-    assert_eq!(canonical, serde_json::json!({"ok": true}));
+    assert_eq!(canonical, json!({"ok": true}));
 
     for input in [
         "\u{feff}{\"ok\":true}",
@@ -76,10 +73,7 @@ fn test_strict_decoder_preserves_serde_json_grammar() {
             .decode_value(input)
             .expect_err("strict mode must reject lenient-only input forms");
         assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
-        assert_eq!(
-            error.privacy_policy(),
-            qubit_json::ErrorPrivacyPolicy::Redacted,
-        );
+        assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted,);
     }
 }
 
@@ -124,10 +118,10 @@ fn test_decode_typed_value_succeeds() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_decodes_valid_utf8_without_changing_semantics() {
-    let value: serde_json::Value = LenientJsonDecoder::default()
+    let value: Value = LenientJsonDecoder::default()
         .decode_slice(b"{\"ok\":true}")
         .expect("valid UTF-8 JSON bytes must decode");
-    assert_eq!(value, serde_json::json!({"ok": true}));
+    assert_eq!(value, json!({"ok": true}));
 }
 
 /// Verifies that decode slice rejects invalid utf8 for byte target.
@@ -172,10 +166,10 @@ fn test_decode_slice_accepts_non_rewrite_strict_overrides() {
             .with_max_input_bytes(Some(64))
             .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
     );
-    let value: serde_json::Value = decoder
+    let value: Value = decoder
         .decode_slice(b"{\"ok\":true}")
         .expect("non-rewrite options must preserve successful byte decoding");
-    assert_eq!(value, serde_json::json!({"ok": true}));
+    assert_eq!(value, json!({"ok": true}));
 }
 
 /// Verifies that decode slice preserves deserialize error mapping.
@@ -222,7 +216,7 @@ fn test_decode_slice_checks_raw_size_before_utf8() {
         JsonDecodeOptions::strict().with_max_input_bytes(Some(1)),
     );
     let error = decoder
-        .decode_slice::<serde_json::Value>(&[0xff, 0xfe])
+        .decode_slice::<Value>(&[0xff, 0xfe])
         .expect_err("raw size must be checked before UTF-8");
     assert_eq!(error.kind(), JsonDecodeErrorKind::InputTooLarge);
 }
@@ -240,10 +234,10 @@ fn test_decode_slice_accepts_input_at_exact_raw_size_limit() {
     );
 
     let value = decoder
-        .decode_slice::<serde_json::Value>(input)
+        .decode_slice::<Value>(input)
         .expect("input at the exact raw byte limit must be accepted");
 
-    assert_eq!(value, serde_json::Value::Null);
+    assert_eq!(value, Value::Null);
 }
 
 /// Verifies that decode slice classifies invalid utf8.
@@ -254,7 +248,7 @@ fn test_decode_slice_accepts_input_at_exact_raw_size_limit() {
 #[test]
 fn test_decode_slice_classifies_invalid_utf8() {
     let error = LenientJsonDecoder::default()
-        .decode_slice::<serde_json::Value>(&[0xff])
+        .decode_slice::<Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail before normalization");
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
     assert_eq!(error.stage(), JsonDecodeStage::DecodeText);
@@ -640,7 +634,7 @@ fn test_decoders_with_different_configs_do_not_share_state() {
     let value = permissive_decoder
         .decode_value("```json\n{\"a\":1}\n```")
         .expect("default normalizer should strip one markdown fence");
-    assert_eq!(value, serde_json::json!({"a": 1}));
+    assert_eq!(value, json!({"a": 1}));
 }
 
 /// Verifies that decoder keeps trim whitespace setting for empty text.

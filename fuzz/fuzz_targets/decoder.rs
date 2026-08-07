@@ -13,20 +13,17 @@
 mod fuzz_input_limit;
 mod internal;
 
-use libfuzzer_sys::fuzz_target;
-use qubit_json::{
-    ErrorPrivacyPolicy,
-    JsonDecodeError,
-    JsonDecodeErrorKind,
-    JsonDecodeOptions,
-    JsonDecodeStage,
-    LenientJsonDecoder,
-    MarkdownFenceClosing,
-    MarkdownFencePolicy,
-};
-
 use fuzz_input_limit::is_fuzz_input_within_limit;
 use internal::FuzzRecord;
+use libfuzzer_sys::fuzz_target;
+use qubit_json::ErrorPrivacyPolicy;
+use qubit_json::JsonDecodeError;
+use qubit_json::JsonDecodeErrorKind;
+use qubit_json::JsonDecodeOptions;
+use qubit_json::JsonDecodeStage;
+use qubit_json::LenientJsonDecoder;
+use qubit_json::MarkdownFenceClosing;
+use qubit_json::MarkdownFencePolicy;
 
 /// Verifies stable diagnostics shared by every redacted decoder configuration.
 ///
