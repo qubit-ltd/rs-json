@@ -12,7 +12,6 @@ use std::fmt;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use qubit_budget::JsonValueBudget;
 use qubit_budget::ResourceQuantity;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
@@ -23,6 +22,8 @@ use serde::de::Visitor;
 use serde_json::Map;
 use serde_json::Number;
 use serde_json::Value;
+
+use super::JsonValueBudget;
 
 /// Serde seed that constructs a [`Value`] while charging decoded resources.
 ///

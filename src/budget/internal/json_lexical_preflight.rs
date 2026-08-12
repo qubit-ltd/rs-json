@@ -8,12 +8,12 @@
 //! Non-recursive lexical admission for one JSON input document.
 // qubit-style: allow source-test-pair
 
-use qubit_budget::JsonValueBudget;
 use qubit_budget::ResourceQuantity;
 
 use super::super::JsonSerdeError;
 use super::super::JsonSyntaxError;
 use super::super::JsonSyntaxErrorReason;
+use super::super::JsonValueBudget;
 
 /// Lexically validates and charges one JSON document without recursion.
 pub(in crate::budget) struct JsonLexicalPreflight<'a, R, Q>

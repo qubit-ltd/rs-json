@@ -79,9 +79,16 @@ mod lenient_json_decoder;
 mod options;
 
 pub use budget::BudgetedJsonValueSeed;
+pub use budget::JsonDecodeLimits;
+pub use budget::JsonDecodeSession;
+pub use budget::JsonEncodeLimits;
+pub use budget::JsonEncodeSession;
+pub use budget::JsonResource;
 pub use budget::JsonSerdeError;
 pub use budget::JsonSyntaxError;
 pub use budget::JsonSyntaxErrorReason;
+pub use budget::JsonValueBudget;
+pub use budget::JsonValueLimits;
 pub use budget::JsonValueVisitor;
 pub use budget::account_value;
 pub use budget::decode_slice;

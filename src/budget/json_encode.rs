@@ -12,13 +12,12 @@ use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
 
-use qubit_budget::JsonEncodeSession;
 use qubit_budget::MeasuredBudgetError;
-use qubit_budget::ResourceBudget;
 use qubit_budget::ResourceQuantity;
 use serde::Serialize;
 use serde_json::Serializer as JsonSerializer;
 
+use super::JsonEncodeSession;
 use super::JsonSerdeError;
 use super::internal::JsonEncodeSerializer;
 use super::internal::JsonOutputAccounting;
@@ -58,13 +57,8 @@ where
 {
     let (output_budget, value_budget) = session.split_mut();
     let initial_remaining =
-        output_budget.as_deref().map(ResourceBudget::remaining);
-    let mut transaction = output_budget.as_deref().map(|budget| {
-        ResourceBudget::from_limit_with_remaining(
-            budget.resource_limit().clone(),
-            budget.remaining(),
-        )
-    });
+        output_budget.as_deref().map(|budget| budget.remaining());
+    let mut transaction = output_budget.as_deref().cloned();
     let bytes = {
         let accounting = Rc::new(RefCell::new(JsonOutputAccounting::new(
             transaction.as_mut(),

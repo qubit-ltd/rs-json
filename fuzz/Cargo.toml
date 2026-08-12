@@ -19,3 +19,24 @@ path = "fuzz_targets/decoder.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "json_decode_differential"
+path = "fuzz_targets/json_decode_differential.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json_budget_invariants"
+path = "fuzz_targets/json_budget_invariants.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json_encode_invariants"
+path = "fuzz_targets/json_encode_invariants.rs"
+test = false
+doc = false
+bench = false

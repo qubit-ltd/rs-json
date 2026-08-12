@@ -9,6 +9,27 @@
 
 Lenient JSON decoder for Rust, designed for non-fully-trusted text inputs.
 
+## Budget-aware JSON processing
+
+`qubit-json` owns JSON resource limits, sessions, traversal, and Serde
+adapters. Import `JsonValueLimits`, `JsonDecodeLimits`, `JsonDecodeSession`,
+`JsonEncodeLimits`, and `JsonEncodeSession` from `qubit_json`; import generic
+`ResourceLimit` and `StructureLimits` from `qubit_budget`.
+
+```rust
+use qubit_json::{JsonDecodeLimits, JsonDecodeSession, JsonEncodeLimits, JsonEncodeSession};
+
+let decode = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+let encode = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+assert_eq!(decode.max_input_bytes(), None);
+assert_eq!(encode.max_output_bytes(), None);
+```
+
+Input bytes and accepted value work are charged per attempt and are not rolled
+back after a later parse or Serde failure. Output bytes are staged and committed
+only after complete serialization succeeds. Therefore a serialization failure
+can leave value accounting charged while leaving output accounting unchanged.
+
 ## Overview
 
 Qubit JSON provides a small and predictable decoding layer on top of

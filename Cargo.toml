@@ -41,7 +41,7 @@ name = "tests"
 path = "tests/mod.rs"
 
 [dependencies]
-qubit-budget = { version = "0.4", path = "../rs-budget", features = ["json"] }
+qubit-budget = { version = "0.4", path = "../rs-budget" }
 serde = "1.0"
 serde_json = { version = "1.0", features = ["arbitrary_precision", "float_roundtrip", "raw_value"] }
 thiserror = "2.0"
@@ -53,6 +53,10 @@ serde_json = "1.0"
 
 [[bench]]
 name = "decoder_bench"
+harness = false
+
+[[bench]]
+name = "budgeted_serde_json"
 harness = false
 
 [profile.release]

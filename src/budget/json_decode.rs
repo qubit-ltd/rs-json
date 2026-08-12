@@ -10,13 +10,13 @@
 
 use std::marker::PhantomData;
 
-use qubit_budget::JsonDecodeSession;
 use qubit_budget::ResourceQuantity;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
 use serde_json::Deserializer as JsonDeserializer;
 
+use super::JsonDecodeSession;
 use super::JsonSerdeError;
 use super::internal::JsonLexicalPreflight;
 

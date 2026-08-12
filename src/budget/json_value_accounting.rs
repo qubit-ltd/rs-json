@@ -12,12 +12,12 @@
 use std::fmt::Debug;
 use std::io::Error as IoError;
 
-use qubit_budget::JsonValueBudget;
 use qubit_budget::ResourceQuantity;
 use serde_json::Error as JsonError;
 use serde_json::Value;
 
 use super::JsonSerdeError;
+use super::JsonValueBudget;
 
 /// Charges every resource represented by one materialized JSON value.
 ///

@@ -9,6 +9,26 @@
 
 为 Rust 提供面向非完全可信文本输入的宽松 JSON 解码器。
 
+## 带预算的 JSON 处理
+
+`qubit-json` 拥有 JSON 资源限制、session、遍历和 Serde adapter。应从 `qubit_json`
+导入 `JsonValueLimits`、`JsonDecodeLimits`、`JsonDecodeSession`、`JsonEncodeLimits`
+和 `JsonEncodeSession`；通用的 `ResourceLimit` 与 `StructureLimits` 仍从
+`qubit_budget` 导入。
+
+```rust
+use qubit_json::{JsonDecodeLimits, JsonDecodeSession, JsonEncodeLimits, JsonEncodeSession};
+
+let decode = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+let encode = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+assert_eq!(decode.max_input_bytes(), None);
+assert_eq!(encode.max_output_bytes(), None);
+```
+
+输入字节和已接纳的 value 工作按每次尝试计费；之后的解析或 Serde 失败不会回滚它们。输出
+字节先在事务中暂存，只有完整序列化成功后才提交。因此序列化失败时 value 记账可以保留，
+而 output 记账保持不变。
+
 ## 概述
 
 Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力。它的
