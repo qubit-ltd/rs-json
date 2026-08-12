@@ -71,12 +71,24 @@
 
 #![deny(missing_docs)]
 
+pub mod budget;
 mod error;
 mod internal;
 mod json_top_level_kind;
 mod lenient_json_decoder;
 mod options;
 
+pub use budget::BudgetedJsonValueSeed;
+pub use budget::JsonSerdeError;
+pub use budget::JsonSyntaxError;
+pub use budget::JsonSyntaxErrorReason;
+pub use budget::JsonValueVisitor;
+pub use budget::account_value;
+pub use budget::decode_slice;
+pub use budget::decode_slice_seed;
+pub use budget::encode_to_vec;
+pub use budget::encode_to_writer;
+pub use budget::walk_json_value;
 pub use error::ErrorPrivacyPolicy;
 pub use error::JsonDecodeError;
 pub use error::JsonDecodeErrorKind;

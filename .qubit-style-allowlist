@@ -1,0 +1,3 @@
+multiple-public-types | src/budget/internal/json_encode_compound.rs | The compound wrapper and nested value wrapper share one private traversal context.
+multiple-public-types | src/budget/internal/json_encode_serializer.rs | Serializer decorators share one private traversal context.
+multiple-public-types | src/budget/internal/json_output_buffer.rs | Output accounting and its writer must share the same private state.
