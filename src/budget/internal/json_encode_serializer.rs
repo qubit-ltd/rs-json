@@ -16,7 +16,6 @@ use std::fmt::Display;
 use std::fmt::Write as _;
 use std::rc::Rc;
 
-use qubit_budget::JsonValueBudget;
 use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
 use serde::Serialize;
@@ -24,6 +23,7 @@ use serde::Serializer;
 use serde::ser::Error;
 
 use super::super::JsonSerdeError;
+use super::super::JsonValueBudget;
 use super::JsonLexicalPreflight;
 use super::json_encode_compound::BudgetedValue;
 use super::json_encode_compound::JsonEncodeCompound;

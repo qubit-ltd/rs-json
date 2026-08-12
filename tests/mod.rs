@@ -7,6 +7,7 @@
 // =============================================================================
 //! Integration test entry point for `qubit-json`.
 
+mod budget;
 mod error;
 mod fixtures;
 mod internal;

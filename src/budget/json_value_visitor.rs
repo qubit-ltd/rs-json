@@ -6,12 +6,12 @@
 //! Explicit-stack traversal of materialized JSON values.
 // qubit-style: allow source-test-pair
 
-use qubit_budget::JsonValueBudget;
 use qubit_budget::ResourceQuantity;
 use serde_json::Error as JsonError;
 use serde_json::Value;
 
 use super::JsonSerdeError;
+use super::JsonValueBudget;
 
 /// Receives callbacks for every node and object key in a JSON tree.
 pub trait JsonValueVisitor<R, Q>
