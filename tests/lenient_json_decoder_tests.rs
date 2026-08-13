@@ -7,6 +7,12 @@
 // =============================================================================
 //! Tests for the public API in `lenient_json_decoder.rs`.
 
+use qubit_budget::ResourceBudget;
+use qubit_budget::ResourceLimit;
+use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueBudget;
+use qubit_budget::json::JsonValueLimits;
 use qubit_json::ErrorPrivacyPolicy;
 use qubit_json::JsonDecodeErrorKind;
 use qubit_json::JsonDecodeOptions;
@@ -48,6 +54,26 @@ fn test_new_exposes_configured_options() {
 fn test_default_uses_default_options() {
     let decoder = LenientJsonDecoder::default();
     assert_eq!(decoder.options(), &JsonDecodeOptions::default());
+}
+
+/// Verifies that callers can share one budget session with lenient decoding.
+#[test]
+fn test_decode_with_session_charges_caller_owned_input_budget() {
+    let decoder = LenientJsonDecoder::default();
+    let mut input = ResourceBudget::from_limit(ResourceLimit::new(
+        JsonResource::InputBytes,
+        16,
+    ));
+    let mut value = JsonValueBudget::new(JsonValueLimits::empty());
+    let mut session =
+        JsonDecodeSession::borrowing_input(&mut input, &mut value);
+
+    let decoded: Value = decoder
+        .decode_with_session("{\"ok\":true}", &mut session)
+        .expect("caller-owned session must be accepted");
+
+    assert_eq!(decoded, json!({"ok": true}));
+    assert_eq!(input.used(), 11);
 }
 
 /// Verifies that strict decoder preserves serde json grammar.

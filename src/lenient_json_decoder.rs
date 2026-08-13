@@ -9,6 +9,7 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use serde::de::DeserializeOwned;
 use serde_json::Error;
 use serde_json::Value;
@@ -84,10 +85,26 @@ impl LenientJsonDecoder {
     where
         T: DeserializeOwned,
     {
+        let mut session = self.decode_session();
+        self.decode_with_session(input, &mut session)
+    }
+
+    /// Decodes `input` while charging a caller-owned JSON decode session.
+    ///
+    /// Raw bytes are charged before normalization and normalized bytes are
+    /// charged by the normalizer. The supplied session remains reusable after
+    /// this call.
+    pub fn decode_with_session<T>(
+        &self,
+        input: &str,
+        session: &mut JsonDecodeSession<'_, JsonResource>,
+    ) -> Result<T, JsonDecodeError>
+    where
+        T: DeserializeOwned,
+    {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
-        let mut session = self.decode_session();
-        let normalized = self.normalizer.normalize(input, &mut session)?;
+        let normalized = self.normalizer.normalize(input, session)?;
         Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,

@@ -47,7 +47,7 @@ fn test_json_value_limits_expose_all_configured_values() {
     assert_eq!(limits.max_string_bytes(), Some(6));
     assert_eq!(limits.max_number_bytes(), Some(7));
     assert_eq!(limits.max_payload_bytes(), Some(8));
-    assert_eq!(limits.structure_limits(), structure);
+    assert_eq!(limits.structure_limits(), &structure);
 }
 
 /// Verifies custom resource identities remain attached to value limits.

@@ -28,5 +28,5 @@ fn test_json_encode_limits_retain_configured_values() {
         limits.output_bytes_limit().map(ResourceLimit::maximum),
         Some(12)
     );
-    assert_eq!(limits.value_limits(), value_limits);
+    assert_eq!(limits.value_limits(), &value_limits);
 }

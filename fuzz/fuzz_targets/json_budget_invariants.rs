@@ -17,7 +17,7 @@ use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::decode_slice;
+use qubit_json::text::decode_slice;
 use serde_json::Value;
 
 const MAX_INPUT_LEN: usize = 4 * 1024;

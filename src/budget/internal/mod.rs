@@ -13,6 +13,6 @@ mod json_lexical_preflight;
 mod json_output_buffer;
 
 pub(in crate::budget) use json_encode_serializer::JsonEncodeSerializer;
-pub(in crate::budget) use json_lexical_preflight::JsonLexicalPreflight;
+pub(crate) use json_lexical_preflight::JsonLexicalPreflight;
 pub(in crate::budget) use json_output_buffer::JsonOutputAccounting;
 pub(in crate::budget) use json_output_buffer::JsonOutputBuffer;

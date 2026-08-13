@@ -16,7 +16,7 @@ use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::encode_to_vec;
+use qubit_json::text::encode_to_vec;
 use serde_json::Value;
 
 const MAX_INPUT_LEN: usize = 4 * 1024;

@@ -8,7 +8,7 @@
 //! Budget-aware JSON/Serde adapters.
 
 mod budgeted_json_value_seed;
-mod internal;
+pub(crate) mod internal;
 mod json_decode;
 mod json_encode;
 mod json_serde_error;
