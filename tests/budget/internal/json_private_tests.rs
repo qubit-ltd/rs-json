@@ -17,9 +17,10 @@ use serde_json::value::RawValue;
 /// Ensures arbitrary-precision numbers and raw fragments stay budget-aware.
 #[test]
 fn test_private_serde_json_shapes_encode_through_budget() {
-    let number: Number =
-        from_str("12345678901234567890").expect("arbitrary-precision number should parse");
-    let raw = RawValue::from_string(String::from("{\"ok\":true}")).expect("raw JSON should parse");
+    let number: Number = from_str("12345678901234567890")
+        .expect("arbitrary-precision number should parse");
+    let raw = RawValue::from_string(String::from("{\"ok\":true}"))
+        .expect("raw JSON should parse");
     let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
 
     let output = encode_to_vec(&(&number, &raw), &mut session)

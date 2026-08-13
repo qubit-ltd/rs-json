@@ -41,7 +41,10 @@ where
     }
 
     /// Charges every node and payload represented by `value`.
-    pub fn visit_tree(&mut self, value: &Value) -> Result<(), MeasuredBudgetError<R, Q>> {
+    pub fn visit_tree(
+        &mut self,
+        value: &Value,
+    ) -> Result<(), MeasuredBudgetError<R, Q>> {
         let mut processor = JsonTreeProcessor::new(&mut self.budget);
         processor
             .process(value, &mut NoopVisitor)
@@ -76,7 +79,11 @@ impl JsonTreeVisitor for NoopVisitor {
     type Error = std::convert::Infallible;
 
     /// Accepts every admitted node.
-    fn enter(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+    fn enter(
+        &mut self,
+        _value: &Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }

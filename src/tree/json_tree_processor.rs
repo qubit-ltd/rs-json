@@ -99,7 +99,8 @@ where
             let context = location.context(depth);
             if !key_charged
                 && let Some(key) = location.key()
-                && let Err(error) = self.budget.consume_key_bytes_usize(key.len())
+                && let Err(error) =
+                    self.budget.consume_key_bytes_usize(key.len())
             {
                 let value = value_at_mut(root, &path);
                 match visitor
@@ -110,7 +111,8 @@ where
                         return Err(JsonTreeProcessError::Budget(error));
                     }
                     JsonBudgetRejection::SkipSubtree => {
-                        pending = next_mut_node(root, &mut path, &mut containers);
+                        pending =
+                            next_mut_node(root, &mut path, &mut containers);
                         continue;
                     }
                 }
@@ -122,9 +124,12 @@ where
                     .reject_budget(value, context, &error)
                     .map_err(JsonTreeProcessError::Visitor)?
                 {
-                    JsonBudgetRejection::Abort => return Err(JsonTreeProcessError::Budget(error)),
+                    JsonBudgetRejection::Abort => {
+                        return Err(JsonTreeProcessError::Budget(error));
+                    }
                     JsonBudgetRejection::SkipSubtree => {
-                        pending = next_mut_node(root, &mut path, &mut containers);
+                        pending =
+                            next_mut_node(root, &mut path, &mut containers);
                         continue;
                     }
                 }
@@ -163,21 +168,39 @@ where
     }
 
     /// Admits one node before any visitor callback.
-    fn admit(&mut self, value: &Value, depth: usize) -> Result<(), MeasuredBudgetError<R, Q>> {
+    fn admit(
+        &mut self,
+        value: &Value,
+        depth: usize,
+    ) -> Result<(), MeasuredBudgetError<R, Q>> {
         match value {
             Value::Null | Value::Bool(_) => self.budget.enter_node_usize(depth),
-            Value::Number(number) => self.budget.enter_number_usize(depth, number.as_str().len()),
-            Value::String(text) => self.budget.enter_string_usize(depth, text.len()),
-            Value::Array(values) => self.budget.enter_array_usize(depth, values.len()),
-            Value::Object(entries) => self.budget.enter_object_usize(depth, entries.len()),
+            Value::Number(number) => {
+                self.budget.enter_number_usize(depth, number.as_str().len())
+            }
+            Value::String(text) => {
+                self.budget.enter_string_usize(depth, text.len())
+            }
+            Value::Array(values) => {
+                self.budget.enter_array_usize(depth, values.len())
+            }
+            Value::Object(entries) => {
+                self.budget.enter_object_usize(depth, entries.len())
+            }
         }
     }
 
-    /// Pushes descendants in reverse order so stack popping preserves JSON order.
-    fn push_children(&self, value: &'a Value, depth: usize, pending: &mut Vec<Frame<'a>>) {
-        let child_depth = depth
-            .checked_add(1)
-            .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
+    /// Pushes descendants in reverse order so stack popping preserves JSON
+    /// order.
+    fn push_children(
+        &self,
+        value: &'a Value,
+        depth: usize,
+        pending: &mut Vec<Frame<'a>>,
+    ) {
+        let child_depth = depth.checked_add(1).expect(
+            "a materialized JSON tree cannot have usize::MAX nesting depth",
+        );
         match value {
             Value::Array(values) => {
                 for (index, child) in values.iter().enumerate().rev() {
@@ -203,7 +226,10 @@ where
                     });
                 }
             }
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+            Value::Null
+            | Value::Bool(_)
+            | Value::Number(_)
+            | Value::String(_) => {}
         }
     }
 }
@@ -239,7 +265,9 @@ impl OwnedLocation {
     fn context(&self, depth: usize) -> JsonTreeContext<'_> {
         let location = match self {
             Self::Root => JsonTreeLocation::Root,
-            Self::ArrayElement(index) => JsonTreeLocation::ArrayElement { index: *index },
+            Self::ArrayElement(index) => {
+                JsonTreeLocation::ArrayElement { index: *index }
+            }
             Self::ObjectValue(key) => JsonTreeLocation::ObjectValue { key },
         };
         JsonTreeContext { depth, location }
@@ -256,7 +284,9 @@ impl OwnedLocation {
     /// Converts this location into a path segment.
     fn segment(&self) -> PathSegment {
         match self {
-            Self::Root => unreachable!("the root cannot be a child path segment"),
+            Self::Root => {
+                unreachable!("the root cannot be a child path segment")
+            }
             Self::ArrayElement(index) => PathSegment::ArrayElement(*index),
             Self::ObjectValue(key) => PathSegment::ObjectValue(key.clone()),
         }
@@ -271,7 +301,8 @@ enum PathSegment {
     ObjectValue(String),
 }
 
-/// Stores continuation state for one mutable container without retaining aliases.
+/// Stores continuation state for one mutable container without retaining
+/// aliases.
 struct MutContainerFrame {
     /// Number of path elements used to reach this container.
     path_len: usize,
@@ -285,21 +316,36 @@ struct MutContainerFrame {
 fn value_at<'a>(mut value: &'a Value, path: &[PathSegment]) -> &'a Value {
     for segment in path {
         value = match (value, segment) {
-            (Value::Array(values), PathSegment::ArrayElement(index)) => &values[*index],
-            (Value::Object(values), PathSegment::ObjectValue(key)) => &values[key],
-            _ => unreachable!("mutable JSON traversal path remains synchronized with the tree"),
+            (Value::Array(values), PathSegment::ArrayElement(index)) => {
+                &values[*index]
+            }
+            (Value::Object(values), PathSegment::ObjectValue(key)) => {
+                &values[key]
+            }
+            _ => unreachable!(
+                "mutable JSON traversal path remains synchronized with the tree"
+            ),
         };
     }
     value
 }
 
 /// Returns the mutable JSON value selected by an internally maintained path.
-fn value_at_mut<'a>(mut value: &'a mut Value, path: &[PathSegment]) -> &'a mut Value {
+fn value_at_mut<'a>(
+    mut value: &'a mut Value,
+    path: &[PathSegment],
+) -> &'a mut Value {
     for segment in path {
         value = match (value, segment) {
-            (Value::Array(values), PathSegment::ArrayElement(index)) => &mut values[*index],
-            (Value::Object(values), PathSegment::ObjectValue(key)) => &mut values[key],
-            _ => unreachable!("mutable JSON traversal path remains synchronized with the tree"),
+            (Value::Array(values), PathSegment::ArrayElement(index)) => {
+                &mut values[*index]
+            }
+            (Value::Object(values), PathSegment::ObjectValue(key)) => {
+                &mut values[key]
+            }
+            _ => unreachable!(
+                "mutable JSON traversal path remains synchronized with the tree"
+            ),
         };
     }
     value

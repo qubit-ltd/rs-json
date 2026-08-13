@@ -16,8 +16,9 @@ use qubit_json::JsonValueLimits;
 /// Verifies a cumulative payload maximum accepts an exact final increment.
 #[test]
 fn json_value_payload_limit_is_inclusive() {
-    let limits = JsonValueLimits::empty()
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3));
+    let limits = JsonValueLimits::empty().with_payload_bytes_limit(
+        ResourceLimit::new(JsonResource::PayloadBytes, 3),
+    );
     let mut budget = JsonValueBudget::new(limits);
     budget.consume_string_bytes(3).expect("exact payload fits");
     let error = budget
@@ -30,8 +31,14 @@ fn json_value_payload_limit_is_inclusive() {
 #[test]
 fn test_json_value_budget_rejects_single_value_before_payload_consumption() {
     let limits = JsonValueLimits::empty()
-        .with_string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 3))
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 4));
+        .with_string_bytes_limit(ResourceLimit::new(
+            JsonResource::StringBytes,
+            3,
+        ))
+        .with_payload_bytes_limit(ResourceLimit::new(
+            JsonResource::PayloadBytes,
+            4,
+        ));
     let mut budget = JsonValueBudget::new(limits);
 
     let error = budget
@@ -46,8 +53,9 @@ fn test_json_value_budget_rejects_single_value_before_payload_consumption() {
 /// Verifies keys, strings and numbers share one cumulative payload budget.
 #[test]
 fn test_json_value_budget_charges_keys_strings_and_numbers_to_shared_payload() {
-    let limits = JsonValueLimits::empty()
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 6));
+    let limits = JsonValueLimits::empty().with_payload_bytes_limit(
+        ResourceLimit::new(JsonResource::PayloadBytes, 6),
+    );
     let mut budget = JsonValueBudget::new(limits);
 
     budget.consume_key_bytes(1).expect("key should fit");
@@ -62,8 +70,9 @@ fn test_json_value_budget_charges_keys_strings_and_numbers_to_shared_payload() {
 /// Verifies a failed payload increment leaves its remaining capacity unchanged.
 #[test]
 fn test_json_value_budget_rejects_payload_increment_atomically() {
-    let limits = JsonValueLimits::empty()
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3));
+    let limits = JsonValueLimits::empty().with_payload_bytes_limit(
+        ResourceLimit::new(JsonResource::PayloadBytes, 3),
+    );
     let mut budget = JsonValueBudget::new(limits);
 
     budget
@@ -85,7 +94,10 @@ fn test_json_value_budget_delegates_structure_checks_and_accumulates_nodes() {
         StructureLimits::empty()
             .with_depth_limit(ResourceLimit::new(JsonResource::Depth, 1))
             .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2))
-            .with_sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, 1)),
+            .with_sequence_items_limit(ResourceLimit::new(
+                JsonResource::SequenceItems,
+                1,
+            )),
     );
     let mut budget = JsonValueBudget::new(limits);
 

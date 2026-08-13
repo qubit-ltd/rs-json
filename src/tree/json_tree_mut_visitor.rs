@@ -15,7 +15,8 @@ use super::JsonBudgetRejection;
 use super::JsonTreeContext;
 use super::JsonTreeControl;
 
-/// Mutates admitted JSON nodes and handles optional fail-closed budget rejection.
+/// Mutates admitted JSON nodes and handles optional fail-closed budget
+/// rejection.
 pub trait JsonTreeMutVisitor<R, Q>
 where
     Q: ResourceQuantity,
@@ -23,14 +24,16 @@ where
     /// Domain-specific failure returned by this visitor.
     type Error;
 
-    /// Handles an admitted node and selects whether its descendants are visited.
+    /// Handles an admitted node and selects whether its descendants are
+    /// visited.
     fn visit(
         &mut self,
         value: &mut Value,
         context: JsonTreeContext<'_>,
     ) -> Result<JsonTreeControl, Self::Error>;
 
-    /// Handles an unadmitted node before its subtree is skipped or processing aborts.
+    /// Handles an unadmitted node before its subtree is skipped or processing
+    /// aborts.
     fn reject_budget(
         &mut self,
         _value: &mut Value,

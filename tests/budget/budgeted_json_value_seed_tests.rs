@@ -19,7 +19,8 @@ use serde_json::json;
 #[test]
 fn budgeted_value_seed_rejects_decoded_nodes_incrementally() {
     let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::empty().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+        StructureLimits::empty()
+            .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
     );
     let mut budget = JsonValueBudget::new(limits);
     let mut deserializer = Deserializer::from_slice(br#"[1,2]"#);

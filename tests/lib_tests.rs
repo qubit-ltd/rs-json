@@ -96,10 +96,19 @@ fn test_readme_fuzz_commands_match_workflow_contract() {
     ];
 
     for readme in readmes {
-        assert!(readme.contains("rustup toolchain install nightly-2026-06-05 --profile minimal",));
-        assert!(readme.contains("cargo install cargo-fuzz --version 0.13.2 --locked"));
-        assert!(readme.contains("cargo +nightly-2026-06-05 fuzz build decoder"));
-        assert!(readme.contains("cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096",));
+        assert!(readme.contains(
+            "rustup toolchain install nightly-2026-06-05 --profile minimal",
+        ));
+        assert!(
+            readme
+                .contains("cargo install cargo-fuzz --version 0.13.2 --locked")
+        );
+        assert!(
+            readme.contains("cargo +nightly-2026-06-05 fuzz build decoder")
+        );
+        assert!(readme.contains(
+            "cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096",
+        ));
     }
 }
 

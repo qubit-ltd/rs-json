@@ -17,8 +17,9 @@ use qubit_json::encode_to_vec;
 /// Verifies the output buffer rejects bytes beyond its configured budget.
 #[test]
 fn test_json_output_buffer_rejects_excess_output() {
-    let limits = JsonEncodeLimits::empty()
-        .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 3));
+    let limits = JsonEncodeLimits::empty().with_output_bytes_limit(
+        ResourceLimit::new(JsonResource::OutputBytes, 3),
+    );
     let mut session = JsonEncodeSession::owned(limits);
     let error = encode_to_vec(&"long", &mut session)
         .expect_err("output should exceed the configured budget");

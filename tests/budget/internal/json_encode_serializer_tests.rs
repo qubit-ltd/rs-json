@@ -17,7 +17,8 @@ fn test_json_encode_serializer_serializes_scalar_values() {
     let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
 
     assert_eq!(
-        encode_to_vec(&true, &mut session).expect("scalar JSON should serialize"),
+        encode_to_vec(&true, &mut session)
+            .expect("scalar JSON should serialize"),
         b"true"
     );
 }

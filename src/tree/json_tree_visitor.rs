@@ -17,10 +17,18 @@ pub trait JsonTreeVisitor {
     type Error;
 
     /// Handles a node after its budget admission and before its descendants.
-    fn enter(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error>;
+    fn enter(
+        &mut self,
+        value: &Value,
+        context: JsonTreeContext<'_>,
+    ) -> Result<(), Self::Error>;
 
     /// Handles a node after all of its descendants have been handled.
-    fn leave(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+    fn leave(
+        &mut self,
+        _value: &Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }

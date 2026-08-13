@@ -13,6 +13,7 @@ use qubit_json::text::decode_slice;
 #[test]
 fn test_decode_slice_returns_a_typed_value() {
     let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
-    let value: bool = decode_slice(b"true", &mut session).expect("valid JSON decodes");
+    let value: bool =
+        decode_slice(b"true", &mut session).expect("valid JSON decodes");
     assert!(value);
 }

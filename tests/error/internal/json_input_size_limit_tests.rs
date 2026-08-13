@@ -17,8 +17,9 @@ use qubit_json::LenientJsonDecoder;
 /// Panics when the public raw-size diagnostics are not observed.
 #[test]
 fn test_raw_size_limit_exposes_only_raw_limit() {
-    let decoder =
-        LenientJsonDecoder::new(JsonDecodeOptions::default().with_max_input_bytes(Some(7)));
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default().with_max_input_bytes(Some(7)),
+    );
     let error = decoder
         .decode_value("{\"a\": 1}")
         .expect_err("oversized input should return an input-too-large error");
@@ -38,11 +39,12 @@ fn test_raw_size_limit_exposes_only_raw_limit() {
 /// Panics when the public normalized-size diagnostics are not observed.
 #[test]
 fn test_normalized_size_limit_exposes_only_normalized_limit() {
-    let decoder =
-        LenientJsonDecoder::new(JsonDecodeOptions::default().with_max_normalized_bytes(Some(7)));
-    let error = decoder
-        .decode::<String>("\"\u{0000}\"")
-        .expect_err("oversized normalized input should return an input-too-large error");
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default().with_max_normalized_bytes(Some(7)),
+    );
+    let error = decoder.decode::<String>("\"\u{0000}\"").expect_err(
+        "oversized normalized input should return an input-too-large error",
+    );
     assert_eq!(
         error.to_string(),
         "Normalized JSON input is too large: 8 bytes exceed configured limit 7 bytes"

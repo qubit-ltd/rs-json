@@ -22,7 +22,8 @@ fn test_default_enables_all_mvp_rules() {
     let options = JsonDecodeOptions::default();
     assert!(options.trim_whitespace());
     assert!(options.strip_utf8_bom());
-    let markdown_fence_policy: &MarkdownFencePolicy = options.markdown_fence_policy();
+    let markdown_fence_policy: &MarkdownFencePolicy =
+        options.markdown_fence_policy();
     assert_eq!(
         markdown_fence_policy,
         &MarkdownFencePolicy::JsonOnly {
