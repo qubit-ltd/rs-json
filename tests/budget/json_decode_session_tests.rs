@@ -24,12 +24,16 @@ use serde::de::IgnoredAny;
 #[test]
 fn decode_and_encode_sessions_have_independent_directional_resources() {
     let decode = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 8)),
+        JsonDecodeLimits::empty().with_input_bytes_limit(ResourceLimit::new(
+            JsonResource::InputBytes,
+            8,
+        )),
     );
     let encode = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty()
-            .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 8)),
+        JsonEncodeLimits::empty().with_output_bytes_limit(ResourceLimit::new(
+            JsonResource::OutputBytes,
+            8,
+        )),
     );
 
     assert_eq!(decode.max_input_bytes(), Some(8));
@@ -40,8 +44,10 @@ fn decode_and_encode_sessions_have_independent_directional_resources() {
 #[test]
 fn test_decode_session_consumes_input_bytes_atomically() {
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 3)),
+        JsonDecodeLimits::empty().with_input_bytes_limit(ResourceLimit::new(
+            JsonResource::InputBytes,
+            3,
+        )),
     );
 
     session.consume_input_bytes(3).expect("exact input fits");
@@ -56,11 +62,14 @@ fn test_decode_session_consumes_input_bytes_atomically() {
 fn test_decode_session_borrowing_reuses_caller_owned_budgets() {
     let mut input = ResourceBudget::new(JsonResource::InputBytes, 16_usize);
     let mut value = JsonValueBudget::new(
-        JsonValueLimits::empty()
-            .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3_usize)),
+        JsonValueLimits::empty().with_payload_bytes_limit(ResourceLimit::new(
+            JsonResource::PayloadBytes,
+            3_usize,
+        )),
     );
     {
-        let mut session = JsonDecodeSession::borrowing(Some(&mut input), None, &mut value);
+        let mut session =
+            JsonDecodeSession::borrowing_input(&mut input, &mut value);
         decode_slice::<IgnoredAny, _, _>(br#"{"a":1}"#, &mut session)
             .expect("borrowed session should admit the document");
         assert_eq!(session.max_input_bytes(), Some(16_usize));
@@ -77,13 +86,21 @@ fn test_decode_session_borrowing_reuses_caller_owned_budgets() {
 #[test]
 fn test_decode_session_preserves_embedded_value_limits() {
     let value_limits = JsonValueLimits::empty()
-        .with_string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2))
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
+        .with_string_bytes_limit(ResourceLimit::new(
+            JsonResource::StringBytes,
+            2,
+        ))
+        .with_payload_bytes_limit(ResourceLimit::new(
+            JsonResource::PayloadBytes,
+            3,
+        ))
         .with_structure_limits(
-            StructureLimits::empty().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)),
+            StructureLimits::empty()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)),
         );
-    let mut session =
-        JsonDecodeSession::owned(JsonDecodeLimits::empty().with_value_limits(value_limits));
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::empty().with_value_limits(value_limits),
+    );
 
     session
         .value_budget_mut()
