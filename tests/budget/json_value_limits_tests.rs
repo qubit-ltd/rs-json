@@ -9,8 +9,8 @@
 
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
-use qubit_json::JsonResource;
-use qubit_json::JsonValueLimits;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
 
 /// Verifies value limits expose every configured point and structural maximum.
 #[test]

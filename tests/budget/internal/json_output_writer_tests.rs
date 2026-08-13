@@ -7,9 +7,9 @@
 // =============================================================================
 //! Public error-precedence tests for bounded JSON output.
 
-use qubit_json::JsonResource;
-use qubit_json::JsonSerdeError;
-use qubit_json::encode_to_vec;
+use qubit_budget::json::JsonResource;
+use qubit_json::text::JsonEncodeError;
+use qubit_json::text::encode_to_vec;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error as _;
@@ -58,10 +58,16 @@ fn test_json_output_buffer_preserves_output_budget_error_precedence() {
     let error = encode_to_vec(&MaskedString("hello"), &mut session)
         .expect_err("the output writer must retain its original budget error");
 
-    let JsonSerdeError::Budget(error) = error else {
+    let JsonEncodeError::Budget(error) = error else {
         panic!("expected the original output budget error");
     };
-    assert_eq!(error.resource(), &JsonResource::OutputBytes);
+    assert_eq!(
+        error
+            .budget_error()
+            .expect("the error must contain a budget failure")
+            .resource(),
+        &JsonResource::OutputBytes,
+    );
 }
 
 /// Verifies value-budget errors take precedence over masked Serde errors.
@@ -75,10 +81,16 @@ fn test_json_encoder_preserves_value_budget_error_precedence() {
         "the serializer must retain its original value-budget error",
     );
 
-    let JsonSerdeError::Budget(error) = error else {
+    let JsonEncodeError::Budget(error) = error else {
         panic!("expected the original string budget error");
     };
-    assert_eq!(error.resource(), &JsonResource::StringBytes);
+    assert_eq!(
+        error
+            .budget_error()
+            .expect("the error must contain a budget failure")
+            .resource(),
+        &JsonResource::StringBytes,
+    );
 }
 
 /// Verifies the first budget violation wins across value and output checks.
@@ -92,8 +104,14 @@ fn test_json_encoder_preserves_chronological_budget_error_precedence() {
     let error = encode_to_vec(&ValueThenOutputViolation, &mut session)
         .expect_err("the encoder must preserve the first ignored budget error");
 
-    let JsonSerdeError::Budget(error) = error else {
+    let JsonEncodeError::Budget(error) = error else {
         panic!("expected the first budget error");
     };
-    assert_eq!(error.resource(), &JsonResource::StringBytes);
+    assert_eq!(
+        error
+            .budget_error()
+            .expect("the error must contain a budget failure")
+            .resource(),
+        &JsonResource::StringBytes,
+    );
 }

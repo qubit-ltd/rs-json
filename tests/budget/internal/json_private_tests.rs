@@ -7,9 +7,9 @@
 // =============================================================================
 //! Regression tests for serde_json private serializer shapes.
 
-use qubit_json::JsonEncodeLimits;
-use qubit_json::JsonEncodeSession;
-use qubit_json::encode_to_vec;
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonEncodeSession;
+use qubit_json::text::encode_to_vec;
 use serde_json::Number;
 use serde_json::from_str;
 use serde_json::value::RawValue;

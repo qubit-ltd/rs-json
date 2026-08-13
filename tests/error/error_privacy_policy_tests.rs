@@ -5,9 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for [`qubit_json::ErrorPrivacyPolicy`].
+//! Tests for [`qubit_json::lenient::ErrorPrivacyPolicy`].
 
-use qubit_json::ErrorPrivacyPolicy;
+use qubit_json::lenient::ErrorPrivacyPolicy;
 
 /// Verifies that default is redacted.
 ///

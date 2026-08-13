@@ -17,11 +17,11 @@ use serde_json::error::Category;
 use serde_json::from_str;
 use serde_json::value::RawValue;
 
-use crate::ErrorPrivacyPolicy;
-use crate::JsonDecodeError;
-use crate::JsonDecodeOptions;
-use crate::JsonTopLevelKind;
+use crate::error::ErrorPrivacyPolicy;
+use crate::error::JsonDecodeError;
 use crate::internal::lenient_json_normalizer::LenientJsonNormalizer;
+use crate::json_top_level_kind::JsonTopLevelKind;
+use crate::options::JsonDecodeOptions;
 
 /// A configurable JSON decoder for non-fully-trusted text inputs.
 ///
@@ -346,7 +346,7 @@ impl LenientJsonDecoder {
     ///
     /// # Errors
     ///
-    /// Returns [`JsonDecodeErrorKind::InvalidJson`](crate::JsonDecodeErrorKind::InvalidJson)
+    /// Returns [`JsonDecodeErrorKind::InvalidJson`](crate::error::JsonDecodeErrorKind::InvalidJson)
     /// when `normalized` is not valid JSON.
     #[inline]
     fn parse_value(
@@ -380,7 +380,7 @@ impl LenientJsonDecoder {
     ///
     /// # Errors
     ///
-    /// Returns [`JsonDecodeErrorKind::InvalidJson`](crate::JsonDecodeErrorKind::InvalidJson)
+    /// Returns [`JsonDecodeErrorKind::InvalidJson`](crate::error::JsonDecodeErrorKind::InvalidJson)
     /// when validation fails.
     #[inline]
     fn validate_json(

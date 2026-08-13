@@ -8,9 +8,9 @@
 //! Tests for JSON encoding limits.
 
 use qubit_budget::ResourceLimit;
-use qubit_json::JsonEncodeLimits;
-use qubit_json::JsonResource;
-use qubit_json::JsonValueLimits;
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
 
 /// Verifies encoding limits retain directional and value configurations.
 #[test]

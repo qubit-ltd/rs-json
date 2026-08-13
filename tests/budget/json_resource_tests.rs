@@ -7,7 +7,7 @@
 // =============================================================================
 //! Tests for JSON resource identities.
 
-use qubit_json::JsonResource;
+use qubit_budget::json::JsonResource;
 
 /// Verifies JSON resource identities retain basic value semantics.
 #[test]

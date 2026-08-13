@@ -12,10 +12,10 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::internal::JsonInputSizeLimit;
-use crate::ErrorPrivacyPolicy;
-use crate::JsonDecodeErrorKind;
-use crate::JsonDecodeStage;
-use crate::JsonTopLevelKind;
+use crate::error::ErrorPrivacyPolicy;
+use crate::error::JsonDecodeErrorKind;
+use crate::error::JsonDecodeStage;
+use crate::json_top_level_kind::JsonTopLevelKind;
 
 /// Error returned when lenient JSON decoding fails.
 ///

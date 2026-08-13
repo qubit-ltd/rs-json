@@ -7,8 +7,8 @@
 // =============================================================================
 //! Test-only builder for JSON encode sessions.
 
-use qubit_json::JsonEncodeLimits;
-use qubit_json::JsonEncodeSession;
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonEncodeSession;
 
 /// Builds equivalent directional sessions for integration boundary tests.
 #[derive(Clone)]

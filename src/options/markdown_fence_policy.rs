@@ -7,7 +7,7 @@
 // =============================================================================
 //! Defines the Markdown fence normalization policy.
 
-use crate::MarkdownFenceClosing;
+use crate::options::MarkdownFenceClosing;
 
 /// Controls whether and how one outer Markdown code fence is stripped.
 ///

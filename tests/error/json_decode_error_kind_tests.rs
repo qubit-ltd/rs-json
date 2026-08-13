@@ -10,7 +10,7 @@
 
 use std::str::FromStr;
 
-use qubit_json::JsonDecodeErrorKind;
+use qubit_json::lenient::JsonDecodeErrorKind;
 
 /// Verifies that decode error kind display uses snake case names.
 ///

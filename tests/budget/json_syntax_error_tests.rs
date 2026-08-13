@@ -7,8 +7,8 @@
 // =============================================================================
 //! Tests for structured JSON syntax errors.
 
-use qubit_json::JsonSyntaxError;
-use qubit_json::JsonSyntaxErrorReason;
+use qubit_json::text::JsonSyntaxError;
+use qubit_json::text::JsonSyntaxErrorReason;
 
 #[test]
 fn test_json_syntax_error_exposes_location_and_reason() {

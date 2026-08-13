@@ -7,9 +7,9 @@
 // =============================================================================
 //! Defines the option type used to configure the lenient JSON decoder.
 
-use crate::ErrorPrivacyPolicy;
-use crate::MarkdownFenceClosing;
-use crate::MarkdownFencePolicy;
+use crate::error::ErrorPrivacyPolicy;
+use crate::options::MarkdownFenceClosing;
+use crate::options::MarkdownFencePolicy;
 
 /// Configuration switches for [`crate::lenient::LenientJsonDecoder`].
 ///
@@ -168,7 +168,7 @@ impl JsonDecodeOptions {
     ///
     /// ```compile_fail
     /// #![deny(unused_must_use)]
-    /// use qubit_json::JsonDecodeOptions;
+    /// use qubit_json::lenient::JsonDecodeOptions;
     ///
     /// let options = JsonDecodeOptions::strict();
     /// options.markdown_fence_policy();

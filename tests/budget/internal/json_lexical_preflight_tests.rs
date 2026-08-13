@@ -7,9 +7,9 @@
 // =============================================================================
 //! Tests for lexical JSON admission.
 
-use qubit_json::JsonDecodeLimits;
-use qubit_json::JsonDecodeSession;
-use qubit_json::decode_slice;
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
+use qubit_json::text::decode_slice;
 
 /// Verifies lexical admission accepts one complete JSON value.
 #[test]
