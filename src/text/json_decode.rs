@@ -12,9 +12,9 @@ use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonDecodeSession;
 use serde::Deserialize;
 use serde::de::DeserializeSeed;
-use serde_json::Error as JsonError;
 
 use super::JsonDecodeError;
+use super::JsonDeserializeError;
 use crate::budget::JsonSerdeError;
 use crate::budget::decode_slice as decode_slice_legacy;
 use crate::budget::decode_slice_seed as decode_slice_seed_legacy;
@@ -78,9 +78,11 @@ where
             ))
         }
         JsonSerdeError::Syntax(error) => JsonDecodeError::Syntax(error),
-        JsonSerdeError::Json(error) => JsonDecodeError::Deserialize(error),
-        JsonSerdeError::Io(error) => {
-            JsonDecodeError::Deserialize(JsonError::io(error))
+        JsonSerdeError::Json(error) => JsonDecodeError::Deserialize(
+            JsonDeserializeError::from_serde(&error),
+        ),
+        JsonSerdeError::Io(_) => {
+            JsonDecodeError::Deserialize(JsonDeserializeError::io())
         }
     }
 }
