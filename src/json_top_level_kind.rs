@@ -21,7 +21,7 @@ use serde_json::Value;
 ///
 /// ```compile_fail
 /// #![deny(unused_must_use)]
-/// use qubit_json::JsonTopLevelKind;
+/// use qubit_json::lenient::JsonTopLevelKind;
 ///
 /// fn top_level_kind() -> JsonTopLevelKind {
 ///     JsonTopLevelKind::Other

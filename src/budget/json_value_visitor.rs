@@ -19,11 +19,7 @@ where
     Q: ResourceQuantity,
 {
     /// Visits one node after its budget admission and before its children.
-    fn visit_value(
-        &mut self,
-        value: &Value,
-        depth: usize,
-    ) -> Result<(), JsonSerdeError<R, Q>>;
+    fn visit_value(&mut self, value: &Value, depth: usize) -> Result<(), JsonSerdeError<R, Q>>;
 
     /// Visits one object key before its associated value.
     fn visit_key(&mut self, _key: &str) -> Result<(), JsonSerdeError<R, Q>> {
@@ -66,9 +62,7 @@ where
                         "JSON traversal depth overflow",
                     )))
                 })?;
-                pending.extend(
-                    values.iter().rev().map(|child| (child, child_depth)),
-                );
+                pending.extend(values.iter().rev().map(|child| (child, child_depth)));
             }
             Value::Object(entries) => {
                 budget

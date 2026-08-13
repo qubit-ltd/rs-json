@@ -58,10 +58,7 @@ where
 
     /// Consumes input bytes atomically for this decoding operation.
     #[inline]
-    pub fn consume_input_bytes(
-        &mut self,
-        amount: Q,
-    ) -> Result<(), BudgetError<R, Q>> {
+    pub fn consume_input_bytes(&mut self, amount: Q) -> Result<(), BudgetError<R, Q>> {
         match &mut self.storage {
             DecodeStorage::Owned { input, .. } => match input {
                 Some(input) => input.try_consume(amount),
@@ -89,9 +86,8 @@ where
         let Some(input) = input else {
             return Ok(());
         };
-        let amount = Q::try_from_usize(amount).map_err(|source| {
-            MeasuredBudgetError::quantity(input.resource().clone(), source)
-        })?;
+        let amount = Q::try_from_usize(amount)
+            .map_err(|source| MeasuredBudgetError::quantity(input.resource().clone(), source))?;
         input.try_consume(amount).map_err(MeasuredBudgetError::from)
     }
 
@@ -100,12 +96,8 @@ where
     #[inline]
     pub fn max_input_bytes(&self) -> Option<Q> {
         match &self.storage {
-            DecodeStorage::Owned { input, .. } => {
-                input.as_ref().map(|budget| budget.limit())
-            }
-            DecodeStorage::Borrowed { input, .. } => {
-                input.as_ref().map(|budget| budget.limit())
-            }
+            DecodeStorage::Owned { input, .. } => input.as_ref().map(|budget| budget.limit()),
+            DecodeStorage::Borrowed { input, .. } => input.as_ref().map(|budget| budget.limit()),
         }
     }
 

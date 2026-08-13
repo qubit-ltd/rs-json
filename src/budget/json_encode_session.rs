@@ -84,10 +84,7 @@ where
     ///
     /// A failed request leaves the remaining output capacity unchanged.
     #[inline]
-    pub fn consume_output_bytes(
-        &mut self,
-        amount: Q,
-    ) -> Result<(), BudgetError<R, Q>> {
+    pub fn consume_output_bytes(&mut self, amount: Q) -> Result<(), BudgetError<R, Q>> {
         match &mut self.storage {
             JsonEncodeStorage::Owned { output, .. } => match output {
                 Some(output) => output.try_consume(amount),
@@ -113,9 +110,8 @@ where
         let Some(output) = output else {
             return Ok(());
         };
-        let amount = Q::try_from_usize(amount).map_err(|source| {
-            MeasuredBudgetError::quantity(output.resource().clone(), source)
-        })?;
+        let amount = Q::try_from_usize(amount)
+            .map_err(|source| MeasuredBudgetError::quantity(output.resource().clone(), source))?;
         output
             .try_consume(amount)
             .map_err(MeasuredBudgetError::from)
@@ -185,12 +181,8 @@ where
         &mut JsonValueBudget<R, Q>,
     ) {
         match &mut self.storage {
-            JsonEncodeStorage::Owned { output, value } => {
-                (output.as_mut(), value)
-            }
-            JsonEncodeStorage::Borrowed { output, value } => {
-                (output.as_deref_mut(), value)
-            }
+            JsonEncodeStorage::Owned { output, value } => (output.as_mut(), value),
+            JsonEncodeStorage::Borrowed { output, value } => (output.as_deref_mut(), value),
         }
     }
 }

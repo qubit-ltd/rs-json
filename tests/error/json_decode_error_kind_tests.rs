@@ -41,13 +41,11 @@ fn test_decode_error_kind_display_uses_snake_case_names() {
 #[test]
 fn test_decode_error_kind_from_str() {
     assert_eq!(
-        JsonDecodeErrorKind::from_str("input_too_large")
-            .expect("input_too_large must parse"),
+        JsonDecodeErrorKind::from_str("input_too_large").expect("input_too_large must parse"),
         JsonDecodeErrorKind::InputTooLarge
     );
     assert_eq!(
-        JsonDecodeErrorKind::from_str("empty_input")
-            .expect("empty_input must parse"),
+        JsonDecodeErrorKind::from_str("empty_input").expect("empty_input must parse"),
         JsonDecodeErrorKind::EmptyInput
     );
     assert_eq!(
@@ -66,8 +64,7 @@ fn test_decode_error_kind_from_str() {
         JsonDecodeErrorKind::UnexpectedTopLevel
     );
     assert_eq!(
-        JsonDecodeErrorKind::from_str("deserialize")
-            .expect("deserialize must parse"),
+        JsonDecodeErrorKind::from_str("deserialize").expect("deserialize must parse"),
         JsonDecodeErrorKind::Deserialize
     );
     assert_eq!(

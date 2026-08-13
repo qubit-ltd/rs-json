@@ -31,7 +31,7 @@ use super::JsonValueBudget;
 /// deserializer has decoded them. It is therefore suitable for default budget
 /// enforcement inside a type's ordinary [`serde::Deserialize`]
 /// implementation, where the original input bytes are unavailable.
-pub struct BudgetedJsonValueSeed<'a, R, Q = u64>
+pub struct BudgetedJsonValueSeed<'a, R, Q = usize>
 where
     Q: ResourceQuantity,
 {
@@ -142,9 +142,8 @@ where
     where
         E: Error,
     {
-        let number = Number::from_i128(value).ok_or_else(|| {
-            E::custom("i128 value is not representable as JSON")
-        })?;
+        let number = Number::from_i128(value)
+            .ok_or_else(|| E::custom("i128 value is not representable as JSON"))?;
         self.enter_number(number)
     }
 
@@ -159,9 +158,8 @@ where
     where
         E: Error,
     {
-        let number = Number::from_u128(value).ok_or_else(|| {
-            E::custom("u128 value is not representable as JSON")
-        })?;
+        let number = Number::from_u128(value)
+            .ok_or_else(|| E::custom("u128 value is not representable as JSON"))?;
         self.enter_number(number)
     }
 
@@ -169,9 +167,8 @@ where
     where
         E: Error,
     {
-        let number = Number::from_f64(value).ok_or_else(|| {
-            E::custom("non-finite float is not representable as JSON")
-        })?;
+        let number = Number::from_f64(value)
+            .ok_or_else(|| E::custom("non-finite float is not representable as JSON"))?;
         self.enter_number(number)
     }
 
@@ -224,10 +221,7 @@ where
         .deserialize(deserializer)
     }
 
-    fn visit_newtype_struct<D>(
-        self,
-        deserializer: D,
-    ) -> Result<Self::Value, D::Error>
+    fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
     {

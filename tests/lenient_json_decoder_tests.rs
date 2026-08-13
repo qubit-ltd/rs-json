@@ -33,8 +33,8 @@ use crate::fixtures::reset_deserialize_calls;
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_new_exposes_configured_options() {
-    let options = JsonDecodeOptions::default()
-        .with_markdown_fence_policy(MarkdownFencePolicy::Disabled);
+    let options =
+        JsonDecodeOptions::default().with_markdown_fence_policy(MarkdownFencePolicy::Disabled);
     let decoder = LenientJsonDecoder::new(options.clone());
     assert_eq!(decoder.options(), &options);
 }
@@ -133,9 +133,7 @@ fn test_decode_slice_decodes_valid_utf8_without_changing_semantics() {
 fn test_decode_slice_rejects_invalid_utf8_for_byte_target() {
     let error = LenientJsonDecoder::new(JsonDecodeOptions::strict())
         .decode_slice::<ByteBuffer>(b"\"\xff\"")
-        .expect_err(
-            "invalid UTF-8 must be rejected before byte deserialization",
-        );
+        .expect_err("invalid UTF-8 must be rejected before byte deserialization");
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
 }
 
@@ -180,12 +178,11 @@ fn test_decode_slice_accepts_non_rewrite_strict_overrides() {
 #[test]
 fn test_decode_slice_preserves_deserialize_error_mapping() {
     let decoder = LenientJsonDecoder::new(
-        JsonDecodeOptions::strict()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        JsonDecodeOptions::strict().with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
     );
-    let error = decoder.decode_slice::<Message>(b"{\"text\":7}").expect_err(
-        "valid JSON with the wrong field type must fail deserialization",
-    );
+    let error = decoder
+        .decode_slice::<Message>(b"{\"text\":7}")
+        .expect_err("valid JSON with the wrong field type must fail deserialization");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
     assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Detailed);
     assert!(std::error::Error::source(&error).is_some());
@@ -212,9 +209,8 @@ fn test_decode_slice_preserves_invalid_json_mapping() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_checks_raw_size_before_utf8() {
-    let decoder = LenientJsonDecoder::new(
-        JsonDecodeOptions::strict().with_max_input_bytes(Some(1)),
-    );
+    let decoder =
+        LenientJsonDecoder::new(JsonDecodeOptions::strict().with_max_input_bytes(Some(1)));
     let error = decoder
         .decode_slice::<Value>(&[0xff, 0xfe])
         .expect_err("raw size must be checked before UTF-8");
@@ -328,9 +324,9 @@ fn test_decode_object_reports_empty_input_from_normalizer() {
 #[test]
 fn test_decode_object_reports_invalid_json_for_malformed_array() {
     let decoder = LenientJsonDecoder::default();
-    let error = decoder.decode_object::<User>("[").expect_err(
-        "malformed JSON should be reported before top-level checking",
-    );
+    let error = decoder
+        .decode_object::<User>("[")
+        .expect_err("malformed JSON should be reported before top-level checking");
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
@@ -342,9 +338,9 @@ fn test_decode_object_reports_invalid_json_for_malformed_array() {
 #[test]
 fn test_decode_object_reports_invalid_json_for_malformed_scalar() {
     let decoder = LenientJsonDecoder::default();
-    let error = decoder.decode_object::<User>("\"unterminated").expect_err(
-        "malformed scalar JSON should not be treated as a top-level mismatch",
-    );
+    let error = decoder
+        .decode_object::<User>("\"unterminated")
+        .expect_err("malformed scalar JSON should not be treated as a top-level mismatch");
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
@@ -386,9 +382,9 @@ fn test_decode_array_reports_empty_input_from_normalizer() {
 #[test]
 fn test_decode_array_reports_invalid_json_for_malformed_object() {
     let decoder = LenientJsonDecoder::default();
-    let error = decoder.decode_array::<User>("{").expect_err(
-        "malformed JSON should be reported before top-level checking",
-    );
+    let error = decoder
+        .decode_array::<User>("{")
+        .expect_err("malformed JSON should be reported before top-level checking");
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
@@ -454,9 +450,7 @@ fn test_decode_object_reports_deserialize_error_after_top_level_check() {
     let decoder = LenientJsonDecoder::default();
     let error = decoder
         .decode_object::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
-        .expect_err(
-            "valid object with wrong field type should return Deserialize",
-        );
+        .expect_err("valid object with wrong field type should return Deserialize");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
 }
 
@@ -470,9 +464,7 @@ fn test_decode_array_reports_deserialize_error_after_top_level_check() {
     let decoder = LenientJsonDecoder::default();
     let error = decoder
         .decode_array::<User>("[{\"name\":\"alice\",\"age\":\"old\"}]")
-        .expect_err(
-            "valid array with wrong element type should return Deserialize",
-        );
+        .expect_err("valid array with wrong element type should return Deserialize");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
 }
 
@@ -528,9 +520,7 @@ fn test_decode_reports_deserialize_error() {
 fn test_decode_reports_invalid_json_when_data_error_precedes_syntax_error() {
     let error = LenientJsonDecoder::default()
         .decode::<SingleValue>("{\"value\":\"wrong\",")
-        .expect_err(
-            "incomplete JSON must take precedence over a field type error",
-        );
+        .expect_err("incomplete JSON must take precedence over a field type error");
 
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
     assert_eq!(error.stage(), JsonDecodeStage::Parse);
@@ -543,8 +533,7 @@ fn test_decode_reports_invalid_json_when_data_error_precedes_syntax_error() {
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_decode_object_reports_invalid_json_when_data_error_precedes_syntax_error()
- {
+fn test_decode_object_reports_invalid_json_when_data_error_precedes_syntax_error() {
     let error = LenientJsonDecoder::default()
         .decode_object::<SingleValue>("{\"value\":\"wrong\",")
         .expect_err("incomplete object JSON must take precedence over a field type error");
@@ -560,8 +549,7 @@ fn test_decode_object_reports_invalid_json_when_data_error_precedes_syntax_error
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_decode_array_reports_invalid_json_when_data_error_precedes_syntax_error()
- {
+fn test_decode_array_reports_invalid_json_when_data_error_precedes_syntax_error() {
     let error = LenientJsonDecoder::default()
         .decode_array::<u8>("[\"wrong\",")
         .expect_err("incomplete array JSON must take precedence over an element type error");
@@ -596,8 +584,7 @@ fn test_decode_object_reports_invalid_json_for_non_token_start() {
 #[test]
 fn test_decoder_reuses_configuration_between_calls() {
     let decoder = LenientJsonDecoder::new(
-        JsonDecodeOptions::default()
-            .with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
+        JsonDecodeOptions::default().with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
     );
 
     let first = decoder
@@ -619,8 +606,7 @@ fn test_decoder_reuses_configuration_between_calls() {
 #[test]
 fn test_decoders_with_different_configs_do_not_share_state() {
     let strict_decoder = LenientJsonDecoder::new(
-        JsonDecodeOptions::default()
-            .with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
+        JsonDecodeOptions::default().with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
     );
     let permissive_decoder = LenientJsonDecoder::default();
 
@@ -644,9 +630,7 @@ fn test_decoders_with_different_configs_do_not_share_state() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decoder_keeps_trim_whitespace_setting_for_empty_text() {
-    let decoder = LenientJsonDecoder::new(
-        JsonDecodeOptions::default().with_trim_whitespace(false),
-    );
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions::default().with_trim_whitespace(false));
     let error = decoder
         .decode_value(" \n\t")
         .expect_err("trim disabled should leave whitespace for parser");

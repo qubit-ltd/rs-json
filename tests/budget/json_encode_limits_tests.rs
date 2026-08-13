@@ -17,10 +17,7 @@ use qubit_json::JsonValueLimits;
 fn test_json_encode_limits_retain_configured_values() {
     let value_limits = JsonValueLimits::empty();
     let limits = JsonEncodeLimits::empty()
-        .with_output_bytes_limit(ResourceLimit::new(
-            JsonResource::OutputBytes,
-            12,
-        ))
+        .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 12))
         .with_value_limits(value_limits);
 
     assert_eq!(limits.max_output_bytes(), Some(12));

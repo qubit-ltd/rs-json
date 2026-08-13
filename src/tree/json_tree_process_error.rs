@@ -1,0 +1,28 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
+//! Defines failures produced while processing JSON trees.
+
+use std::fmt::Debug;
+
+use qubit_budget::MeasuredBudgetError;
+use thiserror::Error;
+
+/// Identifies whether JSON tree processing failed in infrastructure or domain code.
+#[must_use]
+#[derive(Debug, Error)]
+pub enum JsonTreeProcessError<R, Q, E>
+where
+    Q: Copy + Debug,
+{
+    /// A JSON resource measurement or budget rejected a tree node.
+    #[error(transparent)]
+    Budget(#[from] MeasuredBudgetError<R, Q>),
+    /// The caller-defined visitor rejected a budget-admitted node.
+    #[error("JSON tree visitor failed")]
+    Visitor(E),
+}

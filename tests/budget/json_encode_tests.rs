@@ -211,8 +211,8 @@ fn assert_online_rejection<T>(
     T: Serialize + ?Sized,
 {
     let mut session = limits.encode_session();
-    let error = encode_to_vec(value, &mut session)
-        .expect_err("the first value must be rejected online");
+    let error =
+        encode_to_vec(value, &mut session).expect_err("the first value must be rejected online");
     let JsonSerdeError::Budget(error) = error else {
         panic!("expected a budget error, got {error:?}");
     };
@@ -223,9 +223,8 @@ fn assert_online_rejection<T>(
 /// Verifies a budget failure leaves the destination writer unchanged.
 #[test]
 fn test_encode_to_writer_failure_does_not_touch_external_writer() {
-    let limits = JsonEncodeLimits::empty().with_output_bytes_limit(
-        ResourceLimit::new(JsonResource::OutputBytes, 3),
-    );
+    let limits = JsonEncodeLimits::empty()
+        .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 3));
     let mut session = JsonEncodeSession::owned(limits);
     let mut output = Vec::new();
 
@@ -243,8 +242,7 @@ fn test_encode_to_vec_counts_raw_value_once() {
         .expect("the fixture must be valid raw JSON");
     let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
 
-    let output = encode_to_vec(raw.as_ref(), &mut session)
-        .expect("the raw JSON value must encode");
+    let output = encode_to_vec(raw.as_ref(), &mut session).expect("the raw JSON value must encode");
 
     assert_eq!(output, br#"{"k":"v"}"#);
 }
@@ -266,14 +264,10 @@ fn test_encode_to_writer_serde_failure_does_not_touch_external_writer() {
 #[test]
 fn test_encode_to_vec_serde_failure_does_not_consume_output_budget() {
     let value_limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::empty()
-            .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+        StructureLimits::empty().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
     );
     let limits = JsonEncodeLimits::empty()
-        .with_output_bytes_limit(ResourceLimit::new(
-            JsonResource::OutputBytes,
-            16,
-        ))
+        .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 16))
         .with_value_limits(value_limits);
     let mut session = JsonEncodeSession::owned(limits);
     encode_to_vec(&true, &mut session).expect("the initial value should fit");
@@ -324,9 +318,8 @@ fn test_encode_to_vec_output_limit_stops_before_source_tail() {
         serialized: &serialized,
         len: 1_000,
     };
-    let limits = JsonEncodeLimits::empty().with_output_bytes_limit(
-        ResourceLimit::new(JsonResource::OutputBytes, 8),
-    );
+    let limits = JsonEncodeLimits::empty()
+        .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 8));
     let mut session = JsonEncodeSession::owned(limits);
 
     let error = encode_to_vec(&value, &mut session)
@@ -402,8 +395,7 @@ fn test_encode_to_vec_number_limit_stops_before_source_tail() {
 
     assert_online_rejection(
         &value,
-        JsonTestLimits::new()
-            .with_max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
+        JsonTestLimits::new().with_max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
         JsonResource::NumberBytes,
         &serialized_tail,
     );

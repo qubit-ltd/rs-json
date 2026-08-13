@@ -18,7 +18,7 @@ use crate::MarkdownFenceClosing;
 ///
 /// ```compile_fail
 /// #![deny(unused_must_use)]
-/// use qubit_json::MarkdownFencePolicy;
+/// use qubit_json::lenient::MarkdownFencePolicy;
 ///
 /// fn fence_policy() -> MarkdownFencePolicy {
 ///     MarkdownFencePolicy::Disabled

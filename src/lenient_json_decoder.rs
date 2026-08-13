@@ -130,11 +130,7 @@ impl LenientJsonDecoder {
             ));
         }
         let input = std::str::from_utf8(input).map_err(|error| {
-            JsonDecodeError::invalid_utf8(
-                error,
-                raw_input_bytes,
-                privacy_policy,
-            )
+            JsonDecodeError::invalid_utf8(error, raw_input_bytes, privacy_policy)
         })?;
         self.decode(input)
     }
@@ -194,10 +190,7 @@ impl LenientJsonDecoder {
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     #[inline(always)]
-    pub fn decode_array<T>(
-        &self,
-        input: &str,
-    ) -> Result<Vec<T>, JsonDecodeError>
+    pub fn decode_array<T>(&self, input: &str) -> Result<Vec<T>, JsonDecodeError>
     where
         T: DeserializeOwned,
     {
@@ -440,14 +433,12 @@ impl LenientJsonDecoder {
                 ),
                 Err(error) => error,
             },
-            Category::Io | Category::Syntax | Category::Eof => {
-                JsonDecodeError::invalid_json(
-                    error,
-                    raw_input_bytes,
-                    normalized_input_bytes,
-                    privacy_policy,
-                )
-            }
+            Category::Io | Category::Syntax | Category::Eof => JsonDecodeError::invalid_json(
+                error,
+                raw_input_bytes,
+                normalized_input_bytes,
+                privacy_policy,
+            ),
         }
     }
 }

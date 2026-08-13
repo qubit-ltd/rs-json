@@ -7,11 +7,7 @@
 // =============================================================================
 //! Integration test entry point for `qubit-json`.
 
-mod budget;
-mod error;
 mod fixtures;
-mod internal;
-mod json_top_level_kind_tests;
-mod lenient_json_decoder_tests;
 mod lib_tests;
-mod options;
+mod text;
+mod tree;

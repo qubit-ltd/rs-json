@@ -11,7 +11,7 @@ use crate::ErrorPrivacyPolicy;
 use crate::MarkdownFenceClosing;
 use crate::MarkdownFencePolicy;
 
-/// Configuration switches for [`crate::LenientJsonDecoder`].
+/// Configuration switches for [`crate::lenient::LenientJsonDecoder`].
 ///
 /// Its fields control text normalization, input limits, and error
 /// diagnostics. Defaults are intentionally conservative and cover the most
@@ -20,7 +20,7 @@ use crate::MarkdownFencePolicy;
 /// # Examples
 ///
 /// ```compile_fail
-/// use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
+/// use qubit_json::lenient::{JsonDecodeOptions, LenientJsonDecoder};
 ///
 /// let options = JsonDecodeOptions::strict();
 /// let _decoder = LenientJsonDecoder::new(options);
@@ -222,10 +222,7 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    pub const fn with_escape_control_chars_in_strings(
-        mut self,
-        enabled: bool,
-    ) -> Self {
+    pub const fn with_escape_control_chars_in_strings(mut self, enabled: bool) -> Self {
         self.escape_control_chars_in_strings = enabled;
         self
     }
@@ -252,10 +249,7 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    pub const fn with_max_input_bytes(
-        mut self,
-        max_input_bytes: Option<usize>,
-    ) -> Self {
+    pub const fn with_max_input_bytes(mut self, max_input_bytes: Option<usize>) -> Self {
         self.max_input_bytes = max_input_bytes;
         self
     }
@@ -286,10 +280,7 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    pub const fn with_max_normalized_bytes(
-        mut self,
-        max_normalized_bytes: Option<usize>,
-    ) -> Self {
+    pub const fn with_max_normalized_bytes(mut self, max_normalized_bytes: Option<usize>) -> Self {
         self.max_normalized_bytes = max_normalized_bytes;
         self
     }

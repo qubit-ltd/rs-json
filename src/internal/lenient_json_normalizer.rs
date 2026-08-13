@@ -75,10 +75,7 @@ impl LenientJsonNormalizer {
     ///
     /// Returns [`JsonDecodeError`] when the raw or normalized input exceeds its
     /// configured limit or becomes empty at a normalization boundary.
-    pub(crate) fn normalize<'a>(
-        &self,
-        input: &'a str,
-    ) -> Result<Cow<'a, str>, JsonDecodeError> {
+    pub(crate) fn normalize<'a>(&self, input: &'a str) -> Result<Cow<'a, str>, JsonDecodeError> {
         let raw_input_bytes = input.len();
         self.require_within_size_limit(input)?;
         let input = self.require_non_empty(input, raw_input_bytes)?;
@@ -88,20 +85,13 @@ impl LenientJsonNormalizer {
         let input = self.trim_if_enabled(input);
         let input = self.strip_utf8_bom(input);
         let input = self.trim_if_enabled(input);
-        let input = MarkdownFence::strip_outer(
-            input,
-            self.options.markdown_fence_policy(),
-        );
+        let input = MarkdownFence::strip_outer(input, self.options.markdown_fence_policy());
         let input = self.trim_if_enabled(input);
         let control_character_scan =
             self.require_within_normalized_size_limit(input, raw_input_bytes)?;
         let input = match control_character_scan {
             Some((normalized_len, needs_escape)) => {
-                ControlCharacterEscaper::escape_with_scan(
-                    input,
-                    normalized_len,
-                    needs_escape,
-                )
+                ControlCharacterEscaper::escape_with_scan(input, normalized_len, needs_escape)
             }
             None => ControlCharacterEscaper::escape(
                 input,
@@ -172,10 +162,7 @@ impl LenientJsonNormalizer {
     ///
     /// Returns [`JsonDecodeError`] when the input is larger than the configured
     /// raw byte limit.
-    fn require_within_size_limit(
-        &self,
-        input: &str,
-    ) -> Result<(), JsonDecodeError> {
+    fn require_within_size_limit(&self, input: &str) -> Result<(), JsonDecodeError> {
         if let Some(limit) = self.options.max_input_bytes() {
             let size = input.len();
             if size > limit {
@@ -211,11 +198,10 @@ impl LenientJsonNormalizer {
         raw_input_bytes: usize,
     ) -> Result<Option<(usize, bool)>, JsonDecodeError> {
         if let Some(limit) = self.options.max_normalized_bytes() {
-            let (normalized_input_bytes, needs_escape) =
-                ControlCharacterEscaper::scan(
-                    input,
-                    self.options.escape_control_chars_in_strings(),
-                );
+            let (normalized_input_bytes, needs_escape) = ControlCharacterEscaper::scan(
+                input,
+                self.options.escape_control_chars_in_strings(),
+            );
             if normalized_input_bytes > limit {
                 return Err(JsonDecodeError::normalized_input_too_large(
                     raw_input_bytes,

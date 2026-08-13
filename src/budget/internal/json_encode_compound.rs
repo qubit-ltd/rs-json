@@ -170,10 +170,7 @@ where
     }
 
     /// Records the original budget error and maps it into the compound error.
-    fn record<E>(
-        &mut self,
-        result: Result<(), MeasuredBudgetError<R, Q>>,
-    ) -> Result<(), E>
+    fn record<E>(&mut self, result: Result<(), MeasuredBudgetError<R, Q>>) -> Result<(), E>
     where
         E: Error,
     {
@@ -250,11 +247,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, Rc::clone(&self.context), self.child_depth);
         self.inner.serialize_element(&value)
     }
 
@@ -281,11 +274,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, Rc::clone(&self.context), self.child_depth);
         self.inner.serialize_element(&value)
     }
 
@@ -312,11 +301,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, Rc::clone(&self.context), self.child_depth);
         self.inner.serialize_field(&value)
     }
 
@@ -343,11 +328,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, Rc::clone(&self.context), self.child_depth);
         self.inner.serialize_field(&value)
     }
 
@@ -374,10 +355,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_map_entry()?;
-        let key = super::json_encode_serializer::BudgetedKey::new(
-            key,
-            Rc::clone(&self.context),
-        );
+        let key = super::json_encode_serializer::BudgetedKey::new(key, Rc::clone(&self.context));
         self.inner.serialize_key(&key)
     }
 
@@ -386,20 +364,12 @@ where
     where
         T: Serialize + ?Sized,
     {
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, Rc::clone(&self.context), self.child_depth);
         self.inner.serialize_value(&value)
     }
 
     /// Checks and serializes one complete map entry.
-    fn serialize_entry<K, V>(
-        &mut self,
-        key: &K,
-        value: &V,
-    ) -> Result<(), Self::Error>
+    fn serialize_entry<K, V>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
     where
         K: Serialize + ?Sized,
         V: Serialize + ?Sized,
@@ -426,21 +396,16 @@ where
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
-    fn serialize_field<T>(
-        &mut self,
-        key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         match self.private {
             PrivateStruct::Number => {
-                let value =
-                    super::json_encode_serializer::BudgetedPrivateValue::number(
-                        value,
-                        Rc::clone(&self.context),
-                    );
+                let value = super::json_encode_serializer::BudgetedPrivateValue::number(
+                    value,
+                    Rc::clone(&self.context),
+                );
                 return self.inner.serialize_field(key, &value);
             }
             PrivateStruct::RawValue => {
@@ -459,11 +424,7 @@ where
             .budget
             .consume_key_bytes_usize(key.len());
         self.record(key_result)?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, Rc::clone(&self.context), self.child_depth);
         self.inner.serialize_field(key, &value)
     }
 
@@ -493,11 +454,7 @@ where
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
-    fn serialize_field<T>(
-        &mut self,
-        key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -508,11 +465,7 @@ where
             .budget
             .consume_key_bytes_usize(key.len());
         self.record(key_result)?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, Rc::clone(&self.context), self.child_depth);
         self.inner.serialize_field(key, &value)
     }
 

@@ -55,10 +55,8 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    let (output_budget, value_budget) = session.split_mut();
-    let initial_remaining =
-        output_budget.as_deref().map(|budget| budget.remaining());
-    let mut transaction = output_budget.as_deref().cloned();
+    let mut transaction = session.output_budget().cloned();
+    let initial_remaining = transaction.as_ref().map(|budget| budget.remaining());
     let bytes = {
         let accounting = Rc::new(RefCell::new(JsonOutputAccounting::new(
             transaction.as_mut(),
@@ -68,18 +66,16 @@ where
             let mut inner = JsonSerializer::new(&mut output);
             value.serialize(JsonEncodeSerializer::new(
                 &mut inner,
-                value_budget,
+                session.value_budget_mut(),
                 accounting,
             ))
         };
         output.into_result(result)?
     };
-    if let (Some(output_budget), Some(transaction), Some(initial_remaining)) =
-        (output_budget, transaction, initial_remaining)
-    {
+    if let (Some(transaction), Some(initial_remaining)) = (transaction, initial_remaining) {
         let consumed = initial_remaining - transaction.remaining();
-        output_budget
-            .try_consume(consumed)
+        session
+            .consume_output_bytes(consumed)
             .map_err(MeasuredBudgetError::from)
             .map_err(JsonSerdeError::from)?;
     }

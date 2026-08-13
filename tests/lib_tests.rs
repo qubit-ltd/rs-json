@@ -7,30 +7,30 @@
 // =============================================================================
 //! Smoke tests for crate-level exports in `lib.rs`.
 
-use qubit_json::ErrorPrivacyPolicy;
-use qubit_json::JsonDecodeError;
-use qubit_json::JsonDecodeErrorKind;
-use qubit_json::JsonDecodeOptions;
-use qubit_json::JsonDecodeStage;
-use qubit_json::JsonTopLevelKind;
-use qubit_json::LenientJsonDecoder;
+use qubit_json::lenient::ErrorPrivacyPolicy;
+use qubit_json::lenient::JsonDecodeErrorKind;
+use qubit_json::lenient::JsonDecodeOptions;
+use qubit_json::lenient::JsonDecodeStage;
+use qubit_json::lenient::JsonTopLevelKind;
+use qubit_json::lenient::LenientJsonDecodeError;
+use qubit_json::lenient::LenientJsonDecoder;
 
 use crate::fixtures::MAX_FUZZ_INPUT_BYTES;
 use crate::fixtures::is_fuzz_input_within_limit;
 
-/// Verifies that the crate re-exports its documented public API types.
+/// Verifies that the lenient module exposes its documented public API types.
 ///
 /// # Panics
 ///
 /// Panics when an exported type does not preserve its documented behavior.
 #[test]
-fn test_lib_exports_public_types() {
+fn test_lenient_exports_public_types() {
     let decoder = LenientJsonDecoder::default();
     let options = JsonDecodeOptions::default();
     let kind = JsonTopLevelKind::Other;
     let error_kind = JsonDecodeErrorKind::EmptyInput;
     let privacy_policy = ErrorPrivacyPolicy::Redacted;
-    let error: JsonDecodeError = decoder
+    let error: LenientJsonDecodeError = decoder
         .decode_value("")
         .expect_err("empty input should produce an exported error type");
 
@@ -96,19 +96,10 @@ fn test_readme_fuzz_commands_match_workflow_contract() {
     ];
 
     for readme in readmes {
-        assert!(readme.contains(
-            "rustup toolchain install nightly-2026-06-05 --profile minimal",
-        ));
-        assert!(
-            readme
-                .contains("cargo install cargo-fuzz --version 0.13.2 --locked")
-        );
-        assert!(
-            readme.contains("cargo +nightly-2026-06-05 fuzz build decoder")
-        );
-        assert!(readme.contains(
-            "cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096",
-        ));
+        assert!(readme.contains("rustup toolchain install nightly-2026-06-05 --profile minimal",));
+        assert!(readme.contains("cargo install cargo-fuzz --version 0.13.2 --locked"));
+        assert!(readme.contains("cargo +nightly-2026-06-05 fuzz build decoder"));
+        assert!(readme.contains("cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096",));
     }
 }
 
