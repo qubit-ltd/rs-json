@@ -11,13 +11,12 @@
 
 ## 带预算的 JSON 处理
 
-`qubit-json` 拥有 JSON 资源限制、session、遍历和 Serde adapter。应从 `qubit_json`
-导入 `JsonValueLimits`、`JsonDecodeLimits`、`JsonDecodeSession`、`JsonEncodeLimits`
-和 `JsonEncodeSession`；通用的 `ResourceLimit` 与 `StructureLimits` 仍从
-`qubit_budget` 导入。
+`qubit-budget` 拥有 JSON 资源标识、limits 和可变 session；`qubit-json` 拥有 JSON
+规范化、遍历和 Serde adapter。应从 `qubit_budget::json` 导入 `JsonValueLimits`、
+`JsonDecodeLimits`、`JsonDecodeSession`、`JsonEncodeLimits` 和 `JsonEncodeSession`。
 
 ```rust
-use qubit_json::{JsonDecodeLimits, JsonDecodeSession, JsonEncodeLimits, JsonEncodeSession};
+use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession, JsonEncodeLimits, JsonEncodeSession};
 
 let decode = JsonDecodeSession::owned(JsonDecodeLimits::empty());
 let encode = JsonEncodeSession::owned(JsonEncodeLimits::empty());
