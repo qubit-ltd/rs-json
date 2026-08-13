@@ -10,12 +10,12 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use qubit_json::JsonEncodeLimits;
-use qubit_json::JsonEncodeSession;
-use qubit_json::JsonResource;
-use qubit_json::JsonValueLimits;
-use qubit_json::ResourceLimit;
-use qubit_json::StructureLimits;
+use qubit_budget::ResourceLimit;
+use qubit_budget::StructureLimits;
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
 use qubit_json::encode_to_vec;
 use serde_json::Value;
 
