@@ -89,69 +89,67 @@ where
     where
         V: JsonTreeMutVisitor<R, Q>,
     {
-        let mut path = Vec::new();
-        let mut location = OwnedLocation::Root;
-        let mut pending = Some((location.clone(), false));
-        let mut containers = Vec::new();
-        while let Some((current_location, key_charged)) = pending.take() {
-            location = current_location;
-            let depth = path.len() + 1;
-            let context = location.context(depth);
-            if !key_charged
-                && let Some(key) = location.key()
-                && let Err(error) =
-                    self.budget.consume_key_bytes_usize(key.len())
-            {
-                let value = value_at_mut(root, &path);
-                match visitor
-                    .reject_budget(value, context, &error)
-                    .map_err(JsonTreeProcessError::Visitor)?
+        let value = std::mem::take(root);
+        let mut guard = RootRestoreGuard::new(root);
+        guard.stack.push(MutFrame::root(value));
+
+        while !guard.stack.is_empty() {
+            let index = guard.stack.len() - 1;
+            if !guard.stack[index].entered {
+                let frame = &mut guard.stack[index];
+                let context = frame.location.context(frame.depth);
+
+                if let Some(key) = frame.location.key()
+                    && let Err(error) =
+                        self.budget.consume_key_bytes_usize(key.len())
                 {
-                    JsonBudgetRejection::Abort => {
+                    let rejection = visitor
+                        .reject_budget(&mut frame.value, context, &error)
+                        .map_err(JsonTreeProcessError::Visitor)?;
+                    if rejection == JsonBudgetRejection::Abort {
                         return Err(JsonTreeProcessError::Budget(error));
                     }
-                    JsonBudgetRejection::SkipSubtree => {
-                        pending =
-                            next_mut_node(root, &mut path, &mut containers);
-                        continue;
-                    }
+                    frame.entered = true;
+                    continue;
                 }
-            }
-            let admission = self.admit(value_at(root, &path), depth);
-            if let Err(error) = admission {
-                let value = value_at_mut(root, &path);
-                match visitor
-                    .reject_budget(value, context, &error)
-                    .map_err(JsonTreeProcessError::Visitor)?
-                {
-                    JsonBudgetRejection::Abort => {
+
+                if let Err(error) = self.admit(&frame.value, frame.depth) {
+                    let rejection = visitor
+                        .reject_budget(&mut frame.value, context, &error)
+                        .map_err(JsonTreeProcessError::Visitor)?;
+                    if rejection == JsonBudgetRejection::Abort {
                         return Err(JsonTreeProcessError::Budget(error));
                     }
-                    JsonBudgetRejection::SkipSubtree => {
-                        pending =
-                            next_mut_node(root, &mut path, &mut containers);
-                        continue;
-                    }
+                    frame.entered = true;
+                    continue;
                 }
+
+                let control = visitor
+                    .visit(&mut frame.value, context)
+                    .map_err(JsonTreeProcessError::Visitor)?;
+                frame.entered = true;
+                if control == JsonTreeControl::Descend {
+                    frame.children =
+                        take_children(&mut frame.value, frame.depth);
+                }
+                continue;
             }
-            let control = visitor
-                .visit(value_at_mut(root, &path), context)
-                .map_err(JsonTreeProcessError::Visitor)?;
-            let child_count = match control {
-                JsonTreeControl::Descend => child_count(value_at(root, &path)),
-                JsonTreeControl::SkipSubtree => 0,
-            };
-            if child_count == 0 {
-                pending = next_mut_node(root, &mut path, &mut containers);
+
+            if let Some(child) = guard.stack[index].children.pop() {
+                guard.stack[index].active = Some(child.location.clone());
+                guard.stack.push(MutFrame::child(child));
+                continue;
+            }
+
+            let frame = guard.stack.pop().expect("mutable frame exists");
+            if let Some(parent) = guard.stack.last_mut() {
+                let location = parent
+                    .active
+                    .take()
+                    .expect("completed child has an active parent slot");
+                insert_child(&mut parent.value, location, frame.value);
             } else {
-                containers.push(MutContainerFrame {
-                    path_len: path.len(),
-                    next_child: 1,
-                    child_count,
-                });
-                let child_location = child_location(value_at(root, &path), 0);
-                path.push(child_location.segment());
-                pending = Some((child_location, false));
+                guard.finish(frame.value);
             }
         }
         Ok(())
@@ -280,120 +278,135 @@ impl OwnedLocation {
             Self::Root | Self::ArrayElement(_) => None,
         }
     }
+}
 
-    /// Converts this location into a path segment.
-    fn segment(&self) -> PathSegment {
-        match self {
-            Self::Root => {
-                unreachable!("the root cannot be a child path segment")
-            }
-            Self::ArrayElement(index) => PathSegment::ArrayElement(*index),
-            Self::ObjectValue(key) => PathSegment::ObjectValue(key.clone()),
+/// Owns one detached value and the child values still awaiting processing.
+struct MutFrame {
+    location: OwnedLocation,
+    depth: usize,
+    value: Value,
+    children: Vec<ChildEntry>,
+    active: Option<OwnedLocation>,
+    entered: bool,
+}
+
+impl MutFrame {
+    fn root(value: Value) -> Self {
+        Self {
+            location: OwnedLocation::Root,
+            depth: 1,
+            value,
+            children: Vec::new(),
+            active: None,
+            entered: false,
+        }
+    }
+
+    fn child(child: ChildEntry) -> Self {
+        let depth = child.depth;
+        Self {
+            location: child.location,
+            depth,
+            value: child.value,
+            children: Vec::new(),
+            active: None,
+            entered: false,
         }
     }
 }
 
-/// Selects one child while resolving a mutable path from the root on demand.
-enum PathSegment {
-    /// An array child identified by its zero-based index.
-    ArrayElement(usize),
-    /// An object child identified by its key.
-    ObjectValue(String),
+/// Owns one detached child until its parent is ready to receive it.
+struct ChildEntry {
+    location: OwnedLocation,
+    depth: usize,
+    value: Value,
 }
 
-/// Stores continuation state for one mutable container without retaining
-/// aliases.
-struct MutContainerFrame {
-    /// Number of path elements used to reach this container.
-    path_len: usize,
-    /// Next child ordinal not yet processed.
-    next_child: usize,
-    /// Number of children observed after the parent visitor completed.
-    child_count: usize,
-}
-
-/// Returns the JSON value selected by an internally maintained path.
-fn value_at<'a>(mut value: &'a Value, path: &[PathSegment]) -> &'a Value {
-    for segment in path {
-        value = match (value, segment) {
-            (Value::Array(values), PathSegment::ArrayElement(index)) => {
-                &values[*index]
-            }
-            (Value::Object(values), PathSegment::ObjectValue(key)) => {
-                &values[key]
-            }
-            _ => unreachable!(
-                "mutable JSON traversal path remains synchronized with the tree"
-            ),
-        };
-    }
-    value
-}
-
-/// Returns the mutable JSON value selected by an internally maintained path.
-fn value_at_mut<'a>(
-    mut value: &'a mut Value,
-    path: &[PathSegment],
-) -> &'a mut Value {
-    for segment in path {
-        value = match (value, segment) {
-            (Value::Array(values), PathSegment::ArrayElement(index)) => {
-                &mut values[*index]
-            }
-            (Value::Object(values), PathSegment::ObjectValue(key)) => {
-                &mut values[key]
-            }
-            _ => unreachable!(
-                "mutable JSON traversal path remains synchronized with the tree"
-            ),
-        };
-    }
-    value
-}
-
-/// Counts the immediate descendants of a JSON value.
-fn child_count(value: &Value) -> usize {
+/// Detaches immediate children in reverse order, preserving traversal order.
+fn take_children(value: &mut Value, depth: usize) -> Vec<ChildEntry> {
+    let child_depth = depth.checked_add(1).expect(
+        "a materialized JSON tree cannot have usize::MAX nesting depth",
+    );
     match value {
-        Value::Array(values) => values.len(),
-        Value::Object(values) => values.len(),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => 0,
-    }
-}
-
-/// Returns the owned location of one child in iteration order.
-fn child_location(value: &Value, ordinal: usize) -> OwnedLocation {
-    match value {
-        Value::Array(_) => OwnedLocation::ArrayElement(ordinal),
-        Value::Object(values) => OwnedLocation::ObjectValue(
-            values
-                .keys()
-                .nth(ordinal)
-                .expect("stored object child ordinal remains in bounds")
-                .clone(),
-        ),
+        Value::Array(values) => std::mem::take(values)
+            .into_iter()
+            .enumerate()
+            .rev()
+            .map(|(index, value)| ChildEntry {
+                location: OwnedLocation::ArrayElement(index),
+                depth: child_depth,
+                value,
+            })
+            .collect(),
+        Value::Object(entries) => std::mem::take(entries)
+            .into_iter()
+            .rev()
+            .map(|(key, value)| ChildEntry {
+                location: OwnedLocation::ObjectValue(key),
+                depth: child_depth,
+                value,
+            })
+            .collect(),
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-            unreachable!("scalar JSON values have no children")
+            Vec::new()
         }
     }
 }
 
-/// Advances a mutable traversal to the next child or finishes exhausted frames.
-fn next_mut_node(
-    root: &Value,
-    path: &mut Vec<PathSegment>,
-    containers: &mut Vec<MutContainerFrame>,
-) -> Option<(OwnedLocation, bool)> {
-    while let Some(frame) = containers.last_mut() {
-        if frame.next_child < frame.child_count {
-            let ordinal = frame.next_child;
-            frame.next_child += 1;
-            path.truncate(frame.path_len);
-            let location = child_location(value_at(root, path), ordinal);
-            path.push(location.segment());
-            return Some((location, false));
+/// Inserts a completed child into its detached parent.
+fn insert_child(parent: &mut Value, location: OwnedLocation, value: Value) {
+    match (parent, location) {
+        (Value::Array(values), OwnedLocation::ArrayElement(_)) => {
+            values.push(value);
         }
-        path.truncate(frame.path_len);
-        containers.pop();
+        (Value::Object(entries), OwnedLocation::ObjectValue(key)) => {
+            entries.insert(key, value);
+        }
+        _ => unreachable!("mutable JSON frame remains synchronized"),
     }
-    None
+}
+
+/// Restores the original root if traversal exits with an error or panic.
+struct RootRestoreGuard<'a> {
+    root: &'a mut Value,
+    stack: Vec<MutFrame>,
+    finished: bool,
+}
+
+impl<'a> RootRestoreGuard<'a> {
+    fn new(root: &'a mut Value) -> Self {
+        Self {
+            root,
+            stack: Vec::new(),
+            finished: false,
+        }
+    }
+
+    fn finish(&mut self, value: Value) {
+        *self.root = value;
+        self.finished = true;
+    }
+}
+
+impl Drop for RootRestoreGuard<'_> {
+    fn drop(&mut self) {
+        if self.finished || self.stack.is_empty() {
+            return;
+        }
+        let mut completed = None;
+        while let Some(mut frame) = self.stack.pop() {
+            if let Some(value) = completed.take() {
+                let location = frame
+                    .active
+                    .take()
+                    .expect("completed child has an active parent slot");
+                insert_child(&mut frame.value, location, value);
+            }
+            while let Some(child) = frame.children.pop() {
+                insert_child(&mut frame.value, child.location, child.value);
+            }
+            completed = Some(frame.value);
+        }
+        *self.root = completed.expect("root frame exists");
+    }
 }
