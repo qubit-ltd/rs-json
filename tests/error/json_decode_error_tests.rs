@@ -5,14 +5,14 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for the public [`qubit_json::JsonDecodeError`] type.
+//! Tests for the public [`qubit_json::lenient::LenientJsonDecodeError`] type.
 
-use qubit_json::ErrorPrivacyPolicy;
-use qubit_json::JsonDecodeErrorKind;
-use qubit_json::JsonDecodeOptions;
-use qubit_json::JsonDecodeStage;
-use qubit_json::JsonTopLevelKind;
-use qubit_json::LenientJsonDecoder;
+use qubit_json::lenient::ErrorPrivacyPolicy;
+use qubit_json::lenient::JsonDecodeErrorKind;
+use qubit_json::lenient::JsonDecodeOptions;
+use qubit_json::lenient::JsonDecodeStage;
+use qubit_json::lenient::JsonTopLevelKind;
+use qubit_json::lenient::LenientJsonDecoder;
 use serde_json::Value;
 
 use crate::fixtures::PublicChoice;

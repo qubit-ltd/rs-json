@@ -5,10 +5,10 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for [`qubit_json::MarkdownFencePolicy`].
+//! Tests for [`qubit_json::lenient::MarkdownFencePolicy`].
 
-use qubit_json::MarkdownFenceClosing;
-use qubit_json::MarkdownFencePolicy;
+use qubit_json::lenient::MarkdownFenceClosing;
+use qubit_json::lenient::MarkdownFencePolicy;
 
 /// Verifies that markdown fence policy is cloneable and equatable.
 ///

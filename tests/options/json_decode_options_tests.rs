@@ -5,12 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for [`qubit_json::JsonDecodeOptions`].
+//! Tests for [`qubit_json::lenient::JsonDecodeOptions`].
 
-use qubit_json::ErrorPrivacyPolicy;
-use qubit_json::JsonDecodeOptions;
-use qubit_json::MarkdownFenceClosing;
-use qubit_json::MarkdownFencePolicy;
+use qubit_json::lenient::ErrorPrivacyPolicy;
+use qubit_json::lenient::JsonDecodeOptions;
+use qubit_json::lenient::MarkdownFenceClosing;
+use qubit_json::lenient::MarkdownFencePolicy;
 
 /// Verifies that default enables all mvp rules.
 ///

@@ -7,7 +7,7 @@
 // =============================================================================
 //! Tests for the public `JsonDecodeStage` type in `json_decode_stage.rs`.
 
-use qubit_json::JsonDecodeStage;
+use qubit_json::lenient::JsonDecodeStage;
 
 /// Verifies that decode stage display uses snake case tokens.
 ///

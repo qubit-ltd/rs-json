@@ -8,12 +8,12 @@
 //! Tests for normalization behavior implemented in
 //! `lenient_json_normalizer.rs`.
 
-use qubit_json::JsonDecodeErrorKind;
-use qubit_json::JsonDecodeOptions;
-use qubit_json::JsonDecodeStage;
-use qubit_json::LenientJsonDecoder;
-use qubit_json::MarkdownFenceClosing;
-use qubit_json::MarkdownFencePolicy;
+use qubit_json::lenient::JsonDecodeErrorKind;
+use qubit_json::lenient::JsonDecodeOptions;
+use qubit_json::lenient::JsonDecodeStage;
+use qubit_json::lenient::LenientJsonDecoder;
+use qubit_json::lenient::MarkdownFenceClosing;
+use qubit_json::lenient::MarkdownFencePolicy;
 use serde_json::json;
 use serde_json::to_string;
 

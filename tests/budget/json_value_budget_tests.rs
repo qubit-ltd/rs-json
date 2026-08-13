@@ -9,9 +9,9 @@
 
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
-use qubit_json::JsonResource;
-use qubit_json::JsonValueBudget;
-use qubit_json::JsonValueLimits;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueBudget;
+use qubit_budget::json::JsonValueLimits;
 
 /// Verifies a cumulative payload maximum accepts an exact final increment.
 #[test]

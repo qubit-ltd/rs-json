@@ -205,7 +205,7 @@ allocates text. Escaping one raw ASCII control byte as `\\u00XX` can expand
 content from one byte to six bytes.
 
 ```rust
-use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
+use qubit_json::lenient::{JsonDecodeOptions, LenientJsonDecoder};
 
 let decoder = LenientJsonDecoder::new(
     JsonDecodeOptions::default()
@@ -215,7 +215,7 @@ let decoder = LenientJsonDecoder::new(
 let value = decoder.decode_value("{\"ok\":true}")?;
 
 assert_eq!(value["ok"], true);
-# Ok::<(), qubit_json::JsonDecodeError>(())
+# Ok::<(), qubit_json::lenient::LenientJsonDecodeError>(())
 ```
 
 ### Opt In to Detailed Error Diagnostics
@@ -224,7 +224,7 @@ Detailed serde diagnostics may include values from the input. Enable them only
 when the diagnostic sink and its readers are trusted.
 
 ```rust
-use qubit_json::{
+use qubit_json::lenient::{
     ErrorPrivacyPolicy,
     JsonDecodeOptions,
     LenientJsonDecoder,

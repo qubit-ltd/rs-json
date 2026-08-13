@@ -8,11 +8,11 @@
 //! Tests for bounded JSON output buffering.
 
 use qubit_budget::ResourceLimit;
-use qubit_json::JsonEncodeLimits;
-use qubit_json::JsonEncodeSession;
-use qubit_json::JsonResource;
-use qubit_json::JsonSerdeError;
-use qubit_json::encode_to_vec;
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
+use qubit_json::text::JsonEncodeError;
+use qubit_json::text::encode_to_vec;
 
 /// Verifies the output buffer rejects bytes beyond its configured budget.
 #[test]
@@ -24,5 +24,5 @@ fn test_json_output_buffer_rejects_excess_output() {
     let error = encode_to_vec(&"long", &mut session)
         .expect_err("output should exceed the configured budget");
 
-    assert!(matches!(error, JsonSerdeError::Budget(_)));
+    assert!(matches!(error, JsonEncodeError::Budget(_)));
 }

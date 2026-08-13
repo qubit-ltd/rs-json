@@ -11,12 +11,12 @@ use qubit_budget::BudgetError;
 use qubit_budget::Observation;
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
-use qubit_json::JsonDecodeLimits;
-use qubit_json::JsonDecodeSession;
-use qubit_json::JsonResource;
-use qubit_json::JsonSerdeError;
-use qubit_json::JsonValueLimits;
-use qubit_json::decode_slice;
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::text::JsonDecodeError;
+use qubit_json::text::decode_slice;
 use serde_json::Value;
 
 /// Verifies that nested values use root-inclusive lexical depth.
@@ -34,10 +34,14 @@ fn test_json_lexical_preflight_charges_nested_depth() {
 
     assert!(matches!(
         error,
-        JsonSerdeError::Budget(BudgetError::LimitExceeded {
-            resource: JsonResource::Depth,
-            observed: Observation::Exact(2),
-            maximum: 1,
-        })
+        JsonDecodeError::Budget(error)
+            if matches!(
+                error.budget_error(),
+                Some(BudgetError::LimitExceeded {
+                    resource: JsonResource::Depth,
+                    observed: Observation::Exact(2),
+                    maximum: 1,
+                })
+            )
     ));
 }

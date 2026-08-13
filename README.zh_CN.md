@@ -192,7 +192,7 @@ fn main() {
 可从 1 字节扩展为 6 字节。
 
 ```rust
-use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
+use qubit_json::lenient::{JsonDecodeOptions, LenientJsonDecoder};
 
 let decoder = LenientJsonDecoder::new(
     JsonDecodeOptions::default()
@@ -202,7 +202,7 @@ let decoder = LenientJsonDecoder::new(
 let value = decoder.decode_value("{\"ok\":true}")?;
 
 assert_eq!(value["ok"], true);
-# Ok::<(), qubit_json::JsonDecodeError>(())
+# Ok::<(), qubit_json::lenient::LenientJsonDecodeError>(())
 ```
 
 ### 显式启用详细错误诊断
@@ -210,7 +210,7 @@ assert_eq!(value["ok"], true);
 完整 serde 诊断可能包含输入值。只有当诊断存储及其读者均可信时才应启用。
 
 ```rust
-use qubit_json::{
+use qubit_json::lenient::{
     ErrorPrivacyPolicy,
     JsonDecodeOptions,
     LenientJsonDecoder,

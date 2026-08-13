@@ -10,14 +10,14 @@
 use qubit_budget::ResourceBudget;
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
-use qubit_json::JsonDecodeLimits;
-use qubit_json::JsonDecodeSession;
-use qubit_json::JsonEncodeLimits;
-use qubit_json::JsonEncodeSession;
-use qubit_json::JsonResource;
-use qubit_json::JsonValueBudget;
-use qubit_json::JsonValueLimits;
-use qubit_json::decode_slice;
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueBudget;
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::text::decode_slice;
 use serde::de::IgnoredAny;
 
 /// Verifies decode and encode sessions expose only their directional resources.

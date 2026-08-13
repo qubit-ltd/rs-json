@@ -14,9 +14,9 @@ use std::fmt;
 
 use qubit_budget::BudgetError;
 use qubit_budget::Observation;
-use qubit_json::JsonResource;
-use qubit_json::JsonSerdeError;
-use qubit_json::encode_to_vec;
+use qubit_budget::json::JsonResource;
+use qubit_json::text::JsonEncodeError;
+use qubit_json::text::encode_to_vec;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeMap;
@@ -261,10 +261,16 @@ where
     let mut budget = limits.encode_session();
     let error = encode_to_vec(value, &mut budget)
         .expect_err("the configured JSON limit must reject the value");
-    let JsonSerdeError::Budget(error) = error else {
+    let JsonEncodeError::Budget(error) = error else {
         panic!("expected a budget error, got {error:?}");
     };
-    assert_eq!(error.resource(), &expected);
+    assert_eq!(
+        error
+            .budget_error()
+            .expect("the error must contain a budget failure")
+            .resource(),
+        &expected,
+    );
 }
 
 /// Asserts that the budget-aware adapter preserves serde_json output.
@@ -294,10 +300,16 @@ where
         .encode_session();
     let error = encode_to_vec(value, &mut insufficient)
         .expect_err("one fewer node must reject the value");
-    let JsonSerdeError::Budget(error) = error else {
+    let JsonEncodeError::Budget(error) = error else {
         panic!("expected a budget error, got {error:?}");
     };
-    assert_eq!(error.resource(), &JsonResource::Nodes);
+    assert_eq!(
+        error
+            .budget_error()
+            .expect("the error must contain a budget failure")
+            .resource(),
+        &JsonResource::Nodes,
+    );
 }
 
 struct UnknownSequence(usize);
@@ -723,11 +735,15 @@ fn test_raw_value_charges_single_number_token_object_as_object() {
 
     assert!(matches!(
         error,
-        JsonSerdeError::Budget(BudgetError::LimitExceeded {
-            resource: JsonResource::KeyBytes,
-            observed: Observation::Exact(actual),
-            maximum: 0,
-        }) if actual == JSON_NUMBER_TOKEN.len()
+        JsonEncodeError::Budget(error)
+            if matches!(
+                error.budget_error(),
+                Some(BudgetError::LimitExceeded {
+                    resource: JsonResource::KeyBytes,
+                    observed: Observation::Exact(actual),
+                    maximum: 0,
+                }) if *actual == JSON_NUMBER_TOKEN.len()
+            )
     ));
 }
 
@@ -1163,12 +1179,16 @@ fn test_json_encode_serializer_checks_raw_output_remaining_in_reused_session() {
 
     assert!(matches!(
         error,
-        JsonSerdeError::Budget(BudgetError::Insufficient {
-            resource: JsonResource::OutputBytes,
-            limit: 8,
-            remaining: 4,
-            requested: 6,
-        })
+        JsonEncodeError::Budget(error)
+            if matches!(
+                error.budget_error(),
+                Some(BudgetError::Insufficient {
+                    resource: JsonResource::OutputBytes,
+                    limit: 8,
+                    remaining: 4,
+                    requested: 6,
+                })
+            )
     ));
     let output = session
         .output_budget()

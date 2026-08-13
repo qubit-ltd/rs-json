@@ -7,8 +7,8 @@
 // =============================================================================
 //! Tests size-limit discriminator behavior through public error diagnostics.
 
-use qubit_json::JsonDecodeOptions;
-use qubit_json::LenientJsonDecoder;
+use qubit_json::lenient::JsonDecodeOptions;
+use qubit_json::lenient::LenientJsonDecoder;
 
 /// Verifies that raw-size failures expose only the raw limit.
 ///

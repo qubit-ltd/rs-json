@@ -13,13 +13,13 @@ use std::io::Write;
 
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
-use qubit_json::JsonEncodeLimits;
-use qubit_json::JsonEncodeSession;
-use qubit_json::JsonResource;
-use qubit_json::JsonSerdeError;
-use qubit_json::JsonValueLimits;
-use qubit_json::encode_to_vec;
-use qubit_json::encode_to_writer;
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::text::JsonEncodeError;
+use qubit_json::text::encode_to_vec;
+use qubit_json::text::encode_to_writer;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error as _;
@@ -213,10 +213,16 @@ fn assert_online_rejection<T>(
     let mut session = limits.encode_session();
     let error = encode_to_vec(value, &mut session)
         .expect_err("the first value must be rejected online");
-    let JsonSerdeError::Budget(error) = error else {
+    let JsonEncodeError::Budget(error) = error else {
         panic!("expected a budget error, got {error:?}");
     };
-    assert_eq!(error.resource(), &expected);
+    assert_eq!(
+        error
+            .budget_error()
+            .expect("the error must contain a budget failure")
+            .resource(),
+        &expected,
+    );
     assert_eq!(serialized_tail.get(), 0);
 }
 
@@ -232,7 +238,7 @@ fn test_encode_to_writer_failure_does_not_touch_external_writer() {
     let error = encode_to_writer(&mut output, &"long", &mut session)
         .expect_err("the encoded string must exceed the output budget");
 
-    assert!(matches!(error, JsonSerdeError::Budget(_)));
+    assert!(matches!(error, JsonEncodeError::Budget(_)));
     assert!(output.is_empty());
 }
 
@@ -258,7 +264,7 @@ fn test_encode_to_writer_serde_failure_does_not_touch_external_writer() {
     let error = encode_to_writer(&mut output, &FailsAfterPrefix, &mut session)
         .expect_err("the custom serializer must fail");
 
-    assert!(matches!(error, JsonSerdeError::Json(_)));
+    assert!(matches!(error, JsonEncodeError::Serialize(_)));
     assert!(output.is_empty());
 }
 
@@ -286,7 +292,7 @@ fn test_encode_to_vec_serde_failure_does_not_consume_output_budget() {
     let error = encode_to_vec(&FailsAfterPrefix, &mut session)
         .expect_err("the custom serializer must fail");
 
-    assert!(matches!(error, JsonSerdeError::Json(_)));
+    assert!(matches!(error, JsonEncodeError::Serialize(_)));
     let output = session
         .output_budget()
         .expect("output accounting should remain configured");
@@ -332,7 +338,7 @@ fn test_encode_to_vec_output_limit_stops_before_source_tail() {
     let error = encode_to_vec(&value, &mut session)
         .expect_err("the output budget must reject the long sequence");
 
-    assert!(matches!(error, JsonSerdeError::Budget(_)));
+    assert!(matches!(error, JsonEncodeError::Budget(_)));
     assert!(serialized.get() < value.len);
 }
 
@@ -348,7 +354,7 @@ fn test_encode_to_writer_io_failure_can_leave_partial_output() {
     let error = encode_to_writer(&mut writer, &[1_u8, 2_u8], &mut session)
         .expect_err("the destination writer must fail during final commit");
 
-    assert!(matches!(error, JsonSerdeError::Io(_)));
+    assert!(matches!(error, JsonEncodeError::Write(_)));
     assert_eq!(writer.bytes, b"[1");
 }
 
@@ -365,7 +371,7 @@ fn test_encode_to_vec_node_limit_stops_before_source_tail() {
     let error = encode_to_vec(&value, &mut session)
         .expect_err("the node budget must reject the long sequence");
 
-    assert!(matches!(error, JsonSerdeError::Budget(_)));
+    assert!(matches!(error, JsonEncodeError::Budget(_)));
     assert!(serialized.get() < value.len);
 }
 
@@ -384,7 +390,7 @@ fn test_encode_to_vec_depth_limit_stops_before_source_tail() {
     let error = encode_to_vec(&value, &mut session)
         .expect_err("the depth budget must reject recursive serialization");
 
-    assert!(matches!(error, JsonSerdeError::Budget(_)));
+    assert!(matches!(error, JsonEncodeError::Budget(_)));
     assert!(serialized.get() < SOURCE_DEPTH);
 }
 

@@ -10,12 +10,12 @@
 use qubit_budget::ResourceBudget;
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
-use qubit_json::JsonEncodeLimits;
-use qubit_json::JsonEncodeSession;
-use qubit_json::JsonResource;
-use qubit_json::JsonValueBudget;
-use qubit_json::JsonValueLimits;
-use qubit_json::encode_to_vec;
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueBudget;
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::text::encode_to_vec;
 
 /// Verifies encode sessions expose their output-byte resource.
 /// Verifies borrowed encode sessions charge caller-owned budgets in place.

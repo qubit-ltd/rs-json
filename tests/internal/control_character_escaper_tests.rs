@@ -7,10 +7,10 @@
 // =============================================================================
 //! Tests control-character escaping through public decoder behavior.
 
-use qubit_json::JsonDecodeErrorKind;
-use qubit_json::JsonDecodeOptions;
-use qubit_json::JsonDecodeStage;
-use qubit_json::LenientJsonDecoder;
+use qubit_json::lenient::JsonDecodeErrorKind;
+use qubit_json::lenient::JsonDecodeOptions;
+use qubit_json::lenient::JsonDecodeStage;
+use qubit_json::lenient::LenientJsonDecoder;
 use serde_json::json;
 
 /// Verifies that decode value preserves existing escapes.

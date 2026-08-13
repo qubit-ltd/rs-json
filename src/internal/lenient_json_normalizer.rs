@@ -14,8 +14,8 @@ use qubit_budget::json::JsonResource;
 
 use super::control_character_escaper::ControlCharacterEscaper;
 use super::markdown_fence::MarkdownFence;
-use crate::JsonDecodeError;
-use crate::JsonDecodeOptions;
+use crate::error::JsonDecodeError;
+use crate::options::JsonDecodeOptions;
 
 /// Normalizes one raw JSON text input before JSON parsing.
 #[derive(Debug, Clone)]

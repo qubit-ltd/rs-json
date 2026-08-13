@@ -9,7 +9,7 @@
 
 use std::str::FromStr;
 
-use qubit_json::JsonTopLevelKind;
+use qubit_json::lenient::JsonTopLevelKind;
 use serde_json::json;
 
 /// Verifies that top level kind classifies values.

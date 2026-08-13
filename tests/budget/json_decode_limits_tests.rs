@@ -8,9 +8,9 @@
 //! Tests for JSON decoding limits.
 
 use qubit_budget::ResourceLimit;
-use qubit_json::JsonDecodeLimits;
-use qubit_json::JsonResource;
-use qubit_json::JsonValueLimits;
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
 
 /// Verifies decoding limits retain directional and value configurations.
 #[test]

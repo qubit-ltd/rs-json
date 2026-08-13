@@ -14,7 +14,6 @@ mod json_encode;
 mod json_serde_error;
 mod json_syntax_error;
 mod json_syntax_error_reason;
-mod json_value_accounting;
 
 pub use budgeted_json_value_seed::BudgetedJsonValueSeed;
 pub use json_decode::decode_slice;
@@ -24,7 +23,6 @@ pub use json_encode::encode_to_writer;
 pub use json_serde_error::JsonSerdeError;
 pub use json_syntax_error::JsonSyntaxError;
 pub use json_syntax_error_reason::JsonSyntaxErrorReason;
-pub use json_value_accounting::account_value;
 pub(crate) use qubit_budget::json::JsonDecodeSession;
 pub(crate) use qubit_budget::json::JsonEncodeSession;
 pub(crate) use qubit_budget::json::JsonValueBudget;

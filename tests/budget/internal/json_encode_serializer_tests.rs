@@ -7,9 +7,9 @@
 // =============================================================================
 //! Tests for the budget-aware JSON serializer.
 
-use qubit_json::JsonEncodeLimits;
-use qubit_json::JsonEncodeSession;
-use qubit_json::encode_to_vec;
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonEncodeSession;
+use qubit_json::text::encode_to_vec;
 
 /// Verifies scalar serialization uses the wrapped JSON serializer.
 #[test]

@@ -10,16 +10,14 @@
 
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
-use qubit_json::JsonDecodeLimits;
-use qubit_json::JsonDecodeSession;
-use qubit_json::JsonResource;
-use qubit_json::JsonSerdeError;
-use qubit_json::JsonSyntaxErrorReason;
-use qubit_json::JsonValueBudget;
-use qubit_json::JsonValueLimits;
-use qubit_json::account_value;
-use qubit_json::decode_slice;
-use qubit_json::decode_slice_seed;
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::text::JsonDecodeError;
+use qubit_json::text::JsonSyntaxErrorReason;
+use qubit_json::text::decode_slice;
+use qubit_json::text::decode_slice_seed;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
@@ -61,7 +59,7 @@ fn deeply_nested_input_fails_by_limit_without_stack_overflow() {
 
     assert!(matches!(
         decode_slice::<serde_json::Value, _, _>(input.as_bytes(), &mut session),
-        Err(JsonSerdeError::Budget(_))
+        Err(JsonDecodeError::Budget(_))
     ));
 }
 
@@ -123,7 +121,7 @@ fn json_decode_reports_structured_syntax_locations() {
         let error =
             decode_slice::<serde_json::Value, _, _>(input, &mut session)
                 .expect_err("input should be rejected");
-        let JsonSerdeError::Syntax(error) = error else {
+        let JsonDecodeError::Syntax(error) = error else {
             panic!("expected structured syntax error");
         };
         assert_eq!(error.offset(), offset);
@@ -139,7 +137,7 @@ fn json_decode_counts_unicode_columns_and_crlf_lines() {
     let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
     let error = decode_slice::<serde_json::Value, _, _>(input, &mut session)
         .expect_err("missing colon should be rejected");
-    let JsonSerdeError::Syntax(error) = error else {
+    let JsonDecodeError::Syntax(error) = error else {
         panic!("expected structured syntax error");
     };
     assert_eq!(error.line(), 2);
@@ -159,11 +157,11 @@ fn typed_decode_failure_consumes_input_before_the_next_attempt() {
 
     assert!(matches!(
         decode_slice::<u8, _, _>(br#""x""#, &mut session),
-        Err(JsonSerdeError::Json(_))
+        Err(JsonDecodeError::Deserialize(_))
     ));
     assert!(matches!(
         decode_slice::<u8, _, _>(b"0", &mut session),
-        Err(JsonSerdeError::Budget(_))
+        Err(JsonDecodeError::Budget(_))
     ));
 }
 
@@ -201,7 +199,7 @@ fn point_limit_fails_before_seed_and_keeps_work_charged() {
     let mut session = JsonDecodeSession::owned(limits);
     let error = decode_slice_seed(PanicSeed, br#""ab""#, &mut session)
         .expect_err("string limit must fail");
-    assert!(matches!(error, JsonSerdeError::Budget(_)));
+    assert!(matches!(error, JsonDecodeError::Budget(_)));
     assert!(session.value_budget_mut().enter_node(1).is_err());
 }
 
@@ -222,20 +220,6 @@ fn decode_slice_supports_usize_quantities() {
         .expect("usize JSON budgets must admit a fitting document");
     assert_eq!(session.value_budget().structure_budget().used_nodes(), 3);
     assert!(value.is_array());
-}
-
-#[test]
-fn account_value_supports_usize_quantities() {
-    let limits = JsonValueLimits::<JsonResource, usize>::unconfigured()
-        .with_structure_limits(StructureLimits::empty().with_nodes_limit(
-            ResourceLimit::new(JsonResource::Nodes, 4_usize),
-        ));
-    let mut budget = JsonValueBudget::new(limits);
-    let value = serde_json::json!({"key": [true, 1]});
-
-    account_value(&value, &mut budget)
-        .expect("usize accounting must admit a fitting value");
-    assert_eq!(budget.structure_budget().used_nodes(), 4);
 }
 
 struct PanicSeed;
