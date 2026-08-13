@@ -71,9 +71,8 @@ fuzz_target!(|data: &[u8]| {
     let mut input_budget = ResourceBudget::new(JsonResource::InputBytes, bytes);
     let mut value_budget = JsonValueBudget::new(value_limits);
     {
-        let mut session = JsonDecodeSession::borrowing(
-            Some(&mut input_budget),
-            None,
+        let mut session = JsonDecodeSession::borrowing_input(
+            &mut input_budget,
             &mut value_budget,
         );
         let _ = decode_slice::<Value, _, _>(input, &mut session);
