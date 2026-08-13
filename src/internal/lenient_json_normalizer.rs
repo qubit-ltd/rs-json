@@ -10,6 +10,7 @@
 use std::borrow::Cow;
 
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 
 use super::control_character_escaper::ControlCharacterEscaper;
 use super::markdown_fence::MarkdownFence;
@@ -80,7 +81,7 @@ impl LenientJsonNormalizer {
     pub(crate) fn normalize<'a>(
         &self,
         input: &'a str,
-        session: &mut JsonDecodeSession<'static>,
+        session: &mut JsonDecodeSession<'_, JsonResource>,
     ) -> Result<Cow<'a, str>, JsonDecodeError> {
         self.normalize_with_session(input, session, true)
     }
@@ -89,7 +90,7 @@ impl LenientJsonNormalizer {
     pub(crate) fn normalize_after_raw_charge<'a>(
         &self,
         input: &'a str,
-        session: &mut JsonDecodeSession<'static>,
+        session: &mut JsonDecodeSession<'_, JsonResource>,
     ) -> Result<Cow<'a, str>, JsonDecodeError> {
         self.normalize_with_session(input, session, false)
     }
@@ -98,7 +99,7 @@ impl LenientJsonNormalizer {
     fn normalize_with_session<'a>(
         &self,
         input: &'a str,
-        session: &mut JsonDecodeSession<'static>,
+        session: &mut JsonDecodeSession<'_, JsonResource>,
         charge_raw_input: bool,
     ) -> Result<Cow<'a, str>, JsonDecodeError> {
         let raw_input_bytes = input.len();
@@ -199,7 +200,7 @@ impl LenientJsonNormalizer {
     /// Charges raw input bytes and maps a rejected budget to the stable error.
     fn consume_raw_input(
         &self,
-        session: &mut JsonDecodeSession<'static>,
+        session: &mut JsonDecodeSession<'_, JsonResource>,
         amount: usize,
     ) -> Result<(), JsonDecodeError> {
         if session.consume_input_bytes_usize(amount).is_err() {
@@ -215,7 +216,7 @@ impl LenientJsonNormalizer {
     /// Charges normalized input bytes before allocating escaped text.
     fn consume_normalized_input(
         &self,
-        session: &mut JsonDecodeSession<'static>,
+        session: &mut JsonDecodeSession<'_, JsonResource>,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
     ) -> Result<(), JsonDecodeError> {

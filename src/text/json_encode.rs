@@ -45,6 +45,8 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    // TODO: Evaluate transactional or spooled streaming when full buffering is
+    // too costly; retain this all-or-nothing accounting behavior for now.
     encode_to_writer_legacy(writer, value, session).map_err(map_error)
 }
 

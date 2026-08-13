@@ -65,21 +65,22 @@ fn test_ci_workflow_enforces_coverage_thresholds() {
 /// # Panics
 ///
 /// Panics when the workflow omits the corpus cache, execution bounds, or
-/// decoder failure artifacts.
+/// target-specific failure artifacts.
 #[test]
-fn test_fuzz_workflow_preserves_decoder_corpus() {
+fn test_fuzz_workflow_preserves_each_target_corpus() {
     let workflow = include_str!("../.github/workflows/fuzz.yml");
 
     assert!(workflow.contains("timeout-minutes: 15"));
     assert!(workflow.contains("actions/cache/restore@v4"));
     assert!(workflow.contains("actions/cache/save@v4"));
-    assert!(workflow.contains("fuzz/corpus/decoder"));
+    assert!(workflow.contains("target: [decoder, json_decode_differential, json_budget_invariants, json_encode_invariants]"));
+    assert!(workflow.contains("fuzz/corpus/${{ matrix.target }}"));
     assert!(workflow.contains("github.run_id"));
     assert!(workflow.contains("if: always()"));
     assert!(workflow.contains("-max_len=4096"));
     assert!(workflow.contains("if: failure()"));
     assert!(workflow.contains("actions/upload-artifact@v7"));
-    assert!(workflow.contains("fuzz/artifacts/**"));
+    assert!(workflow.contains("fuzz/artifacts/${{ matrix.target }}/**"));
 }
 
 /// Verifies that both README files use the pinned local fuzz toolchain.

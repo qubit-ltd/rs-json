@@ -111,6 +111,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 ```toml
 [dependencies]
 qubit-json = "0.7"
+qubit-budget = { version = "0.4", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -126,7 +127,7 @@ serde = { version = "1.0", features = ["derive"] }
 
 ```rust
 use serde::Deserialize;
-use qubit_json::LenientJsonDecoder;
+use qubit_json::lenient::LenientJsonDecoder;
 
 #[derive(Debug, Deserialize)]
 struct User {
@@ -148,7 +149,7 @@ fn main() {
 ### 解码字符串中包含原始控制字符的 JSON
 
 ```rust
-use qubit_json::LenientJsonDecoder;
+use qubit_json::lenient::LenientJsonDecoder;
 
 fn main() {
     let decoder = LenientJsonDecoder::default();
@@ -163,7 +164,8 @@ fn main() {
 ### 自定义解码选项
 
 ```rust
-use qubit_json::{LenientJsonDecoder, JsonDecodeOptions};
+use qubit_json::lenient::JsonDecodeOptions;
+use qubit_json::lenient::LenientJsonDecoder;
 
 fn main() {
     let decoder = LenientJsonDecoder::new(

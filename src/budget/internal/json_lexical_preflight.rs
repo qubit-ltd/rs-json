@@ -16,7 +16,7 @@ use super::super::JsonSyntaxErrorReason;
 use super::super::JsonValueBudget;
 
 /// Lexically validates and charges one JSON document without recursion.
-pub(in crate::budget) struct JsonLexicalPreflight<'a, R, Q>
+pub(crate) struct JsonLexicalPreflight<'a, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -33,9 +33,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a lexical preflight bound to one mutable value budget.
-    pub(in crate::budget) const fn new(
-        budget: &'a mut JsonValueBudget<R, Q>,
-    ) -> Self {
+    pub(crate) const fn new(budget: &'a mut JsonValueBudget<R, Q>) -> Self {
         Self {
             budget,
             root_depth: 1,
@@ -56,7 +54,7 @@ where
     ///
     /// Returns [`JsonSerdeError::Budget`] for the first resource violation, or
     /// [`JsonSerdeError::Json`] when `input` is not one complete JSON value.
-    pub(in crate::budget) fn inspect(
+    pub(crate) fn inspect(
         &mut self,
         input: &[u8],
     ) -> Result<(), JsonSerdeError<R, Q>> {

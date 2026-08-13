@@ -28,5 +28,5 @@ fn test_json_decode_limits_retain_configured_values() {
         limits.input_bytes_limit().map(ResourceLimit::maximum),
         Some(12)
     );
-    assert_eq!(limits.value_limits(), value_limits);
+    assert_eq!(limits.value_limits(), &value_limits);
 }

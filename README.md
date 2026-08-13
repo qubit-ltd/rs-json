@@ -121,6 +121,7 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 qubit-json = "0.7"
+qubit-budget = { version = "0.4", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -137,7 +138,7 @@ re-export it.
 
 ```rust
 use serde::Deserialize;
-use qubit_json::LenientJsonDecoder;
+use qubit_json::lenient::LenientJsonDecoder;
 
 #[derive(Debug, Deserialize)]
 struct User {
@@ -159,7 +160,7 @@ fn main() {
 ### Decode JSON Containing Raw Control Characters in Strings
 
 ```rust
-use qubit_json::LenientJsonDecoder;
+use qubit_json::lenient::LenientJsonDecoder;
 
 fn main() {
     let decoder = LenientJsonDecoder::default();
@@ -174,7 +175,8 @@ fn main() {
 ### Customize Decoder Options
 
 ```rust
-use qubit_json::{LenientJsonDecoder, JsonDecodeOptions};
+use qubit_json::lenient::JsonDecodeOptions;
+use qubit_json::lenient::LenientJsonDecoder;
 
 fn main() {
     let decoder = LenientJsonDecoder::new(

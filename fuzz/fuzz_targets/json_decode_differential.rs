@@ -10,9 +10,9 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use qubit_json::JsonDecodeLimits;
-use qubit_json::JsonDecodeSession;
-use qubit_json::decode_slice;
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
+use qubit_json::text::decode_slice;
 use serde_json::Value;
 
 const MAX_INPUT_LEN: usize = 4 * 1024;

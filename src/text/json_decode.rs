@@ -13,12 +13,12 @@ use qubit_budget::json::JsonDecodeSession;
 use serde::Deserialize;
 use serde::de::DeserializeSeed;
 use serde_json::Error as JsonError;
-use serde_json::Value;
 
 use super::JsonDecodeError;
 use crate::budget::JsonSerdeError;
 use crate::budget::decode_slice as decode_slice_legacy;
 use crate::budget::decode_slice_seed as decode_slice_seed_legacy;
+use crate::budget::internal::JsonLexicalPreflight;
 
 /// Decodes one strict JSON document into `T` while charging `session`.
 pub fn decode_slice<'de, T, R, Q>(
@@ -43,8 +43,12 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    let _: Value = decode_slice(input, session)?;
-    Ok(())
+    session
+        .consume_input_bytes_usize(input.len())
+        .map_err(JsonDecodeError::Budget)?;
+    JsonLexicalPreflight::new(session.value_budget_mut())
+        .inspect(input)
+        .map_err(map_error)
 }
 
 /// Decodes one strict JSON document through a caller-supplied Serde seed.
