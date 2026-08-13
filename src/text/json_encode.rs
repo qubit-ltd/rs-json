@@ -15,11 +15,10 @@ use qubit_budget::json::JsonEncodeSession;
 use serde::Serialize;
 use serde_json::Error as JsonError;
 
+use super::JsonEncodeError;
 use crate::budget::JsonSerdeError;
 use crate::budget::encode_to_vec as encode_to_vec_legacy;
 use crate::budget::encode_to_writer as encode_to_writer_legacy;
-
-use super::JsonEncodeError;
 
 /// Encodes `value` into compact JSON bytes while charging `session`.
 pub fn encode_to_vec<T, R, Q>(
@@ -57,11 +56,13 @@ where
     match error {
         JsonSerdeError::Budget(error) => JsonEncodeError::Budget(error.into()),
         JsonSerdeError::Quantity { resource, source } => {
-            JsonEncodeError::Budget(MeasuredBudgetError::quantity(resource, source))
+            JsonEncodeError::Budget(MeasuredBudgetError::quantity(
+                resource, source,
+            ))
         }
-        JsonSerdeError::Syntax(error) => {
-            JsonEncodeError::InvalidRawJson(JsonError::io(std::io::Error::other(error.to_string())))
-        }
+        JsonSerdeError::Syntax(error) => JsonEncodeError::InvalidRawJson(
+            JsonError::io(std::io::Error::other(error.to_string())),
+        ),
         JsonSerdeError::Json(error) => JsonEncodeError::Serialize(error),
         JsonSerdeError::Io(error) => JsonEncodeError::Write(error),
     }

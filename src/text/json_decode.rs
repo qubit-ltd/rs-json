@@ -15,11 +15,10 @@ use serde::de::DeserializeSeed;
 use serde_json::Error as JsonError;
 use serde_json::Value;
 
+use super::JsonDecodeError;
 use crate::budget::JsonSerdeError;
 use crate::budget::decode_slice as decode_slice_legacy;
 use crate::budget::decode_slice_seed as decode_slice_seed_legacy;
-
-use super::JsonDecodeError;
 
 /// Decodes one strict JSON document into `T` while charging `session`.
 pub fn decode_slice<'de, T, R, Q>(
@@ -34,7 +33,8 @@ where
     decode_slice_legacy(input, session).map_err(map_error)
 }
 
-/// Validates one strict JSON document and charges its input and value resources.
+/// Validates one strict JSON document and charges its input and value
+/// resources.
 pub fn inspect<R, Q>(
     input: &[u8],
     session: &mut JsonDecodeSession<'_, R, Q>,
@@ -69,10 +69,14 @@ where
     match error {
         JsonSerdeError::Budget(error) => JsonDecodeError::Budget(error.into()),
         JsonSerdeError::Quantity { resource, source } => {
-            JsonDecodeError::Budget(MeasuredBudgetError::quantity(resource, source))
+            JsonDecodeError::Budget(MeasuredBudgetError::quantity(
+                resource, source,
+            ))
         }
         JsonSerdeError::Syntax(error) => JsonDecodeError::Syntax(error),
         JsonSerdeError::Json(error) => JsonDecodeError::Deserialize(error),
-        JsonSerdeError::Io(error) => JsonDecodeError::Deserialize(JsonError::io(error)),
+        JsonSerdeError::Io(error) => {
+            JsonDecodeError::Deserialize(JsonError::io(error))
+        }
     }
 }

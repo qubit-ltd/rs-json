@@ -22,7 +22,11 @@ struct RecordingVisitor {
 impl JsonTreeVisitor for RecordingVisitor {
     type Error = std::convert::Infallible;
 
-    fn enter(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+    fn enter(
+        &mut self,
+        value: &Value,
+        context: JsonTreeContext<'_>,
+    ) -> Result<(), Self::Error> {
         self.events.push(format!(
             "enter:{:?}:{}:{value}",
             context.location, context.depth
@@ -30,7 +34,11 @@ impl JsonTreeVisitor for RecordingVisitor {
         Ok(())
     }
 
-    fn leave(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+    fn leave(
+        &mut self,
+        value: &Value,
+        context: JsonTreeContext<'_>,
+    ) -> Result<(), Self::Error> {
         self.events.push(format!(
             "leave:{:?}:{}:{value}",
             context.location, context.depth

@@ -12,7 +12,8 @@ use std::fmt::Debug;
 use qubit_budget::MeasuredBudgetError;
 use thiserror::Error;
 
-/// Identifies whether JSON tree processing failed in infrastructure or domain code.
+/// Identifies whether JSON tree processing failed in infrastructure or domain
+/// code.
 #[must_use]
 #[derive(Debug, Error)]
 pub enum JsonTreeProcessError<R, Q, E>

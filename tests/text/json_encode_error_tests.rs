@@ -6,8 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use qubit_json::text::JsonEncodeError;
-use serde_json::from_str;
 use serde_json::Value;
+use serde_json::from_str;
 
 /// Verifies that Serde failures retain the encoding error category.
 #[test]

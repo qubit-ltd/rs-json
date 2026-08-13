@@ -15,8 +15,11 @@ use qubit_json::decode_slice;
 #[test]
 fn test_json_lexical_preflight_accepts_complete_value() {
     let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
-    let value = decode_slice::<serde_json::Value, _, _>(br#"{"ok":true}"#, &mut session)
-        .expect("complete JSON should pass lexical admission");
+    let value = decode_slice::<serde_json::Value, _, _>(
+        br#"{"ok":true}"#,
+        &mut session,
+    )
+    .expect("complete JSON should pass lexical admission");
 
     assert_eq!(value["ok"], true);
 }

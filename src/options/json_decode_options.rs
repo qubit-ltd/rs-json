@@ -222,7 +222,10 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    pub const fn with_escape_control_chars_in_strings(mut self, enabled: bool) -> Self {
+    pub const fn with_escape_control_chars_in_strings(
+        mut self,
+        enabled: bool,
+    ) -> Self {
         self.escape_control_chars_in_strings = enabled;
         self
     }
@@ -249,7 +252,10 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    pub const fn with_max_input_bytes(mut self, max_input_bytes: Option<usize>) -> Self {
+    pub const fn with_max_input_bytes(
+        mut self,
+        max_input_bytes: Option<usize>,
+    ) -> Self {
         self.max_input_bytes = max_input_bytes;
         self
     }
@@ -280,7 +286,10 @@ impl JsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
-    pub const fn with_max_normalized_bytes(mut self, max_normalized_bytes: Option<usize>) -> Self {
+    pub const fn with_max_normalized_bytes(
+        mut self,
+        max_normalized_bytes: Option<usize>,
+    ) -> Self {
         self.max_normalized_bytes = max_normalized_bytes;
         self
     }

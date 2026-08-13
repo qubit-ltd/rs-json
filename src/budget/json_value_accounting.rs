@@ -51,7 +51,8 @@ where
                 budget
                     .check_sequence_items_usize(items)
                     .map_err(JsonSerdeError::from)?;
-                let child_depth = depth.checked_add(1).ok_or_else(invalid_json)?;
+                let child_depth =
+                    depth.checked_add(1).ok_or_else(invalid_json)?;
                 for value in values.iter().rev() {
                     pending.push((value, child_depth));
                 }
@@ -61,7 +62,8 @@ where
                 budget
                     .check_map_entries_usize(count)
                     .map_err(JsonSerdeError::from)?;
-                let child_depth = depth.checked_add(1).ok_or_else(invalid_json)?;
+                let child_depth =
+                    depth.checked_add(1).ok_or_else(invalid_json)?;
                 for (key, value) in entries.iter().rev() {
                     budget
                         .consume_key_bytes_usize(key.len())

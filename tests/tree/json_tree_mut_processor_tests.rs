@@ -5,9 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
-use qubit_budget::MeasuredBudgetError;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
@@ -47,9 +47,10 @@ impl JsonTreeMutVisitor<JsonResource, usize> for ReplacingVisitor {
 /// Verifies that a rejection can replace exactly the rejected subtree.
 #[test]
 fn test_process_mut_skips_rejected_subtree_after_replacement() {
-    let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::empty().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)),
-    );
+    let limits = JsonValueLimits::empty()
+        .with_structure_limits(StructureLimits::empty().with_nodes_limit(
+            ResourceLimit::new(JsonResource::Nodes, 2_usize),
+        ));
     let mut budget = JsonValueBudget::new(limits);
     let mut value = json!({"first": true, "second": {"nested": false}});
 

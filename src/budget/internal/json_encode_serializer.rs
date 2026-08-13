@@ -30,10 +30,12 @@ use super::json_encode_compound::JsonEncodeCompound;
 use super::json_output_buffer::JsonOutputAccounting;
 
 /// Private token used by serde_json for arbitrary-precision numbers.
-const JSON_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
+const JSON_NUMBER_TOKEN: &str =
+    concat!("$", "serde_json", ":", ":private::Number");
 
 /// Private token used by serde_json for raw JSON fragments.
-const JSON_RAW_VALUE_TOKEN: &str = concat!("$", "serde_json", ":", ":private::RawValue");
+const JSON_RAW_VALUE_TOKEN: &str =
+    concat!("$", "serde_json", ":", ":private::RawValue");
 
 /// Mutable state shared by every decorator in one serialization traversal.
 pub(super) struct JsonEncodeContext<'a, R, Q>
@@ -77,16 +79,25 @@ where
     {
         let output = self.output.borrow().check_available(value.len());
         self.record(output)?;
-        match JsonLexicalPreflight::at_depth(self.budget, depth).inspect(value.as_bytes()) {
+        match JsonLexicalPreflight::at_depth(self.budget, depth)
+            .inspect(value.as_bytes())
+        {
             Ok(()) => Ok(()),
-            Err(JsonSerdeError::Budget(error)) => self.record(Err(error.into())),
+            Err(JsonSerdeError::Budget(error)) => {
+                self.record(Err(error.into()))
+            }
             Err(JsonSerdeError::Quantity { resource, source }) => {
-                self.record(Err(MeasuredBudgetError::Quantity { resource, source }))
+                self.record(Err(MeasuredBudgetError::Quantity {
+                    resource,
+                    source,
+                }))
             }
             Err(JsonSerdeError::Json(_) | JsonSerdeError::Io(_)) => {
                 Err(E::custom("invalid raw JSON value"))
             }
-            Err(JsonSerdeError::Syntax(_)) => Err(E::custom("invalid raw JSON value")),
+            Err(JsonSerdeError::Syntax(_)) => {
+                Err(E::custom("invalid raw JSON value"))
+            }
         }
     }
 }
@@ -133,7 +144,10 @@ where
     Q: ResourceQuantity,
 {
     /// Creates an empty collector for one resource kind.
-    fn new(context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>, kind: DisplayBudgetKind) -> Self {
+    fn new(
+        context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>,
+        kind: DisplayBudgetKind,
+    ) -> Self {
         Self {
             text: String::new(),
             context,
@@ -149,17 +163,25 @@ where
 {
     /// Checks the cumulative formatted length before growing the string.
     fn write_str(&mut self, value: &str) -> fmt::Result {
-        let next = self.text.len().checked_add(value.len()).ok_or(fmt::Error)?;
-        let output_result = self.context.borrow().output.borrow().check_available(next);
+        let next =
+            self.text.len().checked_add(value.len()).ok_or(fmt::Error)?;
+        let output_result =
+            self.context.borrow().output.borrow().check_available(next);
         self.context
             .borrow_mut()
             .record::<fmt::Error>(output_result)?;
         let point_result = {
             let context = self.context.borrow();
             match self.kind {
-                DisplayBudgetKind::String => context.budget.check_string_bytes_usize(next),
-                DisplayBudgetKind::Key => context.budget.check_key_bytes_usize(next),
-                DisplayBudgetKind::Number => context.budget.check_number_bytes_usize(next),
+                DisplayBudgetKind::String => {
+                    context.budget.check_string_bytes_usize(next)
+                }
+                DisplayBudgetKind::Key => {
+                    context.budget.check_key_bytes_usize(next)
+                }
+                DisplayBudgetKind::Number => {
+                    context.budget.check_number_bytes_usize(next)
+                }
                 DisplayBudgetKind::RawOutput => Ok(()),
             }
         };
@@ -190,9 +212,15 @@ where
     let payload_result = {
         let mut context = collector.context.borrow_mut();
         match kind {
-            DisplayBudgetKind::String => context.budget.consume_string_bytes_usize(text.len()),
-            DisplayBudgetKind::Key => context.budget.consume_key_bytes_usize(text.len()),
-            DisplayBudgetKind::Number => context.budget.consume_number_bytes_usize(text.len()),
+            DisplayBudgetKind::String => {
+                context.budget.consume_string_bytes_usize(text.len())
+            }
+            DisplayBudgetKind::Key => {
+                context.budget.consume_key_bytes_usize(text.len())
+            }
+            DisplayBudgetKind::Number => {
+                context.budget.consume_number_bytes_usize(text.len())
+            }
             DisplayBudgetKind::RawOutput => Ok(()),
         }
     };
@@ -238,7 +266,10 @@ where
     ) -> Self {
         Self {
             inner,
-            context: Rc::new(RefCell::new(JsonEncodeContext { budget, output })),
+            context: Rc::new(RefCell::new(JsonEncodeContext {
+                budget,
+                output,
+            })),
             depth: 1,
         }
     }
@@ -257,7 +288,10 @@ where
     }
 
     /// Records one budget result after all temporary context borrows end.
-    fn record<E>(&self, result: Result<(), MeasuredBudgetError<R, Q>>) -> Result<(), E>
+    fn record<E>(
+        &self,
+        result: Result<(), MeasuredBudgetError<R, Q>>,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -364,11 +398,14 @@ where
     type Error = S::Error;
     type SerializeSeq = JsonEncodeCompound<'a, S::SerializeSeq, R, Q>;
     type SerializeTuple = JsonEncodeCompound<'a, S::SerializeTuple, R, Q>;
-    type SerializeTupleStruct = JsonEncodeCompound<'a, S::SerializeTupleStruct, R, Q>;
-    type SerializeTupleVariant = JsonEncodeCompound<'a, S::SerializeTupleVariant, R, Q>;
+    type SerializeTupleStruct =
+        JsonEncodeCompound<'a, S::SerializeTupleStruct, R, Q>;
+    type SerializeTupleVariant =
+        JsonEncodeCompound<'a, S::SerializeTupleVariant, R, Q>;
     type SerializeMap = JsonEncodeCompound<'a, S::SerializeMap, R, Q>;
     type SerializeStruct = JsonEncodeCompound<'a, S::SerializeStruct, R, Q>;
-    type SerializeStructVariant = JsonEncodeCompound<'a, S::SerializeStructVariant, R, Q>;
+    type SerializeStructVariant =
+        JsonEncodeCompound<'a, S::SerializeStructVariant, R, Q>;
 
     /// Charges and delegates one JSON boolean.
     fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
@@ -457,7 +494,8 @@ where
     where
         T: Serialize + ?Sized,
     {
-        let value = BudgetedValue::new(value, Rc::clone(&self.context), self.depth);
+        let value =
+            BudgetedValue::new(value, Rc::clone(&self.context), self.depth);
         self.inner.serialize_some(&value)
     }
 
@@ -468,7 +506,10 @@ where
     }
 
     /// Charges a unit struct as one JSON null.
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(
+        self,
+        name: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
         self.node()?;
         self.inner.serialize_unit_struct(name)
     }
@@ -494,7 +535,8 @@ where
     where
         T: Serialize + ?Sized,
     {
-        let value = BudgetedValue::new(value, Rc::clone(&self.context), self.depth);
+        let value =
+            BudgetedValue::new(value, Rc::clone(&self.context), self.depth);
         self.inner.serialize_newtype_struct(name, &value)
     }
 
@@ -516,12 +558,19 @@ where
             Rc::clone(&self.context),
             self.depth.saturating_add(1),
         );
-        self.inner
-            .serialize_newtype_variant(name, variant_index, variant, &value)
+        self.inner.serialize_newtype_variant(
+            name,
+            variant_index,
+            variant,
+            &value,
+        )
     }
 
     /// Charges an array before asking the inner serializer to create it.
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeSeq, Self::Error> {
         self.node()?;
         let context = Rc::clone(&self.context);
         let child_depth = self.depth.saturating_add(1);
@@ -530,7 +579,10 @@ where
     }
 
     /// Charges a fixed-length JSON tuple array.
-    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(
+        self,
+        len: usize,
+    ) -> Result<Self::SerializeTuple, Self::Error> {
         self.node()?;
         let context = Rc::clone(&self.context);
         let child_depth = self.depth.saturating_add(1);
@@ -570,14 +622,20 @@ where
         self.record(result)?;
         let context = Rc::clone(&self.context);
         let child_depth = array_depth.saturating_add(1);
-        let inner = self
-            .inner
-            .serialize_tuple_variant(name, variant_index, variant, len)?;
+        let inner = self.inner.serialize_tuple_variant(
+            name,
+            variant_index,
+            variant,
+            len,
+        )?;
         Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
     /// Charges an object before asking the inner serializer to create it.
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeMap, Self::Error> {
         if let Some(entries) = len {
             let result = self
                 .context
@@ -638,9 +696,12 @@ where
         self.record(result)?;
         let context = Rc::clone(&self.context);
         let child_depth = object_depth.saturating_add(1);
-        let inner = self
-            .inner
-            .serialize_struct_variant(name, variant_index, variant, len)?;
+        let inner = self.inner.serialize_struct_variant(
+            name,
+            variant_index,
+            variant,
+            len,
+        )?;
         Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
@@ -830,7 +891,10 @@ where
         self.inner.serialize_unit()
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(
+        self,
+        name: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit_struct(name)
     }
 
@@ -866,15 +930,25 @@ where
     where
         T: Serialize + ?Sized,
     {
-        self.inner
-            .serialize_newtype_variant(name, variant_index, variant, value)
+        self.inner.serialize_newtype_variant(
+            name,
+            variant_index,
+            variant,
+            value,
+        )
     }
 
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeSeq, Self::Error> {
         self.inner.serialize_seq(len)
     }
 
-    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(
+        self,
+        len: usize,
+    ) -> Result<Self::SerializeTuple, Self::Error> {
         self.inner.serialize_tuple(len)
     }
 
@@ -897,7 +971,10 @@ where
             .serialize_tuple_variant(name, variant_index, variant, len)
     }
 
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeMap, Self::Error> {
         self.inner.serialize_map(len)
     }
 
@@ -1104,7 +1181,10 @@ where
         self.inner.serialize_unit()
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(
+        self,
+        name: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit_struct(name)
     }
 
@@ -1139,15 +1219,25 @@ where
     where
         T: Serialize + ?Sized,
     {
-        self.inner
-            .serialize_newtype_variant(name, variant_index, variant, value)
+        self.inner.serialize_newtype_variant(
+            name,
+            variant_index,
+            variant,
+            value,
+        )
     }
 
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeSeq, Self::Error> {
         self.inner.serialize_seq(len)
     }
 
-    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(
+        self,
+        len: usize,
+    ) -> Result<Self::SerializeTuple, Self::Error> {
         self.inner.serialize_tuple(len)
     }
 
@@ -1170,7 +1260,10 @@ where
             .serialize_tuple_variant(name, variant_index, variant, len)
     }
 
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeMap, Self::Error> {
         self.inner.serialize_map(len)
     }
 
@@ -1201,8 +1294,11 @@ where
             PrivateTextKind::Number => DisplayBudgetKind::Number,
             PrivateTextKind::RawValue { .. } => DisplayBudgetKind::RawOutput,
         };
-        let text =
-            collect_display::<S::Error, _, _, Q>(value, Rc::clone(&self.context), budget_kind)?;
+        let text = collect_display::<S::Error, _, _, Q>(
+            value,
+            Rc::clone(&self.context),
+            budget_kind,
+        )?;
         match self.kind {
             PrivateTextKind::Number => {}
             PrivateTextKind::RawValue { depth } => {

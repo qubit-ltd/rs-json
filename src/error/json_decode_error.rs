@@ -70,7 +70,9 @@ impl JsonDecodeError {
     ) -> Self {
         let utf8_error = Arc::new(error);
         let message = match privacy_policy {
-            ErrorPrivacyPolicy::Redacted => "Failed to decode JSON input as UTF-8".to_string(),
+            ErrorPrivacyPolicy::Redacted => {
+                "Failed to decode JSON input as UTF-8".to_string()
+            }
             ErrorPrivacyPolicy::Detailed => {
                 format!("Failed to decode JSON input as UTF-8: {utf8_error}")
             }
@@ -159,7 +161,9 @@ impl JsonDecodeError {
             actual_top_level: None,
             raw_input_bytes,
             normalized_input_bytes: Some(normalized_input_bytes),
-            size_limit: Some(JsonInputSizeLimit::Normalized(max_normalized_bytes)),
+            size_limit: Some(JsonInputSizeLimit::Normalized(
+                max_normalized_bytes,
+            )),
             normalized_line: None,
             normalized_column: None,
             source: None,
@@ -257,7 +261,9 @@ impl JsonDecodeError {
             kind: JsonDecodeErrorKind::UnexpectedTopLevel,
             stage: JsonDecodeStage::TopLevelCheck,
             privacy_policy,
-            message: format!("Unexpected JSON top-level type: expected {expected}, got {actual}"),
+            message: format!(
+                "Unexpected JSON top-level type: expected {expected}, got {actual}"
+            ),
             expected_top_level: Some(expected),
             actual_top_level: Some(actual),
             raw_input_bytes,
@@ -329,7 +335,9 @@ impl JsonDecodeError {
         let line = error.line();
         let column = error.column();
         let (message, source) = match privacy_policy {
-            ErrorPrivacyPolicy::Redacted => (Self::redacted_message(prefix, line, column), None),
+            ErrorPrivacyPolicy::Redacted => {
+                (Self::redacted_message(prefix, line, column), None)
+            }
             ErrorPrivacyPolicy::Detailed => (
                 format!("{prefix}: {error}"),
                 Some(Arc::new(error) as Arc<dyn Error + Send + Sync>),

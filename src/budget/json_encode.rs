@@ -56,7 +56,8 @@ where
     Q: ResourceQuantity,
 {
     let mut transaction = session.output_budget().cloned();
-    let initial_remaining = transaction.as_ref().map(|budget| budget.remaining());
+    let initial_remaining =
+        transaction.as_ref().map(|budget| budget.remaining());
     let bytes = {
         let accounting = Rc::new(RefCell::new(JsonOutputAccounting::new(
             transaction.as_mut(),
@@ -72,7 +73,9 @@ where
         };
         output.into_result(result)?
     };
-    if let (Some(transaction), Some(initial_remaining)) = (transaction, initial_remaining) {
+    if let (Some(transaction), Some(initial_remaining)) =
+        (transaction, initial_remaining)
+    {
         let consumed = initial_remaining - transaction.remaining();
         session
             .consume_output_bytes(consumed)

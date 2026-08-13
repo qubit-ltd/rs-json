@@ -15,9 +15,10 @@ use serde_json::json;
 /// Verifies that visits accumulate and reset restores the configured budget.
 #[test]
 fn test_visit_tree_accumulates_and_reset_clears_usage() {
-    let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::empty().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)),
-    );
+    let limits = JsonValueLimits::empty()
+        .with_structure_limits(StructureLimits::empty().with_nodes_limit(
+            ResourceLimit::new(JsonResource::Nodes, 2_usize),
+        ));
     let mut visitor = JsonTreeBudgetVisitor::new(limits);
 
     visitor.visit_tree(&json!(true)).expect("first scalar fits");

@@ -18,14 +18,26 @@ fn test_json_value_limits_expose_all_configured_values() {
     let structure = StructureLimits::<JsonResource, usize>::empty()
         .with_depth_limit(ResourceLimit::new(JsonResource::Depth, 1))
         .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2))
-        .with_sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, 3))
+        .with_sequence_items_limit(ResourceLimit::new(
+            JsonResource::SequenceItems,
+            3,
+        ))
         .with_map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 4))
         .with_key_bytes_limit(ResourceLimit::new(JsonResource::KeyBytes, 5));
     let limits = JsonValueLimits::empty()
         .with_structure_limits(structure)
-        .with_string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 6))
-        .with_number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, 7))
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 8));
+        .with_string_bytes_limit(ResourceLimit::new(
+            JsonResource::StringBytes,
+            6,
+        ))
+        .with_number_bytes_limit(ResourceLimit::new(
+            JsonResource::NumberBytes,
+            7,
+        ))
+        .with_payload_bytes_limit(ResourceLimit::new(
+            JsonResource::PayloadBytes,
+            8,
+        ));
 
     assert_eq!(limits.max_depth(), Some(1));
     assert_eq!(limits.max_nodes(), Some(2));

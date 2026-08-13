@@ -33,8 +33,11 @@ struct Fixture {
 fn decode(c: &mut Criterion) {
     c.bench_function("json decode with budget", |b| {
         b.iter(|| {
-            let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
-            black_box(decode_slice::<Fixture, _, _>(DOCUMENT, &mut session).unwrap())
+            let mut session =
+                JsonDecodeSession::owned(JsonDecodeLimits::empty());
+            black_box(
+                decode_slice::<Fixture, _, _>(DOCUMENT, &mut session).unwrap(),
+            )
         });
     });
 }
@@ -58,7 +61,8 @@ fn encode(c: &mut Criterion) {
     };
     c.bench_function("json encode with budget", |b| {
         b.iter(|| {
-            let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+            let mut session =
+                JsonEncodeSession::owned(JsonEncodeLimits::empty());
             black_box(encode_to_vec(&fixture, &mut session).unwrap())
         });
     });
@@ -72,7 +76,10 @@ fn encode_baseline(c: &mut Criterion) {
     };
     c.bench_function("json encode with serde_json", |b| {
         b.iter(|| {
-            black_box(serde_json::to_vec(&fixture).expect("benchmark fixture should encode"))
+            black_box(
+                serde_json::to_vec(&fixture)
+                    .expect("benchmark fixture should encode"),
+            )
         });
     });
 }
