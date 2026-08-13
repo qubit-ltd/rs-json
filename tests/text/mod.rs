@@ -6,3 +6,4 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 mod json_decode_tests;
+mod json_encode_error_tests;

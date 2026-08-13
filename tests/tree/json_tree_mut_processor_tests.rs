@@ -7,6 +7,7 @@
 // =============================================================================
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
+use qubit_budget::MeasuredBudgetError;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
@@ -36,7 +37,7 @@ impl JsonTreeMutVisitor<JsonResource, usize> for ReplacingVisitor {
         &mut self,
         value: &mut Value,
         _context: JsonTreeContext<'_>,
-        _error: &qubit_budget::MeasuredBudgetError<JsonResource, usize>,
+        _error: &MeasuredBudgetError<JsonResource, usize>,
     ) -> Result<JsonBudgetRejection, Self::Error> {
         *value = json!("[redacted]");
         Ok(JsonBudgetRejection::SkipSubtree)

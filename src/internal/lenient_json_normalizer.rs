@@ -9,6 +9,8 @@
 
 use std::borrow::Cow;
 
+use qubit_budget::json::JsonDecodeSession;
+
 use super::control_character_escaper::ControlCharacterEscaper;
 use super::markdown_fence::MarkdownFence;
 use crate::JsonDecodeError;
@@ -75,9 +77,34 @@ impl LenientJsonNormalizer {
     ///
     /// Returns [`JsonDecodeError`] when the raw or normalized input exceeds its
     /// configured limit or becomes empty at a normalization boundary.
-    pub(crate) fn normalize<'a>(&self, input: &'a str) -> Result<Cow<'a, str>, JsonDecodeError> {
+    pub(crate) fn normalize<'a>(
+        &self,
+        input: &'a str,
+        session: &mut JsonDecodeSession<'static>,
+    ) -> Result<Cow<'a, str>, JsonDecodeError> {
+        self.normalize_with_session(input, session, true)
+    }
+
+    /// Normalizes input after a caller has already charged its raw bytes.
+    pub(crate) fn normalize_after_raw_charge<'a>(
+        &self,
+        input: &'a str,
+        session: &mut JsonDecodeSession<'static>,
+    ) -> Result<Cow<'a, str>, JsonDecodeError> {
+        self.normalize_with_session(input, session, false)
+    }
+
+    /// Runs normalization while charging raw and normalized input budgets.
+    fn normalize_with_session<'a>(
+        &self,
+        input: &'a str,
+        session: &mut JsonDecodeSession<'static>,
+        charge_raw_input: bool,
+    ) -> Result<Cow<'a, str>, JsonDecodeError> {
         let raw_input_bytes = input.len();
-        self.require_within_size_limit(input)?;
+        if charge_raw_input {
+            self.consume_raw_input(session, raw_input_bytes)?;
+        }
         let input = self.require_non_empty(input, raw_input_bytes)?;
         // Keep strict decoding on this shared pipeline: disabled stages return
         // the input unchanged, while a dedicated bypass added option checks
@@ -85,19 +112,22 @@ impl LenientJsonNormalizer {
         let input = self.trim_if_enabled(input);
         let input = self.strip_utf8_bom(input);
         let input = self.trim_if_enabled(input);
-        let input = MarkdownFence::strip_outer(input, self.options.markdown_fence_policy());
+        let input = MarkdownFence::strip_outer(
+            input,
+            self.options.markdown_fence_policy(),
+        );
         let input = self.trim_if_enabled(input);
-        let control_character_scan =
-            self.require_within_normalized_size_limit(input, raw_input_bytes)?;
-        let input = match control_character_scan {
-            Some((normalized_len, needs_escape)) => {
-                ControlCharacterEscaper::escape_with_scan(input, normalized_len, needs_escape)
-            }
-            None => ControlCharacterEscaper::escape(
-                input,
-                self.options.escape_control_chars_in_strings(),
-            ),
-        };
+        let (normalized_len, needs_escape) = self.scan_normalized_size(input);
+        self.consume_normalized_input(
+            session,
+            raw_input_bytes,
+            normalized_len,
+        )?;
+        let input = ControlCharacterEscaper::escape_with_scan(
+            input,
+            normalized_len,
+            needs_escape,
+        );
 
         if input.is_empty() {
             Err(JsonDecodeError::empty_input(
@@ -148,71 +178,61 @@ impl LenientJsonNormalizer {
         Ok(input)
     }
 
-    /// Rejects raw input that exceeds the configured size limit.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Raw input whose byte length is checked.
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` when the input is within the limit or no limit is configured.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`JsonDecodeError`] when the input is larger than the configured
-    /// raw byte limit.
-    fn require_within_size_limit(&self, input: &str) -> Result<(), JsonDecodeError> {
-        if let Some(limit) = self.options.max_input_bytes() {
-            let size = input.len();
-            if size > limit {
-                return Err(JsonDecodeError::input_too_large(
-                    size,
-                    limit,
-                    self.options.error_privacy_policy(),
-                ));
-            }
-        }
-        Ok(())
-    }
-
-    /// Rejects normalized input that exceeds the configured size limit.
+    /// Scans normalized input before allocating repaired text.
     ///
     /// # Parameters
     ///
     /// * `input` - Text after non-allocating normalization steps.
-    /// * `raw_input_bytes` - Original raw input length in bytes.
+    /// * `input` - Text after non-allocating normalization steps.
     ///
     /// # Returns
     ///
-    /// `Ok(Some((normalized_len, needs_escape)))` when normalized text is
-    /// within a configured limit, or `Ok(None)` when no limit is configured.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`JsonDecodeError`] before allocating repaired control-character
-    /// escapes when the normalized text would exceed the configured limit.
-    fn require_within_normalized_size_limit(
+    /// The normalized byte length and whether control-character escaping is
+    /// required.
+    fn scan_normalized_size(&self, input: &str) -> (usize, bool) {
+        ControlCharacterEscaper::scan(
+            input,
+            self.options.escape_control_chars_in_strings(),
+        )
+    }
+
+    /// Charges raw input bytes and maps a rejected budget to the stable error.
+    fn consume_raw_input(
         &self,
-        input: &str,
-        raw_input_bytes: usize,
-    ) -> Result<Option<(usize, bool)>, JsonDecodeError> {
-        if let Some(limit) = self.options.max_normalized_bytes() {
-            let (normalized_input_bytes, needs_escape) = ControlCharacterEscaper::scan(
-                input,
-                self.options.escape_control_chars_in_strings(),
-            );
-            if normalized_input_bytes > limit {
-                return Err(JsonDecodeError::normalized_input_too_large(
-                    raw_input_bytes,
-                    normalized_input_bytes,
-                    limit,
-                    self.options.error_privacy_policy(),
-                ));
-            }
-            return Ok(Some((normalized_input_bytes, needs_escape)));
+        session: &mut JsonDecodeSession<'static>,
+        amount: usize,
+    ) -> Result<(), JsonDecodeError> {
+        if session.consume_input_bytes_usize(amount).is_err() {
+            return Err(JsonDecodeError::input_too_large(
+                amount,
+                session.max_input_bytes().unwrap_or(amount),
+                self.options.error_privacy_policy(),
+            ));
         }
-        Ok(None)
+        Ok(())
+    }
+
+    /// Charges normalized input bytes before allocating escaped text.
+    fn consume_normalized_input(
+        &self,
+        session: &mut JsonDecodeSession<'static>,
+        raw_input_bytes: usize,
+        normalized_input_bytes: usize,
+    ) -> Result<(), JsonDecodeError> {
+        if session
+            .consume_normalized_input_bytes_usize(normalized_input_bytes)
+            .is_err()
+        {
+            return Err(JsonDecodeError::normalized_input_too_large(
+                raw_input_bytes,
+                normalized_input_bytes,
+                session
+                    .max_normalized_input_bytes()
+                    .unwrap_or(normalized_input_bytes),
+                self.options.error_privacy_policy(),
+            ));
+        }
+        Ok(())
     }
 
     /// Trims a borrowed input slice when trimming is enabled.
