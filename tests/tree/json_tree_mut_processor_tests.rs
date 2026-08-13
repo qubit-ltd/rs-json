@@ -19,6 +19,29 @@ use qubit_json::tree::JsonTreeProcessor;
 use serde_json::Value;
 use serde_json::json;
 
+struct FailingVisitor {
+    calls: usize,
+}
+
+impl JsonTreeMutVisitor<JsonResource, usize> for FailingVisitor {
+    type Error = &'static str;
+
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
+        self.calls += 1;
+        if self.calls == 1 {
+            *value = json!({"changed": [1, 2]});
+            Ok(JsonTreeControl::Descend)
+        } else {
+            *value = json!("partially changed");
+            Err("stop")
+        }
+    }
+}
+
 /// Replaces budget-rejected values and descends into all admitted values.
 struct ReplacingVisitor;
 
@@ -59,4 +82,20 @@ fn test_process_mut_skips_rejected_subtree_after_replacement() {
         .expect("visitor handles the resource rejection");
 
     assert_eq!(value, json!({"first": true, "second": "[redacted]"}));
+}
+
+#[test]
+fn test_process_mut_preserves_mutations_when_visitor_fails() {
+    let mut budget = JsonValueBudget::new(JsonValueLimits::default());
+    let mut value = json!({"original": true});
+
+    let error = JsonTreeProcessor::new(&mut budget)
+        .process_mut(&mut value, &mut FailingVisitor { calls: 0 })
+        .expect_err("the visitor deliberately fails");
+
+    assert!(matches!(
+        error,
+        qubit_json::tree::JsonTreeProcessError::Visitor("stop")
+    ));
+    assert_eq!(value, json!({"changed": "partially changed"}));
 }
