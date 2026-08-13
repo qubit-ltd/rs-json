@@ -115,3 +115,9 @@ impl JsonDeserializeError {
         self.column
     }
 }
+
+impl From<serde_json::Error> for JsonDeserializeError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::from_serde(&error)
+    }
+}
