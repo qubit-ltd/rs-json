@@ -7,6 +7,8 @@
 // =============================================================================
 //! Defines the [`LenientJsonDecoder`] type and its public decoding methods.
 
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
 use serde::de::DeserializeOwned;
 use serde_json::Error;
 use serde_json::Value;
@@ -84,7 +86,8 @@ impl LenientJsonDecoder {
     {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
-        let normalized = self.normalizer.normalize(input)?;
+        let mut session = self.decode_session();
+        let normalized = self.normalizer.normalize(input, &mut session)?;
         Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,
@@ -120,19 +123,30 @@ impl LenientJsonDecoder {
     {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
-        if let Some(max_input_bytes) = self.options().max_input_bytes()
-            && raw_input_bytes > max_input_bytes
-        {
+        let mut session = self.decode_session();
+        if session.consume_input_bytes_usize(raw_input_bytes).is_err() {
             return Err(JsonDecodeError::input_too_large(
                 raw_input_bytes,
-                max_input_bytes,
+                session.max_input_bytes().unwrap_or(raw_input_bytes),
                 privacy_policy,
             ));
         }
         let input = std::str::from_utf8(input).map_err(|error| {
-            JsonDecodeError::invalid_utf8(error, raw_input_bytes, privacy_policy)
+            JsonDecodeError::invalid_utf8(
+                error,
+                raw_input_bytes,
+                privacy_policy,
+            )
         })?;
-        self.decode(input)
+        let normalized = self
+            .normalizer
+            .normalize_after_raw_charge(input, &mut session)?;
+        Self::deserialize_normalized(
+            normalized.as_ref(),
+            raw_input_bytes,
+            normalized.len(),
+            privacy_policy,
+        )
     }
 
     /// Decodes `input` into `T`, requiring a top-level JSON object.
@@ -190,7 +204,10 @@ impl LenientJsonDecoder {
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     #[inline(always)]
-    pub fn decode_array<T>(&self, input: &str) -> Result<Vec<T>, JsonDecodeError>
+    pub fn decode_array<T>(
+        &self,
+        input: &str,
+    ) -> Result<Vec<T>, JsonDecodeError>
     where
         T: DeserializeOwned,
     {
@@ -217,7 +234,8 @@ impl LenientJsonDecoder {
     pub fn decode_value(&self, input: &str) -> Result<Value, JsonDecodeError> {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
-        let normalized = self.normalizer.normalize(input)?;
+        let mut session = self.decode_session();
+        let normalized = self.normalizer.normalize(input, &mut session)?;
         Self::parse_value(
             normalized.as_ref(),
             raw_input_bytes,
@@ -257,7 +275,8 @@ impl LenientJsonDecoder {
     {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
-        let normalized = self.normalizer.normalize(input)?;
+        let mut session = self.decode_session();
+        let normalized = self.normalizer.normalize(input, &mut session)?;
         let normalized_input_bytes = normalized.len();
         let actual = JsonTopLevelKind::of_normalized_json(normalized.as_ref());
         if actual != expected {
@@ -281,6 +300,18 @@ impl LenientJsonDecoder {
             normalized_input_bytes,
             privacy_policy,
         )
+    }
+
+    /// Creates the budget session for one lenient decode operation.
+    fn decode_session(&self) -> JsonDecodeSession<'static> {
+        let mut limits = JsonDecodeLimits::empty();
+        if let Some(maximum) = self.options().max_input_bytes() {
+            limits = limits.with_max_input_bytes(maximum);
+        }
+        if let Some(maximum) = self.options().max_normalized_bytes() {
+            limits = limits.with_max_normalized_input_bytes(maximum);
+        }
+        JsonDecodeSession::owned(limits)
     }
 
     /// Parses normalized JSON text into a dynamic value.
@@ -433,12 +464,14 @@ impl LenientJsonDecoder {
                 ),
                 Err(error) => error,
             },
-            Category::Io | Category::Syntax | Category::Eof => JsonDecodeError::invalid_json(
-                error,
-                raw_input_bytes,
-                normalized_input_bytes,
-                privacy_policy,
-            ),
+            Category::Io | Category::Syntax | Category::Eof => {
+                JsonDecodeError::invalid_json(
+                    error,
+                    raw_input_bytes,
+                    normalized_input_bytes,
+                    privacy_policy,
+                )
+            }
         }
     }
 }

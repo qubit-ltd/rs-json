@@ -17,7 +17,6 @@ mod json_tree_process_error;
 mod json_tree_processor;
 mod json_tree_visitor;
 
-pub use crate::budget::BudgetedJsonValueSeed as BudgetedValueSeed;
 pub use json_budget_rejection::JsonBudgetRejection;
 pub use json_tree_budget_visitor::JsonTreeBudgetVisitor;
 pub use json_tree_context::JsonTreeContext;
@@ -27,3 +26,5 @@ pub use json_tree_mut_visitor::JsonTreeMutVisitor;
 pub use json_tree_process_error::JsonTreeProcessError;
 pub use json_tree_processor::JsonTreeProcessor;
 pub use json_tree_visitor::JsonTreeVisitor;
+
+pub use crate::budget::BudgetedJsonValueSeed as BudgetedValueSeed;
