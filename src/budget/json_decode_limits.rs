@@ -56,10 +56,7 @@ where
 
     /// Configures the cumulative input-byte budget for one decode session.
     #[inline]
-    pub fn with_input_bytes_limit(
-        mut self,
-        limit: ResourceLimit<R, Q>,
-    ) -> Self {
+    pub fn with_input_bytes_limit(mut self, limit: ResourceLimit<R, Q>) -> Self {
         self.input = Some(limit);
         self
     }

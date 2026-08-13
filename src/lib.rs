@@ -7,14 +7,18 @@
 // =============================================================================
 //! Provides the public API for the `qubit-json` crate.
 //!
-//! The crate exposes a lenient JSON decoder and the related option and error
-//! types needed to normalize and deserialize JSON text from
-//! non-fully-trusted sources.
+//! The crate provides resource-aware infrastructure for JSON trees and text.
+//!
+//! * [`tree`] traverses materialized [`serde_json::Value`] trees without
+//!   recursion.
+//! * [`text`] strictly decodes and encodes JSON using sessions from
+//!   [`qubit_budget::json`].
+//! * [`lenient`] normalizes non-standard JSON text before decoding.
 //!
 //! # Quick start
 //!
 //! ```rust
-//! use qubit_json::{JsonDecodeOptions, LenientJsonDecoder};
+//! use qubit_json::lenient::{JsonDecodeOptions, LenientJsonDecoder};
 //!
 //! let decoder = LenientJsonDecoder::new(
 //!     JsonDecodeOptions::default().with_max_input_bytes(Some(1024)),
@@ -22,7 +26,7 @@
 //! let value = decoder.decode_value("```json\n{\"ok\":true}\n```")?;
 //!
 //! assert_eq!(value["ok"], true);
-//! # Ok::<(), qubit_json::JsonDecodeError>(())
+//! # Ok::<(), qubit_json::lenient::LenientJsonDecodeError>(())
 //! ```
 //!
 //! # Error privacy
@@ -34,7 +38,7 @@
 //! and may expose input values.
 //!
 //! ```rust
-//! use qubit_json::{
+//! use qubit_json::lenient::{
 //!     ErrorPrivacyPolicy,
 //!     JsonDecodeOptions,
 //!     LenientJsonDecoder,
@@ -61,47 +65,31 @@
 //!
 //! ```compile_fail
 //! #![deny(unused_must_use)]
-//! qubit_json::JsonDecodeOptions::default();
+//! qubit_json::lenient::JsonDecodeOptions::default();
 //! ```
 //!
 //! ```compile_fail
 //! #![deny(unused_must_use)]
-//! qubit_json::LenientJsonDecoder::default();
+//! qubit_json::lenient::LenientJsonDecoder::default();
 //! ```
 
 #![deny(missing_docs)]
 
-pub mod budget;
+mod budget;
 mod error;
 mod internal;
 mod json_top_level_kind;
+pub mod lenient;
 mod lenient_json_decoder;
 mod options;
+pub mod text;
+pub mod tree;
 
-pub use budget::BudgetedJsonValueSeed;
-pub use budget::JsonDecodeLimits;
-pub use budget::JsonDecodeSession;
-pub use budget::JsonEncodeLimits;
-pub use budget::JsonEncodeSession;
-pub use budget::JsonResource;
-pub use budget::JsonSerdeError;
-pub use budget::JsonSyntaxError;
-pub use budget::JsonSyntaxErrorReason;
-pub use budget::JsonValueBudget;
-pub use budget::JsonValueLimits;
-pub use budget::JsonValueVisitor;
-pub use budget::account_value;
-pub use budget::decode_slice;
-pub use budget::decode_slice_seed;
-pub use budget::encode_to_vec;
-pub use budget::encode_to_writer;
-pub use budget::walk_json_value;
-pub use error::ErrorPrivacyPolicy;
-pub use error::JsonDecodeError;
-pub use error::JsonDecodeErrorKind;
-pub use error::JsonDecodeStage;
-pub use json_top_level_kind::JsonTopLevelKind;
-pub use lenient_json_decoder::LenientJsonDecoder;
-pub use options::JsonDecodeOptions;
-pub use options::MarkdownFenceClosing;
-pub use options::MarkdownFencePolicy;
+pub(crate) use error::ErrorPrivacyPolicy;
+pub(crate) use error::JsonDecodeError;
+pub(crate) use error::JsonDecodeErrorKind;
+pub(crate) use error::JsonDecodeStage;
+pub(crate) use json_top_level_kind::JsonTopLevelKind;
+pub(crate) use options::JsonDecodeOptions;
+pub(crate) use options::MarkdownFenceClosing;
+pub(crate) use options::MarkdownFencePolicy;

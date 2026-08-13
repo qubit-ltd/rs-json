@@ -29,10 +29,8 @@ use serde::de::IgnoredAny;
 #[test]
 fn escaped_and_direct_unicode_charge_equal_decoded_payload() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
-        JsonValueLimits::empty().with_payload_bytes_limit(ResourceLimit::new(
-            JsonResource::PayloadBytes,
-            3,
-        )),
+        JsonValueLimits::empty()
+            .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3)),
     );
     for input in [br#""\u4e2d""#.as_slice(), "\"中\"".as_bytes()] {
         let mut session = JsonDecodeSession::owned(limits);
@@ -49,15 +47,11 @@ fn escaped_and_direct_unicode_charge_equal_decoded_payload() {
 #[test]
 fn deeply_nested_input_fails_by_limit_without_stack_overflow() {
     let input = format!("{}0{}", "[".repeat(20_000), "]".repeat(20_000));
-    let mut session =
-        JsonDecodeSession::owned(JsonDecodeLimits::empty().with_value_limits(
-            JsonValueLimits::empty().with_structure_limits(
-                StructureLimits::empty().with_depth_limit(ResourceLimit::new(
-                    JsonResource::Depth,
-                    128,
-                )),
-            ),
-        ));
+    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty().with_value_limits(
+        JsonValueLimits::empty().with_structure_limits(
+            StructureLimits::empty().with_depth_limit(ResourceLimit::new(JsonResource::Depth, 128)),
+        ),
+    ));
 
     assert!(matches!(
         decode_slice::<serde_json::Value, _, _>(input.as_bytes(), &mut session),
@@ -120,9 +114,8 @@ fn json_decode_reports_structured_syntax_locations() {
     ];
     for (input, offset, line, column, reason) in cases {
         let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
-        let error =
-            decode_slice::<serde_json::Value, _, _>(input, &mut session)
-                .expect_err("input should be rejected");
+        let error = decode_slice::<serde_json::Value, _, _>(input, &mut session)
+            .expect_err("input should be rejected");
         let JsonSerdeError::Syntax(error) = error else {
             panic!("expected structured syntax error");
         };
@@ -151,10 +144,8 @@ fn json_decode_counts_unicode_columns_and_crlf_lines() {
 #[test]
 fn typed_decode_failure_consumes_input_before_the_next_attempt() {
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty().with_input_bytes_limit(ResourceLimit::new(
-            JsonResource::InputBytes,
-            3,
-        )),
+        JsonDecodeLimits::empty()
+            .with_input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 3)),
     );
 
     assert!(matches!(
@@ -173,9 +164,10 @@ fn decode_slice_seed_admits_arbitrary_precision_numbers() {
     let input = b"123456789012345678901234567890";
     let mut session =
         JsonDecodeSession::owned(JsonDecodeLimits::empty().with_value_limits(
-            JsonValueLimits::empty().with_number_bytes_limit(
-                ResourceLimit::new(JsonResource::NumberBytes, input.len()),
-            ),
+            JsonValueLimits::empty().with_number_bytes_limit(ResourceLimit::new(
+                JsonResource::NumberBytes,
+                input.len(),
+            )),
         ));
 
     decode_slice_seed(IgnoreSeed, input, &mut session)
@@ -188,34 +180,26 @@ fn point_limit_fails_before_seed_and_keeps_work_charged() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
         JsonValueLimits::empty()
             .with_structure_limits(
-                StructureLimits::empty().with_nodes_limit(ResourceLimit::new(
-                    JsonResource::Nodes,
-                    1,
-                )),
+                StructureLimits::empty()
+                    .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)),
             )
-            .with_string_bytes_limit(ResourceLimit::new(
-                JsonResource::StringBytes,
-                1,
-            )),
+            .with_string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 1)),
     );
     let mut session = JsonDecodeSession::owned(limits);
-    let error = decode_slice_seed(PanicSeed, br#""ab""#, &mut session)
-        .expect_err("string limit must fail");
+    let error =
+        decode_slice_seed(PanicSeed, br#""ab""#, &mut session).expect_err("string limit must fail");
     assert!(matches!(error, JsonSerdeError::Budget(_)));
     assert!(session.value_budget_mut().enter_node(1).is_err());
 }
 
 #[test]
 fn decode_slice_supports_usize_quantities() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::unconfigured()
-        .with_value_limits(
-            JsonValueLimits::unconfigured().with_structure_limits(
-                StructureLimits::empty().with_nodes_limit(ResourceLimit::new(
-                    JsonResource::Nodes,
-                    4_usize,
-                )),
-            ),
-        );
+    let limits = JsonDecodeLimits::<JsonResource, usize>::unconfigured().with_value_limits(
+        JsonValueLimits::unconfigured().with_structure_limits(
+            StructureLimits::empty()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 4_usize)),
+        ),
+    );
     let mut session = JsonDecodeSession::<JsonResource, usize>::owned(limits);
 
     let value: serde_json::Value = decode_slice(br#"[1,"x"]"#, &mut session)
@@ -226,15 +210,13 @@ fn decode_slice_supports_usize_quantities() {
 
 #[test]
 fn account_value_supports_usize_quantities() {
-    let limits = JsonValueLimits::<JsonResource, usize>::unconfigured()
-        .with_structure_limits(StructureLimits::empty().with_nodes_limit(
-            ResourceLimit::new(JsonResource::Nodes, 4_usize),
-        ));
+    let limits = JsonValueLimits::<JsonResource, usize>::unconfigured().with_structure_limits(
+        StructureLimits::empty().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 4_usize)),
+    );
     let mut budget = JsonValueBudget::new(limits);
     let value = serde_json::json!({"key": [true, 1]});
 
-    account_value(&value, &mut budget)
-        .expect("usize accounting must admit a fitting value");
+    account_value(&value, &mut budget).expect("usize accounting must admit a fitting value");
     assert_eq!(budget.structure_budget().used_nodes(), 4);
 }
 

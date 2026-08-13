@@ -16,7 +16,7 @@
 ///
 /// ```compile_fail
 /// #![deny(unused_must_use)]
-/// use qubit_json::ErrorPrivacyPolicy;
+/// use qubit_json::lenient::ErrorPrivacyPolicy;
 ///
 /// fn configured_policy() -> ErrorPrivacyPolicy {
 ///     ErrorPrivacyPolicy::Redacted

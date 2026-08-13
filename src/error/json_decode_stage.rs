@@ -15,7 +15,7 @@ use std::fmt;
 ///
 /// ```compile_fail
 /// #![deny(unused_must_use)]
-/// use qubit_json::JsonDecodeStage;
+/// use qubit_json::lenient::JsonDecodeStage;
 ///
 /// fn decode_stage() -> JsonDecodeStage {
 ///     JsonDecodeStage::Parse

@@ -60,8 +60,7 @@ impl ControlCharacterEscaper {
 
         while index < bytes.len() {
             let scalar_end = if !in_escape {
-                let ordinary =
-                    Self::ordinary_prefix_len(&bytes[index..], in_string);
+                let ordinary = Self::ordinary_prefix_len(&bytes[index..], in_string);
                 if ordinary != 0 {
                     index += ordinary;
                     continue;
@@ -73,12 +72,10 @@ impl ControlCharacterEscaper {
 
             while index < scalar_end {
                 let byte = bytes[index];
-                if let Some(replacement) =
-                    Self::replacement(byte, &mut in_string, &mut in_escape)
-                {
+                if let Some(replacement) = Self::replacement(byte, &mut in_string, &mut in_escape) {
                     needs_escape = true;
-                    normalized_len = normalized_len
-                        .saturating_add(replacement.len().saturating_sub(1));
+                    normalized_len =
+                        normalized_len.saturating_add(replacement.len().saturating_sub(1));
                 }
                 index += 1;
             }
@@ -104,12 +101,9 @@ impl ControlCharacterEscaper {
         let mut needs_escape = false;
 
         for byte in input.bytes() {
-            if let Some(replacement) =
-                Self::replacement(byte, &mut in_string, &mut in_escape)
-            {
+            if let Some(replacement) = Self::replacement(byte, &mut in_string, &mut in_escape) {
                 needs_escape = true;
-                normalized_len = normalized_len
-                    .saturating_add(replacement.len().saturating_sub(1));
+                normalized_len = normalized_len.saturating_add(replacement.len().saturating_sub(1));
             }
         }
 
@@ -178,9 +172,10 @@ impl ControlCharacterEscaper {
     #[inline]
     fn contains_ascii_control(input: &str) -> bool {
         let (chunks, remainder) = input.as_bytes().as_chunks::<8>();
-        chunks.iter().any(|chunk| {
-            Self::word_contains_ascii_control(u64::from_ne_bytes(*chunk))
-        }) || remainder.iter().any(|byte| *byte < 0x20)
+        chunks
+            .iter()
+            .any(|chunk| Self::word_contains_ascii_control(u64::from_ne_bytes(*chunk)))
+            || remainder.iter().any(|byte| *byte < 0x20)
     }
 
     /// Reports whether a machine word contains an ASCII C0 byte.
@@ -210,10 +205,8 @@ impl ControlCharacterEscaper {
     fn ascii_control_high_bits(word: u64) -> u64 {
         // Setting each high bit prevents cross-byte borrows; restoring the
         // original high bits keeps UTF-8 bytes out of the C0 range.
-        let non_control_high_bits = ((word | Self::HIGH_BITS)
-            .wrapping_sub(Self::CONTROL_OFFSET)
-            | word)
-            & Self::HIGH_BITS;
+        let non_control_high_bits =
+            ((word | Self::HIGH_BITS).wrapping_sub(Self::CONTROL_OFFSET) | word) & Self::HIGH_BITS;
         !non_control_high_bits & Self::HIGH_BITS
     }
 
@@ -230,9 +223,7 @@ impl ControlCharacterEscaper {
     fn contains_dense_ascii_control_chunk(input: &str) -> bool {
         let (chunks, remainder) = input.as_bytes().as_chunks::<8>();
         chunks.iter().any(|chunk| {
-            Self::ascii_control_high_bits(u64::from_ne_bytes(*chunk))
-                .count_ones()
-                >= 2
+            Self::ascii_control_high_bits(u64::from_ne_bytes(*chunk)).count_ones() >= 2
         }) || remainder
             .iter()
             .filter(|byte| **byte < 0x20)
@@ -255,8 +246,7 @@ impl ControlCharacterEscaper {
     fn contains_byte(word: u64, byte: u8) -> bool {
         let repeated = u64::from(byte) * Self::LOW_BITS;
         let candidate = word ^ repeated;
-        (candidate.wrapping_sub(Self::LOW_BITS) & !candidate & Self::HIGH_BITS)
-            != 0
+        (candidate.wrapping_sub(Self::LOW_BITS) & !candidate & Self::HIGH_BITS) != 0
     }
 
     /// Reports whether a chunk can change JSON-string escaping state.
@@ -274,8 +264,7 @@ impl ControlCharacterEscaper {
         let word = u64::from_ne_bytes(chunk);
         Self::contains_byte(word, b'"')
             || (in_string
-                && (Self::contains_byte(word, b'\\')
-                    || Self::word_contains_ascii_control(word)))
+                && (Self::contains_byte(word, b'\\') || Self::word_contains_ascii_control(word)))
     }
 
     /// Reports whether one byte requires scalar state handling.
@@ -347,8 +336,7 @@ impl ControlCharacterEscaper {
 
         while index < bytes.len() {
             let scalar_end = if !in_escape {
-                let ordinary =
-                    Self::ordinary_prefix_len(&bytes[index..], in_string);
+                let ordinary = Self::ordinary_prefix_len(&bytes[index..], in_string);
                 if ordinary != 0 {
                     index += ordinary;
                     continue;
@@ -360,11 +348,9 @@ impl ControlCharacterEscaper {
 
             while index < scalar_end {
                 let byte = bytes[index];
-                let replacement =
-                    Self::replacement(byte, &mut in_string, &mut in_escape);
+                let replacement = Self::replacement(byte, &mut in_string, &mut in_escape);
                 if let Some(replacement) = replacement {
-                    let output = output
-                        .get_or_insert_with(|| String::with_capacity(capacity));
+                    let output = output.get_or_insert_with(|| String::with_capacity(capacity));
                     let unchanged = &input[copy_start..index];
                     match unchanged.as_bytes() {
                         [] => {}
@@ -409,11 +395,9 @@ impl ControlCharacterEscaper {
         let mut output: Option<String> = None;
 
         for (index, byte) in input.bytes().enumerate() {
-            let replacement =
-                Self::replacement(byte, &mut in_string, &mut in_escape);
+            let replacement = Self::replacement(byte, &mut in_string, &mut in_escape);
             if let Some(replacement) = replacement {
-                let output = output
-                    .get_or_insert_with(|| String::with_capacity(capacity));
+                let output = output.get_or_insert_with(|| String::with_capacity(capacity));
                 let unchanged = &input[copy_start..index];
                 match unchanged.as_bytes() {
                     [] => {}
@@ -449,16 +433,11 @@ impl ControlCharacterEscaper {
     ///
     /// `Some(replacement)` when `byte` is a raw C0 control character
     /// requiring repair, or `None` when it should be copied unchanged.
-    fn replacement(
-        byte: u8,
-        in_string: &mut bool,
-        in_escape: &mut bool,
-    ) -> Option<&'static str> {
+    fn replacement(byte: u8, in_string: &mut bool, in_escape: &mut bool) -> Option<&'static str> {
         if *in_string {
             if *in_escape {
                 *in_escape = false;
-                return Self::escaped_control_byte(byte)
-                    .map(|escape| &escape[1..]);
+                return Self::escaped_control_byte(byte).map(|escape| &escape[1..]);
             }
             if byte == b'\\' {
                 *in_escape = true;

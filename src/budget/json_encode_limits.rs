@@ -56,10 +56,7 @@ where
 
     /// Configures the cumulative output-byte budget for one encode session.
     #[inline]
-    pub fn with_output_bytes_limit(
-        mut self,
-        limit: ResourceLimit<R, Q>,
-    ) -> Self {
+    pub fn with_output_bytes_limit(mut self, limit: ResourceLimit<R, Q>) -> Self {
         self.output = Some(limit);
         self
     }

@@ -13,7 +13,7 @@
 ///
 /// ```compile_fail
 /// #![deny(unused_must_use)]
-/// use qubit_json::MarkdownFenceClosing;
+/// use qubit_json::lenient::MarkdownFenceClosing;
 ///
 /// fn closing_policy() -> MarkdownFenceClosing {
 ///     MarkdownFenceClosing::Optional

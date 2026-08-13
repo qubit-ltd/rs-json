@@ -12,12 +12,12 @@ use std::hint::black_box;
 use criterion::Criterion;
 use criterion::criterion_group;
 use criterion::criterion_main;
-use qubit_json::JsonDecodeLimits;
-use qubit_json::JsonDecodeSession;
-use qubit_json::JsonEncodeLimits;
-use qubit_json::JsonEncodeSession;
-use qubit_json::decode_slice;
-use qubit_json::encode_to_vec;
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonEncodeSession;
+use qubit_json::text::decode_slice;
+use qubit_json::text::encode_to_vec;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -33,11 +33,8 @@ struct Fixture {
 fn decode(c: &mut Criterion) {
     c.bench_function("json decode with budget", |b| {
         b.iter(|| {
-            let mut session =
-                JsonDecodeSession::owned(JsonDecodeLimits::empty());
-            black_box(
-                decode_slice::<Fixture, _, _>(DOCUMENT, &mut session).unwrap(),
-            )
+            let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+            black_box(decode_slice::<Fixture, _, _>(DOCUMENT, &mut session).unwrap())
         });
     });
 }
@@ -61,8 +58,7 @@ fn encode(c: &mut Criterion) {
     };
     c.bench_function("json encode with budget", |b| {
         b.iter(|| {
-            let mut session =
-                JsonEncodeSession::owned(JsonEncodeLimits::empty());
+            let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
             black_box(encode_to_vec(&fixture, &mut session).unwrap())
         });
     });
@@ -76,10 +72,7 @@ fn encode_baseline(c: &mut Criterion) {
     };
     c.bench_function("json encode with serde_json", |b| {
         b.iter(|| {
-            black_box(
-                serde_json::to_vec(&fixture)
-                    .expect("benchmark fixture should encode"),
-            )
+            black_box(serde_json::to_vec(&fixture).expect("benchmark fixture should encode"))
         });
     });
 }

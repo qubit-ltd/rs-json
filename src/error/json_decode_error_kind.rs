@@ -19,7 +19,7 @@ use std::str::FromStr;
 ///
 /// ```compile_fail
 /// #![deny(unused_must_use)]
-/// use qubit_json::JsonDecodeErrorKind;
+/// use qubit_json::lenient::JsonDecodeErrorKind;
 ///
 /// fn error_kind() -> JsonDecodeErrorKind {
 ///     JsonDecodeErrorKind::InvalidJson
