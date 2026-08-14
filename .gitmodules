@@ -2,6 +2,3 @@
 	path = .rs-ci
 	url = https://github.com/qubit-ltd/rs-ci
 	branch = main
-[submodule "vendor/rs-budget"]
-	path = vendor/rs-budget
-	url = https://github.com/qubit-ltd/rs-budget.git
