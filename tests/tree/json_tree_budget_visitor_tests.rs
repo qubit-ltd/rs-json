@@ -40,12 +40,12 @@ fn test_visit_tree_accumulates_and_reset_clears_usage() {
 #[test]
 fn test_visit_tree_exposes_and_transfers_budget_state() {
     let mut visitor = JsonTreeBudgetVisitor::new(JsonValueLimits::empty());
-    assert_eq!(visitor.budget().structure_budget().used_nodes(), 0);
+    assert_eq!(visitor.budget().used_nodes(), None);
     visitor
         .visit_tree(&json!({"key": true}))
         .expect("the unrestricted budget should admit the object");
-    assert_eq!(visitor.budget_mut().structure_budget().used_nodes(), 0);
+    assert_eq!(visitor.budget_mut().used_nodes(), None);
 
     let budget = visitor.into_budget();
-    assert_eq!(budget.structure_budget().used_nodes(), 0);
+    assert_eq!(budget.used_nodes(), None);
 }
