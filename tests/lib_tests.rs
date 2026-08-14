@@ -41,22 +41,19 @@ fn test_lenient_exports_public_types() {
     assert_eq!(privacy_policy, ErrorPrivacyPolicy::default());
 }
 
-/// Verifies that pull-request CI enforces the repository's coverage thresholds.
+/// Verifies that pull-request CI delegates coverage enforcement to the shared
+/// workflow.
 ///
 /// # Panics
 ///
-/// Panics when the workflow does not download and validate the coverage report.
+/// Panics when the workflow does not enable shared coverage enforcement.
 #[test]
 fn test_ci_workflow_enforces_coverage_thresholds() {
     let workflow = include_str!("../.github/workflows/ci.yml");
 
-    assert!(workflow.contains("coverage-thresholds:"));
-    assert!(workflow.contains("needs: rust-ci"));
-    assert!(workflow.contains("actions/download-artifact@v8"));
-    assert!(workflow.contains("name: coverage-reports"));
-    assert!(workflow.contains("functions.percent < 100"));
-    assert!(workflow.contains("lines.percent <= 95"));
-    assert!(workflow.contains("regions.percent <= 95"));
+    assert!(workflow.contains("uses: qubit-ltd/rs-ci/.github/workflows/rust-ci.yml@main"));
+    assert!(workflow.contains("coverage_enforce_thresholds: \"1\""));
+    assert!(!workflow.contains("coverage-thresholds:"));
 }
 
 /// Verifies that scheduled fuzzing preserves its corpus, bounds execution, and
@@ -73,7 +70,7 @@ fn test_fuzz_workflow_preserves_each_target_corpus() {
     assert!(workflow.contains("timeout-minutes: 15"));
     assert!(workflow.contains("actions/cache/restore@v4"));
     assert!(workflow.contains("actions/cache/save@v4"));
-    assert!(workflow.contains("target: [decoder, json_decode_differential, json_budget_invariants, json_encode_invariants]"));
+    assert!(workflow.contains("target: [decoder, json_decode_differential, json_budget_invariants, json_encode_invariants, json_tree_invariants]"));
     assert!(workflow.contains("fuzz/corpus/${{ matrix.target }}"));
     assert!(workflow.contains("github.run_id"));
     assert!(workflow.contains("if: always()"));
@@ -97,19 +94,10 @@ fn test_readme_fuzz_commands_match_workflow_contract() {
     ];
 
     for readme in readmes {
-        assert!(readme.contains(
-            "rustup toolchain install nightly-2026-06-05 --profile minimal",
-        ));
-        assert!(
-            readme
-                .contains("cargo install cargo-fuzz --version 0.13.2 --locked")
-        );
-        assert!(
-            readme.contains("cargo +nightly-2026-06-05 fuzz build decoder")
-        );
-        assert!(readme.contains(
-            "cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096",
-        ));
+        assert!(readme.contains("rustup toolchain install nightly-2026-06-05 --profile minimal",));
+        assert!(readme.contains("cargo install cargo-fuzz --version 0.13.2 --locked"));
+        assert!(readme.contains("cargo +nightly-2026-06-05 fuzz build decoder"));
+        assert!(readme.contains("cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096",));
     }
 }
 
