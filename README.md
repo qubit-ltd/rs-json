@@ -323,16 +323,18 @@ version before that review succeeds.
 
 Run the repository checks with `./align-ci.sh` followed by `./ci-check.sh`.
 Criterion benchmarks include 1 KiB, 64 KiB, and 1 MiB budgeted strict and
-lenient decode/encode comparisons. Compile both benchmark targets with:
+lenient decode/encode comparisons and wide/deep tree traversal. Compile all
+three benchmark targets with:
 
 ```bash
 cargo bench --bench decoder_bench --no-run
 cargo bench --bench budgeted_serde_json --no-run
+cargo bench --bench tree_bench --no-run
 ```
 
 The optional fuzz target is development tooling and is not a runtime
 dependency. It exercises the default, strict, JSON-only, and required-closing
-decoder policies. A bounded run is scheduled by `.github/workflows/fuzz.yml`;
+decoder policies and mutable JSON tree restoration invariants. A bounded run is scheduled by `.github/workflows/fuzz.yml`;
 failures retain their reproduction artifacts. Install `cargo-fuzz` to build or
 run the same target locally from the repository root:
 
@@ -341,6 +343,7 @@ rustup toolchain install nightly-2026-06-05 --profile minimal
 cargo install cargo-fuzz --version 0.13.2 --locked
 (cd fuzz && cargo +nightly-2026-06-05 fuzz build decoder)
 (cd fuzz && cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096)
+(cd fuzz && cargo +nightly-2026-06-05 fuzz build json_tree_invariants)
 ```
 
 ## Testing

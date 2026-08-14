@@ -7,6 +7,9 @@ edition = "2024"
 [package.metadata]
 cargo-fuzz = true
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(fuzzing)"] }
+
 [dependencies]
 libfuzzer-sys = "0.4"
 qubit-budget = { path = "../../rs-budget", features = ["json"] }
@@ -38,6 +41,13 @@ bench = false
 [[bin]]
 name = "json_encode_invariants"
 path = "fuzz_targets/json_encode_invariants.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json_tree_invariants"
+path = "fuzz_targets/json_tree_invariants.rs"
 test = false
 doc = false
 bench = false
