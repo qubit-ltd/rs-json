@@ -118,9 +118,10 @@ impl JsonTreeMutVisitor<JsonResource, usize> for PanickingVisitor {
 /// Verifies that a rejection can replace exactly the rejected subtree.
 #[test]
 fn test_process_mut_skips_rejected_subtree_after_replacement() {
-    let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::empty().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)),
-    );
+    let limits = JsonValueLimits::empty()
+        .with_structure_limits(StructureLimits::empty().with_nodes_limit(
+            ResourceLimit::new(JsonResource::Nodes, 2_usize),
+        ));
     let mut budget = JsonValueBudget::new(limits);
     let mut value = json!({"first": true, "second": {"nested": false}});
 
@@ -133,12 +134,15 @@ fn test_process_mut_skips_rejected_subtree_after_replacement() {
 
 #[test]
 fn test_process_mut_preserves_mutations_when_visitor_fails() {
-    let limits = JsonValueLimits::empty()
-        .with_structure_limits(
-            StructureLimits::empty()
-                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 4_usize)),
-        )
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 32_usize));
+    let limits =
+        JsonValueLimits::empty()
+            .with_structure_limits(StructureLimits::empty().with_nodes_limit(
+                ResourceLimit::new(JsonResource::Nodes, 4_usize),
+            ))
+            .with_payload_bytes_limit(ResourceLimit::new(
+                JsonResource::PayloadBytes,
+                32_usize,
+            ));
     let mut budget = JsonValueBudget::new(limits);
     let mut value = json!({"original": true});
 
@@ -165,12 +169,15 @@ fn test_process_mut_preserves_mutations_when_visitor_fails() {
 /// Verifies that budget rejection retains earlier mutation and accounting.
 #[test]
 fn test_process_mut_preserves_partial_mutation_and_budget_on_rejection() {
-    let limits = JsonValueLimits::empty()
-        .with_structure_limits(
-            StructureLimits::empty()
-                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)),
-        )
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 8_usize));
+    let limits =
+        JsonValueLimits::empty()
+            .with_structure_limits(StructureLimits::empty().with_nodes_limit(
+                ResourceLimit::new(JsonResource::Nodes, 2_usize),
+            ))
+            .with_payload_bytes_limit(ResourceLimit::new(
+                JsonResource::PayloadBytes,
+                8_usize,
+            ));
     let mut budget = JsonValueBudget::new(limits);
     let mut value = json!([0, 1]);
 
