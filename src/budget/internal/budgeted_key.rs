@@ -14,6 +14,7 @@ use std::cell::RefCell;
 use std::fmt::Display;
 
 use qubit_budget::ResourceQuantity;
+use qubit_budget::json::JsonMeasurement;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error;
@@ -23,7 +24,7 @@ use super::json_encode_context::JsonEncodeContext;
 use super::json_encode_context::collect_display;
 
 /// Wraps a map key so it is traversed once through a key-aware decorator.
-pub(super) struct BudgetedKey<'a, 'budget, 'context, T, R, Q>
+pub(super) struct BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -32,10 +33,11 @@ where
     value: &'a T,
 
     /// Shared traversal context.
-    context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
+    context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 }
 
-impl<'a, 'budget, 'context, T, R, Q> BudgetedKey<'a, 'budget, 'context, T, R, Q>
+impl<'a, 'transaction, 'budget, 'context, T, R, Q>
+    BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -43,13 +45,15 @@ where
     /// Creates a key wrapper bound to the shared traversal context.
     pub(super) const fn new(
         value: &'a T,
-        context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
+        context: &'context RefCell<
+            JsonEncodeContext<'transaction, 'budget, R, Q>,
+        >,
     ) -> Self {
         Self { value, context }
     }
 }
 
-impl<T, R, Q> Serialize for BudgetedKey<'_, '_, '_, T, R, Q>
+impl<T, R, Q> Serialize for BudgetedKey<'_, '_, '_, '_, T, R, Q>
 where
     T: Serialize + ?Sized,
     R: Clone,
@@ -68,7 +72,7 @@ where
 }
 
 /// Decorates serde_json's map-key serializer with key-byte checks.
-struct JsonKeyBudgetSerializer<'context, 'budget, S, R, Q>
+struct JsonKeyBudgetSerializer<'context, 'transaction, 'budget, S, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -76,10 +80,10 @@ where
     inner: S,
 
     /// Shared traversal context.
-    context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
+    context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 }
 
-impl<S, R, Q> JsonKeyBudgetSerializer<'_, '_, S, R, Q>
+impl<S, R, Q> JsonKeyBudgetSerializer<'_, '_, '_, S, R, Q>
 where
     S: Serializer,
     R: Clone,
@@ -88,12 +92,9 @@ where
     /// Checks and consumes one emitted key length, retaining any original
     /// error.
     fn check(&self, bytes: usize) -> Result<(), S::Error> {
-        let result = self
-            .context
+        self.context
             .borrow_mut()
-            .budget
-            .consume_key_bytes_usize(bytes);
-        self.context.borrow_mut().record(result)
+            .admit(JsonMeasurement::Key { bytes })
     }
 }
 
@@ -106,8 +107,8 @@ macro_rules! serialize_key_number {
     };
 }
 
-impl<'context, 'budget, S, R, Q> Serializer
-    for JsonKeyBudgetSerializer<'context, 'budget, S, R, Q>
+impl<'context, 'transaction, 'budget, S, R, Q> Serializer
+    for JsonKeyBudgetSerializer<'context, 'transaction, 'budget, S, R, Q>
 where
     S: Serializer,
     R: Clone,
@@ -302,6 +303,7 @@ where
             value,
             self.context,
             DisplayBudgetKind::Key,
+            1,
         )?;
         self.inner.serialize_str(&text)
     }

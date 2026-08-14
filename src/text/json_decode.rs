@@ -33,8 +33,8 @@ where
     decode_slice_legacy(input, session).map_err(map_error)
 }
 
-/// Validates one strict JSON document and charges its input and value
-/// resources.
+/// Validates one strict JSON document, retaining its input charge and
+/// committing value resources only after complete lexical admission.
 pub fn inspect<R, Q>(
     input: &[u8],
     session: &mut JsonDecodeSession<'_, R, Q>,
@@ -43,12 +43,15 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    session
-        .consume_input_bytes_usize(input.len())
+    let mut attempt = session.begin_value();
+    attempt
+        .try_consume_input_bytes(input.len())
         .map_err(JsonDecodeError::Budget)?;
-    JsonLexicalPreflight::new(session.value_budget_mut())
+    JsonLexicalPreflight::new(attempt.value_transaction_mut())
         .inspect(input)
-        .map_err(map_error)
+        .map_err(map_error)?;
+    attempt.commit();
+    Ok(())
 }
 
 /// Decodes one strict JSON document through a caller-supplied Serde seed.

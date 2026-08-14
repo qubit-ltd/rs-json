@@ -21,6 +21,7 @@ use qubit_json::text::decode_slice_seed;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
+use serde::de::Error as DeError;
 use serde::de::IgnoredAny;
 
 /// Verifies escaped and direct Unicode text consume the same decoded payload.
@@ -165,6 +166,93 @@ fn typed_decode_failure_consumes_input_before_the_next_attempt() {
     ));
 }
 
+/// Verifies a typed seed failure retains raw input while discarding staged
+/// value admission.
+#[test]
+fn seed_rejection_keeps_input_and_rolls_back_value() {
+    let input = br#"{"value":1}"#;
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::empty()
+            .with_max_input_bytes(64)
+            .with_max_nodes(8),
+    );
+
+    assert!(decode_slice_seed(RejectSeed, input, &mut session).is_err());
+    assert_eq!(
+        session
+            .input_budget()
+            .expect("configured input budget")
+            .used(),
+        input.len()
+    );
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
+}
+
+/// Verifies syntax rejection retains input but rolls back partial lexical
+/// admission before a reusable session accepts the next value.
+#[test]
+fn syntax_rejection_rolls_back_value_and_reuses_session() {
+    let rejected = br#"{"value":]"#;
+    let accepted = br#"null"#;
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::empty()
+            .with_max_input_bytes(rejected.len() + accepted.len())
+            .with_max_nodes(1),
+    );
+
+    assert!(
+        decode_slice::<serde_json::Value, _, _>(rejected, &mut session)
+            .is_err()
+    );
+    assert_eq!(
+        session
+            .input_budget()
+            .expect("configured input budget")
+            .used(),
+        rejected.len()
+    );
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
+
+    assert_eq!(
+        decode_slice::<serde_json::Value, _, _>(accepted, &mut session)
+            .expect("a fresh value must fit after syntax rollback"),
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        session
+            .input_budget()
+            .expect("configured input budget")
+            .used(),
+        rejected.len() + accepted.len()
+    );
+    assert_eq!(session.value_budget().used_nodes(), Some(1));
+}
+
+/// Verifies value budget rejection retains the attempted input but never
+/// publishes the rejected value's partial measurements.
+#[test]
+fn budget_rejection_keeps_input_and_rolls_back_value() {
+    let input = br#"[null]"#;
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::empty()
+            .with_max_input_bytes(input.len())
+            .with_max_nodes(1),
+    );
+
+    assert!(matches!(
+        decode_slice::<serde_json::Value, _, _>(input, &mut session),
+        Err(JsonDecodeError::Budget(_))
+    ));
+    assert_eq!(
+        session
+            .input_budget()
+            .expect("configured input budget")
+            .used(),
+        input.len()
+    );
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
+}
+
 /// Verifies seed-first decoding uses the same lexical admission path.
 #[test]
 fn decode_slice_seed_admits_arbitrary_precision_numbers() {
@@ -200,7 +288,7 @@ fn point_limit_fails_before_seed_and_keeps_work_charged() {
     let error = decode_slice_seed(PanicSeed, br#""ab""#, &mut session)
         .expect_err("string limit must fail");
     assert!(matches!(error, JsonDecodeError::Budget(_)));
-    assert!(session.value_budget_mut().enter_node(1).is_err());
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
 }
 
 #[test]
@@ -218,7 +306,7 @@ fn decode_slice_supports_usize_quantities() {
 
     let value: serde_json::Value = decode_slice(br#"[1,"x"]"#, &mut session)
         .expect("usize JSON budgets must admit a fitting document");
-    assert_eq!(session.value_budget().structure_budget().used_nodes(), 3);
+    assert_eq!(session.value_budget().used_nodes(), Some(3));
     assert!(value.is_array());
 }
 
@@ -232,6 +320,22 @@ impl<'de> DeserializeSeed<'de> for PanicSeed {
         D: Deserializer<'de>,
     {
         panic!("seed must not run before lexical admission succeeds");
+    }
+}
+
+/// Seed which first accepts the JSON value then rejects its typed result.
+struct RejectSeed;
+
+impl<'de> DeserializeSeed<'de> for RejectSeed {
+    type Value = ();
+
+    /// Rejects the parsed JSON value after complete syntax admission.
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let _ = serde_json::Value::deserialize(deserializer)?;
+        Err(DeError::custom("reject after JSON admission"))
     }
 }
 

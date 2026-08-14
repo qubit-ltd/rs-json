@@ -14,6 +14,7 @@ use std::cell::RefCell;
 use std::fmt::Display;
 
 use qubit_budget::ResourceQuantity;
+use qubit_budget::json::JsonMeasurement;
 use serde::Serialize;
 use serde::Serializer;
 
@@ -22,8 +23,15 @@ use super::json_encode_context::JsonEncodeContext;
 use super::json_encode_context::collect_display;
 
 /// Wraps a serde_json private string payload with budget accounting.
-pub(super) struct BudgetedPrivateValue<'a, 'budget, 'context, T, R, Q>
-where
+pub(super) struct BudgetedPrivateValue<
+    'a,
+    'transaction,
+    'budget,
+    'context,
+    T,
+    R,
+    Q,
+> where
     T: ?Sized,
     Q: ResourceQuantity,
 {
@@ -31,14 +39,14 @@ where
     value: &'a T,
 
     /// Shared traversal context.
-    context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
+    context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 
     /// Budget semantics represented by the private string payload.
     kind: PrivateTextKind,
 }
 
-impl<'a, 'budget, 'context, T, R, Q>
-    BudgetedPrivateValue<'a, 'budget, 'context, T, R, Q>
+impl<'a, 'transaction, 'budget, 'context, T, R, Q>
+    BudgetedPrivateValue<'a, 'transaction, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -46,19 +54,24 @@ where
     /// Creates a private arbitrary-precision number payload wrapper.
     pub(super) const fn number(
         value: &'a T,
-        context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
+        context: &'context RefCell<
+            JsonEncodeContext<'transaction, 'budget, R, Q>,
+        >,
+        depth: usize,
     ) -> Self {
         Self {
             value,
             context,
-            kind: PrivateTextKind::Number,
+            kind: PrivateTextKind::Number { depth },
         }
     }
 
     /// Creates a private raw JSON payload wrapper at its final depth.
     pub(super) const fn raw_value(
         value: &'a T,
-        context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
+        context: &'context RefCell<
+            JsonEncodeContext<'transaction, 'budget, R, Q>,
+        >,
         depth: usize,
     ) -> Self {
         Self {
@@ -69,7 +82,7 @@ where
     }
 }
 
-impl<T, R, Q> Serialize for BudgetedPrivateValue<'_, '_, '_, T, R, Q>
+impl<T, R, Q> Serialize for BudgetedPrivateValue<'_, '_, '_, '_, T, R, Q>
 where
     T: Serialize + ?Sized,
     R: Clone,
@@ -92,14 +105,14 @@ where
 #[derive(Clone, Copy)]
 enum PrivateTextKind {
     /// Arbitrary-precision number text.
-    Number,
+    Number { depth: usize },
 
     /// Raw JSON fragment rooted at the specified final depth.
     RawValue { depth: usize },
 }
 
 /// Checks the string token emitted by a serde_json private serializer.
-struct JsonPrivateTextSerializer<'context, 'budget, S, R, Q>
+struct JsonPrivateTextSerializer<'context, 'transaction, 'budget, S, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -107,7 +120,7 @@ where
     inner: S,
 
     /// Shared traversal context.
-    context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
+    context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 
     /// Budget semantics represented by the emitted text.
     kind: PrivateTextKind,
@@ -121,8 +134,8 @@ macro_rules! delegate_number_method {
     };
 }
 
-impl<'context, 'budget, S, R, Q> Serializer
-    for JsonPrivateTextSerializer<'context, 'budget, S, R, Q>
+impl<'context, 'transaction, 'budget, S, R, Q> Serializer
+    for JsonPrivateTextSerializer<'context, 'transaction, 'budget, S, R, Q>
 where
     S: Serializer,
     R: Clone,
@@ -155,13 +168,11 @@ where
 
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
         match self.kind {
-            PrivateTextKind::Number => {
-                let number = self
-                    .context
-                    .borrow_mut()
-                    .budget
-                    .consume_number_bytes_usize(value.len());
-                self.context.borrow_mut().record(number)?;
+            PrivateTextKind::Number { depth } => {
+                self.context.borrow_mut().admit(JsonMeasurement::Number {
+                    depth,
+                    bytes: value.len(),
+                })?;
             }
             PrivateTextKind::RawValue { depth } => {
                 self.context.borrow_mut().preflight_raw(value, depth)?;
@@ -299,16 +310,21 @@ where
         T: Display + ?Sized,
     {
         let budget_kind = match self.kind {
-            PrivateTextKind::Number => DisplayBudgetKind::Number,
+            PrivateTextKind::Number { .. } => DisplayBudgetKind::Number,
             PrivateTextKind::RawValue { .. } => DisplayBudgetKind::RawOutput,
+        };
+        let depth = match self.kind {
+            PrivateTextKind::Number { depth }
+            | PrivateTextKind::RawValue { depth } => depth,
         };
         let text = collect_display::<S::Error, _, _, Q>(
             value,
             self.context,
             budget_kind,
+            depth,
         )?;
         match self.kind {
-            PrivateTextKind::Number => {}
+            PrivateTextKind::Number { .. } => {}
             PrivateTextKind::RawValue { depth } => {
                 self.context.borrow_mut().preflight_raw(&text, depth)?;
             }
