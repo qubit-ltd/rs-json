@@ -41,7 +41,8 @@ name = "tests"
 path = "tests/mod.rs"
 
 [dependencies]
-qubit-budget = { version = "0.4", path = "../rs-budget", features = ["json"] }
+# Keep the unpublished 0.4 source available to standalone CI until it reaches crates.io.
+qubit-budget = { version = "0.4", path = "vendor/rs-budget", features = ["json"] }
 serde = "1.0"
 serde_json = { version = "=1.0.151", features = ["arbitrary_precision", "float_roundtrip", "raw_value"] }
 thiserror = "2.0"
