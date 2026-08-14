@@ -204,9 +204,13 @@ fuzz_target!(|data: &[u8]| {
 
     let mut success_value = original.clone();
     let mut success_budget = generous_budget();
-    JsonTreeProcessor::new(&mut success_budget)
-        .process_mut(&mut success_value, &mut SuccessVisitor)
-        .expect("generous success traversal must complete");
+    {
+        let mut transaction = success_budget.transaction();
+        JsonTreeProcessor::new(&mut transaction)
+            .process_mut(&mut success_value, &mut SuccessVisitor)
+            .expect("generous success traversal must complete");
+        transaction.commit();
+    }
     assert_serializable(&success_value);
 
     let node_limit = 1 + usize::from(data.first().copied().unwrap_or(0)) % 32;
@@ -216,22 +220,29 @@ fuzz_target!(|data: &[u8]| {
     let mut rejected_budget = JsonValueBudget::new(
         JsonValueLimits::empty().with_structure_limits(structure),
     );
-    JsonTreeProcessor::new(&mut rejected_budget)
-        .process_mut(&mut rejected_value, &mut RejectingVisitor)
-        .expect("rejecting visitor must handle every budget rejection");
+    {
+        let mut transaction = rejected_budget.transaction();
+        JsonTreeProcessor::new(&mut transaction)
+            .process_mut(&mut rejected_value, &mut RejectingVisitor)
+            .expect("rejecting visitor must handle every budget rejection");
+        transaction.commit();
+    }
     assert_serializable(&rejected_value);
-    assert!(rejected_budget.structure_budget().used_nodes() <= node_limit);
+    assert!(rejected_budget.used_nodes() <= Some(node_limit));
 
     let stop_after = 1 + usize::from(data.get(1).copied().unwrap_or(0)) % 16;
     let mut error_value = original.clone();
     let mut error_budget = generous_budget();
-    let error = JsonTreeProcessor::new(&mut error_budget).process_mut(
-        &mut error_value,
-        &mut ErrorVisitor {
-            stop_after,
-            calls: 0,
-        },
-    );
+    let error = {
+        let mut transaction = error_budget.transaction();
+        JsonTreeProcessor::new(&mut transaction).process_mut(
+            &mut error_value,
+            &mut ErrorVisitor {
+                stop_after,
+                calls: 0,
+            },
+        )
+    };
     assert!(matches!(
         error,
         Ok(())
@@ -247,8 +258,9 @@ fuzz_target!(|data: &[u8]| {
     #[cfg(all(not(fuzzing), panic = "unwind"))]
     {
         let mut panic_budget = generous_budget();
+        let mut transaction = panic_budget.transaction();
         let panic_result = catch_unwind(AssertUnwindSafe(|| {
-            let _ = JsonTreeProcessor::new(&mut panic_budget).process_mut(
+            let _ = JsonTreeProcessor::new(&mut transaction).process_mut(
                 &mut recovery_value,
                 &mut PanicVisitor {
                     panic_after,
@@ -263,8 +275,9 @@ fuzz_target!(|data: &[u8]| {
         // cargo-fuzz uses panic=abort, so exercise the same restoration
         // boundary through a visitor error instead of terminating the fuzzer.
         let mut recovery_budget = generous_budget();
-        let recovery_error = JsonTreeProcessor::new(&mut recovery_budget)
-            .process_mut(
+        let recovery_error = {
+            let mut transaction = recovery_budget.transaction();
+            JsonTreeProcessor::new(&mut transaction).process_mut(
                 &mut recovery_value,
                 &mut ErrorVisitor {
                     // A fixed first callback guarantees that the abort-safe
@@ -273,7 +286,8 @@ fuzz_target!(|data: &[u8]| {
                     stop_after: 1,
                     calls: 0,
                 },
-            );
+            )
+        };
         assert!(matches!(
             recovery_error,
             Err(qubit_json::tree::JsonTreeProcessError::Visitor(

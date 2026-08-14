@@ -358,13 +358,12 @@ impl ControlCharacterEscaper {
             }
         }
 
-        output.map_or_else(
-            || Cow::Borrowed(input),
-            |mut output| {
-                output.push_str(&input[copy_start..]);
-                Cow::Owned(output)
-            },
-        )
+        // `rewrite` is called only after `scan` observed a replacement, so
+        // the lazy output allocation must have happened before this point.
+        let mut output = output
+            .expect("control-character rewrite requires a scanned replacement");
+        output.push_str(&input[copy_start..]);
+        Cow::Owned(output)
     }
 
     /// Rewrites every byte without attempting block skipping.
@@ -404,13 +403,12 @@ impl ControlCharacterEscaper {
             }
         }
 
-        output.map_or_else(
-            || Cow::Borrowed(input),
-            |mut output| {
-                output.push_str(&input[copy_start..]);
-                Cow::Owned(output)
-            },
-        )
+        // `rewrite_scalar` is called only after `scan` observed a
+        // replacement, so the lazy output allocation is guaranteed.
+        let mut output = output
+            .expect("control-character rewrite requires a scanned replacement");
+        output.push_str(&input[copy_start..]);
+        Cow::Owned(output)
     }
 
     /// Returns the required replacement while advancing JSON-string state.

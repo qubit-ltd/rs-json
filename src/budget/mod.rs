@@ -25,4 +25,3 @@ pub use json_syntax_error::JsonSyntaxError;
 pub use json_syntax_error_reason::JsonSyntaxErrorReason;
 pub(crate) use qubit_budget::json::JsonDecodeSession;
 pub(crate) use qubit_budget::json::JsonEncodeSession;
-pub(crate) use qubit_budget::json::JsonValueBudget;
