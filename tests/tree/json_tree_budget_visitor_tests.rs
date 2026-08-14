@@ -30,6 +30,10 @@ fn test_visit_tree_accumulates_and_reset_clears_usage() {
     visitor
         .visit_tree(&json!(null))
         .expect("reset clears prior usage");
+    assert_eq!(visitor.budget().used_nodes(), Some(1));
+    assert_eq!(visitor.budget_mut().used_nodes(), Some(1));
+    let owned = visitor.into_budget();
+    assert_eq!(owned.used_nodes(), Some(1));
 }
 
 /// Verifies the owned budget accessors expose and transfer visitor state.

@@ -39,6 +39,52 @@ const JSON_NUMBER_TOKEN: &str =
 const JSON_RAW_VALUE_TOKEN: &str =
     concat!("$", "serde_json", ":", ":private::RawValue");
 
+struct SkipFieldStruct;
+
+impl Serialize for SkipFieldStruct {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("SkipFieldStruct", 1)?;
+        state.skip_field("omitted")?;
+        state.serialize_field("kept", &true)?;
+        state.end()
+    }
+}
+
+/// Verifies skipped struct fields pass through the compound wrapper without
+/// affecting accounting or output.
+#[test]
+fn test_json_encode_compound_forwards_skip_field() {
+    let mut session = JsonTestLimits::new().encode_session();
+    let encoded = encode_to_vec(&SkipFieldStruct, &mut session)
+        .expect("skipped fields should be forwarded");
+    assert_eq!(encoded, br#"{"kept":true}"#);
+}
+
+struct SkipFieldVariant;
+
+impl Serialize for SkipFieldVariant {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct_variant("V", 0, "V", 1)?;
+        state.skip_field("omitted")?;
+        state.end()
+    }
+}
+
+/// Verifies struct-variant skip fields are forwarded through the compound.
+#[test]
+fn test_json_encode_compound_forwards_struct_variant_skip_field() {
+    let mut session = JsonTestLimits::new().encode_session();
+    let output = encode_to_vec(&SkipFieldVariant, &mut session)
+        .expect("skipped struct-variant fields should encode");
+    assert_eq!(output, br#"{"V":{}}"#);
+}
+
 /// Number text that serde_json deserializes through its private map token.
 const LARGE_NUMBER_TEXT: &str = "123456789012345678901234567890";
 
@@ -548,9 +594,10 @@ fn test_json_encode_serializer_checks_sequence_items() {
     );
 }
 
-/// Verifies an unknown-length sequence stops before traversing all elements.
+/// Verifies an unknown-length sequence is admitted after its actual item count
+/// is observed.
 #[test]
-fn test_json_encode_serializer_stops_unknown_sequence_incrementally() {
+fn test_json_encode_serializer_checks_unknown_sequence_after_traversal() {
     let serialized = Cell::new(0);
     let value = CountedUnknownSequence {
         serialized: &serialized,
@@ -562,7 +609,7 @@ fn test_json_encode_serializer_stops_unknown_sequence_incrementally() {
         JsonTestLimits::new().with_max_sequence_items(2),
         JsonResource::SequenceItems,
     );
-    assert!(serialized.get() < value.len);
+    assert_eq!(serialized.get(), value.len);
 }
 
 /// Verifies known and unknown maps enforce their actual entry count.
@@ -583,9 +630,10 @@ fn test_json_encode_serializer_checks_map_entries() {
     );
 }
 
-/// Verifies an unknown-length map stops before traversing all entries.
+/// Verifies an unknown-length map is admitted after its actual entry count is
+/// observed.
 #[test]
-fn test_json_encode_serializer_stops_unknown_map_incrementally() {
+fn test_json_encode_serializer_checks_unknown_map_after_traversal() {
     let serialized = Cell::new(0);
     let value = CountedUnknownMap {
         serialized: &serialized,
@@ -597,7 +645,7 @@ fn test_json_encode_serializer_stops_unknown_map_incrementally() {
         JsonTestLimits::new().with_max_map_entries(2),
         JsonResource::MapEntries,
     );
-    assert!(serialized.get() < value.len);
+    assert_eq!(serialized.get(), value.len);
 }
 
 /// Verifies nested output is checked with root-inclusive JSON depth.
@@ -747,9 +795,10 @@ fn test_raw_value_charges_single_number_token_object_as_object() {
     ));
 }
 
-/// Verifies collected string text is rejected while it is being formatted.
+/// Verifies collected string text is rejected after its complete byte length is
+/// measured.
 #[test]
-fn test_collect_str_rejects_before_complete_formatting() {
+fn test_collect_str_rejects_after_complete_formatting() {
     let formatted = Cell::new(0);
     let value = CollectedText(CountedDisplay {
         formatted: &formatted,
@@ -762,12 +811,13 @@ fn test_collect_str_rejects_before_complete_formatting() {
         JsonTestLimits::new().with_max_string_bytes(3),
         JsonResource::StringBytes,
     );
-    assert!(formatted.get() < 1_000);
+    assert_eq!(formatted.get(), 1_000);
 }
 
-/// Verifies collected map keys are rejected while they are being formatted.
+/// Verifies collected map keys are rejected after their complete byte length
+/// is measured.
 #[test]
-fn test_collect_str_map_key_rejects_before_complete_formatting() {
+fn test_collect_str_map_key_rejects_after_complete_formatting() {
     let formatted = Cell::new(0);
     let map = CollectedKeyMap(CollectedText(CountedDisplay {
         formatted: &formatted,
@@ -780,12 +830,13 @@ fn test_collect_str_map_key_rejects_before_complete_formatting() {
         JsonTestLimits::new().with_max_key_bytes(3),
         JsonResource::KeyBytes,
     );
-    assert!(formatted.get() < 1_000);
+    assert_eq!(formatted.get(), 1_000);
 }
 
-/// Verifies private Number collect_str payloads retain number budgeting.
+/// Verifies private Number collect_str payloads retain number budgeting after
+/// complete formatting.
 #[test]
-fn test_private_number_collect_str_rejects_during_formatting() {
+fn test_private_number_collect_str_rejects_after_complete_formatting() {
     let formatted = Cell::new(0);
     let value = CollectedPrivateText {
         token: JSON_NUMBER_TOKEN,
@@ -801,7 +852,7 @@ fn test_private_number_collect_str_rejects_during_formatting() {
         JsonTestLimits::new().with_max_number_bytes(3),
         JsonResource::NumberBytes,
     );
-    assert!(formatted.get() < 1_000);
+    assert_eq!(formatted.get(), 1_000);
 }
 
 /// Verifies private RawValue collect_str payloads retain output budgeting.
@@ -934,16 +985,17 @@ fn test_collect_str_output_lower_bound_preserves_valid_boundaries() {
     );
 }
 
-/// Verifies a low sequence length hint cannot bypass online item checks.
+/// Verifies a low sequence length hint is rejected after the actual item count
+/// is observed at compound completion.
 #[test]
-fn test_underreported_sequence_is_rejected_before_third_child() {
+fn test_underreported_sequence_is_rejected_after_third_child() {
     let observed = Cell::new(0);
     assert_resource(
         &UnderreportedSequence(&observed),
         JsonTestLimits::new().with_max_sequence_items(2),
         JsonResource::SequenceItems,
     );
-    assert_eq!(observed.get(), 2);
+    assert_eq!(observed.get(), 3);
 }
 
 /// Verifies a high length hint does not charge items that were never emitted.
@@ -959,45 +1011,49 @@ fn test_overreported_sequence_charges_actual_items_only() {
     assert_eq!(output, b"[null]");
 }
 
-/// Verifies a low map length hint cannot bypass online entry checks.
+/// Verifies a low map length hint is rejected after the actual entry count is
+/// observed at compound completion.
 #[test]
-fn test_underreported_map_is_rejected_before_third_value() {
+fn test_underreported_map_is_rejected_after_third_value() {
     let observed = Cell::new(0);
     assert_resource(
         &UnderreportedMap(&observed),
         JsonTestLimits::new().with_max_map_entries(2),
         JsonResource::MapEntries,
     );
-    assert_eq!(observed.get(), 2);
+    assert_eq!(observed.get(), 3);
 }
 
-/// Verifies a low struct length cannot bypass online field checks.
+/// Verifies a low struct length is rejected after the actual field count is
+/// observed at compound completion.
 #[test]
-fn test_underreported_struct_is_rejected_before_third_value() {
+fn test_underreported_struct_is_rejected_after_third_value() {
     let observed = Cell::new(0);
     assert_resource(
         &UnderreportedStruct(&observed),
         JsonTestLimits::new().with_max_map_entries(2),
         JsonResource::MapEntries,
     );
-    assert_eq!(observed.get(), 2);
+    assert_eq!(observed.get(), 3);
 }
 
-/// Verifies a low tuple-struct length cannot bypass online item checks.
+/// Verifies a low tuple-struct length is rejected after the actual item count
+/// is observed at compound completion.
 #[test]
-fn test_underreported_tuple_struct_is_rejected_before_third_value() {
+fn test_underreported_tuple_struct_is_rejected_after_third_value() {
     let observed = Cell::new(0);
     assert_resource(
         &UnderreportedTupleStruct(&observed),
         JsonTestLimits::new().with_max_sequence_items(2),
         JsonResource::SequenceItems,
     );
-    assert_eq!(observed.get(), 2);
+    assert_eq!(observed.get(), 3);
 }
 
-/// Verifies low tuple-variant lengths cannot bypass online item checks.
+/// Verifies low tuple-variant lengths are rejected after the actual item count
+/// is observed at compound completion.
 #[test]
-fn test_underreported_tuple_variant_is_rejected_before_third_value() {
+fn test_underreported_tuple_variant_is_rejected_after_third_value() {
     let observed = Cell::new(0);
     assert_resource(
         &UnderreportedVariant {
@@ -1007,12 +1063,13 @@ fn test_underreported_tuple_variant_is_rejected_before_third_value() {
         JsonTestLimits::new().with_max_sequence_items(2),
         JsonResource::SequenceItems,
     );
-    assert_eq!(observed.get(), 2);
+    assert_eq!(observed.get(), 3);
 }
 
-/// Verifies low struct-variant lengths cannot bypass online entry checks.
+/// Verifies low struct-variant lengths are rejected after the actual entry
+/// count is observed at compound completion.
 #[test]
-fn test_underreported_struct_variant_is_rejected_before_third_value() {
+fn test_underreported_struct_variant_is_rejected_after_third_value() {
     let observed = Cell::new(0);
     assert_resource(
         &UnderreportedVariant {
@@ -1022,12 +1079,14 @@ fn test_underreported_struct_variant_is_rejected_before_third_value() {
         JsonTestLimits::new().with_max_map_entries(2),
         JsonResource::MapEntries,
     );
-    assert_eq!(observed.get(), 2);
+    assert_eq!(observed.get(), 3);
 }
 
-/// Verifies private number node and depth limits fail before payload traversal.
+/// Verifies private number node and depth limits reject after their payload is
+/// collected into one complete measurement.
 #[test]
-fn test_json_encode_serializer_checks_private_number_before_payload() {
+fn test_json_encode_serializer_checks_private_number_after_payload_collection()
+{
     let serialized = Cell::new(0);
     let value = CountedPrivateNumber {
         serialized: &serialized,
@@ -1038,14 +1097,16 @@ fn test_json_encode_serializer_checks_private_number_before_payload() {
         JsonTestLimits::new().with_max_nodes(0),
         JsonResource::Nodes,
     );
-    assert_eq!(serialized.get(), 0);
+    assert_eq!(serialized.get(), 1);
+
+    serialized.set(0);
 
     assert_resource(
         &value,
         JsonTestLimits::new().with_max_depth(0),
         JsonResource::Depth,
     );
-    assert_eq!(serialized.get(), 0);
+    assert_eq!(serialized.get(), 1);
 }
 
 /// Verifies simulated raw values ignore their private key and string shape.
@@ -1090,9 +1151,10 @@ fn test_json_encode_serializer_measures_actual_raw_value_structure() {
     assert_eq!(output, br#"{"ok":[1,true]}"#);
 }
 
-/// Verifies raw node failures stop traversal before the following value.
+/// Verifies raw node failures occur after the raw fragment and its following
+/// value have been traversed into the complete measurement.
 #[test]
-fn test_json_encode_serializer_checks_raw_nodes_before_tail() {
+fn test_json_encode_serializer_checks_raw_nodes_after_tail_traversal() {
     let raw = RawValue::from_string(String::from("[null,null]"))
         .expect("fixture must contain valid raw JSON");
     let serialized_tail = Cell::new(0);
@@ -1105,7 +1167,7 @@ fn test_json_encode_serializer_checks_raw_nodes_before_tail() {
         JsonTestLimits::new().with_max_nodes(3),
         JsonResource::Nodes,
     );
-    assert_eq!(serialized_tail.get(), 0);
+    assert_eq!(serialized_tail.get(), 1);
 }
 
 /// Verifies raw depth failures stop traversal before the following value.

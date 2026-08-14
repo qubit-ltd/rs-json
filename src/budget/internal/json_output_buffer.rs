@@ -25,7 +25,8 @@ pub(in crate::budget) struct JsonOutputAccounting<'a, R, Q>
 where
     Q: ResourceQuantity,
 {
-    /// Optional operation-local output budget charged as bytes are appended.
+    /// Optional operation-local output budget checked before bytes are
+    /// emitted.
     output: Option<&'a mut ResourceBudget<R, Q>>,
 
     /// First budget violation hidden behind a Serde or I/O error.
@@ -110,9 +111,15 @@ where
         R: Clone,
     {
         self.output.as_deref_mut().map_or(Ok(()), |output| {
-            let amount = Q::try_from_usize(amount).map_err(|source| {
-                MeasuredBudgetError::quantity(output.resource().clone(), source)
-            })?;
+            let amount = match Q::try_from_usize(amount) {
+                Ok(amount) => amount,
+                Err(source) => {
+                    return Err(MeasuredBudgetError::quantity(
+                        output.resource().clone(),
+                        source,
+                    ));
+                }
+            };
             output
                 .try_consume(amount)
                 .map_err(MeasuredBudgetError::from)
@@ -150,7 +157,7 @@ pub(in crate::budget) struct JsonOutputBuffer<'a, R, Q>
 where
     Q: ResourceQuantity,
 {
-    /// Bytes accepted by the output budget so far.
+    /// Bytes accepted by the in-memory buffer so far.
     bytes: Vec<u8>,
 
     /// Accounting shared with the online serializer checks.
@@ -214,16 +221,20 @@ where
 {
     /// Appends one complete input slice after checking the resulting length.
     ///
-    /// The buffer remains unchanged if arithmetic overflows or the output-byte
-    /// limit is exceeded.
+    /// The buffer does not charge the output budget. Its caller consumes the
+    /// complete length only after successful serialization, so a failed Vec or
+    /// buffered-writer encode leaves output usage unchanged.
     fn write(&mut self, input: &[u8]) -> io::Result<usize> {
-        let next =
-            self.bytes.len().checked_add(input.len()).ok_or_else(|| {
-                io::Error::other("JSON output length overflow")
-            })?;
-        let amount = next - self.bytes.len();
-        let mut accounting = self.accounting.borrow_mut();
-        if let Err(error) = accounting.consume(amount) {
+        let next = match self.bytes.len().checked_add(input.len()) {
+            Some(next) => next,
+            None => {
+                return Err(io::Error::other("JSON output length overflow"));
+            }
+        };
+        let accounting = self.accounting.borrow();
+        if let Err(error) = accounting.check_available(next) {
+            drop(accounting);
+            let mut accounting = self.accounting.borrow_mut();
             accounting.record_violation(error);
             return Err(io::Error::other("JSON output budget exceeded"));
         }
