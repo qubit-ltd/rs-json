@@ -9,7 +9,8 @@
 
 use std::borrow::Cow;
 
-use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::ResourceBudget;
+use qubit_budget::json::JsonDecodeAttempt;
 use qubit_budget::json::JsonResource;
 
 use super::control_character_escaper::ControlCharacterEscaper;
@@ -81,30 +82,30 @@ impl LenientJsonNormalizer {
     pub(crate) fn normalize<'a>(
         &self,
         input: &'a str,
-        session: &mut JsonDecodeSession<'_, JsonResource>,
+        attempt: &mut JsonDecodeAttempt<'_, JsonResource, usize>,
     ) -> Result<Cow<'a, str>, JsonDecodeError> {
-        self.normalize_with_session(input, session, true)
+        self.normalize_with_attempt(input, attempt, true)
     }
 
     /// Normalizes input after a caller has already charged its raw bytes.
     pub(crate) fn normalize_after_raw_charge<'a>(
         &self,
         input: &'a str,
-        session: &mut JsonDecodeSession<'_, JsonResource>,
+        attempt: &mut JsonDecodeAttempt<'_, JsonResource, usize>,
     ) -> Result<Cow<'a, str>, JsonDecodeError> {
-        self.normalize_with_session(input, session, false)
+        self.normalize_with_attempt(input, attempt, false)
     }
 
     /// Runs normalization while charging raw and normalized input budgets.
-    fn normalize_with_session<'a>(
+    fn normalize_with_attempt<'a>(
         &self,
         input: &'a str,
-        session: &mut JsonDecodeSession<'_, JsonResource>,
+        attempt: &mut JsonDecodeAttempt<'_, JsonResource, usize>,
         charge_raw_input: bool,
     ) -> Result<Cow<'a, str>, JsonDecodeError> {
         let raw_input_bytes = input.len();
         if charge_raw_input {
-            self.consume_raw_input(session, raw_input_bytes)?;
+            self.consume_raw_input(attempt, raw_input_bytes)?;
         }
         let input = self.require_non_empty(input, raw_input_bytes)?;
         // Keep strict decoding on this shared pipeline: disabled stages return
@@ -120,7 +121,7 @@ impl LenientJsonNormalizer {
         let input = self.trim_if_enabled(input);
         let (normalized_len, needs_escape) = self.scan_normalized_size(input);
         self.consume_normalized_input(
-            session,
+            attempt,
             raw_input_bytes,
             normalized_len,
         )?;
@@ -200,13 +201,13 @@ impl LenientJsonNormalizer {
     /// Charges raw input bytes and maps a rejected budget to the stable error.
     fn consume_raw_input(
         &self,
-        session: &mut JsonDecodeSession<'_, JsonResource>,
+        attempt: &mut JsonDecodeAttempt<'_, JsonResource, usize>,
         amount: usize,
     ) -> Result<(), JsonDecodeError> {
-        if session.consume_input_bytes_usize(amount).is_err() {
+        if attempt.try_consume_input_bytes(amount).is_err() {
             return Err(JsonDecodeError::input_too_large(
                 amount,
-                session.max_input_bytes().unwrap_or(amount),
+                attempt.input_budget().map_or(amount, ResourceBudget::limit),
                 self.options.error_privacy_policy(),
             ));
         }
@@ -216,20 +217,20 @@ impl LenientJsonNormalizer {
     /// Charges normalized input bytes before allocating escaped text.
     fn consume_normalized_input(
         &self,
-        session: &mut JsonDecodeSession<'_, JsonResource>,
+        attempt: &mut JsonDecodeAttempt<'_, JsonResource, usize>,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
     ) -> Result<(), JsonDecodeError> {
-        if session
-            .consume_normalized_input_bytes_usize(normalized_input_bytes)
+        if attempt
+            .try_consume_normalized_input_bytes(normalized_input_bytes)
             .is_err()
         {
             return Err(JsonDecodeError::normalized_input_too_large(
                 raw_input_bytes,
                 normalized_input_bytes,
-                session
-                    .max_normalized_input_bytes()
-                    .unwrap_or(normalized_input_bytes),
+                attempt
+                    .normalized_input_budget()
+                    .map_or(normalized_input_bytes, ResourceBudget::limit),
                 self.options.error_privacy_policy(),
             ));
         }

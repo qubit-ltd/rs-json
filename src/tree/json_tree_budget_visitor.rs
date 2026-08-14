@@ -45,10 +45,14 @@ where
         &mut self,
         value: &Value,
     ) -> Result<(), MeasuredBudgetError<R, Q>> {
-        let mut processor = JsonTreeProcessor::new(&mut self.budget);
-        processor
+        let mut transaction = self.budget.transaction();
+        let result = JsonTreeProcessor::new(&mut transaction)
             .process(value, &mut NoopVisitor)
-            .map_err(extract_budget)
+            .map_err(extract_budget);
+        if result.is_ok() {
+            transaction.commit();
+        }
+        result
     }
 
     /// Restores the owned budget to its original configured state.
