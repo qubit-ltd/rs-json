@@ -72,13 +72,14 @@ let reply: Reply = decoder.decode_with_session(
     &mut session,
 )?;
 assert_eq!(reply, Reply { ok: true });
-assert_eq!(session.value_budget().structure_budget().used_nodes(), 2);
+assert_eq!(session.value_budget().used_nodes(), Some(2));
 # Ok::<(), qubit_json::lenient::LenientJsonDecodeError>(())
 ```
 
-只要某一步计费成功，即使后续预算检查、语法检查或目标类型反序列化失败，已消耗资源也
-不会回滚。`Budget`/`Admission` 错误可通过 `measured_budget_error()` 读取结构化拒绝
-详情。普通 `decode()` 仍走更快的“规范化后直接反序列化”路径，不执行 value 预检。
+即使后续预算检查、语法检查或目标类型反序列化失败，输入计费也会保留在调用方持有的
+session 中；value 计费只有在完整顶层值成功后才提交。`Budget`/`Admission` 错误可通过
+`measured_budget_error()` 读取结构化拒绝详情。普通 `decode()` 仍走更快的“规范化后直接
+反序列化”路径，不执行 value 预检。
 
 ## 核心能力
 
@@ -255,10 +256,23 @@ fn main() {
 
 ### session 与 mutation 的失败语义
 
-- Decode session 采用累计记账。错误发生前已经消费的原始输入、规范化输入和 value
-  资源不会回滚；单次被拒绝的预算增量仍保持原子性，但更早的成功增量会保留。
-- 严格编码只有在完整序列化成功后才提交 output 记账；若序列化稍后失败，value 记账
-  可能已经发生。
+每次 `JsonDecodeSession::begin_value()` 或 `JsonEncodeSession::begin_value()` 都会创建一个
+value attempt。它暂存 value 计费，只有完整 attempt 成功时才提交；原始输入、规范化输入和
+已接受 output 字节会立即计费。公开 API 遵循下表：
+
+| API 或失败点 | 失败后保留的立即计费 | 暂存 value 计费 | 外部副作用 |
+| --- | --- | --- | --- |
+| 严格 `text::decode_slice` 语法或强类型失败 | 原始输入字节 | 回滚 | 无 |
+| 严格 `text::inspect` 词法失败 | 原始输入字节 | 回滚 | 无 |
+| 宽松 `decode_with_session` 规范化、语法或强类型失败 | 原始和规范化输入字节 | 回滚 | 无 |
+| `text::encode_to_vec` 序列化或预算失败 | 完整 buffer 被接受前不计 output | 回滚 | 不返回 vector |
+| buffered `text::encode_to_writer` 最终写入失败 | writer 已接受的字节 | 回滚 | writer 可能保留已接受前缀 |
+| incremental `text::encode_to_writer_incremental` 序列化、预算或 I/O 失败 | 每个已接受 output 字节 | 回滚 | writer 可能保留已接受前缀 |
+| 手工 session attempt 中的流式 value 失败 | 已计费的原始、规范化或已接受 output 字节 | attempt drop 时回滚 | 调用方管理的副作用仍保留 |
+
+value transaction 不控制外部副作用：丢弃 attempt 不能回滚 writer、回调、网络对端或其他
+目标。只有在希望跨 attempt 累计 I/O 计费时，才应有意复用同一个 session。
+
 - `JsonTreeProcessor::process_mut` 采用递增修改。visitor 或预算错误发生前已完成的
   mutation 和预算消费仍可观察。
 

@@ -123,9 +123,10 @@ fn test_process_mut_skips_rejected_subtree_after_replacement() {
             ResourceLimit::new(JsonResource::Nodes, 2_usize),
         ));
     let mut budget = JsonValueBudget::new(limits);
+    let mut transaction = budget.transaction();
     let mut value = json!({"first": true, "second": {"nested": false}});
 
-    JsonTreeProcessor::new(&mut budget)
+    JsonTreeProcessor::new(&mut transaction)
         .process_mut(&mut value, &mut ReplacingVisitor)
         .expect("visitor handles the resource rejection");
 
@@ -144,9 +145,10 @@ fn test_process_mut_preserves_mutations_when_visitor_fails() {
                 32_usize,
             ));
     let mut budget = JsonValueBudget::new(limits);
+    let mut transaction = budget.transaction();
     let mut value = json!({"original": true});
 
-    let error = JsonTreeProcessor::new(&mut budget)
+    let error = JsonTreeProcessor::new(&mut transaction)
         .process_mut(&mut value, &mut FailingVisitor { calls: 0 })
         .expect_err("the visitor deliberately fails");
 
@@ -156,14 +158,8 @@ fn test_process_mut_preserves_mutations_when_visitor_fails() {
         to_string(&value).expect("partially mutated value serializes"),
         r#"{"changed":"partially changed"}"#,
     );
-    assert_eq!(budget.structure_budget().used_nodes(), 2);
-    assert_eq!(
-        budget
-            .payload_budget()
-            .expect("payload budget is configured")
-            .used(),
-        7,
-    );
+    assert_eq!(transaction.used_nodes(), Some(2));
+    assert_eq!(transaction.used_payload_bytes(), Some(7));
 }
 
 /// Verifies that budget rejection retains earlier mutation and accounting.
@@ -179,9 +175,10 @@ fn test_process_mut_preserves_partial_mutation_and_budget_on_rejection() {
                 8_usize,
             ));
     let mut budget = JsonValueBudget::new(limits);
+    let mut transaction = budget.transaction();
     let mut value = json!([0, 1]);
 
-    let error = JsonTreeProcessor::new(&mut budget)
+    let error = JsonTreeProcessor::new(&mut transaction)
         .process_mut(&mut value, &mut FirstChildReplacingVisitor)
         .expect_err("the second child exceeds the node budget");
 
@@ -195,24 +192,19 @@ fn test_process_mut_preserves_partial_mutation_and_budget_on_rejection() {
         to_string(&value).expect("partially mutated value serializes"),
         r#"["changed",1]"#,
     );
-    assert_eq!(budget.structure_budget().used_nodes(), 2);
-    assert_eq!(
-        budget
-            .payload_budget()
-            .expect("payload budget is configured")
-            .used(),
-        1,
-    );
+    assert_eq!(transaction.used_nodes(), Some(2));
+    assert_eq!(transaction.used_payload_bytes(), Some(1));
 }
 
 /// Verifies that a panic leaves the mutable root reassembled and serializable.
 #[test]
 fn test_process_mut_restores_root_after_visitor_panic() {
     let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
+    let mut transaction = budget.transaction();
     let mut value = json!({"first": [1, 2], "second": true});
 
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let _ = JsonTreeProcessor::new(&mut budget).process_mut(
+        let _ = JsonTreeProcessor::new(&mut transaction).process_mut(
             &mut value,
             &mut PanickingVisitor {
                 calls: 0,

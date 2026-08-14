@@ -117,10 +117,12 @@ fn benchmark_read(c: &mut Criterion) {
                 bencher.iter(|| {
                     let mut budget =
                         JsonValueBudget::new(JsonValueLimits::empty());
+                    let mut transaction = budget.transaction();
                     let mut visitor = ReadVisitor;
-                    JsonTreeProcessor::new(&mut budget)
+                    JsonTreeProcessor::new(&mut transaction)
                         .process(black_box(value), &mut visitor)
                         .expect("unlimited read traversal succeeds");
+                    transaction.commit();
                     let _ = black_box(budget);
                 });
             },
@@ -136,10 +138,12 @@ fn benchmark_read(c: &mut Criterion) {
                 bencher.iter(|| {
                     let mut budget =
                         JsonValueBudget::new(JsonValueLimits::empty());
+                    let mut transaction = budget.transaction();
                     let mut visitor = ReadVisitor;
-                    JsonTreeProcessor::new(&mut budget)
+                    JsonTreeProcessor::new(&mut transaction)
                         .process(black_box(value), &mut visitor)
                         .expect("unlimited read traversal succeeds");
+                    transaction.commit();
                     let _ = black_box(budget);
                 });
             },
@@ -150,10 +154,12 @@ fn benchmark_read(c: &mut Criterion) {
     group.bench_function("deep-tree", |bencher| {
         bencher.iter(|| {
             let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
+            let mut transaction = budget.transaction();
             let mut visitor = ReadVisitor;
-            JsonTreeProcessor::new(&mut budget)
+            JsonTreeProcessor::new(&mut transaction)
                 .process(black_box(&value), &mut visitor)
                 .expect("unlimited read traversal succeeds");
+            transaction.commit();
             let _ = black_box(budget);
         });
     });
@@ -177,10 +183,12 @@ fn benchmark_mut(c: &mut Criterion) {
                     let mut value = value.clone();
                     let mut budget =
                         JsonValueBudget::new(JsonValueLimits::empty());
+                    let mut transaction = budget.transaction();
                     let mut visitor = RedactionShapeVisitor;
-                    JsonTreeProcessor::new(&mut budget)
+                    JsonTreeProcessor::new(&mut transaction)
                         .process_mut(black_box(&mut value), &mut visitor)
                         .expect("unlimited mutable traversal succeeds");
+                    transaction.commit();
                     black_box(value);
                 });
             },
