@@ -19,7 +19,7 @@ use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error;
 
-use super::json_encode_context::DisplayBudgetKind;
+use super::display_budget_kind::DisplayBudgetKind;
 use super::json_encode_context::JsonEncodeContext;
 use super::json_encode_context::collect_display;
 
@@ -188,7 +188,10 @@ where
         self.inner.serialize_unit()
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(
+        self,
+        name: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit_struct(name)
     }
 
@@ -224,15 +227,25 @@ where
     where
         T: Serialize + ?Sized,
     {
-        self.inner
-            .serialize_newtype_variant(name, variant_index, variant, value)
+        self.inner.serialize_newtype_variant(
+            name,
+            variant_index,
+            variant,
+            value,
+        )
     }
 
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeSeq, Self::Error> {
         self.inner.serialize_seq(len)
     }
 
-    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(
+        self,
+        len: usize,
+    ) -> Result<Self::SerializeTuple, Self::Error> {
         self.inner.serialize_tuple(len)
     }
 
@@ -255,7 +268,10 @@ where
             .serialize_tuple_variant(name, variant_index, variant, len)
     }
 
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeMap, Self::Error> {
         self.inner.serialize_map(len)
     }
 

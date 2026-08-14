@@ -7,8 +7,12 @@
 // =============================================================================
 //! Public behavior tests for JSON budgeting internals.
 
+mod budgeted_key_tests;
+mod budgeted_private_value_tests;
+mod display_budget_kind_tests;
 mod json_budget_serializer_tests;
 mod json_encode_compound_tests;
+mod json_encode_context_tests;
 mod json_encode_serializer_tests;
 mod json_lexical_preflight_depth_tests;
 mod json_lexical_preflight_resource_tests;
