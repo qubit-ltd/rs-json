@@ -222,6 +222,7 @@ where
     serialize_integer!(serialize_u128, u128);
 
     /// Charges and delegates one floating-point number or JSON null.
+    #[inline(always)]
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
         if value.is_finite() {
             let bytes = serde_json::to_string(&value)
@@ -235,6 +236,7 @@ where
     }
 
     /// Charges and delegates one floating-point number or JSON null.
+    #[inline(always)]
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
         if value.is_finite() {
             let bytes = serde_json::to_string(&value)

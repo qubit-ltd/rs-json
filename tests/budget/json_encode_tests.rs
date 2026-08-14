@@ -26,6 +26,11 @@ use serde::Serializer;
 use serde::ser::Error as _;
 use serde::ser::SerializeMap;
 use serde::ser::SerializeSeq;
+use serde::ser::SerializeStruct;
+use serde::ser::SerializeStructVariant;
+use serde::ser::SerializeTuple;
+use serde::ser::SerializeTupleStruct;
+use serde::ser::SerializeTupleVariant;
 use serde_json::Number;
 use serde_json::json;
 use serde_json::value::RawValue;
@@ -34,6 +39,14 @@ use super::json_test_limits_tests::JsonTestLimits;
 
 /// Arbitrary-precision number text used by online accounting tests.
 const LARGE_NUMBER_TEXT: &str = "123456789012345678901234567890";
+
+/// Private serde_json protocol token used by arbitrary-precision numbers.
+const JSON_NUMBER_TOKEN: &str =
+    concat!("$", "serde_json", ":", ":private::Number");
+
+/// Private serde_json protocol token used by raw JSON fragments.
+const JSON_RAW_VALUE_TOKEN: &str =
+    concat!("$", "serde_json", ":", ":private::RawValue");
 
 /// Value that emits a prefix before returning a custom Serde error.
 struct FailsAfterPrefix;
@@ -226,6 +239,571 @@ fn assert_online_rejection<T>(
         &expected,
     );
     assert_eq!(serialized_tail.get(), 0);
+}
+
+struct ScalarSerializerSurface;
+
+macro_rules! define_scalar_serializer_surface {
+    ($name:ident, $method:ident, $($value:expr),+ $(,)?) => {
+        struct $name;
+
+        impl Serialize for $name {
+            /// Delegates the fixture to one less-common Serde scalar method.
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                serializer.$method($($value),+)
+            }
+        }
+    };
+}
+
+define_scalar_serializer_surface!(F32Surface, serialize_f32, 1.5_f32);
+define_scalar_serializer_surface!(F64Surface, serialize_f64, 1.5_f64);
+define_scalar_serializer_surface!(BytesSurface, serialize_bytes, &[1_u8, 2]);
+define_scalar_serializer_surface!(
+    UnitStructSurface,
+    serialize_unit_struct,
+    "Unit"
+);
+define_scalar_serializer_surface!(
+    UnitVariantSurface,
+    serialize_unit_variant,
+    "Kind",
+    0,
+    "Unit"
+);
+define_scalar_serializer_surface!(
+    NewtypeStructSurface,
+    serialize_newtype_struct,
+    "Value",
+    &1_u8
+);
+define_scalar_serializer_surface!(
+    NewtypeVariantSurface,
+    serialize_newtype_variant,
+    "Kind",
+    0,
+    "Value",
+    &1_u8
+);
+
+impl Serialize for ScalarSerializerSurface {
+    /// Formats a display-only value through Serde's collection hook.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(&1_234)
+    }
+}
+
+struct TupleStructSurface;
+
+impl Serialize for TupleStructSurface {
+    /// Emits one tuple-struct field through the budgeted compound adapter.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut value = serializer.serialize_tuple_struct("Tuple", 1)?;
+        value.serialize_field(&1_u8)?;
+        value.end()
+    }
+}
+
+struct TupleVariantSurface;
+
+impl Serialize for TupleVariantSurface {
+    /// Emits one tuple-variant field through the budgeted compound adapter.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut value =
+            serializer.serialize_tuple_variant("Kind", 0, "Tuple", 1)?;
+        value.serialize_field(&1_u8)?;
+        value.end()
+    }
+}
+
+struct StructSurface;
+
+impl Serialize for StructSurface {
+    /// Exercises regular and skipped struct fields.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut value = serializer.serialize_struct("Struct", 1)?;
+        value.skip_field("ignored")?;
+        value.serialize_field("value", &1_u8)?;
+        value.end()
+    }
+}
+
+struct StructVariantSurface;
+
+impl Serialize for StructVariantSurface {
+    /// Exercises regular and skipped struct-variant fields.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut value =
+            serializer.serialize_struct_variant("Kind", 0, "Struct", 1)?;
+        value.skip_field("ignored")?;
+        value.serialize_field("value", &1_u8)?;
+        value.end()
+    }
+}
+
+/// Selects one Serde scalar or compound operation for a map key.
+#[derive(Clone, Copy)]
+enum KeySurfaceKind {
+    Bool,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+    F32,
+    F64,
+    Char,
+    Str,
+    Bytes,
+    None,
+    Some,
+    Unit,
+    UnitStruct,
+    UnitVariant,
+    NewtypeStruct,
+    NewtypeVariant,
+    Seq,
+    Tuple,
+    TupleStruct,
+    TupleVariant,
+    Map,
+    Struct,
+    StructVariant,
+    CollectStr,
+}
+
+/// Exercises the key serializer's complete Serde forwarding surface.
+struct KeySurface(KeySurfaceKind);
+
+impl Serialize for KeySurface {
+    /// Calls one selected serializer operation, including unsupported JSON-key
+    /// shapes whose forwarding code still needs to remain covered.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.0 {
+            KeySurfaceKind::Bool => serializer.serialize_bool(true),
+            KeySurfaceKind::I8 => serializer.serialize_i8(-1),
+            KeySurfaceKind::I16 => serializer.serialize_i16(-1),
+            KeySurfaceKind::I32 => serializer.serialize_i32(-1),
+            KeySurfaceKind::I64 => serializer.serialize_i64(-1),
+            KeySurfaceKind::I128 => serializer.serialize_i128(-1),
+            KeySurfaceKind::U8 => serializer.serialize_u8(1),
+            KeySurfaceKind::U16 => serializer.serialize_u16(1),
+            KeySurfaceKind::U32 => serializer.serialize_u32(1),
+            KeySurfaceKind::U64 => serializer.serialize_u64(1),
+            KeySurfaceKind::U128 => serializer.serialize_u128(1),
+            KeySurfaceKind::F32 => serializer.serialize_f32(1.5),
+            KeySurfaceKind::F64 => serializer.serialize_f64(1.5),
+            KeySurfaceKind::Char => serializer.serialize_char('x'),
+            KeySurfaceKind::Str => serializer.serialize_str("key"),
+            KeySurfaceKind::Bytes => serializer.serialize_bytes(&[1, 2]),
+            KeySurfaceKind::None => serializer.serialize_none(),
+            KeySurfaceKind::Some => serializer.serialize_some(&1_u8),
+            KeySurfaceKind::Unit => serializer.serialize_unit(),
+            KeySurfaceKind::UnitStruct => {
+                serializer.serialize_unit_struct("KeyUnit")
+            }
+            KeySurfaceKind::UnitVariant => {
+                serializer.serialize_unit_variant("Key", 0, "Unit")
+            }
+            KeySurfaceKind::NewtypeStruct => {
+                serializer.serialize_newtype_struct("KeyValue", &1_u8)
+            }
+            KeySurfaceKind::NewtypeVariant => {
+                serializer.serialize_newtype_variant("Key", 0, "Value", &1_u8)
+            }
+            KeySurfaceKind::Seq => {
+                let mut value = serializer.serialize_seq(Some(1))?;
+                value.serialize_element(&1_u8)?;
+                value.end()
+            }
+            KeySurfaceKind::Tuple => {
+                let mut value = serializer.serialize_tuple(1)?;
+                value.serialize_element(&1_u8)?;
+                value.end()
+            }
+            KeySurfaceKind::TupleStruct => {
+                let mut value = serializer.serialize_tuple_struct("Key", 1)?;
+                value.serialize_field(&1_u8)?;
+                value.end()
+            }
+            KeySurfaceKind::TupleVariant => {
+                let mut value =
+                    serializer.serialize_tuple_variant("Key", 0, "Value", 1)?;
+                value.serialize_field(&1_u8)?;
+                value.end()
+            }
+            KeySurfaceKind::Map => {
+                let mut value = serializer.serialize_map(Some(1))?;
+                value.serialize_entry("nested", &1_u8)?;
+                value.end()
+            }
+            KeySurfaceKind::Struct => {
+                let mut value = serializer.serialize_struct("Key", 1)?;
+                value.serialize_field("value", &1_u8)?;
+                value.end()
+            }
+            KeySurfaceKind::StructVariant => {
+                let mut value = serializer
+                    .serialize_struct_variant("Key", 0, "Value", 1)?;
+                value.serialize_field("value", &1_u8)?;
+                value.end()
+            }
+            KeySurfaceKind::CollectStr => serializer.collect_str(&1_234),
+        }
+    }
+}
+
+/// Emits one custom key so a selected key serializer operation is entered.
+struct OneKey<'a> {
+    /// Key fixture selected for this test case.
+    key: &'a KeySurface,
+}
+
+impl Serialize for OneKey<'_> {
+    /// Emits one map entry with the selected custom key.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(self.key, &1_u8)?;
+        map.end()
+    }
+}
+
+/// Selects one delegated operation of the private serde_json text serializer.
+#[derive(Clone, Copy)]
+enum PrivateTextSurfaceKind {
+    Bool,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+    F32,
+    F64,
+    Char,
+    Bytes,
+    None,
+    Some,
+    Unit,
+    UnitStruct,
+    UnitVariant,
+    NewtypeStruct,
+    NewtypeVariant,
+    Seq,
+    Tuple,
+    TupleStruct,
+    TupleVariant,
+    Map,
+    Struct,
+    StructVariant,
+    CollectStr,
+}
+
+/// Emits a serde_json private number shape around a selected field value.
+struct PrivateTextSurface {
+    /// Selects the private serde_json protocol to exercise.
+    token: &'static str,
+
+    /// Selects the delegated field operation.
+    kind: PrivateTextSurfaceKind,
+}
+
+impl Serialize for PrivateTextSurface {
+    /// Enters the private-number protocol used by arbitrary-precision values.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut value = serializer.serialize_struct(self.token, 1)?;
+        value.serialize_field(self.token, &PrivateTextValue(self.kind))?;
+        value.end()
+    }
+}
+
+/// Scalar emitted below a nested private payload boundary.
+struct NestedPrivateScalar(bool);
+
+impl Serialize for NestedPrivateScalar {
+    /// Enters the private serializer through a budgeted child wrapper.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if self.0 {
+            serializer.serialize_f32(1.5)
+        } else {
+            serializer.serialize_f64(1.5)
+        }
+    }
+}
+
+/// Emits one selected operation into the private text serializer.
+struct PrivateTextValue(PrivateTextSurfaceKind);
+
+impl Serialize for PrivateTextValue {
+    /// Calls one operation forwarded by the private text serializer.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.0 {
+            PrivateTextSurfaceKind::Bool => serializer.serialize_bool(true),
+            PrivateTextSurfaceKind::I8 => serializer.serialize_i8(-1),
+            PrivateTextSurfaceKind::I16 => serializer.serialize_i16(-1),
+            PrivateTextSurfaceKind::I32 => serializer.serialize_i32(-1),
+            PrivateTextSurfaceKind::I64 => serializer.serialize_i64(-1),
+            PrivateTextSurfaceKind::I128 => serializer.serialize_i128(-1),
+            PrivateTextSurfaceKind::U8 => serializer.serialize_u8(1),
+            PrivateTextSurfaceKind::U16 => serializer.serialize_u16(1),
+            PrivateTextSurfaceKind::U32 => serializer.serialize_u32(1),
+            PrivateTextSurfaceKind::U64 => serializer.serialize_u64(1),
+            PrivateTextSurfaceKind::U128 => serializer.serialize_u128(1),
+            PrivateTextSurfaceKind::F32 => serializer.serialize_f32(1.5),
+            PrivateTextSurfaceKind::F64 => serializer.serialize_f64(1.5),
+            PrivateTextSurfaceKind::Char => serializer.serialize_char('x'),
+            PrivateTextSurfaceKind::Bytes => {
+                serializer.serialize_bytes(&[1, 2])
+            }
+            PrivateTextSurfaceKind::None => serializer.serialize_none(),
+            PrivateTextSurfaceKind::Some => serializer.serialize_some(&1_u8),
+            PrivateTextSurfaceKind::Unit => serializer.serialize_unit(),
+            PrivateTextSurfaceKind::UnitStruct => {
+                serializer.serialize_unit_struct("Value")
+            }
+            PrivateTextSurfaceKind::UnitVariant => {
+                serializer.serialize_unit_variant("Value", 0, "Unit")
+            }
+            PrivateTextSurfaceKind::NewtypeStruct => {
+                serializer.serialize_newtype_struct("Value", &1_u8)
+            }
+            PrivateTextSurfaceKind::NewtypeVariant => serializer
+                .serialize_newtype_variant("Value", 0, "Nested", &1_u8),
+            PrivateTextSurfaceKind::Seq => {
+                let mut value = serializer.serialize_seq(Some(1))?;
+                value.serialize_element(&1_u8)?;
+                value.end()
+            }
+            PrivateTextSurfaceKind::Tuple => {
+                let mut value = serializer.serialize_tuple(1)?;
+                value.serialize_element(&1_u8)?;
+                value.end()
+            }
+            PrivateTextSurfaceKind::TupleStruct => {
+                let mut value =
+                    serializer.serialize_tuple_struct("Value", 1)?;
+                value.serialize_field(&1_u8)?;
+                value.end()
+            }
+            PrivateTextSurfaceKind::TupleVariant => {
+                let mut value = serializer
+                    .serialize_tuple_variant("Value", 0, "Nested", 1)?;
+                value.serialize_field(&1_u8)?;
+                value.end()
+            }
+            PrivateTextSurfaceKind::Map => {
+                let mut value = serializer.serialize_map(Some(1))?;
+                value.serialize_entry("nested", &1_u8)?;
+                value.end()
+            }
+            PrivateTextSurfaceKind::Struct => {
+                let mut value = serializer.serialize_struct("Value", 1)?;
+                value.serialize_field("value", &1_u8)?;
+                value.end()
+            }
+            PrivateTextSurfaceKind::StructVariant => {
+                let mut value = serializer
+                    .serialize_struct_variant("Value", 0, "Nested", 1)?;
+                value.serialize_field("value", &1_u8)?;
+                value.end()
+            }
+            PrivateTextSurfaceKind::CollectStr => {
+                serializer.collect_str(&1_234)
+            }
+        }
+    }
+}
+
+/// Verifies less-common Serde serializer entry points remain budget-aware.
+#[test]
+fn test_encode_exercises_all_serializer_entry_points() {
+    fn assert_encodes<T: Serialize>(value: &T) {
+        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+        encode_to_vec(value, &mut session)
+            .expect("every supported Serde entry point must encode");
+    }
+
+    assert_encodes(&F32Surface);
+    assert_encodes(&F64Surface);
+    assert_encodes(&BytesSurface);
+    assert_encodes(&UnitStructSurface);
+    assert_encodes(&UnitVariantSurface);
+    assert_encodes(&NewtypeStructSurface);
+    assert_encodes(&NewtypeVariantSurface);
+    assert_encodes(&ScalarSerializerSurface);
+    assert_encodes(&TupleStructSurface);
+    assert_encodes(&TupleVariantSurface);
+    assert_encodes(&StructSurface);
+    assert_encodes(&StructVariantSurface);
+    assert_encodes(&1_u8);
+    assert_encodes(&vec![1_u8]);
+
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    encode_to_vec(&f32::NAN, &mut session)
+        .expect("non-finite f32 should use the JSON null path");
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    encode_to_vec(&f64::NAN, &mut session)
+        .expect("non-finite f64 should use the JSON null path");
+}
+
+/// Verifies every map-key forwarding method performs its budget check before
+/// delegating to serde_json.
+#[test]
+fn test_encode_exercises_all_key_serializer_entry_points() {
+    let kinds = [
+        KeySurfaceKind::Bool,
+        KeySurfaceKind::I8,
+        KeySurfaceKind::I16,
+        KeySurfaceKind::I32,
+        KeySurfaceKind::I64,
+        KeySurfaceKind::I128,
+        KeySurfaceKind::U8,
+        KeySurfaceKind::U16,
+        KeySurfaceKind::U32,
+        KeySurfaceKind::U64,
+        KeySurfaceKind::U128,
+        KeySurfaceKind::F32,
+        KeySurfaceKind::F64,
+        KeySurfaceKind::Char,
+        KeySurfaceKind::Str,
+        KeySurfaceKind::Bytes,
+        KeySurfaceKind::None,
+        KeySurfaceKind::Some,
+        KeySurfaceKind::Unit,
+        KeySurfaceKind::UnitStruct,
+        KeySurfaceKind::UnitVariant,
+        KeySurfaceKind::NewtypeStruct,
+        KeySurfaceKind::NewtypeVariant,
+        KeySurfaceKind::Seq,
+        KeySurfaceKind::Tuple,
+        KeySurfaceKind::TupleStruct,
+        KeySurfaceKind::TupleVariant,
+        KeySurfaceKind::Map,
+        KeySurfaceKind::Struct,
+        KeySurfaceKind::StructVariant,
+        KeySurfaceKind::CollectStr,
+    ];
+
+    for kind in kinds {
+        let key = KeySurface(kind);
+        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+        let _ = encode_to_vec(&OneKey { key: &key }, &mut session);
+    }
+
+    for kind in kinds {
+        let key = KeySurface(kind);
+        let mut output = Vec::new();
+        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+        let _ = encode_to_writer_incremental(
+            &mut output,
+            &OneKey { key: &key },
+            &mut session,
+        );
+    }
+}
+
+/// Verifies private serde_json payload forwarding remains total for all Serde
+/// operations, including shapes rejected by the underlying JSON serializer.
+#[test]
+fn test_encode_exercises_private_text_serializer_entry_points() {
+    let kinds = [
+        PrivateTextSurfaceKind::Bool,
+        PrivateTextSurfaceKind::I8,
+        PrivateTextSurfaceKind::I16,
+        PrivateTextSurfaceKind::I32,
+        PrivateTextSurfaceKind::I64,
+        PrivateTextSurfaceKind::I128,
+        PrivateTextSurfaceKind::U8,
+        PrivateTextSurfaceKind::U16,
+        PrivateTextSurfaceKind::U32,
+        PrivateTextSurfaceKind::U64,
+        PrivateTextSurfaceKind::U128,
+        PrivateTextSurfaceKind::F32,
+        PrivateTextSurfaceKind::F64,
+        PrivateTextSurfaceKind::Char,
+        PrivateTextSurfaceKind::Bytes,
+        PrivateTextSurfaceKind::None,
+        PrivateTextSurfaceKind::Some,
+        PrivateTextSurfaceKind::Unit,
+        PrivateTextSurfaceKind::UnitStruct,
+        PrivateTextSurfaceKind::UnitVariant,
+        PrivateTextSurfaceKind::NewtypeStruct,
+        PrivateTextSurfaceKind::NewtypeVariant,
+        PrivateTextSurfaceKind::Seq,
+        PrivateTextSurfaceKind::Tuple,
+        PrivateTextSurfaceKind::TupleStruct,
+        PrivateTextSurfaceKind::TupleVariant,
+        PrivateTextSurfaceKind::Map,
+        PrivateTextSurfaceKind::Struct,
+        PrivateTextSurfaceKind::StructVariant,
+        PrivateTextSurfaceKind::CollectStr,
+    ];
+
+    for kind in kinds {
+        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+        let _ = encode_to_vec(
+            &PrivateTextSurface {
+                token: JSON_NUMBER_TOKEN,
+                kind,
+            },
+            &mut session,
+        );
+        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+        let _ = encode_to_vec(
+            &PrivateTextSurface {
+                token: JSON_RAW_VALUE_TOKEN,
+                kind,
+            },
+            &mut session,
+        );
+    }
+
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    let _ = encode_to_vec(&vec![NestedPrivateScalar(true)], &mut session);
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    let _ = encode_to_vec(&vec![NestedPrivateScalar(false)], &mut session);
 }
 
 /// Verifies a budget failure leaves the destination writer unchanged.
