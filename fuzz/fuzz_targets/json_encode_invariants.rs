@@ -19,12 +19,10 @@ use qubit_budget::json::JsonValueLimits;
 use qubit_json::text::encode_to_vec;
 use serde_json::Value;
 
-const MAX_INPUT_LEN: usize = 4 * 1024;
-const MAX_LIMIT: usize = 4 * 1024;
+#[path = "../../tests/fixtures/internal/fuzz_limit.rs"]
+mod fuzz_limit;
 
-fn limit(data: u8) -> usize {
-    1 + usize::from(data) % MAX_LIMIT
-}
+const MAX_INPUT_LEN: usize = 4 * 1024;
 
 fuzz_target!(|data: &[u8]| {
     let input = &data[..data.len().min(MAX_INPUT_LEN)];
@@ -32,9 +30,9 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
-    let output_bytes = data.first().copied().map(limit).unwrap_or(1);
-    let nodes = data.get(1).copied().map(limit).unwrap_or(1);
-    let payload_bytes = data.get(2).copied().map(limit).unwrap_or(1);
+    let output_bytes = fuzz_limit::limit(data, 0);
+    let nodes = fuzz_limit::limit(data, 2);
+    let payload_bytes = fuzz_limit::limit(data, 4);
     let structure = StructureLimits::empty()
         .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes));
     let value_limits = JsonValueLimits::empty()

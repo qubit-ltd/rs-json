@@ -9,6 +9,8 @@
 
 mod byte_buffer_visitor;
 mod fuzz_input_limit;
+mod fuzz_limit;
+mod fuzz_limit_tests;
 
 pub(crate) use byte_buffer_visitor::ByteBufferVisitor;
 pub(crate) use fuzz_input_limit::MAX_FUZZ_INPUT_BYTES;

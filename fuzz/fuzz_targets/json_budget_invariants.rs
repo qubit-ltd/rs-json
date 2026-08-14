@@ -20,24 +20,22 @@ use qubit_budget::json::JsonValueLimits;
 use qubit_json::text::decode_slice;
 use serde_json::Value;
 
-const MAX_INPUT_LEN: usize = 4 * 1024;
-const MAX_LIMIT: usize = 4 * 1024;
+#[path = "../../tests/fixtures/internal/fuzz_limit.rs"]
+mod fuzz_limit;
 
-fn limit(data: u8) -> usize {
-    1 + usize::from(data) % MAX_LIMIT
-}
+const MAX_INPUT_LEN: usize = 4 * 1024;
 
 fuzz_target!(|data: &[u8]| {
     let input = &data[..data.len().min(MAX_INPUT_LEN)];
-    let bytes = data.get(0).copied().map(limit).unwrap_or(1);
-    let depth = data.get(1).copied().map(limit).unwrap_or(1);
-    let nodes = data.get(2).copied().map(limit).unwrap_or(1);
-    let items = data.get(3).copied().map(limit).unwrap_or(1);
-    let entries = data.get(4).copied().map(limit).unwrap_or(1);
-    let key_bytes = data.get(5).copied().map(limit).unwrap_or(1);
-    let string_bytes = data.get(6).copied().map(limit).unwrap_or(1);
-    let number_bytes = data.get(7).copied().map(limit).unwrap_or(1);
-    let payload_bytes = data.get(8).copied().map(limit).unwrap_or(1);
+    let bytes = fuzz_limit::limit(data, 0);
+    let depth = fuzz_limit::limit(data, 2);
+    let nodes = fuzz_limit::limit(data, 4);
+    let items = fuzz_limit::limit(data, 6);
+    let entries = fuzz_limit::limit(data, 8);
+    let key_bytes = fuzz_limit::limit(data, 10);
+    let string_bytes = fuzz_limit::limit(data, 12);
+    let number_bytes = fuzz_limit::limit(data, 14);
+    let payload_bytes = fuzz_limit::limit(data, 16);
 
     let structure = StructureLimits::empty()
         .with_depth_limit(ResourceLimit::new(JsonResource::Depth, depth))
