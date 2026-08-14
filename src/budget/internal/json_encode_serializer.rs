@@ -28,14 +28,8 @@ use super::JsonLexicalPreflight;
 use super::json_encode_compound::BudgetedValue;
 use super::json_encode_compound::JsonEncodeCompound;
 use super::json_output_buffer::JsonOutputAccounting;
-
-/// Private token used by serde_json for arbitrary-precision numbers.
-const JSON_NUMBER_TOKEN: &str =
-    concat!("$", "serde_json", ":", ":private::Number");
-
-/// Private token used by serde_json for raw JSON fragments.
-const JSON_RAW_VALUE_TOKEN: &str =
-    concat!("$", "serde_json", ":", ":private::RawValue");
+use super::private_struct_kind::PrivateStructKind;
+use super::serde_json_compat::classify_private_struct;
 
 /// Mutable state shared by every decorator in one serialization traversal.
 pub(super) struct JsonEncodeContext<'a, R, Q>
@@ -657,24 +651,28 @@ where
         name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        if name == JSON_NUMBER_TOKEN {
-            self.node()?;
-            let context = Rc::clone(&self.context);
-            let depth = self.depth;
-            let inner = self.inner.serialize_struct(name, len)?;
-            return Ok(JsonEncodeCompound::number(inner, context, depth));
+        match classify_private_struct(name) {
+            Some(PrivateStructKind::Number) => {
+                self.node()?;
+                let context = Rc::clone(&self.context);
+                let depth = self.depth;
+                let inner = self.inner.serialize_struct(name, len)?;
+                Ok(JsonEncodeCompound::number(inner, context, depth))
+            }
+            Some(PrivateStructKind::RawValue) => {
+                let context = Rc::clone(&self.context);
+                let depth = self.depth;
+                let inner = self.inner.serialize_struct(name, len)?;
+                Ok(JsonEncodeCompound::raw_value(inner, context, depth))
+            }
+            None => {
+                self.node()?;
+                let context = Rc::clone(&self.context);
+                let child_depth = self.depth.saturating_add(1);
+                let inner = self.inner.serialize_struct(name, len)?;
+                Ok(JsonEncodeCompound::new(inner, context, child_depth))
+            }
         }
-        if name == JSON_RAW_VALUE_TOKEN {
-            let context = Rc::clone(&self.context);
-            let depth = self.depth;
-            let inner = self.inner.serialize_struct(name, len)?;
-            return Ok(JsonEncodeCompound::raw_value(inner, context, depth));
-        }
-        self.node()?;
-        let context = Rc::clone(&self.context);
-        let child_depth = self.depth.saturating_add(1);
-        let inner = self.inner.serialize_struct(name, len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
     /// Charges a struct variant's outer and inner objects.

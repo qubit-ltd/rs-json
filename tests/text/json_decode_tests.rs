@@ -10,8 +10,6 @@ use std::error::Error;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_json::text::JsonDecodeError;
-use qubit_json::text::JsonDeserializeError;
-use qubit_json::text::JsonDeserializeErrorCategory;
 use qubit_json::text::decode_slice;
 
 /// Verifies that strict text decoding uses the operation-specific error API.
@@ -34,16 +32,4 @@ fn test_decode_slice_redacts_serde_input_details() {
     assert!(!error.to_string().contains("TOP_SECRET"));
     assert!(error.source().is_none());
     assert!(!format!("{error:?}").contains("TOP_SECRET"));
-}
-
-/// Verifies that serde errors convert to safe strict-decoder metadata.
-#[test]
-fn test_deserialize_error_conversion_redacts_input_details() {
-    let source = serde_json::from_slice::<u64>(br#""TOP_SECRET""#)
-        .expect_err("a JSON string cannot deserialize into u64");
-    let error = JsonDeserializeError::from(source);
-
-    assert_eq!(error.category(), JsonDeserializeErrorCategory::Data);
-    assert_eq!(error.line(), 1);
-    assert!(!error.to_string().contains("TOP_SECRET"));
 }

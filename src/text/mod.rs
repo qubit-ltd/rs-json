@@ -9,6 +9,8 @@
 
 mod json_decode;
 mod json_decode_error;
+mod json_deserialize_error;
+mod json_deserialize_error_category;
 mod json_encode;
 mod json_encode_error;
 
@@ -16,8 +18,8 @@ pub use json_decode::decode_slice;
 pub use json_decode::decode_slice_seed;
 pub use json_decode::inspect;
 pub use json_decode_error::JsonDecodeError;
-pub use json_decode_error::JsonDeserializeError;
-pub use json_decode_error::JsonDeserializeErrorCategory;
+pub use json_deserialize_error::JsonDeserializeError;
+pub use json_deserialize_error_category::JsonDeserializeErrorCategory;
 pub use json_encode::encode_to_vec;
 pub use json_encode::encode_to_writer;
 pub use json_encode_error::JsonEncodeError;

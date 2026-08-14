@@ -14,6 +14,8 @@ use qubit_budget::MeasuredBudgetError;
 use serde_json::Error as JsonError;
 use thiserror::Error;
 
+use crate::budget::JsonSyntaxError;
+
 /// Failure produced while encoding one JSON document.
 #[must_use]
 #[derive(Debug, Error)]
@@ -26,7 +28,7 @@ where
     Budget(#[from] MeasuredBudgetError<R, Q>),
     /// A `RawValue` field did not contain valid JSON text.
     #[error("JSON raw value is invalid: {0}")]
-    InvalidRawJson(#[source] JsonError),
+    InvalidRawJson(#[source] JsonSyntaxError),
     /// Serde could not serialize the source value.
     #[error("JSON serialization failed: {0}")]
     Serialize(#[source] JsonError),
