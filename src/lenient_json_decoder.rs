@@ -411,7 +411,8 @@ impl LenientJsonDecoder {
     /// # Returns
     ///
     /// A budget error for resource rejection or an invalid-JSON error for a
-    /// lexical failure, with input-derived details governed by `privacy_policy`.
+    /// lexical failure, with input-derived details governed by
+    /// `privacy_policy`.
     #[must_use]
     fn map_admission_error(
         error: JsonSerdeError<JsonResource, usize>,

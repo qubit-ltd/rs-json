@@ -442,7 +442,10 @@ fn test_decode_with_session_rejects_unpaired_surrogate_without_panicking() {
         .expect_err("RawValue must not bypass lexical surrogate rejection");
     assert_eq!(raw_value_error.kind(), JsonDecodeErrorKind::InvalidJson);
     assert_eq!(raw_value_error.stage(), JsonDecodeStage::Parse);
-    assert_eq!(raw_value_error.privacy_policy(), ErrorPrivacyPolicy::Detailed);
+    assert_eq!(
+        raw_value_error.privacy_policy(),
+        ErrorPrivacyPolicy::Detailed
+    );
     assert!(raw_value_error.measured_budget_error().is_none());
     let source = std::error::Error::source(&raw_value_error)
         .expect("detailed lexical errors must retain their stable source");

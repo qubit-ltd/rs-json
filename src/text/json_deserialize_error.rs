@@ -19,7 +19,9 @@ use super::JsonDeserializeErrorCategory;
 /// Serde without retaining an input-derived diagnostic message.
 #[must_use]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
-#[error("JSON deserialization failed ({category}) at line {line}, column {column}")]
+#[error(
+    "JSON deserialization failed ({category}) at line {line}, column {column}"
+)]
 pub struct JsonDeserializeError {
     /// Broad Serde failure category.
     category: JsonDeserializeErrorCategory,
