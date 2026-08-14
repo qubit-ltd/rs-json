@@ -7,59 +7,86 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![English Document](https://img.shields.io/badge/Document-English-blue.svg)](README.md)
 
-为 Rust 提供面向非完全可信文本输入的宽松 JSON 解码器。
+面向 Rust 的资源感知 JSON 基础设施：它把可预测的宽松输入规范化、严格文本编解码、
+带预算的 value 构造和非递归 tree 处理放在同一套资源语义下，同时保留 Serde 原生数据
+模型和反序列化行为。
 
-## 带预算的 JSON 处理
+## 按边界选择能力
 
-`qubit-budget` 拥有 JSON 资源标识、limits 和可变 session；`qubit-json` 拥有 JSON
-规范化、遍历和 Serde adapter。应从 `qubit_budget::json` 导入 `JsonValueLimits`、
-`JsonDecodeLimits`、`JsonDecodeSession`、`JsonEncodeLimits` 和 `JsonEncodeSession`。
+| 模块 | 适用场景 | 明确边界 |
+| --- | --- | --- |
+| `lenient` | 规范化围栏包裹或有轻微噪声的文本，再反序列化为 `T` | 只做文档列出的修复，不猜测引号、逗号或括号 |
+| `text` | 严格、带预算的 JSON 编解码 | 使用调用方持有的 decode/encode session，不修复文本 |
+| `value` | 通过 Serde seed 构造 `serde_json::Value` | 核算解码后的 value 资源，具体实现保持私有 |
+| `tree` | 迭代访问或修改已经物化的 `Value` | `process_mut` 不提供事务回滚 |
 
-```rust
-use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession, JsonEncodeLimits, JsonEncodeSession};
+`qubit-budget` 负责 JSON 资源标识、限制、预算和可变 session；`qubit-json` 负责规范化、
+词法准入、严格文本适配、value 构造和 tree 遍历。
 
-let decode = JsonDecodeSession::owned(JsonDecodeLimits::empty());
-let encode = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-assert_eq!(decode.max_input_bytes(), None);
-assert_eq!(encode.max_output_bytes(), None);
+## 安装
+
+在 `Cargo.toml` 中添加：
+
+```toml
+[dependencies]
+qubit-json = "0.7"
+qubit-budget = { version = "0.4", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
 ```
 
-输入字节和已接纳的 value 工作按每次尝试计费；之后的解析或 Serde 失败不会回滚它们。输出
-字节先在事务中暂存，只有完整序列化成功后才提交。因此序列化失败时 value 记账可以保留，
-而 output 记账保持不变。
+只有为强类型解码派生 `Deserialize` 时才需要直接添加 `serde`。若代码直接使用
+`serde_json::Value` 或 `serde_json` 宏，请自行声明 `serde_json` 直接依赖；本 crate
+有意不再导出它。
 
-## 概述
+## 快速开始
 
-Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力。它的
-核心类型 `LenientJsonDecoder` 会先对输入做有限的规范化，再进行 JSON
-解析和反序列化。
+### 以累计预算解码围栏包裹的响应
 
-这个库适合处理这类来源的 JSON 文本：
+假设服务从文本通道接收 Markdown 围栏包裹的 JSON，需要直接得到强类型结果，并且要核算
+跨重试的所有工作。此时复用一个 `JsonDecodeSession`：依次累计原始输入、规范化输入和
+解码后 value 资源。规范化文档通过词法准入后直接反序列化为 `T`，不会先构造中间
+`serde_json::Value`。
 
-- Markdown 包裹文本
-- 使用反引号或波浪线围栏的 Markdown 代码块
-- 复制粘贴的代码片段
-- CLI 输出流
-- 其他可能包裹了 JSON 的文本通道
+```rust
+use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession};
+use qubit_json::lenient::LenientJsonDecoder;
+use serde::Deserialize;
 
-这个库的边界是刻意收窄的。它不是通用 JSON 修复引擎，也不会去猜测缺失
-的引号、逗号或花括号。
+#[derive(Debug, Deserialize, PartialEq)]
+struct Reply {
+    ok: bool,
+}
 
-## 设计目标
+let limits = JsonDecodeLimits::empty()
+    .with_max_input_bytes(64)
+    .with_max_normalized_input_bytes(32)
+    .with_max_nodes(2)
+    .with_max_map_entries(1)
+    .with_max_key_bytes(2)
+    .with_max_payload_bytes(2);
+let mut session = JsonDecodeSession::owned(limits);
+let decoder = LenientJsonDecoder::default();
 
-- **宽松但可预测**：只处理少量、边界明确的输入问题
-- **对象化 API**：通过可复用的 `LenientJsonDecoder` 实例暴露能力，而不是
-  散落的工具函数
-- **以 Serde 为核心**：真正的解析和反序列化仍然交给 `serde_json`
-- **隐私感知错误**：默认提供稳定的脱敏诊断，仅在显式配置后保留完整 serde 明细
-- **低额外开销**：在可以借用原始输入时尽量避免额外分配
+let reply: Reply = decoder.decode_with_session(
+    "```json\n{\"ok\":true}\n```",
+    &mut session,
+)?;
+assert_eq!(reply, Reply { ok: true });
+assert_eq!(session.value_budget().structure_budget().used_nodes(), 2);
+# Ok::<(), qubit_json::lenient::LenientJsonDecodeError>(())
+```
 
-## 特性
+只要某一步计费成功，即使后续预算检查、语法检查或目标类型反序列化失败，已消耗资源也
+不会回滚。`Budget`/`Admission` 错误可通过 `measured_budget_error()` 读取结构化拒绝
+详情。普通 `decode()` 仍走更快的“规范化后直接反序列化”路径，不执行 value 预检。
 
-### `LenientJsonDecoder`
+## 核心能力
+
+### 宽松解码
 
 - 可复用的解码器对象，内部持有不可变配置
 - `decode<T>()`：把任意 JSON 顶层值解码为 `T`
+- `decode_with_session<T>()`：直接反序列化前，累计核算原始输入、规范化输入和 value
 - `decode_slice<T>()`：校验 UTF-8 字节并解码为 `T`
 - `decode_value()`：解码为 `serde_json::Value`
 - `decode_object<T>()`：要求顶层必须是 JSON 对象，并直接从规范化文本反序列化 `T`
@@ -85,8 +112,22 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 默认配置不会设置 `max_input_bytes` 和 `max_normalized_bytes`，避免库替应用强加资源上限。
 来自不可信边界的输入应由调用方按自身内存与延迟预算显式限制。
 
+### 严格文本、value 与 tree 基础设施
+
+- `text::decode_slice` / `text::decode_slice_seed` 使用 `JsonDecodeSession` 严格
+  解码字节；`text::encode_to_vec` / `text::encode_to_writer` 使用
+  `JsonEncodeSession` 编码。
+- `text::JsonEncodeError::InvalidRawJson` 直接保留稳定的 `JsonSyntaxError` reason、
+  offset、line 和 column，不再用字符串重建 `serde_json::Error`。
+- `value::BudgetedJsonValueSeed` 是递增核算 value 预算并构造
+  `serde_json::Value` 的唯一公开路径。
+- `tree::JsonTreeProcessor` 允许输入 value 的借用短于 budget 借用。
+  `process_mut` 返回错误时保留此前的 mutation 和预算消费；恢复 guard 只保证 root
+  仍是结构有效的 `Value`，不会恢复原值。
+
 ### 显式错误模型
 
+- `Budget`：调用方持有的 value 限制在 `Admission` 阶段拒绝工作
 - `InputTooLarge`：原始或规范化后的输入大小超过对应配置上限
 - `EmptyInput`：输入在规范化之后为空
 - `InvalidUtf8`：原始字节输入不是合法 UTF-8
@@ -104,47 +145,7 @@ Qubit JSON 在 `serde_json` 之上提供了一层小而可预测的解码能力�
 - `Detailed` 会保留完整 UTF-8 或 serde source，因此可能暴露输入派生诊断；
   仅应在受控环境中显式启用
 
-## 安装
-
-在 `Cargo.toml` 中添加：
-
-```toml
-[dependencies]
-qubit-json = "0.7"
-qubit-budget = { version = "0.4", features = ["json"] }
-serde = { version = "1.0", features = ["derive"] }
-```
-
-只有在像下面第一个快速开始示例那样，为强类型解码派生 `Deserialize` 时，才需要
-直接添加 `serde` 依赖。
-
-若你的代码直接使用 `serde_json::Value` 或 `serde_json` 宏，请自行声明
-`serde_json` 直接依赖；本 crate 有意不再导出它。
-
-## 快速开始
-
-### 从 Markdown 代码块中解码 JSON 对象
-
-```rust
-use serde::Deserialize;
-use qubit_json::lenient::LenientJsonDecoder;
-
-#[derive(Debug, Deserialize)]
-struct User {
-    name: String,
-    age: u8,
-}
-
-fn main() {
-    let decoder = LenientJsonDecoder::default();
-    let user: User = decoder
-        .decode_object("```json\n{\"name\":\"Alice\",\"age\":30}\n```")
-        .expect("decoder should extract and decode the fenced JSON object");
-
-    assert_eq!(user.name, "Alice");
-    assert_eq!(user.age, 30);
-}
-```
+## 其他宽松解码示例
 
 ### 解码字符串中包含原始控制字符的 JSON
 
@@ -229,7 +230,9 @@ fn main() {
 }
 ```
 
-## 规范化规则
+## 行为契约
+
+### 规范化规则
 
 在对应选项启用时，解码器会按以下顺序处理输入：
 
@@ -243,18 +246,28 @@ fn main() {
 8. 在分配前校验规范化后 JSON 的可选字节数上限
 9. 转义 JSON 字符串字面量中的 ASCII 控制字符
 
-这个库不会做下面这些事情：
+`lenient` 模块不会做下面这些事情：
 
 - 自动补引号
 - 自动补逗号
 - 自动补花括号或方括号
 - 把任意畸形 JSON 猜测性地修复成合法 JSON
 
+### session 与 mutation 的失败语义
+
+- Decode session 采用累计记账。错误发生前已经消费的原始输入、规范化输入和 value
+  资源不会回滚；单次被拒绝的预算增量仍保持原子性，但更早的成功增量会保留。
+- 严格编码只有在完整序列化成功后才提交 output 记账；若序列化稍后失败，value 记账
+  可能已经发生。
+- `JsonTreeProcessor::process_mut` 采用递增修改。visitor 或预算错误发生前已完成的
+  mutation 和预算消费仍可观察。
+
 ## 适用场景
 
 Qubit JSON 适合这些情况：
 
-- 你需要一个可复用、可配置的 JSON 解码对象
+- 你希望文本、value 和 tree 共享同一套资源核算语义
+- 你需要一个可复用、可配置的宽松 JSON 解码对象
 - 输入大体是合法 JSON，只是外层可能有包裹或轻度噪声
 - 你希望在 `serde_json` 之外再得到一层稳定且默认安全的错误语义
 
@@ -262,25 +275,40 @@ Qubit JSON 适合这些情况：
 
 - 你需要对严重损坏的 JSON 做激进修复
 - 输入本身并不是 JSON
-- 直接调用 `serde_json::from_str()` 已经足够
+- 直接调用 `serde_json::from_str()` 已能满足全部需求
 
-## 对齐说明
+## 兼容与升级
 
-本文档与当前实现保持一致：
+带预算的序列化会识别 `serde_json` 的私有 Number 和 RawValue 协议名。因此生产依赖
+精确锁定为 `serde_json = 1.0.151`，且
+`src/budget/internal/serde_json_compat.rs` 是这些 token 在生产代码中的唯一所有者。
+升级 `serde_json` 时必须：
 
-- `LenientJsonDecoder` 通过内部的 `LenientJsonNormalizer` 完成输入规范化。
-- 对外公开能力为 `decode`、`decode_object`、`decode_array`、`decode_value`、
-  `decode_slice`。
-- 规范化与错误模型由 `src/internal/lenient_json_normalizer.rs`、`src/error/json_decode_error.rs` 实现，并有
-  `tests/` 下对应测试覆盖。
-- 需求与实现口径与
-  `doc/json_prd.zh_CN.md` 和 `doc/json_design.zh_CN.md` 对齐。
+1. 更新 `Cargo.toml` 中的精确版本；
+2. 更新根目录和 `fuzz/Cargo.lock`；
+3. 对照 compat 模块复核上游私有 Number、RawValue serializer；
+4. 运行私有协议、serializer 回归、两棵依赖树检查、fuzz workspace check 和项目完整
+   质量门禁。
+
+复核通过前，不得在 compat 模块外新增 token 判断，也不得放宽精确版本约束。
+
+## 延伸阅读
+
+- [English README](README.md)
+- [设计说明](doc/json_design.zh_CN.md)
+- [产品需求](doc/json_prd.zh_CN.md)
+- [基准基线](doc/benchmark_baseline.zh_CN.md)
+- [API 文档](https://docs.rs/qubit-json)
 
 ## 开发验证
 
-先运行 `./align-ci.sh`，再运行 `./ci-check.sh`。Criterion 基准覆盖小输入公开入口对比、
-HTTP 风格严格字节解码（包含复用解码器和按次构造解码器）、最大 1 MiB 的 LLM 风格宽松类型解码、
-规范化密度和代表性失败路径，可通过 `cargo bench --bench decoder_bench --no-run` 编译。
+先运行 `./align-ci.sh`，再运行 `./ci-check.sh`。Criterion 基准包含 1 KiB、64 KiB 和
+1 MiB 的带预算 strict/lenient decode/encode 对比，可通过以下命令编译两个目标：
+
+```bash
+cargo bench --bench decoder_bench --no-run
+cargo bench --bench budgeted_serde_json --no-run
+```
 
 可选 fuzz 目标仅用于开发，不会成为运行时依赖。它覆盖默认、严格、仅 JSON 围栏和
 必须闭合围栏四类策略，并由 `.github/workflows/fuzz.yml` 定时执行有时限的运行；失败时会保留

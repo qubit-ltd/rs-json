@@ -9,80 +9,255 @@
 
 use std::hint::black_box;
 
+use criterion::BenchmarkId;
 use criterion::Criterion;
+use criterion::Throughput;
 use criterion::criterion_group;
 use criterion::criterion_main;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonValueBudget;
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::lenient::JsonDecodeOptions;
+use qubit_json::lenient::LenientJsonDecoder;
 use qubit_json::text::decode_slice;
 use qubit_json::text::encode_to_vec;
 use serde::Deserialize;
 use serde::Serialize;
 
-const DOCUMENT: &[u8] = br#"{"name":"qubit","items":[1,2,3,4],"enabled":true}"#;
+mod internal;
 
+use internal::BenchmarkRecord;
+
+const DOCUMENT_SIZES: [usize; 3] = [1_024, 65_536, 1_048_576];
+const RECORD: &[u8] = br#"{"id":7,"text":"benchmark-record"}"#;
+const DOCUMENT_PREFIX: &[u8] = br#"{"records":["#;
+const DOCUMENT_SUFFIX: &[u8] = br#"]}"#;
+
+/// JSON fixture with an object array that scales to each target document size.
 #[derive(Debug, Deserialize, Serialize)]
 struct Fixture {
-    name: String,
-    items: Vec<u64>,
-    enabled: bool,
+    /// Records exercised by the benchmark document.
+    records: Vec<BenchmarkRecord>,
 }
 
-fn decode(c: &mut Criterion) {
-    c.bench_function("json decode with budget", |b| {
-        b.iter(|| {
-            let mut session =
-                JsonDecodeSession::owned(JsonDecodeLimits::empty());
-            black_box(
-                decode_slice::<Fixture, _, _>(DOCUMENT, &mut session).unwrap(),
-            )
-        });
-    });
+/// Builds a fixed JSON object-array document close to `target_bytes`.
+///
+/// # Parameters
+///
+/// * `target_bytes` - Requested approximate byte length for the document.
+///
+/// # Returns
+///
+/// A valid JSON document whose length is no greater than `target_bytes` and
+/// differs by less than one encoded record.
+///
+/// # Panics
+///
+/// Panics when `target_bytes` cannot hold the fixed document structure or the
+/// generated document falls outside the documented size tolerance.
+fn benchmark_document(target_bytes: usize) -> Vec<u8> {
+    assert!(
+        target_bytes >= DOCUMENT_PREFIX.len() + RECORD.len() + DOCUMENT_SUFFIX.len(),
+        "benchmark target must hold one record",
+    );
+
+    let mut document = Vec::with_capacity(target_bytes);
+    document.extend_from_slice(DOCUMENT_PREFIX);
+    while document.len() + RECORD.len() + DOCUMENT_SUFFIX.len() <= target_bytes {
+        if document.len() > DOCUMENT_PREFIX.len() {
+            document.push(b',');
+        }
+        document.extend_from_slice(RECORD);
+    }
+    document.extend_from_slice(DOCUMENT_SUFFIX);
+
+    assert!(
+        document.len() <= target_bytes && target_bytes - document.len() <= RECORD.len(),
+        "benchmark document must remain within one record of its target",
+    );
+    document
 }
 
-fn decode_baseline(c: &mut Criterion) {
-    c.bench_function("json decode with serde_json", |b| {
-        b.iter(|| {
-            black_box(
-                serde_json::from_slice::<Fixture>(DOCUMENT)
-                    .expect("benchmark document should decode"),
-            )
-        });
-    });
+/// Registers strict and lenient decoding benchmarks for every document size.
+///
+/// # Parameters
+///
+/// * `criterion` - Criterion context used to register the benchmark group.
+///
+/// # Panics
+///
+/// Panics when a generated document cannot be decoded by a benchmark path.
+fn decode(criterion: &mut Criterion) {
+    let decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
+    let mut group = criterion.benchmark_group("budgeted-json-decode");
+
+    for target_bytes in DOCUMENT_SIZES {
+        let document = benchmark_document(target_bytes);
+        let size = document.len();
+        let input = std::str::from_utf8(&document).expect("benchmark document must be valid UTF-8");
+        let fixture =
+            serde_json::from_slice::<Fixture>(&document).expect("benchmark document must decode");
+        black_box(fixture.records.len());
+        group.throughput(Throughput::Bytes(document.len() as u64));
+
+        group.bench_with_input(
+            BenchmarkId::new("decode/serde_json", size),
+            &document,
+            |bencher, input| {
+                bencher.iter(|| {
+                    black_box(
+                        serde_json::from_slice::<Fixture>(black_box(input))
+                            .expect("fixture must decode"),
+                    )
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("decode/owned-session", size),
+            &document,
+            |bencher, input| {
+                bencher.iter(|| {
+                    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+                    black_box(
+                        decode_slice::<Fixture, _, _>(black_box(input), &mut session)
+                            .expect("fixture must decode"),
+                    )
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("decode/borrowed-session", size),
+            &document,
+            |bencher, input| {
+                bencher.iter(|| {
+                    let mut value = JsonValueBudget::new(JsonValueLimits::empty());
+                    let mut session = JsonDecodeSession::borrowing_value(&mut value);
+                    black_box(
+                        decode_slice::<Fixture, _, _>(black_box(input), &mut session)
+                            .expect("fixture must decode"),
+                    )
+                });
+            },
+        );
+        let mut reused_session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+        group.bench_with_input(
+            BenchmarkId::new("decode/reused-session", size),
+            &document,
+            |bencher, input| {
+                bencher.iter(|| {
+                    black_box(
+                        decode_slice::<Fixture, _, _>(black_box(input), &mut reused_session)
+                            .expect("fixture must decode"),
+                    )
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("decode/lenient-json-decoder", size),
+            &input,
+            |bencher, input| {
+                bencher.iter(|| {
+                    black_box(
+                        decoder
+                            .decode::<Fixture>(black_box(input))
+                            .expect("fixture must decode"),
+                    )
+                });
+            },
+        );
+        let mut lenient_session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+        group.bench_with_input(
+            BenchmarkId::new("decode/lenient-json-decoder-with-session", size),
+            &input,
+            |bencher, input| {
+                bencher.iter(|| {
+                    black_box(
+                        decoder
+                            .decode_with_session::<Fixture>(black_box(input), &mut lenient_session)
+                            .expect("fixture must decode"),
+                    )
+                });
+            },
+        );
+    }
+    group.finish();
 }
 
-fn encode(c: &mut Criterion) {
-    let fixture = Fixture {
-        name: String::from("qubit"),
-        items: vec![1, 2, 3, 4],
-        enabled: true,
-    };
-    c.bench_function("json encode with budget", |b| {
-        b.iter(|| {
-            let mut session =
-                JsonEncodeSession::owned(JsonEncodeLimits::empty());
-            black_box(encode_to_vec(&fixture, &mut session).unwrap())
-        });
-    });
+/// Registers strict JSON encoding benchmarks for every document size.
+///
+/// # Parameters
+///
+/// * `criterion` - Criterion context used to register the benchmark group.
+///
+/// # Panics
+///
+/// Panics when a generated document cannot be decoded into the encoding fixture
+/// or a benchmark path cannot encode that fixture.
+fn encode(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("budgeted-json-encode");
+
+    for target_bytes in DOCUMENT_SIZES {
+        let document = benchmark_document(target_bytes);
+        let size = document.len();
+        let fixture =
+            serde_json::from_slice::<Fixture>(&document).expect("benchmark document must decode");
+        group.throughput(Throughput::Bytes(document.len() as u64));
+
+        group.bench_with_input(
+            BenchmarkId::new("encode/serde_json", size),
+            &fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    black_box(serde_json::to_vec(black_box(fixture)).expect("fixture must encode"))
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("encode/owned-session", size),
+            &fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+                    black_box(
+                        encode_to_vec(black_box(fixture), &mut session)
+                            .expect("fixture must encode"),
+                    )
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("encode/borrowed-session", size),
+            &fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    let mut value = JsonValueBudget::new(JsonValueLimits::empty());
+                    let mut session = JsonEncodeSession::borrowing_value(&mut value);
+                    black_box(
+                        encode_to_vec(black_box(fixture), &mut session)
+                            .expect("fixture must encode"),
+                    )
+                });
+            },
+        );
+        let mut reused_session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+        group.bench_with_input(
+            BenchmarkId::new("encode/reused-session", size),
+            &fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    black_box(
+                        encode_to_vec(black_box(fixture), &mut reused_session)
+                            .expect("fixture must encode"),
+                    )
+                });
+            },
+        );
+    }
+    group.finish();
 }
 
-fn encode_baseline(c: &mut Criterion) {
-    let fixture = Fixture {
-        name: String::from("qubit"),
-        items: vec![1, 2, 3, 4],
-        enabled: true,
-    };
-    c.bench_function("json encode with serde_json", |b| {
-        b.iter(|| {
-            black_box(
-                serde_json::to_vec(&fixture)
-                    .expect("benchmark fixture should encode"),
-            )
-        });
-    });
-}
-
-criterion_group!(benches, decode, decode_baseline, encode, encode_baseline);
+criterion_group!(benches, decode, encode);
 criterion_main!(benches);

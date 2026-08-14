@@ -3,25 +3,26 @@
 ## 文档信息
 
 - 文档名称：`rs-json` 产品需求文档（PRD）
-- 文档版本：`v3.1`
+- 文档版本：`v4.0`
 - 创建日期：`2026-04-12`
-- 更新日期：`2026-07-18`
+- 更新日期：`2026-08-14`
 - 状态：`Implemented`
 - 对齐设计文档：`json_design.zh_CN.md`
 
 ## 1. 产品定义
 
-`rs-json` 的核心产品是一个通用的宽松 JSON 解码器
-`LenientJsonDecoder`。该组件用于处理“非完全可信文本”下的 JSON 解码场景，
-例如来自日志、模板或通道输出的文本 JSON。
+`rs-json` 是通用 JSON 基础设施。它面向需要稳定资源核算和明确失败边界的 Rust
+调用方，提供四个公开能力域：`lenient`、`text`、`value`、`tree`。
 
 解码器目标是：
 
-1. 对输入文本执行可配置的、有限且可预测的规范化。
-2. 以 `serde_json::Value` 或强类型结果返回解码结果。
-3. 在解码阶段统一错误语义，并默认移除输入派生的 serde 诊断内容。
+1. 通过 `lenient` 对非完全可信文本执行有限规范化，并直接得到强类型结果。
+2. 通过 `text` 严格编解码，通过 `value` 构造预算感知 DOM，通过 `tree` 迭代访问或修改
+   已物化 JSON。
+3. 使用 `qubit_budget::json` session 统一核算输入、输出和 value 资源。
+4. 在错误模型中稳定表达隐私、失败阶段和结构化 budget rejection。
 
-它不替代 `serde_json`，也不做激进修复式解析。
+它不替代 `serde_json` 的数据模型和 Serde 行为，也不做激进修复式解析。
 
 ## 2. 设计目标
 
@@ -34,11 +35,14 @@
      `decode_array<T>()` 与 `decode_value()` 五个主要入口。
 4. **一致错误模型**
    - 通过 `JsonDecodeError` 与 `JsonDecodeErrorKind` 表达空输入、语法错误、
-     顶层结构冲突、反序列化失败。
+     顶层结构冲突、反序列化失败和预算拒绝。
 5. **默认保护输入隐私**
    - 默认错误可用于普通日志；完整 serde 诊断必须由调用方显式启用。
 6. **实现与上层隔离**
    - 避免平台、provider、网络、日志等上层上下文依赖。
+7. **模块边界明确**
+   - `lenient` 只负责宽松文本入口；`text` 只负责严格编解码；`value` 只公开 budgeted
+     seed；`tree` 负责物化树遍历。
 
 ## 3. 非目标
 
@@ -46,6 +50,8 @@
 2. 不提供 JSON Schema、业务字段校验。
 3. 不在公共 API 暴露 `Option<&str>`，调用方需在上游明确输入缺失语义。
 4. 不公开 LLM 专属命名或场景化方法名。
+5. 不承诺错误时回滚累计 session 消费或 `process_mut` 已完成的 mutation。
+6. 不在当前 crate 重导出由 `qubit-budget` 或 `serde_json` 所有的外部类型。
 
 ## 4. 用户场景
 
@@ -53,6 +59,8 @@
 2. 处理含 UTF-8 BOM、首尾噪声或轻度格式问题的文本。
 3. 解码常见对象、数组及动态 JSON 值。
 4. 在同一业务上下文复用同一套规范化策略。
+5. 在同一调用方 session 中累计限制多次 decode 尝试的 raw、normalized 和 value 资源。
+6. 严格编解码受限 JSON，或在预算内构造、遍历和修改 `serde_json::Value`。
 
 ## 5. 目标范围
 
@@ -66,6 +74,9 @@
    `ErrorPrivacyPolicy`。
 6. 内部规范化管线：空输入检查、trim、BOM 移除、代码块移除、控制字符转义。
 7. 配套单元测试与文档说明。
+8. `decode_with_session<T>()` 三阶段累计预算准入。
+9. `text`、`value`、`tree` 通用 JSON 基础设施。
+10. `serde_json` 私有协议集中兼容边界和精确版本升级门禁。
 
 ### M2（候选）
 
@@ -153,6 +164,48 @@
   - `Detailed` 只能显式配置，并保留完整 UTF-8 或 serde 标准 error source。
   - 每个 `JsonDecodeError` 均通过 `privacy_policy()` 暴露实际生效策略。
 
+### PRD-RSJSON-010：完整 decode session 预算
+
+- 验收标准
+  - `decode_with_session<T>()` 接受调用方持有的
+    `JsonDecodeSession<'_, JsonResource>`。
+  - 按 raw input、normalized input、value admission 的顺序累计计费。
+  - value admission 覆盖节点、深度、单容器成员数、键、字符串、数字和共享 payload。
+  - 成功消费在后续 budget、syntax 或 target deserialize 失败时不回滚；被拒绝的单次增量
+    保持原子性。
+  - value 超限返回 `JsonDecodeErrorKind::Budget`、`JsonDecodeStage::Admission`，并通过
+    `measured_budget_error()` 暴露资源和限制详情。
+  - 普通 `decode()` 不执行 value preflight，继续作为快速路径。
+
+### PRD-RSJSON-011：直接反序列化语义
+
+- 验收标准
+  - lexical preflight 准入后直接调用 `serde_json` 反序列化 `T`，不得经由
+    `serde_json::Value` 中转。
+  - 保留目标类型的重复字段检查、自定义 `Deserialize` 行为和 `u128` 等精确数值语义。
+  - lexical parser 与 `serde_json` 对语法接受集合不一致时，不得 panic；普通 serde 语法
+    错误继续保留 serde 的稳定行列位置。
+
+### PRD-RSJSON-012：`text`、`value`、`tree` 公共边界
+
+- 验收标准
+  - `text` 提供严格 session decode/encode 和独立的公开错误类型；
+    `JsonEncodeError::InvalidRawJson` 携带稳定 `JsonSyntaxError`。
+  - `value::BudgetedJsonValueSeed` 是 budgeted `serde_json::Value` seed 的唯一公开路径，
+    不保留 `budget` 或 `tree` 兼容 alias。
+  - `JsonTreeProcessor::process` 的 value borrow 不与 budget borrow 绑定。
+  - `process_mut` 文档和测试明确：错误时保留此前 mutation 和 budget 消费；guard 只保证
+    root 仍为有效 `Value`。
+
+### PRD-RSJSON-013：私有协议升级门禁
+
+- 验收标准
+  - 生产代码仅由 `serde_json_compat.rs` 持有并分类 serde_json 私有 Number/RawValue
+    token。
+  - `serde_json` 生产依赖精确固定为经验证版本。
+  - 升级时同步更新 root/fuzz lockfile，复核上游私有 serializer，并运行真实私有形状、
+    near-miss、`collect_str`、依赖树和 fuzz workspace 检查。
+
 ## 7. 风险与约束
 
 1. 规则过少导致覆盖不足：M1 只覆盖“温和修复”规则，避免过度猜测。
@@ -161,17 +214,24 @@
    配置迫使下游修改 struct literal。
 4. 诊断泄露风险：默认丢弃 serde 明细；启用 `Detailed` 的调用方负责保护日志与
    错误链。
+5. 双扫描成本：`decode_with_session` 的 lexical preflight 与目标反序列化会各扫描一次
+   规范化文本；这是“构造前资源准入”和“保留原生 Serde 语义”的明确取舍。
+6. 私有协议风险：serde_json Number/RawValue 协议不是公共稳定 API，必须通过精确版本和
+   升级清单控制。
 
 ## 8. 与实现对齐检查
 
 - 配置模型与当前实现一致：`JsonDecodeOptions` 与默认值与代码保持一致。
 - 隐私模型与当前实现一致：默认 `Redacted`，`Detailed` 需显式启用。
 - 解码入口与实现一致：`decode` / `decode_slice` / `decode_object` /
-  `decode_array` / `decode_value` 均通过内部统一规范化。
+  `decode_array` / `decode_value` 均通过内部统一规范化；`decode_with_session` 额外执行
+  value admission。
 - 解析流程与实现一致：`normalize` 托管在 `src/internal/lenient_json_normalizer.rs`，对外不暴露底层 helper。
 - 错误模型与实现一致：`JsonDecodeErrorKind` 与 `JsonTopLevelKind` 已对齐。
 - 复用与对象语义一致：`LenientJsonDecoder` 持有不可变的
   `LenientJsonNormalizer`，可安全多次复用。
+- 公共能力域与实现一致：crate root 公开 `lenient`、`text`、`value`、`tree`。
+- 失败语义与实现一致：decode session 和 mutable tree 处理均不回滚已经完成的工作。
 
 ## 9. 文档与测试一致性
 
@@ -190,9 +250,16 @@
   - `tests/error/json_decode_stage_tests.rs`
   - `tests/options/markdown_fence_closing_tests.rs`
   - `tests/options/markdown_fence_policy_tests.rs`
+  - `tests/text/**`
+  - `tests/budget/budgeted_json_value_seed_tests.rs`
+  - `tests/budget/internal/json_private_tests.rs`
+  - `tests/tree/json_tree_processor_tests.rs`
+  - `tests/tree/json_tree_mut_processor_tests.rs`
 
-- `benches/decoder_bench.rs` 提供公开解码路径的 Criterion 基准。
-- `fuzz/fuzz_targets/decoder.rs` 覆盖主要配置组合，并由
+- `benches/decoder_bench.rs` 与 `benches/budgeted_serde_json.rs` 分别提供宽松公开入口和
+  多规模 budgeted strict/lenient 路径的 Criterion 基准。
+- `fuzz/fuzz_targets/decoder.rs`、`json_budget_invariants.rs`、
+  `json_decode_differential.rs`、`json_encode_invariants.rs` 覆盖主要配置和预算不变量，并由
   `.github/workflows/fuzz.yml` 定时执行有时限的 fuzz。
 
 以上清单与目前代码目录保持一致，避免文档与实现的漂移。
