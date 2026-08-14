@@ -60,7 +60,8 @@ where
     depth: usize,
 }
 
-impl<'a, 'budget, 'context, T, R, Q> BudgetedValue<'a, 'budget, 'context, T, R, Q>
+impl<'a, 'budget, 'context, T, R, Q>
+    BudgetedValue<'a, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -171,7 +172,10 @@ where
     }
 
     /// Records the original budget error and maps it into the compound error.
-    fn record<E>(&mut self, result: Result<(), MeasuredBudgetError<R, Q>>) -> Result<(), E>
+    fn record<E>(
+        &mut self,
+        result: Result<(), MeasuredBudgetError<R, Q>>,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -370,7 +374,11 @@ where
     }
 
     /// Checks and serializes one complete map entry.
-    fn serialize_entry<K, V>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
+    fn serialize_entry<K, V>(
+        &mut self,
+        key: &K,
+        value: &V,
+    ) -> Result<(), Self::Error>
     where
         K: Serialize + ?Sized,
         V: Serialize + ?Sized,
@@ -397,7 +405,11 @@ where
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
-    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -407,7 +419,11 @@ where
                 return self.inner.serialize_field(key, &value);
             }
             PrivateStruct::RawValue => {
-                let value = BudgetedPrivateValue::raw_value(value, self.context, self.child_depth);
+                let value = BudgetedPrivateValue::raw_value(
+                    value,
+                    self.context,
+                    self.child_depth,
+                );
                 return self.inner.serialize_field(key, &value);
             }
             PrivateStruct::Regular => self.next_map_entry()?,
@@ -448,7 +464,11 @@ where
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
-    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {

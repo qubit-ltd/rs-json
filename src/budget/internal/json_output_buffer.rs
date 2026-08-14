@@ -46,7 +46,9 @@ where
     ///
     /// Fresh accounting with no recorded violation.
     #[inline]
-    pub(in crate::budget) const fn new(output: Option<&'a mut ResourceBudget<R, Q>>) -> Self {
+    pub(in crate::budget) const fn new(
+        output: Option<&'a mut ResourceBudget<R, Q>>,
+    ) -> Self {
         Self {
             output,
             violation: None,
@@ -68,7 +70,10 @@ where
     /// Returns the output budget error without consuming any capacity when the
     /// amount exceeds the live remaining capacity.
     #[inline]
-    pub(super) fn check_available(&self, amount: usize) -> Result<(), MeasuredBudgetError<R, Q>>
+    pub(super) fn check_available(
+        &self,
+        amount: usize,
+    ) -> Result<(), MeasuredBudgetError<R, Q>>
     where
         R: Clone,
     {
@@ -97,7 +102,10 @@ where
     /// Returns the output budget error while leaving capacity unchanged when
     /// the amount exceeds the live remaining capacity.
     #[inline]
-    pub(super) fn consume(&mut self, amount: usize) -> Result<(), MeasuredBudgetError<R, Q>>
+    pub(super) fn consume(
+        &mut self,
+        amount: usize,
+    ) -> Result<(), MeasuredBudgetError<R, Q>>
     where
         R: Clone,
     {
@@ -116,7 +124,10 @@ where
     /// # Parameters
     ///
     /// * `error` - Typed budget error hidden by Serde or I/O.
-    pub(super) fn record_violation(&mut self, error: MeasuredBudgetError<R, Q>) {
+    pub(super) fn record_violation(
+        &mut self,
+        error: MeasuredBudgetError<R, Q>,
+    ) {
         if self.violation.is_none() {
             self.violation = Some(error);
         }
@@ -127,7 +138,9 @@ where
     /// # Returns
     ///
     /// The first typed violation, or `None` when no budget check failed.
-    pub(super) fn take_violation(&mut self) -> Option<MeasuredBudgetError<R, Q>> {
+    pub(super) fn take_violation(
+        &mut self,
+    ) -> Option<MeasuredBudgetError<R, Q>> {
         self.violation.take()
     }
 }
@@ -204,11 +217,10 @@ where
     /// The buffer remains unchanged if arithmetic overflows or the output-byte
     /// limit is exceeded.
     fn write(&mut self, input: &[u8]) -> io::Result<usize> {
-        let next = self
-            .bytes
-            .len()
-            .checked_add(input.len())
-            .ok_or_else(|| io::Error::other("JSON output length overflow"))?;
+        let next =
+            self.bytes.len().checked_add(input.len()).ok_or_else(|| {
+                io::Error::other("JSON output length overflow")
+            })?;
         let amount = next - self.bytes.len();
         let mut accounting = self.accounting.borrow_mut();
         if let Err(error) = accounting.consume(amount) {

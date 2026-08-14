@@ -82,7 +82,10 @@ where
     }
 
     /// Records one budget result after all temporary context borrows end.
-    fn record<E>(&self, result: Result<(), MeasuredBudgetError<R, Q>>) -> Result<(), E>
+    fn record<E>(
+        &self,
+        result: Result<(), MeasuredBudgetError<R, Q>>,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -179,7 +182,8 @@ macro_rules! serialize_integer {
     };
 }
 
-impl<'a, 'context, S, R, Q> Serializer for JsonEncodeSerializer<'a, 'context, S, R, Q>
+impl<'a, 'context, S, R, Q> Serializer
+    for JsonEncodeSerializer<'a, 'context, S, R, Q>
 where
     S: Serializer,
     R: Clone,
@@ -188,12 +192,17 @@ where
     type Ok = S::Ok;
     type Error = S::Error;
     type SerializeSeq = JsonEncodeCompound<'a, 'context, S::SerializeSeq, R, Q>;
-    type SerializeTuple = JsonEncodeCompound<'a, 'context, S::SerializeTuple, R, Q>;
-    type SerializeTupleStruct = JsonEncodeCompound<'a, 'context, S::SerializeTupleStruct, R, Q>;
-    type SerializeTupleVariant = JsonEncodeCompound<'a, 'context, S::SerializeTupleVariant, R, Q>;
+    type SerializeTuple =
+        JsonEncodeCompound<'a, 'context, S::SerializeTuple, R, Q>;
+    type SerializeTupleStruct =
+        JsonEncodeCompound<'a, 'context, S::SerializeTupleStruct, R, Q>;
+    type SerializeTupleVariant =
+        JsonEncodeCompound<'a, 'context, S::SerializeTupleVariant, R, Q>;
     type SerializeMap = JsonEncodeCompound<'a, 'context, S::SerializeMap, R, Q>;
-    type SerializeStruct = JsonEncodeCompound<'a, 'context, S::SerializeStruct, R, Q>;
-    type SerializeStructVariant = JsonEncodeCompound<'a, 'context, S::SerializeStructVariant, R, Q>;
+    type SerializeStruct =
+        JsonEncodeCompound<'a, 'context, S::SerializeStruct, R, Q>;
+    type SerializeStructVariant =
+        JsonEncodeCompound<'a, 'context, S::SerializeStructVariant, R, Q>;
 
     /// Charges and delegates one JSON boolean.
     fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
@@ -293,7 +302,10 @@ where
     }
 
     /// Charges a unit struct as one JSON null.
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(
+        self,
+        name: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
         self.node()?;
         self.inner.serialize_unit_struct(name)
     }
@@ -336,13 +348,24 @@ where
     {
         self.object(self.depth, 1)?;
         self.key(variant)?;
-        let value = BudgetedValue::new(value, self.context, self.depth.saturating_add(1));
-        self.inner
-            .serialize_newtype_variant(name, variant_index, variant, &value)
+        let value = BudgetedValue::new(
+            value,
+            self.context,
+            self.depth.saturating_add(1),
+        );
+        self.inner.serialize_newtype_variant(
+            name,
+            variant_index,
+            variant,
+            &value,
+        )
     }
 
     /// Charges an array before asking the inner serializer to create it.
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeSeq, Self::Error> {
         self.node()?;
         let context = self.context;
         let child_depth = self.depth.saturating_add(1);
@@ -351,7 +374,10 @@ where
     }
 
     /// Charges a fixed-length JSON tuple array.
-    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(
+        self,
+        len: usize,
+    ) -> Result<Self::SerializeTuple, Self::Error> {
         self.node()?;
         let context = self.context;
         let child_depth = self.depth.saturating_add(1);
@@ -391,14 +417,20 @@ where
         self.record(result)?;
         let context = self.context;
         let child_depth = array_depth.saturating_add(1);
-        let inner = self
-            .inner
-            .serialize_tuple_variant(name, variant_index, variant, len)?;
+        let inner = self.inner.serialize_tuple_variant(
+            name,
+            variant_index,
+            variant,
+            len,
+        )?;
         Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
     /// Charges an object before asking the inner serializer to create it.
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeMap, Self::Error> {
         if let Some(entries) = len {
             let result = self
                 .context
@@ -463,9 +495,12 @@ where
         self.record(result)?;
         let context = self.context;
         let child_depth = object_depth.saturating_add(1);
-        let inner = self
-            .inner
-            .serialize_struct_variant(name, variant_index, variant, len)?;
+        let inner = self.inner.serialize_struct_variant(
+            name,
+            variant_index,
+            variant,
+            len,
+        )?;
         Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
@@ -475,8 +510,11 @@ where
         T: Display + ?Sized,
     {
         self.node()?;
-        let text =
-            collect_display::<S::Error, _, _, Q>(value, self.context, DisplayBudgetKind::String)?;
+        let text = collect_display::<S::Error, _, _, Q>(
+            value,
+            self.context,
+            DisplayBudgetKind::String,
+        )?;
         self.inner.serialize_str(&text)
     }
 

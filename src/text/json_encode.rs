@@ -88,7 +88,8 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    encode_to_writer_incremental_legacy(writer, value, session).map_err(map_error)
+    encode_to_writer_incremental_legacy(writer, value, session)
+        .map_err(map_error)
 }
 
 /// Converts the legacy unified error into an encode-specific error.
@@ -99,7 +100,9 @@ where
     match error {
         JsonSerdeError::Budget(error) => JsonEncodeError::Budget(error.into()),
         JsonSerdeError::Quantity { resource, source } => {
-            JsonEncodeError::Budget(MeasuredBudgetError::quantity(resource, source))
+            JsonEncodeError::Budget(MeasuredBudgetError::quantity(
+                resource, source,
+            ))
         }
         JsonSerdeError::Syntax(error) => JsonEncodeError::InvalidRawJson(error),
         JsonSerdeError::Json(error) => JsonEncodeError::Serialize(error),
