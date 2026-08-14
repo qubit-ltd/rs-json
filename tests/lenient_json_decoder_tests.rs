@@ -9,6 +9,7 @@
 
 use qubit_budget::ResourceBudget;
 use qubit_budget::ResourceLimit;
+use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
@@ -20,8 +21,10 @@ use qubit_json::lenient::JsonDecodeStage;
 use qubit_json::lenient::JsonTopLevelKind;
 use qubit_json::lenient::LenientJsonDecoder;
 use qubit_json::lenient::MarkdownFencePolicy;
+use serde_json::Error as JsonError;
 use serde_json::Value;
 use serde_json::json;
+use serde_json::value::RawValue;
 
 use crate::fixtures::ByteBuffer;
 use crate::fixtures::CountedFailure;
@@ -31,6 +34,23 @@ use crate::fixtures::SingleValue;
 use crate::fixtures::User;
 use crate::fixtures::deserialize_calls;
 use crate::fixtures::reset_deserialize_calls;
+
+/// Creates an owned decode session with the supplied value limits.
+///
+/// # Parameters
+///
+/// * `limits` - Value-resource limits enforced by the returned session.
+///
+/// # Returns
+///
+/// A fresh session with no input-byte limits and the supplied value limits.
+fn value_budget_session(
+    limits: JsonValueLimits,
+) -> JsonDecodeSession<'static, JsonResource> {
+    JsonDecodeSession::owned(
+        JsonDecodeLimits::empty().with_value_limits(limits),
+    )
+}
 
 /// Verifies that new exposes configured options.
 ///
@@ -74,6 +94,366 @@ fn test_decode_with_session_charges_caller_owned_input_budget() {
 
     assert_eq!(decoded, json!({"ok": true}));
     assert_eq!(input.used(), 11);
+}
+
+/// Verifies that value admission charges exact resources once and accumulates
+/// charges when the same session is reused.
+///
+/// # Panics
+///
+/// Panics when either decode fails or any value counter differs from the
+/// normalized JSON measurements.
+#[test]
+fn test_decode_with_session_charges_exact_value_resources_cumulatively() {
+    let decoder = LenientJsonDecoder::default();
+    let limits = JsonValueLimits::empty()
+        .with_max_depth(3)
+        .with_max_nodes(6)
+        .with_max_sequence_items(2)
+        .with_max_map_entries(1)
+        .with_max_key_bytes(5)
+        .with_max_string_bytes(2)
+        .with_max_number_bytes(4)
+        .with_max_payload_bytes(13);
+    let mut session = value_budget_session(limits);
+
+    let first: Value = decoder
+        .decode_with_session(r#"{"items":["é",1e+3]}"#, &mut session)
+        .expect("the first value must fit every exact point limit");
+    assert_eq!(first["items"][0], json!("é"));
+    assert_eq!(first["items"][1].as_f64(), Some(1_000.0));
+    assert_eq!(session.value_budget().structure_budget().used_nodes(), 4);
+    assert_eq!(
+        session
+            .value_budget()
+            .payload_budget()
+            .expect("payload budget must be configured")
+            .used(),
+        11,
+    );
+
+    let second: Value = decoder
+        .decode_with_session(r#"{"k":"v"}"#, &mut session)
+        .expect("the second value must consume the remaining session budget");
+    assert_eq!(second, json!({"k": "v"}));
+    assert_eq!(session.value_budget().structure_budget().used_nodes(), 6);
+    assert_eq!(
+        session
+            .value_budget()
+            .payload_budget()
+            .expect("payload budget must be configured")
+            .used(),
+        13,
+    );
+}
+
+/// Verifies that every limited value resource produces a structured admission
+/// failure.
+///
+/// # Panics
+///
+/// Panics when a constrained input succeeds or reports the wrong public error
+/// classification or resource identity.
+#[test]
+fn test_decode_with_session_classifies_each_value_budget_rejection() {
+    let decoder = LenientJsonDecoder::default();
+    let cases = [
+        (
+            JsonValueLimits::empty().with_max_map_entries(1),
+            r#"{"a":null,"b":null}"#,
+            JsonResource::MapEntries,
+            "object entry budget must reject two entries",
+        ),
+        (
+            JsonValueLimits::empty().with_max_sequence_items(1),
+            "[null,null]",
+            JsonResource::SequenceItems,
+            "array item budget must reject two items",
+        ),
+        (
+            JsonValueLimits::empty().with_max_key_bytes(1),
+            r#"{"ab":null}"#,
+            JsonResource::KeyBytes,
+            "key budget must reject the decoded key",
+        ),
+        (
+            JsonValueLimits::empty().with_max_string_bytes(1),
+            r#""ab""#,
+            JsonResource::StringBytes,
+            "string budget must reject the decoded string",
+        ),
+        (
+            JsonValueLimits::empty().with_max_number_bytes(3),
+            "1e+3",
+            JsonResource::NumberBytes,
+            "number budget must reject the lexical representation",
+        ),
+        (
+            JsonValueLimits::empty().with_max_nodes(1),
+            "[null]",
+            JsonResource::Nodes,
+            "node budget must reject the child value",
+        ),
+        (
+            JsonValueLimits::empty().with_max_depth(1),
+            "[null]",
+            JsonResource::Depth,
+            "depth budget must reject the nested value",
+        ),
+        (
+            JsonValueLimits::empty().with_max_payload_bytes(2),
+            r#"{"a":"bc"}"#,
+            JsonResource::PayloadBytes,
+            "payload budget must reject cumulative key and string bytes",
+        ),
+    ];
+
+    for (limits, input, expected_resource, expectation) in cases {
+        let mut session = value_budget_session(limits);
+        let error = decoder
+            .decode_with_session::<Value>(input, &mut session)
+            .expect_err(expectation);
+        assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+        assert_eq!(error.stage(), JsonDecodeStage::Admission);
+        assert_eq!(
+            *error
+                .measured_budget_error()
+                .expect("budget rejection details must be retained")
+                .resource(),
+            expected_resource,
+        );
+    }
+}
+
+/// Verifies that a rejected admission preserves every earlier session charge.
+///
+/// # Panics
+///
+/// Panics when successful or partial admission charges are rolled back, or
+/// when the rejected session cannot use its remaining capacity.
+#[test]
+fn test_decode_with_session_budget_rejection_preserves_partial_charges() {
+    let decoder = LenientJsonDecoder::default();
+    let limits = JsonValueLimits::empty()
+        .with_max_nodes(5)
+        .with_max_payload_bytes(4);
+    let mut session = value_budget_session(limits);
+
+    decoder
+        .decode_with_session::<Value>(r#"{"a":"b"}"#, &mut session)
+        .expect("the first value must fit the cumulative budgets");
+    let error = decoder
+        .decode_with_session::<Value>(r#"{"cc":"ddd"}"#, &mut session)
+        .expect_err("the second string must exceed the payload budget");
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), JsonDecodeStage::Admission);
+    assert_eq!(
+        *error
+            .measured_budget_error()
+            .expect("budget rejection details must be retained")
+            .resource(),
+        JsonResource::PayloadBytes,
+    );
+    assert_eq!(session.value_budget().structure_budget().used_nodes(), 4);
+    assert_eq!(
+        session
+            .value_budget()
+            .payload_budget()
+            .expect("payload budget must be configured")
+            .used(),
+        4,
+    );
+
+    let value: Value = decoder
+        .decode_with_session("null", &mut session)
+        .expect("the rejected session must retain one remaining node");
+    assert_eq!(value, Value::Null);
+    assert_eq!(session.value_budget().structure_budget().used_nodes(), 5);
+}
+
+/// Verifies that fenced lenient input is value-accounted from its normalized
+/// JSON representation.
+///
+/// # Panics
+///
+/// Panics when normalization, decoding, or any exact normalized counter does
+/// not match the expected value.
+#[test]
+fn test_decode_with_session_accounts_normalized_fenced_value() {
+    const NORMALIZED: &str = r#"{"escaped":"\u4e2d","number":1e+3}"#;
+    const INPUT: &str =
+        "```json\n{\"escaped\":\"\\u4e2d\",\"number\":1e+3}\n```";
+
+    let decoder = LenientJsonDecoder::default();
+    let mut input_budget =
+        ResourceBudget::new(JsonResource::InputBytes, INPUT.len());
+    let mut normalized_budget = ResourceBudget::new(
+        JsonResource::NormalizedInputBytes,
+        NORMALIZED.len(),
+    );
+    let limits = JsonValueLimits::empty()
+        .with_max_depth(2)
+        .with_max_nodes(3)
+        .with_max_map_entries(2)
+        .with_max_key_bytes(7)
+        .with_max_string_bytes(3)
+        .with_max_number_bytes(4)
+        .with_max_payload_bytes(20);
+    let mut value_budget = JsonValueBudget::new(limits);
+    let mut session = JsonDecodeSession::borrowing_all(
+        &mut input_budget,
+        &mut normalized_budget,
+        &mut value_budget,
+    );
+
+    let value: Value = decoder
+        .decode_with_session(INPUT, &mut session)
+        .expect("normalized fenced JSON must fit its exact budgets");
+
+    assert_eq!(value["escaped"], json!("中"));
+    assert_eq!(value["number"].as_f64(), Some(1_000.0));
+    assert_eq!(
+        session.input_budget().expect("raw budget").used(),
+        INPUT.len()
+    );
+    assert_eq!(
+        session
+            .normalized_input_budget()
+            .expect("normalized budget")
+            .used(),
+        NORMALIZED.len(),
+    );
+    assert_eq!(session.value_budget().structure_budget().used_nodes(), 3);
+    assert_eq!(
+        session
+            .value_budget()
+            .payload_budget()
+            .expect("payload budget")
+            .used(),
+        20,
+    );
+}
+
+/// Verifies that session admission preserves lexical and target-type error
+/// classifications.
+///
+/// # Panics
+///
+/// Panics when syntax or target deserialization failures are reported as
+/// budget admission failures.
+#[test]
+fn test_decode_with_session_preserves_non_budget_error_classification() {
+    let decoder = LenientJsonDecoder::default();
+    let limits = JsonValueLimits::empty()
+        .with_max_nodes(8)
+        .with_max_payload_bytes(16);
+
+    let mut syntax_session = value_budget_session(limits);
+    let syntax_error = decoder
+        .decode_with_session::<Value>(r#"{"value":]"#, &mut syntax_session)
+        .expect_err("malformed normalized JSON must remain a lexical error");
+    assert_eq!(syntax_error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(syntax_error.stage(), JsonDecodeStage::Parse);
+    assert!(syntax_error.measured_budget_error().is_none());
+
+    let mut target_session = value_budget_session(limits);
+    let target_error = decoder
+        .decode_with_session::<Message>(r#"{"text":7}"#, &mut target_session)
+        .expect_err("valid JSON with the wrong target type must remain a deserialize error");
+    assert_eq!(target_error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(target_error.stage(), JsonDecodeStage::Deserialize);
+    assert!(target_error.measured_budget_error().is_none());
+    assert_eq!(
+        target_session
+            .value_budget()
+            .structure_budget()
+            .used_nodes(),
+        2,
+    );
+}
+
+/// Verifies that session admission preserves serde's syntax position for
+/// ordinary malformed JSON.
+///
+/// # Panics
+///
+/// Panics when lexical admission replaces serde's stable syntax position.
+#[test]
+fn test_decode_with_session_preserves_serde_syntax_position() {
+    let mut session =
+        value_budget_session(JsonValueLimits::empty().with_max_nodes(2));
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default()
+            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+    );
+    let error = decoder
+        .decode_with_session::<Value>("{", &mut session)
+        .expect_err("an incomplete object must return an invalid JSON error");
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), JsonDecodeStage::Parse);
+    assert_eq!(error.normalized_line(), Some(1));
+    assert_eq!(error.normalized_column(), Some(1));
+    let source = std::error::Error::source(&error)
+        .expect("detailed ordinary syntax errors must retain their source");
+    assert!(source.downcast_ref::<JsonError>().is_some());
+}
+
+/// Verifies that lexical surrogate rejection returns stable errors for target
+/// types accepted by different serde JSON paths.
+///
+/// # Panics
+///
+/// Panics when an unpaired surrogate unwinds, reports unstable diagnostics, or
+/// changes the preflight accounting and privacy semantics.
+#[test]
+fn test_decode_with_session_rejects_unpaired_surrogate_without_panicking() {
+    const INPUT: &str = r#""\ud800""#;
+    let limits = JsonValueLimits::empty().with_max_nodes(2);
+
+    let mut string_session = value_budget_session(limits);
+    let string_error = LenientJsonDecoder::default()
+        .decode_with_session::<String>(INPUT, &mut string_session)
+        .expect_err("an unpaired surrogate must return an invalid JSON error");
+    assert_eq!(string_error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(string_error.stage(), JsonDecodeStage::Parse);
+    assert_eq!(string_error.raw_input_bytes(), INPUT.len());
+    assert_eq!(string_error.normalized_input_bytes(), Some(INPUT.len()));
+    assert_eq!(string_error.normalized_line(), Some(1));
+    assert_eq!(string_error.normalized_column(), Some(8));
+    assert!(string_error.measured_budget_error().is_none());
+    assert!(std::error::Error::source(&string_error).is_none());
+    assert_eq!(
+        string_session
+            .value_budget()
+            .structure_budget()
+            .used_nodes(),
+        1,
+    );
+
+    let decoder = LenientJsonDecoder::new(
+        JsonDecodeOptions::default()
+            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+    );
+    let mut raw_value_session = value_budget_session(limits);
+    let raw_value_error = decoder
+        .decode_with_session::<Box<RawValue>>(INPUT, &mut raw_value_session)
+        .expect_err("RawValue must not bypass lexical surrogate rejection");
+    assert_eq!(raw_value_error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(raw_value_error.stage(), JsonDecodeStage::Parse);
+    assert_eq!(raw_value_error.privacy_policy(), ErrorPrivacyPolicy::Detailed);
+    assert!(raw_value_error.measured_budget_error().is_none());
+    let source = std::error::Error::source(&raw_value_error)
+        .expect("detailed lexical errors must retain their stable source");
+    assert!(source.to_string().contains("unpaired Unicode surrogate"));
+    assert_eq!(
+        raw_value_session
+            .value_budget()
+            .structure_budget()
+            .used_nodes(),
+        1,
+    );
 }
 
 /// Verifies that strict decoder preserves serde json grammar.

@@ -7,6 +7,7 @@
 // =============================================================================
 //! Defines the [`LenientJsonDecoder`] type and its public decoding methods.
 
+use qubit_budget::MeasuredBudgetError;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
@@ -17,6 +18,8 @@ use serde_json::error::Category;
 use serde_json::from_str;
 use serde_json::value::RawValue;
 
+use crate::budget::JsonSerdeError;
+use crate::budget::internal::JsonLexicalPreflight;
 use crate::error::ErrorPrivacyPolicy;
 use crate::error::JsonDecodeError;
 use crate::internal::lenient_json_normalizer::LenientJsonNormalizer;
@@ -85,15 +88,37 @@ impl LenientJsonDecoder {
     where
         T: DeserializeOwned,
     {
-        let mut session = self.decode_session();
-        self.decode_with_session(input, &mut session)
+        self.normalize_then_deserialize(input)
     }
 
     /// Decodes `input` while charging a caller-owned JSON decode session.
     ///
-    /// Raw bytes are charged before normalization and normalized bytes are
-    /// charged by the normalizer. The supplied session remains reusable after
-    /// this call.
+    /// Raw bytes are charged before normalization, normalized bytes are charged
+    /// by the normalizer, and decoded value resources are charged by lexical
+    /// admission. Every charge accumulated before success or failure remains in
+    /// the supplied reusable session.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Raw JSON text to normalize, admit, and deserialize.
+    /// * `session` - Reusable caller-owned accounting state. Successful charges
+    ///   are retained on both success and failure.
+    ///
+    /// # Returns
+    ///
+    /// The directly deserialized target value after all configured resources
+    /// are admitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] when normalization fails, lexical admission
+    /// rejects syntax or a value resource, or the admitted JSON cannot be
+    /// deserialized into `T`. Value-resource failures use the stable
+    /// `Budget`/`Admission` classification and retain the measured rejection.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     pub fn decode_with_session<T>(
         &self,
         input: &str,
@@ -105,6 +130,16 @@ impl LenientJsonDecoder {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
         let normalized = self.normalizer.normalize(input, session)?;
+        JsonLexicalPreflight::new(session.value_budget_mut())
+            .inspect(normalized.as_bytes())
+            .map_err(|error| {
+                Self::map_admission_error(
+                    error,
+                    normalized.as_ref(),
+                    raw_input_bytes,
+                    privacy_policy,
+                )
+            })?;
         Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,
@@ -329,6 +364,106 @@ impl LenientJsonDecoder {
             limits = limits.with_max_normalized_input_bytes(maximum);
         }
         JsonDecodeSession::owned(limits)
+    }
+
+    /// Normalizes and directly deserializes input without value preflight.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Raw JSON text to normalize and deserialize.
+    ///
+    /// # Returns
+    ///
+    /// The deserialized target value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonDecodeError`] when normalization, JSON parsing, or target
+    /// deserialization fails.
+    fn normalize_then_deserialize<T>(
+        &self,
+        input: &str,
+    ) -> Result<T, JsonDecodeError>
+    where
+        T: DeserializeOwned,
+    {
+        let raw_input_bytes = input.len();
+        let privacy_policy = self.options().error_privacy_policy();
+        let mut session = self.decode_session();
+        let normalized = self.normalizer.normalize(input, &mut session)?;
+        Self::deserialize_normalized(
+            normalized.as_ref(),
+            raw_input_bytes,
+            normalized.len(),
+            privacy_policy,
+        )
+    }
+
+    /// Maps lexical admission failures to the stable public error model.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - Admission error produced while scanning normalized JSON.
+    /// * `normalized` - Complete normalized JSON text.
+    /// * `raw_input_bytes` - Input length before normalization.
+    /// * `privacy_policy` - Policy applied to retained diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// A budget error for resource rejection or an invalid-JSON error for a
+    /// lexical failure, with input-derived details governed by `privacy_policy`.
+    #[must_use]
+    fn map_admission_error(
+        error: JsonSerdeError<JsonResource, usize>,
+        normalized: &str,
+        raw_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
+    ) -> JsonDecodeError {
+        let normalized_input_bytes = normalized.len();
+        match error {
+            JsonSerdeError::Budget(error) => JsonDecodeError::budget(
+                MeasuredBudgetError::Budget(error),
+                raw_input_bytes,
+                normalized_input_bytes,
+                privacy_policy,
+            ),
+            JsonSerdeError::Quantity { resource, source } => {
+                JsonDecodeError::budget(
+                    MeasuredBudgetError::quantity(resource, source),
+                    raw_input_bytes,
+                    normalized_input_bytes,
+                    privacy_policy,
+                )
+            }
+            JsonSerdeError::Syntax(error) => {
+                match from_str::<&RawValue>(normalized) {
+                    Ok(_) => JsonDecodeError::invalid_lexical_json(
+                        error,
+                        raw_input_bytes,
+                        normalized_input_bytes,
+                        privacy_policy,
+                    ),
+                    Err(error) => JsonDecodeError::invalid_json(
+                        error,
+                        raw_input_bytes,
+                        normalized_input_bytes,
+                        privacy_policy,
+                    ),
+                }
+            }
+            JsonSerdeError::Json(error) => JsonDecodeError::invalid_json(
+                error,
+                raw_input_bytes,
+                normalized_input_bytes,
+                privacy_policy,
+            ),
+            JsonSerdeError::Io(error) => JsonDecodeError::invalid_json(
+                Error::io(error),
+                raw_input_bytes,
+                normalized_input_bytes,
+                privacy_policy,
+            ),
+        }
     }
 
     /// Parses normalized JSON text into a dynamic value.

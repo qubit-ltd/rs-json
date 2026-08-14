@@ -31,6 +31,9 @@ use std::str::FromStr;
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeErrorKind {
+    /// Indicates that a decoded JSON value exceeded a configured resource
+    /// limit or could not be represented by the budget quantity type.
+    Budget,
     /// Indicates that raw or normalized input size exceeds a configured
     /// maximum.
     InputTooLarge,
@@ -64,6 +67,7 @@ impl fmt::Display for JsonDecodeErrorKind {
     /// Returns a formatting error when the destination rejects the write.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = match self {
+            Self::Budget => "budget",
             Self::InputTooLarge => "input_too_large",
             Self::EmptyInput => "empty_input",
             Self::InvalidUtf8 => "invalid_utf8",
@@ -93,7 +97,9 @@ impl FromStr for JsonDecodeErrorKind {
     ///
     /// Returns a static diagnostic when `value` is not a known category name.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        if value.eq_ignore_ascii_case("input_too_large") {
+        if value.eq_ignore_ascii_case("budget") {
+            Ok(Self::Budget)
+        } else if value.eq_ignore_ascii_case("input_too_large") {
             Ok(Self::InputTooLarge)
         } else if value.eq_ignore_ascii_case("empty_input") {
             Ok(Self::EmptyInput)

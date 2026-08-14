@@ -31,6 +31,8 @@ pub enum JsonDecodeStage {
     DecodeText,
     /// The error happened while normalizing raw input text.
     Normalize,
+    /// The error happened while admitting normalized JSON value resources.
+    Admission,
     /// The error happened while parsing normalized text as JSON syntax.
     Parse,
     /// The error happened while enforcing a top-level kind contract.
@@ -57,6 +59,7 @@ impl fmt::Display for JsonDecodeStage {
         match self {
             Self::DecodeText => f.write_str("decode_text"),
             Self::Normalize => f.write_str("normalize"),
+            Self::Admission => f.write_str("admission"),
             Self::Parse => f.write_str("parse"),
             Self::TopLevelCheck => f.write_str("top_level_check"),
             Self::Deserialize => f.write_str("deserialize"),
