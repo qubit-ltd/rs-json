@@ -303,15 +303,16 @@ Qubit JSON 适合这些情况：
 ## 开发验证
 
 先运行 `./align-ci.sh`，再运行 `./ci-check.sh`。Criterion 基准包含 1 KiB、64 KiB 和
-1 MiB 的带预算 strict/lenient decode/encode 对比，可通过以下命令编译两个目标：
+1 MiB 的带预算 strict/lenient decode/encode 对比以及宽/深 tree traversal，可通过以下命令编译三个目标：
 
 ```bash
 cargo bench --bench decoder_bench --no-run
 cargo bench --bench budgeted_serde_json --no-run
+cargo bench --bench tree_bench --no-run
 ```
 
-可选 fuzz 目标仅用于开发，不会成为运行时依赖。它覆盖默认、严格、仅 JSON 围栏和
-必须闭合围栏四类策略，并由 `.github/workflows/fuzz.yml` 定时执行有时限的运行；失败时会保留
+可选 fuzz 目标仅用于开发，不会成为运行时依赖。它覆盖默认、严格、仅 JSON 围栏、
+必须闭合围栏四类策略以及可变 JSON tree 恢复不变量，并由 `.github/workflows/fuzz.yml` 定时执行有时限的运行；失败时会保留
 可复现输入产物。
 安装 `cargo-fuzz` 后，可在仓库根目录构建或运行同一目标：
 
@@ -320,6 +321,7 @@ rustup toolchain install nightly-2026-06-05 --profile minimal
 cargo install cargo-fuzz --version 0.13.2 --locked
 (cd fuzz && cargo +nightly-2026-06-05 fuzz build decoder)
 (cd fuzz && cargo +nightly-2026-06-05 fuzz run decoder -- -max_len=4096)
+(cd fuzz && cargo +nightly-2026-06-05 fuzz build json_tree_invariants)
 ```
 
 ## 测试

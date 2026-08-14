@@ -59,6 +59,10 @@ harness = false
 name = "budgeted_serde_json"
 harness = false
 
+[[bench]]
+name = "tree_bench"
+harness = false
+
 [profile.release]
 opt-level = 3
 lto = true

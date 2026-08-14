@@ -91,13 +91,36 @@ impl JsonTreeMutVisitor<JsonResource, usize> for ReplacingVisitor {
     }
 }
 
+/// Panics after mutating a selected node.
+struct PanickingVisitor {
+    calls: usize,
+    panic_after: usize,
+}
+
+impl JsonTreeMutVisitor<JsonResource, usize> for PanickingVisitor {
+    type Error = std::convert::Infallible;
+
+    /// Mutates the current object before deliberately panicking.
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
+        self.calls += 1;
+        if let Value::Object(entries) = value {
+            entries.insert("visited".to_owned(), json!(true));
+        }
+        assert!(self.calls < self.panic_after, "visitor panic regression");
+        Ok(JsonTreeControl::Descend)
+    }
+}
+
 /// Verifies that a rejection can replace exactly the rejected subtree.
 #[test]
 fn test_process_mut_skips_rejected_subtree_after_replacement() {
-    let limits = JsonValueLimits::empty()
-        .with_structure_limits(StructureLimits::empty().with_nodes_limit(
-            ResourceLimit::new(JsonResource::Nodes, 2_usize),
-        ));
+    let limits = JsonValueLimits::empty().with_structure_limits(
+        StructureLimits::empty().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)),
+    );
     let mut budget = JsonValueBudget::new(limits);
     let mut value = json!({"first": true, "second": {"nested": false}});
 
@@ -110,15 +133,12 @@ fn test_process_mut_skips_rejected_subtree_after_replacement() {
 
 #[test]
 fn test_process_mut_preserves_mutations_when_visitor_fails() {
-    let limits =
-        JsonValueLimits::empty()
-            .with_structure_limits(StructureLimits::empty().with_nodes_limit(
-                ResourceLimit::new(JsonResource::Nodes, 4_usize),
-            ))
-            .with_payload_bytes_limit(ResourceLimit::new(
-                JsonResource::PayloadBytes,
-                32_usize,
-            ));
+    let limits = JsonValueLimits::empty()
+        .with_structure_limits(
+            StructureLimits::empty()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 4_usize)),
+        )
+        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 32_usize));
     let mut budget = JsonValueBudget::new(limits);
     let mut value = json!({"original": true});
 
@@ -145,15 +165,12 @@ fn test_process_mut_preserves_mutations_when_visitor_fails() {
 /// Verifies that budget rejection retains earlier mutation and accounting.
 #[test]
 fn test_process_mut_preserves_partial_mutation_and_budget_on_rejection() {
-    let limits =
-        JsonValueLimits::empty()
-            .with_structure_limits(StructureLimits::empty().with_nodes_limit(
-                ResourceLimit::new(JsonResource::Nodes, 2_usize),
-            ))
-            .with_payload_bytes_limit(ResourceLimit::new(
-                JsonResource::PayloadBytes,
-                8_usize,
-            ));
+    let limits = JsonValueLimits::empty()
+        .with_structure_limits(
+            StructureLimits::empty()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)),
+        )
+        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 8_usize));
     let mut budget = JsonValueBudget::new(limits);
     let mut value = json!([0, 1]);
 
@@ -180,3 +197,30 @@ fn test_process_mut_preserves_partial_mutation_and_budget_on_rejection() {
         1,
     );
 }
+
+/// Verifies that a panic leaves the mutable root reassembled and serializable.
+#[test]
+fn test_process_mut_restores_root_after_visitor_panic() {
+    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
+    let mut value = json!({"first": [1, 2], "second": true});
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let _ = JsonTreeProcessor::new(&mut budget).process_mut(
+            &mut value,
+            &mut PanickingVisitor {
+                calls: 0,
+                panic_after: 3,
+            },
+        );
+    }));
+
+    assert!(result.is_err());
+    assert_eq!(value["visited"], Value::Bool(true));
+    assert!(value["first"].is_array());
+    assert_eq!(
+        to_string(&value).expect("panic-restored value serializes"),
+        r#"{"first":[1,2],"second":true,"visited":true}"#,
+    );
+}
+use std::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
