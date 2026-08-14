@@ -16,3 +16,5 @@ mod json_lexical_preflight_tests;
 mod json_output_buffer_tests;
 mod json_output_writer_tests;
 mod json_private_tests;
+mod private_struct_kind_tests;
+mod serde_json_compat_tests;

@@ -26,5 +26,3 @@ pub use json_tree_mut_visitor::JsonTreeMutVisitor;
 pub use json_tree_process_error::JsonTreeProcessError;
 pub use json_tree_processor::JsonTreeProcessor;
 pub use json_tree_visitor::JsonTreeVisitor;
-
-pub use crate::budget::BudgetedJsonValueSeed as BudgetedValueSeed;

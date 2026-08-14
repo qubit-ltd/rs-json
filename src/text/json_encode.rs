@@ -13,7 +13,6 @@ use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonEncodeSession;
 use serde::Serialize;
-use serde_json::Error as JsonError;
 
 use super::JsonEncodeError;
 use crate::budget::JsonSerdeError;
@@ -62,9 +61,7 @@ where
                 resource, source,
             ))
         }
-        JsonSerdeError::Syntax(error) => JsonEncodeError::InvalidRawJson(
-            JsonError::io(std::io::Error::other(error.to_string())),
-        ),
+        JsonSerdeError::Syntax(error) => JsonEncodeError::InvalidRawJson(error),
         JsonSerdeError::Json(error) => JsonEncodeError::Serialize(error),
         JsonSerdeError::Io(error) => JsonEncodeError::Write(error),
     }

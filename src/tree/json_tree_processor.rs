@@ -39,9 +39,13 @@ where
     }
 
     /// Processes every node in depth-first order without Rust recursion.
-    pub fn process<V>(
+    ///
+    /// The explicit `'value` lifetime intentionally keeps the input tree's
+    /// stack-held borrow independent from the processor's budget borrow.
+    #[allow(clippy::needless_lifetimes)]
+    pub fn process<'value, V>(
         &mut self,
-        value: &'a Value,
+        value: &'value Value,
         visitor: &mut V,
     ) -> Result<(), JsonTreeProcessError<R, Q, V::Error>>
     where
@@ -81,6 +85,13 @@ where
     }
 
     /// Mutates every admitted node in depth-first order without Rust recursion.
+    ///
+    /// Mutation and budget accounting are incremental. If this method returns
+    /// an error, mutations already made by the visitor and budget already
+    /// consumed remain in effect; this operation does not roll either back.
+    /// The internal restoration guard only rebuilds detached tree structure so
+    /// `root` remains a valid [`Value`], and does not restore its original
+    /// contents.
     pub fn process_mut<V>(
         &mut self,
         root: &mut Value,
@@ -190,11 +201,11 @@ where
 
     /// Pushes descendants in reverse order so stack popping preserves JSON
     /// order.
-    fn push_children(
+    fn push_children<'value>(
         &self,
-        value: &'a Value,
+        value: &'value Value,
         depth: usize,
-        pending: &mut Vec<Frame<'a>>,
+        pending: &mut Vec<Frame<'value>>,
     ) {
         let child_depth = depth.checked_add(1).expect(
             "a materialized JSON tree cannot have usize::MAX nesting depth",
@@ -233,17 +244,17 @@ where
 }
 
 /// Represents one delayed enter or leave operation in a depth-first traversal.
-enum Frame<'a> {
+enum Frame<'value> {
     /// Enters a node after optionally charging its object key.
     Enter {
-        value: &'a Value,
-        context: JsonTreeContext<'a>,
-        key_to_charge: Option<&'a str>,
+        value: &'value Value,
+        context: JsonTreeContext<'value>,
+        key_to_charge: Option<&'value str>,
     },
     /// Leaves a node after its descendants are complete.
     Leave {
-        value: &'a Value,
-        context: JsonTreeContext<'a>,
+        value: &'value Value,
+        context: JsonTreeContext<'value>,
     },
 }
 
@@ -366,7 +377,7 @@ fn insert_child(parent: &mut Value, location: OwnedLocation, value: Value) {
     }
 }
 
-/// Restores the original root if traversal exits with an error or panic.
+/// Reassembles detached tree parts if traversal exits with an error or panic.
 struct RootRestoreGuard<'a> {
     root: &'a mut Value,
     stack: Vec<MutFrame>,

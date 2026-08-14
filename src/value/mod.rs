@@ -5,7 +5,6 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod json_decode_tests;
-mod json_deserialize_error_category_tests;
-mod json_deserialize_error_tests;
-mod json_encode_error_tests;
+//! Builds [`serde_json::Value`] values while charging a JSON value budget.
+
+pub use crate::budget::budgeted_json_value_seed::BudgetedJsonValueSeed;

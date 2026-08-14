@@ -15,9 +15,11 @@ use qubit_json::tree::JsonBudgetRejection;
 use qubit_json::tree::JsonTreeContext;
 use qubit_json::tree::JsonTreeControl;
 use qubit_json::tree::JsonTreeMutVisitor;
+use qubit_json::tree::JsonTreeProcessError;
 use qubit_json::tree::JsonTreeProcessor;
 use serde_json::Value;
 use serde_json::json;
+use serde_json::to_string;
 
 struct FailingVisitor {
     calls: usize,
@@ -38,6 +40,28 @@ impl JsonTreeMutVisitor<JsonResource, usize> for FailingVisitor {
         } else {
             *value = json!("partially changed");
             Err("stop")
+        }
+    }
+}
+
+/// Replaces the first admitted array element before a later node is rejected.
+struct FirstChildReplacingVisitor;
+
+impl JsonTreeMutVisitor<JsonResource, usize> for FirstChildReplacingVisitor {
+    type Error = std::convert::Infallible;
+
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
+        match value {
+            Value::Array(_) => Ok(JsonTreeControl::Descend),
+            Value::Number(number) if number.as_i64() == Some(0) => {
+                *value = json!("changed");
+                Ok(JsonTreeControl::SkipSubtree)
+            }
+            _ => Ok(JsonTreeControl::SkipSubtree),
         }
     }
 }
@@ -86,16 +110,73 @@ fn test_process_mut_skips_rejected_subtree_after_replacement() {
 
 #[test]
 fn test_process_mut_preserves_mutations_when_visitor_fails() {
-    let mut budget = JsonValueBudget::new(JsonValueLimits::default());
+    let limits =
+        JsonValueLimits::empty()
+            .with_structure_limits(StructureLimits::empty().with_nodes_limit(
+                ResourceLimit::new(JsonResource::Nodes, 4_usize),
+            ))
+            .with_payload_bytes_limit(ResourceLimit::new(
+                JsonResource::PayloadBytes,
+                32_usize,
+            ));
+    let mut budget = JsonValueBudget::new(limits);
     let mut value = json!({"original": true});
 
     let error = JsonTreeProcessor::new(&mut budget)
         .process_mut(&mut value, &mut FailingVisitor { calls: 0 })
         .expect_err("the visitor deliberately fails");
 
-    assert!(matches!(
-        error,
-        qubit_json::tree::JsonTreeProcessError::Visitor("stop")
-    ));
+    assert!(matches!(error, JsonTreeProcessError::Visitor("stop")));
     assert_eq!(value, json!({"changed": "partially changed"}));
+    assert_eq!(
+        to_string(&value).expect("partially mutated value serializes"),
+        r#"{"changed":"partially changed"}"#,
+    );
+    assert_eq!(budget.structure_budget().used_nodes(), 2);
+    assert_eq!(
+        budget
+            .payload_budget()
+            .expect("payload budget is configured")
+            .used(),
+        7,
+    );
+}
+
+/// Verifies that budget rejection retains earlier mutation and accounting.
+#[test]
+fn test_process_mut_preserves_partial_mutation_and_budget_on_rejection() {
+    let limits =
+        JsonValueLimits::empty()
+            .with_structure_limits(StructureLimits::empty().with_nodes_limit(
+                ResourceLimit::new(JsonResource::Nodes, 2_usize),
+            ))
+            .with_payload_bytes_limit(ResourceLimit::new(
+                JsonResource::PayloadBytes,
+                8_usize,
+            ));
+    let mut budget = JsonValueBudget::new(limits);
+    let mut value = json!([0, 1]);
+
+    let error = JsonTreeProcessor::new(&mut budget)
+        .process_mut(&mut value, &mut FirstChildReplacingVisitor)
+        .expect_err("the second child exceeds the node budget");
+
+    assert!(matches!(
+        &error,
+        JsonTreeProcessError::Budget(error)
+            if error.resource() == &JsonResource::Nodes
+    ));
+    assert_eq!(value, json!(["changed", 1]));
+    assert_eq!(
+        to_string(&value).expect("partially mutated value serializes"),
+        r#"["changed",1]"#,
+    );
+    assert_eq!(budget.structure_budget().used_nodes(), 2);
+    assert_eq!(
+        budget
+            .payload_budget()
+            .expect("payload budget is configured")
+            .used(),
+        1,
+    );
 }

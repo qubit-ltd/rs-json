@@ -7,11 +7,11 @@ autotests = false
 authors = ["Haixing Hu <starfish.hu@gmail.com>"]
 license = "Apache-2.0"
 repository = "https://github.com/qubit-ltd/rs-json"
-description = "Lenient JSON decoder for non-fully-trusted JSON text inputs"
+description = "Resource-aware infrastructure for lenient and strict JSON processing"
 homepage = "https://github.com/qubit-ltd/rs-json"
 documentation = "https://docs.rs/qubit-json"
 readme = "README.md"
-keywords = ["json", "decoder", "serde", "lenient", "qubit"]
+keywords = ["json", "serde", "decoder", "budget", "qubit"]
 categories = ["encoding", "parser-implementations"]
 include = [
     "/Cargo.toml",
@@ -43,7 +43,7 @@ path = "tests/mod.rs"
 [dependencies]
 qubit-budget = { version = "0.4", path = "../rs-budget", features = ["json"] }
 serde = "1.0"
-serde_json = { version = "1.0", features = ["arbitrary_precision", "float_roundtrip", "raw_value"] }
+serde_json = { version = "=1.0.151", features = ["arbitrary_precision", "float_roundtrip", "raw_value"] }
 thiserror = "2.0"
 
 [dev-dependencies]

@@ -7,13 +7,18 @@
 // =============================================================================
 //! Provides the public API for the `qubit-json` crate.
 //!
-//! The crate provides resource-aware infrastructure for JSON trees and text.
+//! The crate provides resource-aware infrastructure for lenient input,
+//! strict text codecs, decoded values, and materialized JSON trees.
 //!
-//! * [`tree`] traverses materialized [`serde_json::Value`] trees without
-//!   recursion.
-//! * [`text`] strictly decodes and encodes JSON using sessions from
-//!   [`qubit_budget::json`].
-//! * [`lenient`] normalizes non-standard JSON text before decoding.
+//! * [`lenient`] normalizes narrowly defined text noise before direct Serde
+//!   deserialization. Its `decode_with_session` path charges raw input,
+//!   normalized input, and decoded-value resources cumulatively.
+//! * [`text`] strictly decodes and encodes JSON using caller-managed sessions
+//!   from [`qubit_budget::json`].
+//! * [`value`] constructs [`serde_json::Value`] trees with decoded-value
+//!   accounting.
+//! * [`tree`] traverses or mutates materialized values without Rust recursion.
+//!   Mutable traversal is incremental rather than transactional.
 //!
 //! # Quick start
 //!
@@ -61,6 +66,59 @@
 //! assert!(std::error::Error::source(&detailed).is_some());
 //! ```
 //!
+//! # Cumulative lenient decoding
+//!
+//! `decode_with_session` first charges raw bytes during normalization, then
+//! normalized bytes, then uses a lexical preflight to charge JSON value
+//! resources before directly deserializing `T`. It does not build an
+//! intermediate [`serde_json::Value`], so target-specific Serde behavior is
+//! preserved. Charges completed before any error remain in the session.
+//!
+//! ```rust
+//! use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession};
+//! use qubit_json::lenient::LenientJsonDecoder;
+//!
+//! let limits = JsonDecodeLimits::empty()
+//!     .with_max_input_bytes(32)
+//!     .with_max_normalized_input_bytes(32)
+//!     .with_max_nodes(4)
+//!     .with_max_map_entries(1)
+//!     .with_max_key_bytes(2)
+//!     .with_max_payload_bytes(4);
+//! let mut session = JsonDecodeSession::owned(limits);
+//! let decoder = LenientJsonDecoder::default();
+//!
+//! let value: serde_json::Value = decoder
+//!     .decode_with_session("```json\n{\"ok\":true}\n```", &mut session)?;
+//! assert_eq!(value["ok"], true);
+//! assert_eq!(session.value_budget().structure_budget().used_nodes(), 2);
+//! # Ok::<(), qubit_json::lenient::LenientJsonDecodeError>(())
+//! ```
+//!
+//! # Budgeted value construction
+//!
+//! [`value::BudgetedJsonValueSeed`] is the public seed for callers that need a
+//! materialized [`serde_json::Value`] and only have access to Serde's decoded
+//! value events.
+//!
+//! ```rust
+//! use qubit_budget::json::{JsonValueBudget, JsonValueLimits};
+//! use qubit_json::value::BudgetedJsonValueSeed;
+//! use serde::de::DeserializeSeed;
+//! use serde_json::Deserializer;
+//!
+//! let mut budget = JsonValueBudget::new(
+//!     JsonValueLimits::empty().with_max_nodes(3),
+//! );
+//! let mut deserializer = Deserializer::from_slice(br#"{"key":[true]}"#);
+//! let value = BudgetedJsonValueSeed::new(&mut budget)
+//!     .deserialize(&mut deserializer)?;
+//!
+//! assert_eq!(value["key"][0], true);
+//! assert_eq!(budget.structure_budget().used_nodes(), 3);
+//! # Ok::<(), serde_json::Error>(())
+//! ```
+//!
 //! # Must-use configuration values
 //!
 //! ```compile_fail
@@ -84,3 +142,4 @@ mod lenient_json_decoder;
 mod options;
 pub mod text;
 pub mod tree;
+pub mod value;

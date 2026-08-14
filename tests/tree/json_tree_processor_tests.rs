@@ -71,6 +71,24 @@ fn test_process_visits_depth_first_with_root_and_key_locations() {
     );
 }
 
+/// Verifies that a processor can outlive each JSON value it processes.
+#[test]
+fn test_process_accepts_value_borrowed_shorter_than_budget() {
+    let mut budget =
+        JsonValueBudget::new(JsonValueLimits::empty().with_max_nodes(2));
+    let mut processor = JsonTreeProcessor::new(&mut budget);
+    let mut visitor = RecordingVisitor { events: Vec::new() };
+
+    {
+        let value = json!([true]);
+        processor
+            .process(&value, &mut visitor)
+            .expect("short-lived JSON value processing succeeds");
+    }
+
+    assert_eq!(processor.budget().structure_budget().used_nodes(), 2);
+}
+
 /// Verifies that the root context is explicitly represented.
 #[test]
 fn test_context_root_location_is_distinct() {
