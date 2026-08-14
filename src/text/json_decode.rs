@@ -82,7 +82,7 @@ where
             JsonDeserializeError::from_serde(&error),
         ),
         JsonSerdeError::Io(_) => {
-            JsonDecodeError::Deserialize(JsonDeserializeError::io())
+            JsonDecodeError::Deserialize(JsonDeserializeError::IO)
         }
     }
 }
