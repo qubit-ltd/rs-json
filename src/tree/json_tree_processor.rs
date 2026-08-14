@@ -51,34 +51,40 @@ where
     where
         V: JsonTreeVisitor,
     {
-        let mut pending = vec![Frame::Enter {
+        let mut pending = vec![ReadFrame::enter(
             value,
-            context: JsonTreeContext {
+            JsonTreeContext {
                 depth: 1,
                 location: JsonTreeLocation::Root,
             },
-            key_to_charge: None,
-        }];
-        while let Some(frame) = pending.pop() {
-            match frame {
-                Frame::Enter {
-                    value,
-                    context,
-                    key_to_charge,
-                } => {
-                    if let Some(key) = key_to_charge {
+        )];
+        while let Some(frame) = pending.last_mut() {
+            match &mut frame.state {
+                ReadFrameState::Enter => {
+                    let value = frame.value;
+                    let context = frame.context;
+                    if let JsonTreeLocation::ObjectValue { key } = context.location {
                         self.budget.consume_key_bytes_usize(key.len())?;
                     }
                     self.admit(value, context.depth)?;
                     visitor
                         .enter(value, context)
                         .map_err(JsonTreeProcessError::Visitor)?;
-                    pending.push(Frame::Leave { value, context });
-                    self.push_children(value, context.depth, &mut pending);
+                    frame.state = ReadFrameState::Children(ChildCursor::new(value, context.depth));
                 }
-                Frame::Leave { value, context } => visitor
-                    .leave(value, context)
-                    .map_err(JsonTreeProcessError::Visitor)?,
+                ReadFrameState::Children(cursor) => {
+                    if let Some((value, location, depth)) = cursor.next() {
+                        pending.push(ReadFrame::enter(value, JsonTreeContext { depth, location }));
+                    } else {
+                        frame.state = ReadFrameState::Leave;
+                    }
+                }
+                ReadFrameState::Leave => {
+                    let frame = pending.pop().expect("read frame exists");
+                    visitor
+                        .leave(frame.value, frame.context)
+                        .map_err(JsonTreeProcessError::Visitor)?;
+                }
             }
         }
         Ok(())
@@ -111,8 +117,7 @@ where
                 let context = frame.location.context(frame.depth);
 
                 if let Some(key) = frame.location.key()
-                    && let Err(error) =
-                        self.budget.consume_key_bytes_usize(key.len())
+                    && let Err(error) = self.budget.consume_key_bytes_usize(key.len())
                 {
                     let rejection = visitor
                         .reject_budget(&mut frame.value, context, &error)
@@ -140,25 +145,19 @@ where
                     .map_err(JsonTreeProcessError::Visitor)?;
                 frame.entered = true;
                 if control == JsonTreeControl::Descend {
-                    frame.children =
-                        take_children(&mut frame.value, frame.depth);
+                    frame.children = take_children(&mut frame.value, frame.depth);
                 }
                 continue;
             }
 
             if let Some(child) = guard.stack[index].children.pop() {
-                guard.stack[index].active = Some(child.location.clone());
                 guard.stack.push(MutFrame::child(child));
                 continue;
             }
 
             let frame = guard.stack.pop().expect("mutable frame exists");
             if let Some(parent) = guard.stack.last_mut() {
-                let location = parent
-                    .active
-                    .take()
-                    .expect("completed child has an active parent slot");
-                insert_child(&mut parent.value, location, frame.value);
+                insert_child(&mut parent.value, frame.location, frame.value);
             } else {
                 guard.finish(frame.value);
             }
@@ -177,85 +176,105 @@ where
     }
 
     /// Admits one node before any visitor callback.
-    fn admit(
-        &mut self,
-        value: &Value,
-        depth: usize,
-    ) -> Result<(), MeasuredBudgetError<R, Q>> {
+    fn admit(&mut self, value: &Value, depth: usize) -> Result<(), MeasuredBudgetError<R, Q>> {
         match value {
             Value::Null | Value::Bool(_) => self.budget.enter_node_usize(depth),
-            Value::Number(number) => {
-                self.budget.enter_number_usize(depth, number.as_str().len())
-            }
-            Value::String(text) => {
-                self.budget.enter_string_usize(depth, text.len())
-            }
-            Value::Array(values) => {
-                self.budget.enter_array_usize(depth, values.len())
-            }
-            Value::Object(entries) => {
-                self.budget.enter_object_usize(depth, entries.len())
-            }
-        }
-    }
-
-    /// Pushes descendants in reverse order so stack popping preserves JSON
-    /// order.
-    fn push_children<'value>(
-        &self,
-        value: &'value Value,
-        depth: usize,
-        pending: &mut Vec<Frame<'value>>,
-    ) {
-        let child_depth = depth.checked_add(1).expect(
-            "a materialized JSON tree cannot have usize::MAX nesting depth",
-        );
-        match value {
-            Value::Array(values) => {
-                for (index, child) in values.iter().enumerate().rev() {
-                    pending.push(Frame::Enter {
-                        value: child,
-                        context: JsonTreeContext {
-                            depth: child_depth,
-                            location: JsonTreeLocation::ArrayElement { index },
-                        },
-                        key_to_charge: None,
-                    });
-                }
-            }
-            Value::Object(entries) => {
-                for (key, child) in entries.iter().rev() {
-                    pending.push(Frame::Enter {
-                        value: child,
-                        context: JsonTreeContext {
-                            depth: child_depth,
-                            location: JsonTreeLocation::ObjectValue { key },
-                        },
-                        key_to_charge: Some(key),
-                    });
-                }
-            }
-            Value::Null
-            | Value::Bool(_)
-            | Value::Number(_)
-            | Value::String(_) => {}
+            Value::Number(number) => self.budget.enter_number_usize(depth, number.as_str().len()),
+            Value::String(text) => self.budget.enter_string_usize(depth, text.len()),
+            Value::Array(values) => self.budget.enter_array_usize(depth, values.len()),
+            Value::Object(entries) => self.budget.enter_object_usize(depth, entries.len()),
         }
     }
 }
 
-/// Represents one delayed enter or leave operation in a depth-first traversal.
-enum Frame<'value> {
-    /// Enters a node after optionally charging its object key.
-    Enter {
-        value: &'value Value,
-        context: JsonTreeContext<'value>,
-        key_to_charge: Option<&'value str>,
+/// Represents one stack-held frame in a read-only depth-first traversal.
+struct ReadFrame<'value> {
+    /// Borrowed node visited by this frame.
+    value: &'value Value,
+
+    /// Callback context for this node.
+    context: JsonTreeContext<'value>,
+
+    /// Current enter, child, or leave phase.
+    state: ReadFrameState<'value>,
+}
+
+impl<'value> ReadFrame<'value> {
+    /// Creates a frame that will enter `value` before scheduling children.
+    fn enter(value: &'value Value, context: JsonTreeContext<'value>) -> Self {
+        Self {
+            value,
+            context,
+            state: ReadFrameState::Enter,
+        }
+    }
+}
+
+/// Current phase of a read-only traversal frame.
+enum ReadFrameState<'value> {
+    /// The node has not yet been admitted or entered.
+    Enter,
+
+    /// The cursor yields children in source order.
+    Children(ChildCursor<'value>),
+
+    /// All children have completed and the visitor should leave the node.
+    Leave,
+}
+
+/// Lazily yields one container's children, keeping pending memory O(depth).
+enum ChildCursor<'value> {
+    /// Array iterator with the next child index.
+    Array {
+        /// Next array index and value.
+        iter: std::iter::Enumerate<std::slice::Iter<'value, Value>>,
+        /// Root-inclusive depth of each child.
+        depth: usize,
     },
-    /// Leaves a node after its descendants are complete.
-    Leave {
-        value: &'value Value,
-        context: JsonTreeContext<'value>,
+
+    /// Object iterator over borrowed keys and values.
+    Object {
+        /// Next object entry.
+        iter: serde_json::map::Iter<'value>,
+        /// Root-inclusive depth of each child.
+        depth: usize,
     },
+
+    /// Scalar node with no children.
+    Empty,
+}
+
+impl<'value> ChildCursor<'value> {
+    /// Creates a cursor for the immediate children of `value`.
+    fn new(value: &'value Value, depth: usize) -> Self {
+        let child_depth = depth
+            .checked_add(1)
+            .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
+        match value {
+            Value::Array(values) => Self::Array {
+                iter: values.iter().enumerate(),
+                depth: child_depth,
+            },
+            Value::Object(entries) => Self::Object {
+                iter: entries.iter(),
+                depth: child_depth,
+            },
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Self::Empty,
+        }
+    }
+
+    /// Returns the next child, its location, and its root-inclusive depth.
+    fn next(&mut self) -> Option<(&'value Value, JsonTreeLocation<'value>, usize)> {
+        match self {
+            Self::Array { iter, depth } => iter
+                .next()
+                .map(|(index, value)| (value, JsonTreeLocation::ArrayElement { index }, *depth)),
+            Self::Object { iter, depth } => iter
+                .next()
+                .map(|(key, value)| (value, JsonTreeLocation::ObjectValue { key }, *depth)),
+            Self::Empty => None,
+        }
+    }
 }
 
 /// Owns the location information needed while mutable traversal advances.
@@ -274,9 +293,7 @@ impl OwnedLocation {
     fn context(&self, depth: usize) -> JsonTreeContext<'_> {
         let location = match self {
             Self::Root => JsonTreeLocation::Root,
-            Self::ArrayElement(index) => {
-                JsonTreeLocation::ArrayElement { index: *index }
-            }
+            Self::ArrayElement(index) => JsonTreeLocation::ArrayElement { index: *index },
             Self::ObjectValue(key) => JsonTreeLocation::ObjectValue { key },
         };
         JsonTreeContext { depth, location }
@@ -297,7 +314,6 @@ struct MutFrame {
     depth: usize,
     value: Value,
     children: Vec<ChildEntry>,
-    active: Option<OwnedLocation>,
     entered: bool,
 }
 
@@ -308,7 +324,6 @@ impl MutFrame {
             depth: 1,
             value,
             children: Vec::new(),
-            active: None,
             entered: false,
         }
     }
@@ -320,7 +335,6 @@ impl MutFrame {
             depth,
             value: child.value,
             children: Vec::new(),
-            active: None,
             entered: false,
         }
     }
@@ -335,9 +349,9 @@ struct ChildEntry {
 
 /// Detaches immediate children in reverse order, preserving traversal order.
 fn take_children(value: &mut Value, depth: usize) -> Vec<ChildEntry> {
-    let child_depth = depth.checked_add(1).expect(
-        "a materialized JSON tree cannot have usize::MAX nesting depth",
-    );
+    let child_depth = depth
+        .checked_add(1)
+        .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
     match value {
         Value::Array(values) => std::mem::take(values)
             .into_iter()
@@ -358,9 +372,7 @@ fn take_children(value: &mut Value, depth: usize) -> Vec<ChildEntry> {
                 value,
             })
             .collect(),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-            Vec::new()
-        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Vec::new(),
     }
 }
 
@@ -406,18 +418,15 @@ impl Drop for RootRestoreGuard<'_> {
         }
         let mut completed = None;
         while let Some(mut frame) = self.stack.pop() {
-            if let Some(value) = completed.take() {
-                let location = frame
-                    .active
-                    .take()
-                    .expect("completed child has an active parent slot");
+            if let Some((location, value)) = completed.take() {
                 insert_child(&mut frame.value, location, value);
             }
             while let Some(child) = frame.children.pop() {
                 insert_child(&mut frame.value, child.location, child.value);
             }
-            completed = Some(frame.value);
+            completed = Some((frame.location, frame.value));
         }
-        *self.root = completed.expect("root frame exists");
+        let (_, value) = completed.expect("root frame exists");
+        *self.root = value;
     }
 }
