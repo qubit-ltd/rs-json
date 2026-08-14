@@ -57,19 +57,12 @@ impl JsonDeserializeError {
         }
     }
 
-    /// Creates safe metadata for an I/O failure with no source coordinates.
-    ///
-    /// # Returns
-    ///
-    /// An I/O-category error with line and column set to zero.
-    #[inline(always)]
-    pub(crate) const fn io() -> Self {
-        Self {
-            category: JsonDeserializeErrorCategory::Io,
-            line: 0,
-            column: 0,
-        }
-    }
+    /// Safe metadata for an I/O failure with no source coordinates.
+    pub(crate) const IO: Self = Self {
+        category: JsonDeserializeErrorCategory::Io,
+        line: 0,
+        column: 0,
+    };
 
     /// Returns the broad Serde failure category.
     ///
