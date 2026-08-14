@@ -20,6 +20,7 @@ use serde::ser::Error;
 use super::super::JsonSerdeError;
 use super::super::JsonValueBudget;
 use super::JsonLexicalPreflight;
+use super::display_budget_kind::DisplayBudgetKind;
 use super::json_output_buffer::JsonOutputAccounting;
 
 pub(super) struct JsonEncodeContext<'a, R, Q>
@@ -56,41 +57,38 @@ where
     /// The fragment length is a safe lower bound for the complete output size.
     /// Structural traversal starts at `depth`, the fragment's root-inclusive
     /// position in the final document.
-    pub(super) fn preflight_raw<E>(&mut self, value: &str, depth: usize) -> Result<(), E>
+    pub(super) fn preflight_raw<E>(
+        &mut self,
+        value: &str,
+        depth: usize,
+    ) -> Result<(), E>
     where
         E: Error,
         R: Clone,
     {
         let output = self.output.borrow().check_available(value.len());
         self.record(output)?;
-        match JsonLexicalPreflight::at_depth(self.budget, depth).inspect(value.as_bytes()) {
+        match JsonLexicalPreflight::at_depth(self.budget, depth)
+            .inspect(value.as_bytes())
+        {
             Ok(()) => Ok(()),
-            Err(JsonSerdeError::Budget(error)) => self.record(Err(error.into())),
+            Err(JsonSerdeError::Budget(error)) => {
+                self.record(Err(error.into()))
+            }
             Err(JsonSerdeError::Quantity { resource, source }) => {
-                self.record(Err(MeasuredBudgetError::Quantity { resource, source }))
+                self.record(Err(MeasuredBudgetError::Quantity {
+                    resource,
+                    source,
+                }))
             }
             Err(JsonSerdeError::Json(_) | JsonSerdeError::Io(_)) => {
                 Err(E::custom("invalid raw JSON value"))
             }
-            Err(JsonSerdeError::Syntax(_)) => Err(E::custom("invalid raw JSON value")),
+            Err(JsonSerdeError::Syntax(_)) => {
+                Err(E::custom("invalid raw JSON value"))
+            }
         }
     }
-}
-
-/// Resource checked while a `Display` implementation emits text chunks.
-#[derive(Clone, Copy)]
-pub(super) enum DisplayBudgetKind {
-    /// Ordinary JSON string payload.
-    String,
-
-    /// JSON object key text.
-    Key,
-
-    /// Arbitrary-precision JSON number text.
-    Number,
-
-    /// Raw JSON source, bounded by the complete output limit while collected.
-    RawOutput,
 }
 
 /// Bounded string sink used by Serde `collect_str` hooks.
@@ -119,7 +117,10 @@ where
     Q: ResourceQuantity,
 {
     /// Creates an empty collector for one resource kind.
-    fn new(context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>, kind: DisplayBudgetKind) -> Self {
+    fn new(
+        context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>,
+        kind: DisplayBudgetKind,
+    ) -> Self {
         Self {
             text: String::new(),
             context,
@@ -135,17 +136,25 @@ where
 {
     /// Checks the cumulative formatted length before growing the string.
     fn write_str(&mut self, value: &str) -> fmt::Result {
-        let next = self.text.len().checked_add(value.len()).ok_or(fmt::Error)?;
-        let output_result = self.context.borrow().output.borrow().check_available(next);
+        let next =
+            self.text.len().checked_add(value.len()).ok_or(fmt::Error)?;
+        let output_result =
+            self.context.borrow().output.borrow().check_available(next);
         self.context
             .borrow_mut()
             .record::<fmt::Error>(output_result)?;
         let point_result = {
             let context = self.context.borrow();
             match self.kind {
-                DisplayBudgetKind::String => context.budget.check_string_bytes_usize(next),
-                DisplayBudgetKind::Key => context.budget.check_key_bytes_usize(next),
-                DisplayBudgetKind::Number => context.budget.check_number_bytes_usize(next),
+                DisplayBudgetKind::String => {
+                    context.budget.check_string_bytes_usize(next)
+                }
+                DisplayBudgetKind::Key => {
+                    context.budget.check_key_bytes_usize(next)
+                }
+                DisplayBudgetKind::Number => {
+                    context.budget.check_number_bytes_usize(next)
+                }
                 DisplayBudgetKind::RawOutput => Ok(()),
             }
         };
@@ -176,9 +185,15 @@ where
     let payload_result = {
         let mut context = collector.context.borrow_mut();
         match kind {
-            DisplayBudgetKind::String => context.budget.consume_string_bytes_usize(text.len()),
-            DisplayBudgetKind::Key => context.budget.consume_key_bytes_usize(text.len()),
-            DisplayBudgetKind::Number => context.budget.consume_number_bytes_usize(text.len()),
+            DisplayBudgetKind::String => {
+                context.budget.consume_string_bytes_usize(text.len())
+            }
+            DisplayBudgetKind::Key => {
+                context.budget.consume_key_bytes_usize(text.len())
+            }
+            DisplayBudgetKind::Number => {
+                context.budget.consume_number_bytes_usize(text.len())
+            }
             DisplayBudgetKind::RawOutput => Ok(()),
         }
     };

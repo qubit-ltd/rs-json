@@ -21,10 +21,12 @@ mod serde_json_compat;
 use serde_json_compat::classify_private_struct;
 
 /// Private struct name emitted by serde_json arbitrary-precision numbers.
-const JSON_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
+const JSON_NUMBER_TOKEN: &str =
+    concat!("$", "serde_json", ":", ":private::Number");
 
 /// Private struct name emitted by serde_json raw values.
-const JSON_RAW_VALUE_TOKEN: &str = concat!("$", "serde_json", ":", ":private::RawValue");
+const JSON_RAW_VALUE_TOKEN: &str =
+    concat!("$", "serde_json", ":", ":private::RawValue");
 
 /// Ensures the pinned serde_json private names map to their expected kinds.
 #[test]
@@ -43,7 +45,11 @@ fn test_classify_private_struct_recognizes_pinned_tokens() {
 #[test]
 fn test_classify_private_struct_rejects_forged_names() {
     assert_eq!(
-        classify_private_struct(concat!("$", "serde_json", "::private::Number::forged")),
+        classify_private_struct(concat!(
+            "$",
+            "serde_json",
+            "::private::Number::forged"
+        )),
         None,
     );
     assert_eq!(
