@@ -55,7 +55,7 @@ fuzz_target!(|data: &[u8]| {
             .output_budget()
             .is_none_or(|budget| budget.used() <= output_bytes)
     );
-    assert!(session.value_budget().structure_budget().used_nodes() <= nodes);
+    assert!(session.value_budget().used_nodes() <= Some(nodes));
     if let Ok(encoded) = encoded {
         let decoded = serde_json::from_slice::<Value>(&encoded)
             .expect("successful budget-aware encoding must produce JSON");

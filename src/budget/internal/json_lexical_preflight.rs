@@ -9,43 +9,50 @@
 // qubit-style: allow source-test-pair
 
 use qubit_budget::ResourceQuantity;
+use qubit_budget::json::JsonMeasurement;
+use qubit_budget::json::JsonValueTransaction;
 
 use super::super::JsonSerdeError;
 use super::super::JsonSyntaxError;
 use super::super::JsonSyntaxErrorReason;
-use super::super::JsonValueBudget;
 
 /// Lexically validates and charges one JSON document without recursion.
-pub(crate) struct JsonLexicalPreflight<'a, R, Q>
+pub(crate) struct JsonLexicalPreflight<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
     /// JSON value resources charged while scanning the document.
-    budget: &'a mut JsonValueBudget<R, Q>,
+    transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 
     /// Root-inclusive depth assigned to the inspected value.
     root_depth: usize,
 }
 
-impl<'a, R, Q> JsonLexicalPreflight<'a, R, Q>
+impl<'transaction, 'budget, R, Q>
+    JsonLexicalPreflight<'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
 {
-    /// Creates a lexical preflight bound to one mutable value budget.
-    pub(crate) const fn new(budget: &'a mut JsonValueBudget<R, Q>) -> Self {
+    /// Creates a lexical preflight bound to one value transaction.
+    pub(crate) const fn new(
+        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    ) -> Self {
         Self {
-            budget,
+            transaction,
             root_depth: 1,
         }
     }
 
     /// Creates a lexical preflight rooted at an enclosing serializer depth.
     pub(in crate::budget) const fn at_depth(
-        budget: &'a mut JsonValueBudget<R, Q>,
+        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
         root_depth: usize,
     ) -> Self {
-        Self { budget, root_depth }
+        Self {
+            transaction,
+            root_depth,
+        }
     }
 
     /// Validates and charges one complete JSON document.
@@ -58,7 +65,7 @@ where
         &mut self,
         input: &[u8],
     ) -> Result<(), JsonSerdeError<R, Q>> {
-        let mut cursor = JsonCursor::new(input, self.budget);
+        let mut cursor = JsonCursor::new(input, &mut *self.transaction);
         let mut stack = Vec::new();
         cursor.skip_whitespace();
         cursor.value(self.root_depth, &mut stack)?;
@@ -114,34 +121,35 @@ enum ContainerFrame {
 }
 
 /// Iterative cursor over the JSON bytes being admitted.
-struct JsonCursor<'a, 'budget, R, Q>
+struct JsonCursor<'input, 'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
     /// Complete JSON input.
-    input: &'a [u8],
+    input: &'input [u8],
 
     /// Current input position.
     position: usize,
 
-    /// Value budget charged by lexical admission.
-    budget: &'budget mut JsonValueBudget<R, Q>,
+    /// Value transaction charged by lexical admission.
+    transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 }
 
-impl<'a, 'budget, R, Q> JsonCursor<'a, 'budget, R, Q>
+impl<'input, 'transaction, 'budget, R, Q>
+    JsonCursor<'input, 'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
 {
     /// Creates a cursor positioned at the beginning of `input`.
     const fn new(
-        input: &'a [u8],
-        budget: &'budget mut JsonValueBudget<R, Q>,
+        input: &'input [u8],
+        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     ) -> Self {
         Self {
             input,
             position: 0,
-            budget,
+            transaction,
         }
     }
 
@@ -175,42 +183,38 @@ where
         self.skip_whitespace();
         match self.peek() {
             Some(b'{') => {
-                self.budget
-                    .enter_node_usize(depth)
-                    .map_err(JsonSerdeError::from)?;
                 self.position += 1;
                 stack.push(ContainerFrame::ObjectKey { depth, entries: 0 });
                 Ok(())
             }
             Some(b'[') => {
-                self.budget
-                    .enter_node_usize(depth)
-                    .map_err(JsonSerdeError::from)?;
                 self.position += 1;
                 stack.push(ContainerFrame::ArrayValue { depth, items: 0 });
                 Ok(())
             }
             Some(b'"') => {
-                self.budget
-                    .enter_node_usize(depth)
-                    .map_err(JsonSerdeError::from)?;
                 let bytes = self.string_bytes()?;
-                self.budget
-                    .consume_string_bytes_usize(bytes)
+                self.transaction
+                    .try_admit(JsonMeasurement::String { depth, bytes })
                     .map_err(JsonSerdeError::from)
             }
             Some(b'-' | b'0'..=b'9') => {
-                self.budget
-                    .enter_node_usize(depth)
-                    .map_err(JsonSerdeError::from)?;
                 let bytes = self.number_bytes()?;
-                self.budget
-                    .consume_number_bytes_usize(bytes)
+                self.transaction
+                    .try_admit(JsonMeasurement::Number { depth, bytes })
                     .map_err(JsonSerdeError::from)
             }
-            Some(b't') => self.literal(depth, b"true"),
-            Some(b'f') => self.literal(depth, b"false"),
-            Some(b'n') => self.literal(depth, b"null"),
+            Some(b't') => {
+                self.literal(depth, b"true", JsonMeasurement::Boolean { depth })
+            }
+            Some(b'f') => self.literal(
+                depth,
+                b"false",
+                JsonMeasurement::Boolean { depth },
+            ),
+            Some(b'n') => {
+                self.literal(depth, b"null", JsonMeasurement::Null { depth })
+            }
             None => Err(self.syntax(JsonSyntaxErrorReason::UnexpectedEnd)),
             Some(byte) => {
                 Err(self.syntax(JsonSyntaxErrorReason::UnexpectedByte { byte }))
@@ -221,8 +225,9 @@ where
     /// Charges and consumes one scalar literal.
     fn literal(
         &mut self,
-        depth: usize,
+        _depth: usize,
         literal: &[u8],
+        measurement: JsonMeasurement,
     ) -> Result<(), JsonSerdeError<R, Q>> {
         if !self.input[self.position..].starts_with(literal) {
             return Err(match self.peek() {
@@ -238,8 +243,8 @@ where
                 byte: self.peek().unwrap_or_default(),
             }));
         }
-        self.budget
-            .enter_node_usize(depth)
+        self.transaction
+            .try_admit(measurement)
             .map_err(JsonSerdeError::from)?;
         self.position = end;
         Ok(())
@@ -257,7 +262,10 @@ where
                 if self.peek() == Some(b']') {
                     if items == 0 {
                         self.position += 1;
-                        return Ok(());
+                        return self
+                            .transaction
+                            .try_admit(JsonMeasurement::Array { depth, items })
+                            .map_err(JsonSerdeError::from);
                     }
                     return Err(self.syntax(
                         JsonSyntaxErrorReason::UnexpectedByte {
@@ -268,9 +276,6 @@ where
                 let items = items.checked_add(1).ok_or_else(|| {
                     self.syntax(JsonSyntaxErrorReason::NestingOverflow)
                 })?;
-                self.budget
-                    .check_sequence_items_usize(items)
-                    .map_err(JsonSerdeError::from)?;
                 stack.push(ContainerFrame::ArrayDelimiter { depth, items });
                 self.value(
                     depth.checked_add(1).ok_or_else(|| {
@@ -289,7 +294,9 @@ where
                     }
                     Some(b']') => {
                         self.position += 1;
-                        Ok(())
+                        self.transaction
+                            .try_admit(JsonMeasurement::Array { depth, items })
+                            .map_err(JsonSerdeError::from)
                     }
                     None => {
                         Err(self.syntax(JsonSyntaxErrorReason::UnexpectedEnd))
@@ -304,7 +311,13 @@ where
                 if self.peek() == Some(b'}') {
                     if entries == 0 {
                         self.position += 1;
-                        return Ok(());
+                        return self
+                            .transaction
+                            .try_admit(JsonMeasurement::Object {
+                                depth,
+                                entries,
+                            })
+                            .map_err(JsonSerdeError::from);
                     }
                     return Err(self.syntax(
                         JsonSyntaxErrorReason::UnexpectedByte {
@@ -320,12 +333,9 @@ where
                 let entries = entries.checked_add(1).ok_or_else(|| {
                     self.syntax(JsonSyntaxErrorReason::NestingOverflow)
                 })?;
-                self.budget
-                    .check_map_entries_usize(entries)
-                    .map_err(JsonSerdeError::from)?;
                 let bytes = self.string_bytes()?;
-                self.budget
-                    .consume_key_bytes_usize(bytes)
+                self.transaction
+                    .try_admit(JsonMeasurement::Key { bytes })
                     .map_err(JsonSerdeError::from)?;
                 self.skip_whitespace();
                 if self.peek() != Some(b':') {
@@ -358,7 +368,12 @@ where
                     }
                     Some(b'}') => {
                         self.position += 1;
-                        Ok(())
+                        self.transaction
+                            .try_admit(JsonMeasurement::Object {
+                                depth,
+                                entries,
+                            })
+                            .map_err(JsonSerdeError::from)
                     }
                     None => {
                         Err(self.syntax(JsonSyntaxErrorReason::UnexpectedEnd))
