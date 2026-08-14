@@ -75,12 +75,10 @@ fuzz_target!(|data: &[u8]| {
         );
         let _ = decode_slice::<Value, _, _>(input, &mut session);
         assert_eq!(session.max_input_bytes(), Some(bytes));
-        assert!(
-            session.value_budget().structure_budget().used_nodes() <= nodes
-        );
+        assert!(session.value_budget().used_nodes() <= Some(nodes));
     }
 
     assert!(input_budget.used() <= bytes);
     assert_eq!(input_budget.used() + input_budget.remaining(), bytes);
-    assert!(value_budget.structure_budget().used_nodes() <= nodes);
+    assert!(value_budget.used_nodes() <= Some(nodes));
 });

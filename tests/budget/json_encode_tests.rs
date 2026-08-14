@@ -10,12 +10,15 @@
 use std::cell::Cell;
 use std::io;
 use std::io::Write;
+use std::panic;
 
+use qubit_budget::ResourceBudget;
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::text::JsonEncodeError;
 use qubit_json::text::encode_to_vec;
@@ -26,11 +29,6 @@ use serde::Serializer;
 use serde::ser::Error as _;
 use serde::ser::SerializeMap;
 use serde::ser::SerializeSeq;
-use serde::ser::SerializeStruct;
-use serde::ser::SerializeStructVariant;
-use serde::ser::SerializeTuple;
-use serde::ser::SerializeTupleStruct;
-use serde::ser::SerializeTupleVariant;
 use serde_json::Number;
 use serde_json::json;
 use serde_json::value::RawValue;
@@ -39,14 +37,6 @@ use super::json_test_limits_tests::JsonTestLimits;
 
 /// Arbitrary-precision number text used by online accounting tests.
 const LARGE_NUMBER_TEXT: &str = "123456789012345678901234567890";
-
-/// Private serde_json protocol token used by arbitrary-precision numbers.
-const JSON_NUMBER_TOKEN: &str =
-    concat!("$", "serde_json", ":", ":private::Number");
-
-/// Private serde_json protocol token used by raw JSON fragments.
-const JSON_RAW_VALUE_TOKEN: &str =
-    concat!("$", "serde_json", ":", ":private::RawValue");
 
 /// Value that emits a prefix before returning a custom Serde error.
 struct FailsAfterPrefix;
@@ -60,6 +50,23 @@ impl Serialize for FailsAfterPrefix {
         let mut sequence = serializer.serialize_seq(None)?;
         sequence.serialize_element(&1_u8)?;
         Err(S::Error::custom("deliberate serialization failure"))
+    }
+}
+
+/// Value that emits a prefix before panicking during serialization.
+struct PanicsAfterPrefix;
+
+impl Serialize for PanicsAfterPrefix {
+    /// Emits one sequence item, then panics before completing the sequence.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(None)?;
+        sequence
+            .serialize_element(&1_u8)
+            .expect("the prefix must serialize before the injected panic");
+        panic!("deliberate serialization panic");
     }
 }
 
@@ -190,24 +197,23 @@ impl Serialize for UnknownMap {
 }
 
 /// Writer that accepts a bounded prefix, then fails every later write.
-struct PrefixThenFailWriter {
+struct PrefixWriter {
     /// Bytes accepted before the configured failure boundary.
-    bytes: Vec<u8>,
+    accepted: Vec<u8>,
 
     /// Maximum number of bytes accepted across all writes.
-    accepted: usize,
+    maximum: usize,
 }
 
-impl Write for PrefixThenFailWriter {
+impl Write for PrefixWriter {
     /// Accepts at most the remaining prefix capacity, then reports an error.
     fn write(&mut self, input: &[u8]) -> io::Result<usize> {
-        let remaining = self.accepted.saturating_sub(self.bytes.len());
-        if remaining == 0 {
-            return Err(io::Error::other("deliberate writer failure"));
+        if self.accepted.len() == self.maximum {
+            return Err(io::Error::other("injected writer failure"));
         }
-        let accepted = remaining.min(input.len());
-        self.bytes.extend_from_slice(&input[..accepted]);
-        Ok(accepted)
+        let count = input.len().min(self.maximum - self.accepted.len());
+        self.accepted.extend_from_slice(&input[..count]);
+        Ok(count)
     }
 
     /// Flushes without additional side effects.
@@ -222,6 +228,7 @@ fn assert_online_rejection<T>(
     limits: JsonTestLimits,
     expected: JsonResource,
     serialized_tail: &Cell<usize>,
+    expected_tail: usize,
 ) where
     T: Serialize + ?Sized,
 {
@@ -238,580 +245,24 @@ fn assert_online_rejection<T>(
             .resource(),
         &expected,
     );
-    assert_eq!(serialized_tail.get(), 0);
-}
-
-struct ScalarSerializerSurface;
-
-macro_rules! define_scalar_serializer_surface {
-    ($name:ident, $method:ident, $($value:expr),+ $(,)?) => {
-        struct $name;
-
-        impl Serialize for $name {
-            /// Delegates the fixture to one less-common Serde scalar method.
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: Serializer,
-            {
-                serializer.$method($($value),+)
-            }
-        }
-    };
-}
-
-define_scalar_serializer_surface!(F32Surface, serialize_f32, 1.5_f32);
-define_scalar_serializer_surface!(F64Surface, serialize_f64, 1.5_f64);
-define_scalar_serializer_surface!(BytesSurface, serialize_bytes, &[1_u8, 2]);
-define_scalar_serializer_surface!(
-    UnitStructSurface,
-    serialize_unit_struct,
-    "Unit"
-);
-define_scalar_serializer_surface!(
-    UnitVariantSurface,
-    serialize_unit_variant,
-    "Kind",
-    0,
-    "Unit"
-);
-define_scalar_serializer_surface!(
-    NewtypeStructSurface,
-    serialize_newtype_struct,
-    "Value",
-    &1_u8
-);
-define_scalar_serializer_surface!(
-    NewtypeVariantSurface,
-    serialize_newtype_variant,
-    "Kind",
-    0,
-    "Value",
-    &1_u8
-);
-
-impl Serialize for ScalarSerializerSurface {
-    /// Formats a display-only value through Serde's collection hook.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.collect_str(&1_234)
-    }
-}
-
-struct TupleStructSurface;
-
-impl Serialize for TupleStructSurface {
-    /// Emits one tuple-struct field through the budgeted compound adapter.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut value = serializer.serialize_tuple_struct("Tuple", 1)?;
-        value.serialize_field(&1_u8)?;
-        value.end()
-    }
-}
-
-struct TupleVariantSurface;
-
-impl Serialize for TupleVariantSurface {
-    /// Emits one tuple-variant field through the budgeted compound adapter.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut value =
-            serializer.serialize_tuple_variant("Kind", 0, "Tuple", 1)?;
-        value.serialize_field(&1_u8)?;
-        value.end()
-    }
-}
-
-struct StructSurface;
-
-impl Serialize for StructSurface {
-    /// Exercises regular and skipped struct fields.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut value = serializer.serialize_struct("Struct", 1)?;
-        value.skip_field("ignored")?;
-        value.serialize_field("value", &1_u8)?;
-        value.end()
-    }
-}
-
-struct StructVariantSurface;
-
-impl Serialize for StructVariantSurface {
-    /// Exercises regular and skipped struct-variant fields.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut value =
-            serializer.serialize_struct_variant("Kind", 0, "Struct", 1)?;
-        value.skip_field("ignored")?;
-        value.serialize_field("value", &1_u8)?;
-        value.end()
-    }
-}
-
-/// Selects one Serde scalar or compound operation for a map key.
-#[derive(Clone, Copy)]
-enum KeySurfaceKind {
-    Bool,
-    I8,
-    I16,
-    I32,
-    I64,
-    I128,
-    U8,
-    U16,
-    U32,
-    U64,
-    U128,
-    F32,
-    F64,
-    Char,
-    Str,
-    Bytes,
-    None,
-    Some,
-    Unit,
-    UnitStruct,
-    UnitVariant,
-    NewtypeStruct,
-    NewtypeVariant,
-    Seq,
-    Tuple,
-    TupleStruct,
-    TupleVariant,
-    Map,
-    Struct,
-    StructVariant,
-    CollectStr,
-}
-
-/// Exercises the key serializer's complete Serde forwarding surface.
-struct KeySurface(KeySurfaceKind);
-
-impl Serialize for KeySurface {
-    /// Calls one selected serializer operation, including unsupported JSON-key
-    /// shapes whose forwarding code still needs to remain covered.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self.0 {
-            KeySurfaceKind::Bool => serializer.serialize_bool(true),
-            KeySurfaceKind::I8 => serializer.serialize_i8(-1),
-            KeySurfaceKind::I16 => serializer.serialize_i16(-1),
-            KeySurfaceKind::I32 => serializer.serialize_i32(-1),
-            KeySurfaceKind::I64 => serializer.serialize_i64(-1),
-            KeySurfaceKind::I128 => serializer.serialize_i128(-1),
-            KeySurfaceKind::U8 => serializer.serialize_u8(1),
-            KeySurfaceKind::U16 => serializer.serialize_u16(1),
-            KeySurfaceKind::U32 => serializer.serialize_u32(1),
-            KeySurfaceKind::U64 => serializer.serialize_u64(1),
-            KeySurfaceKind::U128 => serializer.serialize_u128(1),
-            KeySurfaceKind::F32 => serializer.serialize_f32(1.5),
-            KeySurfaceKind::F64 => serializer.serialize_f64(1.5),
-            KeySurfaceKind::Char => serializer.serialize_char('x'),
-            KeySurfaceKind::Str => serializer.serialize_str("key"),
-            KeySurfaceKind::Bytes => serializer.serialize_bytes(&[1, 2]),
-            KeySurfaceKind::None => serializer.serialize_none(),
-            KeySurfaceKind::Some => serializer.serialize_some(&1_u8),
-            KeySurfaceKind::Unit => serializer.serialize_unit(),
-            KeySurfaceKind::UnitStruct => {
-                serializer.serialize_unit_struct("KeyUnit")
-            }
-            KeySurfaceKind::UnitVariant => {
-                serializer.serialize_unit_variant("Key", 0, "Unit")
-            }
-            KeySurfaceKind::NewtypeStruct => {
-                serializer.serialize_newtype_struct("KeyValue", &1_u8)
-            }
-            KeySurfaceKind::NewtypeVariant => {
-                serializer.serialize_newtype_variant("Key", 0, "Value", &1_u8)
-            }
-            KeySurfaceKind::Seq => {
-                let mut value = serializer.serialize_seq(Some(1))?;
-                value.serialize_element(&1_u8)?;
-                value.end()
-            }
-            KeySurfaceKind::Tuple => {
-                let mut value = serializer.serialize_tuple(1)?;
-                value.serialize_element(&1_u8)?;
-                value.end()
-            }
-            KeySurfaceKind::TupleStruct => {
-                let mut value = serializer.serialize_tuple_struct("Key", 1)?;
-                value.serialize_field(&1_u8)?;
-                value.end()
-            }
-            KeySurfaceKind::TupleVariant => {
-                let mut value =
-                    serializer.serialize_tuple_variant("Key", 0, "Value", 1)?;
-                value.serialize_field(&1_u8)?;
-                value.end()
-            }
-            KeySurfaceKind::Map => {
-                let mut value = serializer.serialize_map(Some(1))?;
-                value.serialize_entry("nested", &1_u8)?;
-                value.end()
-            }
-            KeySurfaceKind::Struct => {
-                let mut value = serializer.serialize_struct("Key", 1)?;
-                value.serialize_field("value", &1_u8)?;
-                value.end()
-            }
-            KeySurfaceKind::StructVariant => {
-                let mut value = serializer
-                    .serialize_struct_variant("Key", 0, "Value", 1)?;
-                value.serialize_field("value", &1_u8)?;
-                value.end()
-            }
-            KeySurfaceKind::CollectStr => serializer.collect_str(&1_234),
-        }
-    }
-}
-
-/// Emits one custom key so a selected key serializer operation is entered.
-struct OneKey<'a> {
-    /// Key fixture selected for this test case.
-    key: &'a KeySurface,
-}
-
-impl Serialize for OneKey<'_> {
-    /// Emits one map entry with the selected custom key.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut map = serializer.serialize_map(Some(1))?;
-        map.serialize_entry(self.key, &1_u8)?;
-        map.end()
-    }
-}
-
-/// Selects one delegated operation of the private serde_json text serializer.
-#[derive(Clone, Copy)]
-enum PrivateTextSurfaceKind {
-    Bool,
-    I8,
-    I16,
-    I32,
-    I64,
-    I128,
-    U8,
-    U16,
-    U32,
-    U64,
-    U128,
-    F32,
-    F64,
-    Char,
-    Bytes,
-    None,
-    Some,
-    Unit,
-    UnitStruct,
-    UnitVariant,
-    NewtypeStruct,
-    NewtypeVariant,
-    Seq,
-    Tuple,
-    TupleStruct,
-    TupleVariant,
-    Map,
-    Struct,
-    StructVariant,
-    CollectStr,
-}
-
-/// Emits a serde_json private number shape around a selected field value.
-struct PrivateTextSurface {
-    /// Selects the private serde_json protocol to exercise.
-    token: &'static str,
-
-    /// Selects the delegated field operation.
-    kind: PrivateTextSurfaceKind,
-}
-
-impl Serialize for PrivateTextSurface {
-    /// Enters the private-number protocol used by arbitrary-precision values.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut value = serializer.serialize_struct(self.token, 1)?;
-        value.serialize_field(self.token, &PrivateTextValue(self.kind))?;
-        value.end()
-    }
-}
-
-/// Scalar emitted below a nested private payload boundary.
-struct NestedPrivateScalar(bool);
-
-impl Serialize for NestedPrivateScalar {
-    /// Enters the private serializer through a budgeted child wrapper.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        if self.0 {
-            serializer.serialize_f32(1.5)
-        } else {
-            serializer.serialize_f64(1.5)
-        }
-    }
-}
-
-/// Emits one selected operation into the private text serializer.
-struct PrivateTextValue(PrivateTextSurfaceKind);
-
-impl Serialize for PrivateTextValue {
-    /// Calls one operation forwarded by the private text serializer.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self.0 {
-            PrivateTextSurfaceKind::Bool => serializer.serialize_bool(true),
-            PrivateTextSurfaceKind::I8 => serializer.serialize_i8(-1),
-            PrivateTextSurfaceKind::I16 => serializer.serialize_i16(-1),
-            PrivateTextSurfaceKind::I32 => serializer.serialize_i32(-1),
-            PrivateTextSurfaceKind::I64 => serializer.serialize_i64(-1),
-            PrivateTextSurfaceKind::I128 => serializer.serialize_i128(-1),
-            PrivateTextSurfaceKind::U8 => serializer.serialize_u8(1),
-            PrivateTextSurfaceKind::U16 => serializer.serialize_u16(1),
-            PrivateTextSurfaceKind::U32 => serializer.serialize_u32(1),
-            PrivateTextSurfaceKind::U64 => serializer.serialize_u64(1),
-            PrivateTextSurfaceKind::U128 => serializer.serialize_u128(1),
-            PrivateTextSurfaceKind::F32 => serializer.serialize_f32(1.5),
-            PrivateTextSurfaceKind::F64 => serializer.serialize_f64(1.5),
-            PrivateTextSurfaceKind::Char => serializer.serialize_char('x'),
-            PrivateTextSurfaceKind::Bytes => {
-                serializer.serialize_bytes(&[1, 2])
-            }
-            PrivateTextSurfaceKind::None => serializer.serialize_none(),
-            PrivateTextSurfaceKind::Some => serializer.serialize_some(&1_u8),
-            PrivateTextSurfaceKind::Unit => serializer.serialize_unit(),
-            PrivateTextSurfaceKind::UnitStruct => {
-                serializer.serialize_unit_struct("Value")
-            }
-            PrivateTextSurfaceKind::UnitVariant => {
-                serializer.serialize_unit_variant("Value", 0, "Unit")
-            }
-            PrivateTextSurfaceKind::NewtypeStruct => {
-                serializer.serialize_newtype_struct("Value", &1_u8)
-            }
-            PrivateTextSurfaceKind::NewtypeVariant => serializer
-                .serialize_newtype_variant("Value", 0, "Nested", &1_u8),
-            PrivateTextSurfaceKind::Seq => {
-                let mut value = serializer.serialize_seq(Some(1))?;
-                value.serialize_element(&1_u8)?;
-                value.end()
-            }
-            PrivateTextSurfaceKind::Tuple => {
-                let mut value = serializer.serialize_tuple(1)?;
-                value.serialize_element(&1_u8)?;
-                value.end()
-            }
-            PrivateTextSurfaceKind::TupleStruct => {
-                let mut value =
-                    serializer.serialize_tuple_struct("Value", 1)?;
-                value.serialize_field(&1_u8)?;
-                value.end()
-            }
-            PrivateTextSurfaceKind::TupleVariant => {
-                let mut value = serializer
-                    .serialize_tuple_variant("Value", 0, "Nested", 1)?;
-                value.serialize_field(&1_u8)?;
-                value.end()
-            }
-            PrivateTextSurfaceKind::Map => {
-                let mut value = serializer.serialize_map(Some(1))?;
-                value.serialize_entry("nested", &1_u8)?;
-                value.end()
-            }
-            PrivateTextSurfaceKind::Struct => {
-                let mut value = serializer.serialize_struct("Value", 1)?;
-                value.serialize_field("value", &1_u8)?;
-                value.end()
-            }
-            PrivateTextSurfaceKind::StructVariant => {
-                let mut value = serializer
-                    .serialize_struct_variant("Value", 0, "Nested", 1)?;
-                value.serialize_field("value", &1_u8)?;
-                value.end()
-            }
-            PrivateTextSurfaceKind::CollectStr => {
-                serializer.collect_str(&1_234)
-            }
-        }
-    }
-}
-
-/// Verifies less-common Serde serializer entry points remain budget-aware.
-#[test]
-fn test_encode_exercises_all_serializer_entry_points() {
-    fn assert_encodes<T: Serialize>(value: &T) {
-        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-        encode_to_vec(value, &mut session)
-            .expect("every supported Serde entry point must encode");
-    }
-
-    assert_encodes(&F32Surface);
-    assert_encodes(&F64Surface);
-    assert_encodes(&BytesSurface);
-    assert_encodes(&UnitStructSurface);
-    assert_encodes(&UnitVariantSurface);
-    assert_encodes(&NewtypeStructSurface);
-    assert_encodes(&NewtypeVariantSurface);
-    assert_encodes(&ScalarSerializerSurface);
-    assert_encodes(&TupleStructSurface);
-    assert_encodes(&TupleVariantSurface);
-    assert_encodes(&StructSurface);
-    assert_encodes(&StructVariantSurface);
-    assert_encodes(&1_u8);
-    assert_encodes(&vec![1_u8]);
-
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-    encode_to_vec(&f32::NAN, &mut session)
-        .expect("non-finite f32 should use the JSON null path");
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-    encode_to_vec(&f64::NAN, &mut session)
-        .expect("non-finite f64 should use the JSON null path");
-}
-
-/// Verifies every map-key forwarding method performs its budget check before
-/// delegating to serde_json.
-#[test]
-fn test_encode_exercises_all_key_serializer_entry_points() {
-    let kinds = [
-        KeySurfaceKind::Bool,
-        KeySurfaceKind::I8,
-        KeySurfaceKind::I16,
-        KeySurfaceKind::I32,
-        KeySurfaceKind::I64,
-        KeySurfaceKind::I128,
-        KeySurfaceKind::U8,
-        KeySurfaceKind::U16,
-        KeySurfaceKind::U32,
-        KeySurfaceKind::U64,
-        KeySurfaceKind::U128,
-        KeySurfaceKind::F32,
-        KeySurfaceKind::F64,
-        KeySurfaceKind::Char,
-        KeySurfaceKind::Str,
-        KeySurfaceKind::Bytes,
-        KeySurfaceKind::None,
-        KeySurfaceKind::Some,
-        KeySurfaceKind::Unit,
-        KeySurfaceKind::UnitStruct,
-        KeySurfaceKind::UnitVariant,
-        KeySurfaceKind::NewtypeStruct,
-        KeySurfaceKind::NewtypeVariant,
-        KeySurfaceKind::Seq,
-        KeySurfaceKind::Tuple,
-        KeySurfaceKind::TupleStruct,
-        KeySurfaceKind::TupleVariant,
-        KeySurfaceKind::Map,
-        KeySurfaceKind::Struct,
-        KeySurfaceKind::StructVariant,
-        KeySurfaceKind::CollectStr,
-    ];
-
-    for kind in kinds {
-        let key = KeySurface(kind);
-        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-        let _ = encode_to_vec(&OneKey { key: &key }, &mut session);
-    }
-
-    for kind in kinds {
-        let key = KeySurface(kind);
-        let mut output = Vec::new();
-        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-        let _ = encode_to_writer_incremental(
-            &mut output,
-            &OneKey { key: &key },
-            &mut session,
-        );
-    }
-}
-
-/// Verifies private serde_json payload forwarding remains total for all Serde
-/// operations, including shapes rejected by the underlying JSON serializer.
-#[test]
-fn test_encode_exercises_private_text_serializer_entry_points() {
-    let kinds = [
-        PrivateTextSurfaceKind::Bool,
-        PrivateTextSurfaceKind::I8,
-        PrivateTextSurfaceKind::I16,
-        PrivateTextSurfaceKind::I32,
-        PrivateTextSurfaceKind::I64,
-        PrivateTextSurfaceKind::I128,
-        PrivateTextSurfaceKind::U8,
-        PrivateTextSurfaceKind::U16,
-        PrivateTextSurfaceKind::U32,
-        PrivateTextSurfaceKind::U64,
-        PrivateTextSurfaceKind::U128,
-        PrivateTextSurfaceKind::F32,
-        PrivateTextSurfaceKind::F64,
-        PrivateTextSurfaceKind::Char,
-        PrivateTextSurfaceKind::Bytes,
-        PrivateTextSurfaceKind::None,
-        PrivateTextSurfaceKind::Some,
-        PrivateTextSurfaceKind::Unit,
-        PrivateTextSurfaceKind::UnitStruct,
-        PrivateTextSurfaceKind::UnitVariant,
-        PrivateTextSurfaceKind::NewtypeStruct,
-        PrivateTextSurfaceKind::NewtypeVariant,
-        PrivateTextSurfaceKind::Seq,
-        PrivateTextSurfaceKind::Tuple,
-        PrivateTextSurfaceKind::TupleStruct,
-        PrivateTextSurfaceKind::TupleVariant,
-        PrivateTextSurfaceKind::Map,
-        PrivateTextSurfaceKind::Struct,
-        PrivateTextSurfaceKind::StructVariant,
-        PrivateTextSurfaceKind::CollectStr,
-    ];
-
-    for kind in kinds {
-        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-        let _ = encode_to_vec(
-            &PrivateTextSurface {
-                token: JSON_NUMBER_TOKEN,
-                kind,
-            },
-            &mut session,
-        );
-        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-        let _ = encode_to_vec(
-            &PrivateTextSurface {
-                token: JSON_RAW_VALUE_TOKEN,
-                kind,
-            },
-            &mut session,
-        );
-    }
-
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-    let _ = encode_to_vec(&vec![NestedPrivateScalar(true)], &mut session);
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-    let _ = encode_to_vec(&vec![NestedPrivateScalar(false)], &mut session);
+    assert_eq!(serialized_tail.get(), expected_tail);
 }
 
 /// Verifies a budget failure leaves the destination writer unchanged.
 #[test]
 fn test_encode_to_writer_failure_does_not_touch_external_writer() {
-    let limits = JsonEncodeLimits::empty().with_output_bytes_limit(
-        ResourceLimit::new(JsonResource::OutputBytes, 3),
-    );
+    let limits =
+        JsonEncodeLimits::empty()
+            .with_output_bytes_limit(ResourceLimit::new(
+                JsonResource::OutputBytes,
+                3,
+            ))
+            .with_value_limits(JsonValueLimits::empty().with_structure_limits(
+                StructureLimits::empty().with_nodes_limit(ResourceLimit::new(
+                    JsonResource::Nodes,
+                    16,
+                )),
+            ));
     let mut session = JsonEncodeSession::owned(limits);
     let mut output = Vec::new();
 
@@ -820,6 +271,14 @@ fn test_encode_to_writer_failure_does_not_touch_external_writer() {
 
     assert!(matches!(error, JsonEncodeError::Budget(_)));
     assert!(output.is_empty());
+    assert_eq!(
+        session
+            .output_budget()
+            .expect("output budget should remain configured")
+            .used(),
+        0,
+    );
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
 }
 
 /// Verifies a RawValue is traversed once and emitted without metadata charges.
@@ -848,40 +307,49 @@ fn test_encode_to_writer_serde_failure_does_not_touch_external_writer() {
     assert!(output.is_empty());
 }
 
-/// Verifies a failed encode does not consume borrowed output budget capacity.
+/// Verifies a failed Vec encode rolls back borrowed output and value budgets.
 #[test]
-fn test_encode_to_vec_serde_failure_does_not_consume_output_budget() {
-    let value_limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::empty()
-            .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+fn test_encode_to_vec_serde_failure_rolls_back_borrowed_budgets() {
+    let mut output = ResourceBudget::new(JsonResource::OutputBytes, 16);
+    let mut value = JsonValueBudget::new(
+        JsonValueLimits::empty().with_structure_limits(
+            StructureLimits::empty()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+        ),
     );
-    let limits = JsonEncodeLimits::empty()
-        .with_output_bytes_limit(ResourceLimit::new(
-            JsonResource::OutputBytes,
-            16,
-        ))
-        .with_value_limits(value_limits);
-    let mut session = JsonEncodeSession::owned(limits);
-    encode_to_vec(&true, &mut session).expect("the initial value should fit");
-    let used_before = session
-        .output_budget()
-        .expect("output accounting should be configured")
-        .used();
-    let nodes_before = session.value_budget().structure_budget().used_nodes();
+    let mut session =
+        JsonEncodeSession::borrowing_output(&mut output, &mut value);
 
     let error = encode_to_vec(&FailsAfterPrefix, &mut session)
         .expect_err("the custom serializer must fail");
 
     assert!(matches!(error, JsonEncodeError::Serialize(_)));
-    let output = session
-        .output_budget()
-        .expect("output accounting should remain configured");
-    assert_eq!(output.used(), used_before);
-    assert_eq!(output.remaining(), 16 - used_before);
-    assert!(
-        session.value_budget().structure_budget().used_nodes() > nodes_before,
-        "accepted value work remains charged after serialization failure",
+    drop(session);
+    assert_eq!(output.used(), 0);
+    assert_eq!(value.used_nodes(), Some(0));
+}
+
+/// Verifies Vec output-budget rejection leaves all caller-owned budgets
+/// unchanged.
+#[test]
+fn test_encode_to_vec_output_budget_rejection_rolls_back_borrowed_budgets() {
+    let mut output = ResourceBudget::new(JsonResource::OutputBytes, 3);
+    let mut value = JsonValueBudget::new(
+        JsonValueLimits::empty().with_structure_limits(
+            StructureLimits::empty()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+        ),
     );
+    let mut session =
+        JsonEncodeSession::borrowing_output(&mut output, &mut value);
+
+    let error = encode_to_vec(&[1_u8, 2_u8], &mut session)
+        .expect_err("the complete output must exceed the configured limit");
+
+    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    drop(session);
+    assert_eq!(output.used(), 0);
+    assert_eq!(value.used_nodes(), Some(0));
 }
 
 /// Verifies a known map length is checked before its entries are traversed.
@@ -899,6 +367,7 @@ fn test_encode_to_vec_known_map_limit_stops_before_source_tail() {
         JsonTestLimits::new().with_max_map_entries(1),
         JsonResource::MapEntries,
         &serialized_tail,
+        1,
     );
 }
 
@@ -925,17 +394,28 @@ fn test_encode_to_vec_output_limit_stops_before_source_tail() {
 /// Verifies final writer I/O can leave an accepted prefix in the destination.
 #[test]
 fn test_encode_to_writer_io_failure_can_leave_partial_output() {
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-    let mut writer = PrefixThenFailWriter {
-        bytes: Vec::new(),
-        accepted: 2,
+    let mut output = ResourceBudget::new(JsonResource::OutputBytes, 16);
+    let mut value = JsonValueBudget::new(
+        JsonValueLimits::empty().with_structure_limits(
+            StructureLimits::empty()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+        ),
+    );
+    let mut session =
+        JsonEncodeSession::borrowing_output(&mut output, &mut value);
+    let mut writer = PrefixWriter {
+        accepted: Vec::new(),
+        maximum: 2,
     };
 
     let error = encode_to_writer(&mut writer, &[1_u8, 2_u8], &mut session)
         .expect_err("the destination writer must fail during final commit");
 
     assert!(matches!(error, JsonEncodeError::Write(_)));
-    assert_eq!(writer.bytes, b"[1");
+    assert_eq!(writer.accepted, b"[1");
+    drop(session);
+    assert_eq!(output.used(), writer.accepted.len());
+    assert_eq!(value.used_nodes(), Some(0));
 }
 
 /// Verifies incremental encoding matches transactional encoding on success.
@@ -959,9 +439,18 @@ fn test_encode_to_writer_incremental_matches_encode_to_vec() {
 #[test]
 fn test_encode_to_writer_incremental_preserves_partial_output_on_budget_error()
 {
-    let limits = JsonEncodeLimits::empty().with_output_bytes_limit(
-        ResourceLimit::new(JsonResource::OutputBytes, 4),
-    );
+    let limits =
+        JsonEncodeLimits::empty()
+            .with_output_bytes_limit(ResourceLimit::new(
+                JsonResource::OutputBytes,
+                4,
+            ))
+            .with_value_limits(JsonValueLimits::empty().with_structure_limits(
+                StructureLimits::empty().with_nodes_limit(ResourceLimit::new(
+                    JsonResource::Nodes,
+                    16,
+                )),
+            ));
     let mut session = JsonEncodeSession::owned(limits);
     let mut output = Vec::new();
 
@@ -981,15 +470,24 @@ fn test_encode_to_writer_incremental_preserves_partial_output_on_budget_error()
             .used(),
         4,
     );
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
 }
 
 /// Verifies incremental encoding maps destination failures to `Write`.
 #[test]
 fn test_encode_to_writer_incremental_preserves_partial_output_on_io_error() {
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-    let mut writer = PrefixThenFailWriter {
-        bytes: Vec::new(),
-        accepted: 2,
+    let mut output = ResourceBudget::new(JsonResource::OutputBytes, 16);
+    let mut value = JsonValueBudget::new(
+        JsonValueLimits::empty().with_structure_limits(
+            StructureLimits::empty()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+        ),
+    );
+    let mut session =
+        JsonEncodeSession::borrowing_output(&mut output, &mut value);
+    let mut writer = PrefixWriter {
+        accepted: Vec::new(),
+        maximum: 2,
     };
 
     let error =
@@ -997,15 +495,27 @@ fn test_encode_to_writer_incremental_preserves_partial_output_on_io_error() {
             .expect_err("the destination writer must fail incrementally");
 
     assert!(matches!(error, JsonEncodeError::Write(_)));
-    assert_eq!(writer.bytes, b"[1");
+    assert_eq!(writer.accepted, b"[1");
+    drop(session);
+    assert_eq!(output.used(), writer.accepted.len());
+    assert_eq!(value.used_nodes(), Some(0));
 }
 
 /// Verifies incremental Serde failures retain their accepted prefix and usage.
 #[test]
 fn test_encode_to_writer_incremental_preserves_partial_output_on_serde_error() {
-    let limits = JsonEncodeLimits::empty().with_output_bytes_limit(
-        ResourceLimit::new(JsonResource::OutputBytes, 16),
-    );
+    let limits =
+        JsonEncodeLimits::empty()
+            .with_output_bytes_limit(ResourceLimit::new(
+                JsonResource::OutputBytes,
+                16,
+            ))
+            .with_value_limits(JsonValueLimits::empty().with_structure_limits(
+                StructureLimits::empty().with_nodes_limit(ResourceLimit::new(
+                    JsonResource::Nodes,
+                    16,
+                )),
+            ));
     let mut session = JsonEncodeSession::owned(limits);
     let mut output = Vec::new();
 
@@ -1025,6 +535,83 @@ fn test_encode_to_writer_incremental_preserves_partial_output_on_serde_error() {
             .used(),
         2,
     );
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
+}
+
+/// Verifies an incremental panic rolls back value state but retains accepted
+/// output.
+#[test]
+fn test_encode_to_writer_incremental_panic_rolls_back_value_budget() {
+    let mut output = ResourceBudget::new(JsonResource::OutputBytes, 16);
+    let mut value = JsonValueBudget::new(
+        JsonValueLimits::empty().with_structure_limits(
+            StructureLimits::empty()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+        ),
+    );
+    let mut session =
+        JsonEncodeSession::borrowing_output(&mut output, &mut value);
+    let mut writer = Vec::new();
+
+    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        encode_to_writer_incremental(
+            &mut writer,
+            &PanicsAfterPrefix,
+            &mut session,
+        )
+    }));
+
+    assert!(result.is_err());
+    drop(session);
+    assert_eq!(output.used(), writer.len());
+    assert_eq!(value.used_nodes(), Some(0));
+}
+
+/// Verifies a session remains usable after an uncommitted writer attempt.
+#[test]
+fn test_encode_to_writer_reuses_session_after_failed_attempt() {
+    let mut session = JsonEncodeSession::owned(
+        JsonEncodeLimits::empty()
+            .with_output_bytes_limit(ResourceLimit::new(
+                JsonResource::OutputBytes,
+                16,
+            ))
+            .with_value_limits(JsonValueLimits::empty().with_structure_limits(
+                StructureLimits::empty().with_nodes_limit(ResourceLimit::new(
+                    JsonResource::Nodes,
+                    16,
+                )),
+            )),
+    );
+    let mut failed_writer = PrefixWriter {
+        accepted: Vec::new(),
+        maximum: 2,
+    };
+
+    let _ = encode_to_writer(&mut failed_writer, &[1_u8, 2_u8], &mut session)
+        .expect_err("the injected writer failure must drop the value attempt");
+    assert_eq!(
+        session
+            .output_budget()
+            .expect("output budget should remain configured")
+            .used(),
+        failed_writer.accepted.len(),
+    );
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
+
+    let mut successful_writer = Vec::new();
+    encode_to_writer(&mut successful_writer, &true, &mut session)
+        .expect("a later value must commit after the failed attempt");
+
+    assert_eq!(successful_writer, b"true");
+    assert_eq!(
+        session
+            .output_budget()
+            .expect("output budget should remain configured")
+            .used(),
+        failed_writer.accepted.len() + successful_writer.len(),
+    );
+    assert_eq!(session.value_budget().used_nodes(), Some(1));
 }
 
 /// Verifies node accounting stops a long source before it is exhausted.
@@ -1044,9 +631,10 @@ fn test_encode_to_vec_node_limit_stops_before_source_tail() {
     assert!(serialized.get() < value.len);
 }
 
-/// Verifies depth accounting stops recursive serialization online.
+/// Verifies depth accounting rejects after the complete recursive value is
+/// traversed into its final measurement.
 #[test]
-fn test_encode_to_vec_depth_limit_stops_before_source_tail() {
+fn test_encode_to_vec_depth_limit_checks_complete_source_depth() {
     const SOURCE_DEPTH: usize = 128;
 
     let serialized = Cell::new(0);
@@ -1060,7 +648,7 @@ fn test_encode_to_vec_depth_limit_stops_before_source_tail() {
         .expect_err("the depth budget must reject recursive serialization");
 
     assert!(matches!(error, JsonEncodeError::Budget(_)));
-    assert!(serialized.get() < SOURCE_DEPTH);
+    assert_eq!(serialized.get(), SOURCE_DEPTH);
 }
 
 /// Verifies arbitrary-precision number rejection occurs before a later value.
@@ -1081,6 +669,7 @@ fn test_encode_to_vec_number_limit_stops_before_source_tail() {
             .with_max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
         JsonResource::NumberBytes,
         &serialized_tail,
+        0,
     );
 }
 
@@ -1100,6 +689,7 @@ fn test_encode_to_vec_key_limit_stops_before_source_tail() {
         JsonTestLimits::new().with_max_key_bytes(key.len() - 1),
         JsonResource::KeyBytes,
         &serialized_tail,
+        0,
     );
 }
 
@@ -1118,6 +708,7 @@ fn test_encode_to_vec_string_limit_stops_before_source_tail() {
         JsonTestLimits::new().with_max_string_bytes(text.len() - 1),
         JsonResource::StringBytes,
         &serialized_tail,
+        0,
     );
 }
 
@@ -1136,5 +727,6 @@ fn test_encode_to_vec_unknown_map_limit_stops_before_source_tail() {
         JsonTestLimits::new().with_max_map_entries(1),
         JsonResource::MapEntries,
         &serialized_tail,
+        0,
     );
 }

@@ -5,10 +5,10 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::tree::JsonTreeContext;
 use qubit_json::tree::JsonTreeLocation;
+use qubit_json::tree::JsonTreeProcessError;
 use qubit_json::tree::JsonTreeProcessor;
 use qubit_json::tree::JsonTreeVisitor;
 use serde_json::Value;
@@ -17,6 +17,29 @@ use serde_json::json;
 /// Records the context received by a tree visitor.
 struct RecordingVisitor {
     events: Vec<String>,
+}
+
+/// Stops traversal to verify the caller-owned transaction rolls back.
+struct FailingVisitor;
+
+impl JsonTreeVisitor for FailingVisitor {
+    type Error = &'static str;
+
+    fn enter(
+        &mut self,
+        _value: &Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<(), Self::Error> {
+        Err("stop")
+    }
+
+    fn leave(
+        &mut self,
+        _value: &Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }
 
 impl JsonTreeVisitor for RecordingVisitor {
@@ -51,10 +74,11 @@ impl JsonTreeVisitor for RecordingVisitor {
 #[test]
 fn test_process_visits_depth_first_with_root_and_key_locations() {
     let value = json!({"a": [true]});
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
+    let mut budget = JsonValueLimits::empty().budget();
+    let mut transaction = budget.transaction();
     let mut visitor = RecordingVisitor { events: Vec::new() };
 
-    JsonTreeProcessor::new(&mut budget)
+    JsonTreeProcessor::new(&mut transaction)
         .process(&value, &mut visitor)
         .expect("unlimited tree processing succeeds");
 
@@ -74,19 +98,35 @@ fn test_process_visits_depth_first_with_root_and_key_locations() {
 /// Verifies that a processor can outlive each JSON value it processes.
 #[test]
 fn test_process_accepts_value_borrowed_shorter_than_budget() {
-    let mut budget =
-        JsonValueBudget::new(JsonValueLimits::empty().with_max_nodes(2));
-    let mut processor = JsonTreeProcessor::new(&mut budget);
+    let mut budget = JsonValueLimits::empty().with_max_nodes(2).budget();
+    let mut transaction = budget.transaction();
     let mut visitor = RecordingVisitor { events: Vec::new() };
 
     {
+        let mut processor = JsonTreeProcessor::new(&mut transaction);
         let value = json!([true]);
         processor
             .process(&value, &mut visitor)
             .expect("short-lived JSON value processing succeeds");
     }
 
-    assert_eq!(processor.budget().structure_budget().used_nodes(), 2);
+    assert_eq!(transaction.used_nodes(), Some(2));
+}
+
+/// Verifies a visitor error leaves the caller's committed budget unchanged.
+#[test]
+fn test_process_rolls_back_transaction_when_visitor_returns_error() {
+    let mut budget = JsonValueLimits::empty().with_max_nodes(4).budget();
+
+    {
+        let mut transaction = budget.transaction();
+        let error = JsonTreeProcessor::new(&mut transaction)
+            .process(&json!([Value::Null]), &mut FailingVisitor)
+            .expect_err("visitor must stop traversal");
+        assert!(matches!(error, JsonTreeProcessError::Visitor("stop")));
+    }
+
+    assert_eq!(budget.used_nodes(), Some(0));
 }
 
 /// Verifies that the root context is explicitly represented.

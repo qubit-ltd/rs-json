@@ -9,7 +9,8 @@
 
 use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
-use qubit_budget::json::JsonValueBudget;
+use qubit_budget::json::JsonMeasurement;
+use qubit_budget::json::JsonValueTransaction;
 use serde_json::Value;
 use serde_json::map::Iter;
 
@@ -21,22 +22,24 @@ use super::JsonTreeMutVisitor;
 use super::JsonTreeProcessError;
 use super::JsonTreeVisitor;
 
-/// Processes JSON values while borrowing one shared JSON value budget.
-pub struct JsonTreeProcessor<'a, R, Q>
+/// Processes JSON values while borrowing one staged JSON value transaction.
+pub struct JsonTreeProcessor<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
-    budget: &'a mut JsonValueBudget<R, Q>,
+    transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 }
 
-impl<'a, R, Q> JsonTreeProcessor<'a, R, Q>
+impl<'transaction, 'budget, R, Q> JsonTreeProcessor<'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
 {
-    /// Creates a processor borrowing the supplied JSON value budget.
-    pub fn new(budget: &'a mut JsonValueBudget<R, Q>) -> Self {
-        Self { budget }
+    /// Creates a processor borrowing the supplied JSON value transaction.
+    pub fn new(
+        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    ) -> Self {
+        Self { transaction }
     }
 
     /// Processes every node in depth-first order without Rust recursion.
@@ -67,7 +70,9 @@ where
                     if let JsonTreeLocation::ObjectValue { key } =
                         context.location
                     {
-                        self.budget.consume_key_bytes_usize(key.len())?;
+                        self.transaction.try_admit(JsonMeasurement::Key {
+                            bytes: key.len(),
+                        })?;
                     }
                     self.admit(value, context.depth)?;
                     visitor
@@ -126,8 +131,9 @@ where
                 let context = frame.location.context(frame.depth);
 
                 if let Some(key) = frame.location.key()
-                    && let Err(error) =
-                        self.budget.consume_key_bytes_usize(key.len())
+                    && let Err(error) = self
+                        .transaction
+                        .try_admit(JsonMeasurement::Key { bytes: key.len() })
                 {
                     let rejection = visitor
                         .reject_budget(&mut frame.value, context, &error)
@@ -176,37 +182,33 @@ where
         Ok(())
     }
 
-    /// Returns the borrowed budget.
-    pub const fn budget(&self) -> &JsonValueBudget<R, Q> {
-        self.budget
-    }
-
-    /// Returns the borrowed budget for direct caller-managed accounting.
-    pub fn budget_mut(&mut self) -> &mut JsonValueBudget<R, Q> {
-        self.budget
-    }
-
     /// Admits one node before any visitor callback.
     fn admit(
         &mut self,
         value: &Value,
         depth: usize,
     ) -> Result<(), MeasuredBudgetError<R, Q>> {
-        match value {
-            Value::Null | Value::Bool(_) => self.budget.enter_node_usize(depth),
-            Value::Number(number) => {
-                self.budget.enter_number_usize(depth, number.as_str().len())
-            }
-            Value::String(text) => {
-                self.budget.enter_string_usize(depth, text.len())
-            }
-            Value::Array(values) => {
-                self.budget.enter_array_usize(depth, values.len())
-            }
-            Value::Object(entries) => {
-                self.budget.enter_object_usize(depth, entries.len())
-            }
-        }
+        let measurement = match value {
+            Value::Null => JsonMeasurement::Null { depth },
+            Value::Bool(_) => JsonMeasurement::Boolean { depth },
+            Value::Number(number) => JsonMeasurement::Number {
+                depth,
+                bytes: number.as_str().len(),
+            },
+            Value::String(text) => JsonMeasurement::String {
+                depth,
+                bytes: text.len(),
+            },
+            Value::Array(values) => JsonMeasurement::Array {
+                depth,
+                items: values.len(),
+            },
+            Value::Object(entries) => JsonMeasurement::Object {
+                depth,
+                entries: entries.len(),
+            },
+        };
+        self.transaction.try_admit(measurement)
     }
 }
 

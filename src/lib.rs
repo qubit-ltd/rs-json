@@ -72,7 +72,9 @@
 //! normalized bytes, then uses a lexical preflight to charge JSON value
 //! resources before directly deserializing `T`. It does not build an
 //! intermediate [`serde_json::Value`], so target-specific Serde behavior is
-//! preserved. Charges completed before any error remain in the session.
+//! preserved. Raw and normalized input charges remain in the session after an
+//! error, while staged value charges commit only after complete
+//! deserialization.
 //!
 //! ```rust
 //! use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession};
@@ -91,7 +93,7 @@
 //! let value: serde_json::Value = decoder
 //!     .decode_with_session("```json\n{\"ok\":true}\n```", &mut session)?;
 //! assert_eq!(value["ok"], true);
-//! assert_eq!(session.value_budget().structure_budget().used_nodes(), 2);
+//! assert_eq!(session.value_budget().used_nodes(), Some(2));
 //! # Ok::<(), qubit_json::lenient::LenientJsonDecodeError>(())
 //! ```
 //!
@@ -111,11 +113,13 @@
 //!     JsonValueLimits::empty().with_max_nodes(3),
 //! );
 //! let mut deserializer = Deserializer::from_slice(br#"{"key":[true]}"#);
-//! let value = BudgetedJsonValueSeed::new(&mut budget)
+//! let mut transaction = budget.transaction();
+//! let value = BudgetedJsonValueSeed::new(&mut transaction)
 //!     .deserialize(&mut deserializer)?;
+//! transaction.commit();
 //!
 //! assert_eq!(value["key"][0], true);
-//! assert_eq!(budget.structure_budget().used_nodes(), 3);
+//! assert_eq!(budget.used_nodes(), Some(3));
 //! # Ok::<(), serde_json::Error>(())
 //! ```
 //!

@@ -12,9 +12,10 @@ use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
 
-use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
+use qubit_budget::json::JsonEncodeAttempt;
 use serde::Serialize;
+use serde_json::Error as JsonError;
 use serde_json::Serializer as JsonSerializer;
 
 use super::JsonEncodeSession;
@@ -56,42 +57,27 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    let mut transaction = session.output_budget().cloned();
-    let initial_remaining =
-        transaction.as_ref().map(|budget| budget.remaining());
-    let bytes = {
-        let accounting = Rc::new(RefCell::new(JsonOutputAccounting::new(
-            transaction.as_mut(),
-        )));
-        let mut output = JsonOutputBuffer::new(Rc::clone(&accounting));
-        let result = {
-            let mut inner = JsonSerializer::new(&mut output);
-            let context = RefCell::new(super::internal::JsonEncodeContext {
-                budget: session.value_budget_mut(),
-                output: accounting,
-            });
-            value.serialize(JsonEncodeSerializer::new(&mut inner, &context))
-        };
-        output.into_result(result)?
-    };
-    if let (Some(transaction), Some(initial_remaining)) =
-        (transaction, initial_remaining)
-    {
-        let consumed = initial_remaining - transaction.remaining();
-        session
-            .consume_output_bytes(consumed)
-            .map_err(MeasuredBudgetError::from)
-            .map_err(JsonSerdeError::from)?;
-    }
+    let mut attempt = session.begin_value();
+    let bytes = serialize_to_buffer(value, &mut attempt)?;
+    attempt
+        .check_output_bytes(bytes.len())
+        .map_err(JsonSerdeError::from)?;
+    attempt
+        .try_consume_output_bytes(bytes.len())
+        .map_err(JsonSerdeError::from)?;
+    attempt.commit();
     Ok(bytes)
 }
 
-/// Serializes one value and writes it only after budget checks pass.
+/// Serializes one value and writes it only after the complete document passes
+/// output-budget checks.
 ///
 /// Serialization is transactional with respect to budget and Serde failures:
 /// the destination is not touched until the complete buffered document is
 /// accepted. A failure during the final [`Write::write_all`] call may leave the
 /// destination with a partial document because [`Write`] has no rollback API.
+/// Every accepted byte is charged immediately, while value accounting commits
+/// only after the full write succeeds.
 ///
 /// # Parameters
 ///
@@ -114,7 +100,7 @@ where
 /// * `T` - Value type serialized to JSON.
 /// * `R` - Resource identity reported by budget violations.
 pub fn encode_to_writer<W, T, R, Q>(
-    mut writer: W,
+    writer: W,
     value: &T,
     session: &mut JsonEncodeSession<R, Q>,
 ) -> Result<(), JsonSerdeError<R, Q>>
@@ -124,8 +110,14 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    let bytes = encode_to_vec(value, session)?;
-    writer.write_all(&bytes).map_err(JsonSerdeError::Io)
+    let mut attempt = session.begin_value();
+    let bytes = serialize_to_buffer(value, &mut attempt)?;
+    attempt
+        .check_output_bytes(bytes.len())
+        .map_err(JsonSerdeError::from)?;
+    write_buffered(writer, &bytes, &mut attempt)?;
+    attempt.commit();
+    Ok(())
 }
 
 /// Serializes one value directly to a writer with online budget checks.
@@ -168,32 +160,104 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    let mut transaction = session.output_budget().cloned();
-    let initial_remaining =
-        transaction.as_ref().map(|budget| budget.remaining());
+    let mut attempt = session.begin_value();
     let result = {
-        let accounting = Rc::new(RefCell::new(JsonOutputAccounting::new(
-            transaction.as_mut(),
-        )));
+        let (output_budget, transaction) = attempt.split_mut();
+        let accounting =
+            Rc::new(RefCell::new(JsonOutputAccounting::new(output_budget)));
         let mut output = JsonOutputWriter::new(writer, Rc::clone(&accounting));
         let result = {
             let mut inner = JsonSerializer::new(&mut output);
             let context = RefCell::new(super::internal::JsonEncodeContext {
-                budget: session.value_budget_mut(),
+                transaction,
                 output: accounting,
             });
             value.serialize(JsonEncodeSerializer::new(&mut inner, &context))
         };
+        if result.is_ok() {
+            let _ = output.flush();
+        }
         output.into_result(result)
     };
-    if let (Some(transaction), Some(initial_remaining)) =
-        (transaction, initial_remaining)
-    {
-        let consumed = initial_remaining - transaction.remaining();
-        session
-            .consume_output_bytes(consumed)
-            .map_err(MeasuredBudgetError::from)
-            .map_err(JsonSerdeError::from)?;
+    result?;
+    attempt.commit();
+    Ok(())
+}
+
+/// Serializes one value into an uncharged, output-bounded byte buffer.
+///
+/// # Parameters
+///
+/// * `value` - Value serialized into compact JSON.
+/// * `attempt` - Active encode attempt whose value transaction is staged.
+///
+/// # Returns
+///
+/// Complete JSON bytes after serialization and online output checks succeed.
+///
+/// # Errors
+///
+/// Returns [`JsonSerdeError::Budget`] for a value or prospective output
+/// violation, or [`JsonSerdeError::Json`] when Serde rejects `value`. The
+/// caller controls whether to commit the active attempt.
+fn serialize_to_buffer<T, R, Q>(
+    value: &T,
+    attempt: &mut JsonEncodeAttempt<'_, R, Q>,
+) -> Result<Vec<u8>, JsonSerdeError<R, Q>>
+where
+    T: Serialize + ?Sized,
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    let (output_budget, transaction) = attempt.split_mut();
+    let accounting =
+        Rc::new(RefCell::new(JsonOutputAccounting::new(output_budget)));
+    let mut output = JsonOutputBuffer::new(Rc::clone(&accounting));
+    let result = {
+        let mut inner = JsonSerializer::new(&mut output);
+        let context = RefCell::new(super::internal::JsonEncodeContext {
+            transaction,
+            output: accounting,
+        });
+        value.serialize(JsonEncodeSerializer::new(&mut inner, &context))
+    };
+    if result.is_ok() {
+        let _ = output.flush();
     }
-    result
+    output.into_result(result)
+}
+
+/// Writes buffered bytes while immediately charging each accepted prefix.
+///
+/// # Parameters
+///
+/// * `writer` - Destination receiving the complete buffered document.
+/// * `bytes` - Previously serialized compact JSON document.
+/// * `attempt` - Active encode attempt that owns output accounting.
+///
+/// # Returns
+///
+/// `Ok(())` only when the destination accepts every byte.
+///
+/// # Errors
+///
+/// Returns [`JsonSerdeError::Budget`] if a remaining output check fails, or
+/// [`JsonSerdeError::Io`] if `writer` rejects bytes. Bytes accepted before an
+/// error remain charged on `attempt`.
+fn write_buffered<W, R, Q>(
+    writer: W,
+    bytes: &[u8],
+    attempt: &mut JsonEncodeAttempt<'_, R, Q>,
+) -> Result<(), JsonSerdeError<R, Q>>
+where
+    W: Write,
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    let (output_budget, _) = attempt.split_mut();
+    let accounting =
+        Rc::new(RefCell::new(JsonOutputAccounting::new(output_budget)));
+    let mut output = JsonOutputWriter::new(writer, accounting);
+    let result = output.write_all(bytes).map_err(JsonError::io);
+    output.into_result(result)
 }

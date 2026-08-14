@@ -18,6 +18,9 @@ struct Pair {
     right: u8,
 }
 
+#[derive(Serialize)]
+struct Triple(u8, u8);
+
 /// Verifies compound serialization preserves object members.
 #[test]
 fn test_json_encode_compound_serializes_struct_members() {
@@ -26,4 +29,14 @@ fn test_json_encode_compound_serializes_struct_members() {
         .expect("compound JSON should serialize");
 
     assert_eq!(output, br#"{"left":1,"right":2}"#);
+}
+
+/// Verifies tuple-struct compounds complete through the decorated end path.
+#[test]
+fn test_json_encode_compound_serializes_tuple_struct_fields() {
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    let output = encode_to_vec(&Triple(3, 4), &mut session)
+        .expect("tuple-struct JSON should serialize");
+
+    assert_eq!(output, b"[3,4]");
 }

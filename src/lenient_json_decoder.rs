@@ -8,6 +8,7 @@
 //! Defines the [`LenientJsonDecoder`] type and its public decoding methods.
 
 use qubit_budget::MeasuredBudgetError;
+use qubit_budget::ResourceBudget;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
@@ -94,15 +95,17 @@ impl LenientJsonDecoder {
     /// Decodes `input` while charging a caller-owned JSON decode session.
     ///
     /// Raw bytes are charged before normalization, normalized bytes are charged
-    /// by the normalizer, and decoded value resources are charged by lexical
-    /// admission. Every charge accumulated before success or failure remains in
-    /// the supplied reusable session.
+    /// by the normalizer, and decoded value resources are staged by lexical
+    /// admission. Raw and normalized input charges remain in the supplied
+    /// reusable session after failure, while value charges are committed only
+    /// for a successfully deserialized top-level value.
     ///
     /// # Parameters
     ///
     /// * `input` - Raw JSON text to normalize, admit, and deserialize.
-    /// * `session` - Reusable caller-owned accounting state. Successful charges
-    ///   are retained on both success and failure.
+    /// * `session` - Reusable caller-owned accounting state. Input charges are
+    ///   retained on both success and failure; value charges are retained only
+    ///   after successful top-level decoding.
     ///
     /// # Returns
     ///
@@ -129,8 +132,9 @@ impl LenientJsonDecoder {
     {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
-        let normalized = self.normalizer.normalize(input, session)?;
-        JsonLexicalPreflight::new(session.value_budget_mut())
+        let mut attempt = session.begin_value();
+        let normalized = self.normalizer.normalize(input, &mut attempt)?;
+        JsonLexicalPreflight::new(attempt.value_transaction_mut())
             .inspect(normalized.as_bytes())
             .map_err(|error| {
                 Self::map_admission_error(
@@ -140,12 +144,14 @@ impl LenientJsonDecoder {
                     privacy_policy,
                 )
             })?;
-        Self::deserialize_normalized(
+        let value = Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,
             normalized.len(),
             privacy_policy,
-        )
+        )?;
+        attempt.commit();
+        Ok(value)
     }
 
     /// Decodes UTF-8 input bytes into the target Rust type.
@@ -176,10 +182,13 @@ impl LenientJsonDecoder {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
         let mut session = self.decode_session();
-        if session.consume_input_bytes_usize(raw_input_bytes).is_err() {
+        let mut attempt = session.begin_value();
+        if attempt.try_consume_input_bytes(raw_input_bytes).is_err() {
             return Err(JsonDecodeError::input_too_large(
                 raw_input_bytes,
-                session.max_input_bytes().unwrap_or(raw_input_bytes),
+                attempt
+                    .input_budget()
+                    .map_or(raw_input_bytes, ResourceBudget::limit),
                 privacy_policy,
             ));
         }
@@ -192,13 +201,15 @@ impl LenientJsonDecoder {
         })?;
         let normalized = self
             .normalizer
-            .normalize_after_raw_charge(input, &mut session)?;
-        Self::deserialize_normalized(
+            .normalize_after_raw_charge(input, &mut attempt)?;
+        let value = Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,
             normalized.len(),
             privacy_policy,
-        )
+        )?;
+        attempt.commit();
+        Ok(value)
     }
 
     /// Decodes `input` into `T`, requiring a top-level JSON object.
@@ -287,13 +298,16 @@ impl LenientJsonDecoder {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
         let mut session = self.decode_session();
-        let normalized = self.normalizer.normalize(input, &mut session)?;
-        Self::parse_value(
+        let mut attempt = session.begin_value();
+        let normalized = self.normalizer.normalize(input, &mut attempt)?;
+        let value = Self::parse_value(
             normalized.as_ref(),
             raw_input_bytes,
             normalized.len(),
             privacy_policy,
-        )
+        )?;
+        attempt.commit();
+        Ok(value)
     }
 
     /// Decodes input while enforcing an object or array top-level contract.
@@ -328,7 +342,8 @@ impl LenientJsonDecoder {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
         let mut session = self.decode_session();
-        let normalized = self.normalizer.normalize(input, &mut session)?;
+        let mut attempt = session.begin_value();
+        let normalized = self.normalizer.normalize(input, &mut attempt)?;
         let normalized_input_bytes = normalized.len();
         let actual = JsonTopLevelKind::of_normalized_json(normalized.as_ref());
         if actual != expected {
@@ -346,12 +361,14 @@ impl LenientJsonDecoder {
                 privacy_policy,
             ));
         }
-        Self::deserialize_normalized(
+        let value = Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,
             normalized_input_bytes,
             privacy_policy,
-        )
+        )?;
+        attempt.commit();
+        Ok(value)
     }
 
     /// Creates the budget session for one lenient decode operation.
@@ -390,13 +407,16 @@ impl LenientJsonDecoder {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
         let mut session = self.decode_session();
-        let normalized = self.normalizer.normalize(input, &mut session)?;
-        Self::deserialize_normalized(
+        let mut attempt = session.begin_value();
+        let normalized = self.normalizer.normalize(input, &mut attempt)?;
+        let value = Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,
             normalized.len(),
             privacy_policy,
-        )
+        )?;
+        attempt.commit();
+        Ok(value)
     }
 
     /// Maps lexical admission failures to the stable public error model.
