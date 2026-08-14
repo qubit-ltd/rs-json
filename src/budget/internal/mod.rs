@@ -8,11 +8,14 @@
 //! Private helpers for budget-aware JSON/Serde adapters.
 
 mod json_encode_compound;
+mod json_encode_context;
+mod json_encode_key;
 mod json_encode_serializer;
 mod json_lexical_preflight;
 mod json_output_buffer;
 mod private_struct_kind;
 mod serde_json_compat;
+mod serde_json_private;
 
 pub(in crate::budget) use json_encode_serializer::JsonEncodeSerializer;
 pub(crate) use json_lexical_preflight::JsonLexicalPreflight;
