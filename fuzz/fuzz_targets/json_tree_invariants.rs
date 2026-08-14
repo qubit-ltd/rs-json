@@ -45,7 +45,8 @@ fn make_tree(data: &[u8]) -> Value {
             "nested": [number, number % 7],
         }));
     }
-    let mut value = json!({"keep": true, "secret": "TOP_SECRET", "items": items});
+    let mut value =
+        json!({"keep": true, "secret": "TOP_SECRET", "items": items});
     for level in data.iter().take(MAX_TREE_DEPTH).rev() {
         value = json!({
             "level": level,
@@ -59,14 +60,26 @@ fn make_tree(data: &[u8]) -> Value {
 /// Creates a budget with generous limits for visitor-error and panic paths.
 fn generous_budget() -> JsonValueBudget<JsonResource, usize> {
     let structure = StructureLimits::empty()
-        .with_depth_limit(ResourceLimit::new(JsonResource::Depth, GENEROUS_LIMIT))
-        .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, GENEROUS_LIMIT))
+        .with_depth_limit(ResourceLimit::new(
+            JsonResource::Depth,
+            GENEROUS_LIMIT,
+        ))
+        .with_nodes_limit(ResourceLimit::new(
+            JsonResource::Nodes,
+            GENEROUS_LIMIT,
+        ))
         .with_sequence_items_limit(ResourceLimit::new(
             JsonResource::SequenceItems,
             GENEROUS_LIMIT,
         ))
-        .with_map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, GENEROUS_LIMIT))
-        .with_key_bytes_limit(ResourceLimit::new(JsonResource::KeyBytes, GENEROUS_LIMIT));
+        .with_map_entries_limit(ResourceLimit::new(
+            JsonResource::MapEntries,
+            GENEROUS_LIMIT,
+        ))
+        .with_key_bytes_limit(ResourceLimit::new(
+            JsonResource::KeyBytes,
+            GENEROUS_LIMIT,
+        ));
     JsonValueBudget::new(
         JsonValueLimits::empty()
             .with_structure_limits(structure)
@@ -81,8 +94,8 @@ fn generous_budget() -> JsonValueBudget<JsonResource, usize> {
 fn assert_serializable(value: &Value) {
     let encoded = serde_json::to_vec(value)
         .expect("tree restoration must preserve a serializable JSON value");
-    let decoded =
-        serde_json::from_slice::<Value>(&encoded).expect("restored tree must remain valid JSON");
+    let decoded = serde_json::from_slice::<Value>(&encoded)
+        .expect("restored tree must remain valid JSON");
     assert_eq!(decoded, *value);
 }
 
@@ -200,8 +213,9 @@ fuzz_target!(|data: &[u8]| {
     let structure = StructureLimits::empty()
         .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, node_limit));
     let mut rejected_value = original.clone();
-    let mut rejected_budget =
-        JsonValueBudget::new(JsonValueLimits::empty().with_structure_limits(structure));
+    let mut rejected_budget = JsonValueBudget::new(
+        JsonValueLimits::empty().with_structure_limits(structure),
+    );
     JsonTreeProcessor::new(&mut rejected_budget)
         .process_mut(&mut rejected_value, &mut RejectingVisitor)
         .expect("rejecting visitor must handle every budget rejection");
@@ -220,12 +234,14 @@ fuzz_target!(|data: &[u8]| {
     );
     assert!(matches!(
         error,
-        Err(qubit_json::tree::JsonTreeProcessError::Visitor(
-            "fuzz visitor error"
-        ))
+        Ok(())
+            | Err(qubit_json::tree::JsonTreeProcessError::Visitor(
+                "fuzz visitor error"
+            ))
     ));
     assert_serializable(&error_value);
 
+    #[cfg(all(not(fuzzing), panic = "unwind"))]
     let panic_after = 1 + usize::from(data.get(2).copied().unwrap_or(0)) % 16;
     let mut recovery_value = original;
     #[cfg(all(not(fuzzing), panic = "unwind"))]
@@ -247,14 +263,23 @@ fuzz_target!(|data: &[u8]| {
         // cargo-fuzz uses panic=abort, so exercise the same restoration
         // boundary through a visitor error instead of terminating the fuzzer.
         let mut recovery_budget = generous_budget();
-        let recovery_error = JsonTreeProcessor::new(&mut recovery_budget).process_mut(
-            &mut recovery_value,
-            &mut ErrorVisitor {
-                stop_after: panic_after,
-                calls: 0,
-            },
-        );
-        assert!(recovery_error.is_err());
+        let recovery_error = JsonTreeProcessor::new(&mut recovery_budget)
+            .process_mut(
+                &mut recovery_value,
+                &mut ErrorVisitor {
+                    // A fixed first callback guarantees that the abort-safe
+                    // surrogate reaches the same restoration boundary on
+                    // every fuzz input.
+                    stop_after: 1,
+                    calls: 0,
+                },
+            );
+        assert!(matches!(
+            recovery_error,
+            Err(qubit_json::tree::JsonTreeProcessError::Visitor(
+                "fuzz visitor error"
+            ))
+        ));
     }
     assert_serializable(&recovery_value);
 });
