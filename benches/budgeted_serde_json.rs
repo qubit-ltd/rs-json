@@ -24,6 +24,7 @@ use qubit_json::lenient::JsonDecodeOptions;
 use qubit_json::lenient::LenientJsonDecoder;
 use qubit_json::text::decode_slice;
 use qubit_json::text::encode_to_vec;
+use qubit_json::text::encode_to_writer_incremental;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -280,6 +281,21 @@ fn encode(criterion: &mut Criterion) {
                         encode_to_vec(black_box(fixture), &mut reused_session)
                             .expect("fixture must encode"),
                     )
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("encode/incremental-writer", size),
+            &fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    let mut session =
+                        JsonEncodeSession::owned(JsonEncodeLimits::empty());
+                    black_box(encode_to_writer_incremental(
+                        std::io::sink(),
+                        black_box(fixture),
+                        &mut session,
+                    ))
                 });
             },
         );

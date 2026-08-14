@@ -11,7 +11,6 @@
 // qubit-style: allow explicit-imports
 
 use std::cell::RefCell;
-use std::rc::Rc;
 
 use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
@@ -46,7 +45,7 @@ enum PrivateStruct {
 
 /// Wraps one nested value so the underlying compound serializer re-enters the
 /// budget-aware serializer before traversing it.
-pub(super) struct BudgetedValue<'a, 'budget, T, R, Q>
+pub(super) struct BudgetedValue<'a, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -55,13 +54,13 @@ where
     value: &'a T,
 
     /// Shared mutable budget state for the serialization traversal.
-    context: Rc<RefCell<JsonEncodeContext<'budget, R, Q>>>,
+    context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
 
     /// Root-inclusive depth assigned to the nested value.
     depth: usize,
 }
 
-impl<'a, 'budget, T, R, Q> BudgetedValue<'a, 'budget, T, R, Q>
+impl<'a, 'budget, 'context, T, R, Q> BudgetedValue<'a, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -69,7 +68,7 @@ where
     /// Creates a nested value wrapper bound to a shared budget context.
     pub(super) const fn new(
         value: &'a T,
-        context: Rc<RefCell<JsonEncodeContext<'budget, R, Q>>>,
+        context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
         depth: usize,
     ) -> Self {
         Self {
@@ -80,7 +79,7 @@ where
     }
 }
 
-impl<T, R, Q> Serialize for BudgetedValue<'_, '_, T, R, Q>
+impl<T, R, Q> Serialize for BudgetedValue<'_, '_, '_, T, R, Q>
 where
     T: Serialize + ?Sized,
     R: Clone,
@@ -93,7 +92,7 @@ where
     {
         self.value.serialize(JsonEncodeSerializer::with_context(
             serializer,
-            Rc::clone(&self.context),
+            self.context,
             self.depth,
         ))
     }
@@ -101,7 +100,7 @@ where
 
 /// Wraps a Serde compound serializer and checks container operations before
 /// delegating them.
-pub(in crate::budget) struct JsonEncodeCompound<'a, C, R, Q>
+pub(in crate::budget) struct JsonEncodeCompound<'a, 'context, C, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -109,7 +108,7 @@ where
     inner: C,
 
     /// Shared mutable budget state for the serialization traversal.
-    context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>,
+    context: &'context RefCell<JsonEncodeContext<'a, R, Q>>,
 
     /// Root-inclusive depth assigned to nested values.
     child_depth: usize,
@@ -121,7 +120,7 @@ where
     private: PrivateStruct,
 }
 
-impl<'a, C, R, Q> JsonEncodeCompound<'a, C, R, Q>
+impl<'a, 'context, C, R, Q> JsonEncodeCompound<'a, 'context, C, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
@@ -129,7 +128,7 @@ where
     /// Creates a wrapper for a regular JSON array or object compound.
     pub(super) const fn new(
         inner: C,
-        context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>,
+        context: &'context RefCell<JsonEncodeContext<'a, R, Q>>,
         child_depth: usize,
     ) -> Self {
         Self {
@@ -144,7 +143,7 @@ where
     /// Creates a wrapper for serde_json's private number compound.
     pub(super) const fn number(
         inner: C,
-        context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>,
+        context: &'context RefCell<JsonEncodeContext<'a, R, Q>>,
         depth: usize,
     ) -> Self {
         Self {
@@ -159,7 +158,7 @@ where
     /// Creates a wrapper for serde_json's private raw-value compound.
     pub(super) const fn raw_value(
         inner: C,
-        context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>,
+        context: &'context RefCell<JsonEncodeContext<'a, R, Q>>,
         depth: usize,
     ) -> Self {
         Self {
@@ -172,10 +171,7 @@ where
     }
 
     /// Records the original budget error and maps it into the compound error.
-    fn record<E>(
-        &mut self,
-        result: Result<(), MeasuredBudgetError<R, Q>>,
-    ) -> Result<(), E>
+    fn record<E>(&mut self, result: Result<(), MeasuredBudgetError<R, Q>>) -> Result<(), E>
     where
         E: Error,
     {
@@ -237,7 +233,7 @@ where
     }
 }
 
-impl<C, R, Q> SerializeSeq for JsonEncodeCompound<'_, C, R, Q>
+impl<C, R, Q> SerializeSeq for JsonEncodeCompound<'_, '_, C, R, Q>
 where
     C: SerializeSeq,
     R: Clone,
@@ -252,11 +248,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, self.context, self.child_depth);
         self.inner.serialize_element(&value)
     }
 
@@ -268,7 +260,7 @@ where
     }
 }
 
-impl<C, R, Q> SerializeTuple for JsonEncodeCompound<'_, C, R, Q>
+impl<C, R, Q> SerializeTuple for JsonEncodeCompound<'_, '_, C, R, Q>
 where
     C: SerializeTuple,
     R: Clone,
@@ -283,11 +275,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, self.context, self.child_depth);
         self.inner.serialize_element(&value)
     }
 
@@ -299,7 +287,7 @@ where
     }
 }
 
-impl<C, R, Q> SerializeTupleStruct for JsonEncodeCompound<'_, C, R, Q>
+impl<C, R, Q> SerializeTupleStruct for JsonEncodeCompound<'_, '_, C, R, Q>
 where
     C: SerializeTupleStruct,
     R: Clone,
@@ -314,11 +302,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, self.context, self.child_depth);
         self.inner.serialize_field(&value)
     }
 
@@ -330,7 +314,7 @@ where
     }
 }
 
-impl<C, R, Q> SerializeTupleVariant for JsonEncodeCompound<'_, C, R, Q>
+impl<C, R, Q> SerializeTupleVariant for JsonEncodeCompound<'_, '_, C, R, Q>
 where
     C: SerializeTupleVariant,
     R: Clone,
@@ -345,11 +329,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, self.context, self.child_depth);
         self.inner.serialize_field(&value)
     }
 
@@ -361,7 +341,7 @@ where
     }
 }
 
-impl<C, R, Q> SerializeMap for JsonEncodeCompound<'_, C, R, Q>
+impl<C, R, Q> SerializeMap for JsonEncodeCompound<'_, '_, C, R, Q>
 where
     C: SerializeMap,
     R: Clone,
@@ -376,7 +356,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_map_entry()?;
-        let key = BudgetedKey::new(key, Rc::clone(&self.context));
+        let key = BudgetedKey::new(key, self.context);
         self.inner.serialize_key(&key)
     }
 
@@ -385,20 +365,12 @@ where
     where
         T: Serialize + ?Sized,
     {
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, self.context, self.child_depth);
         self.inner.serialize_value(&value)
     }
 
     /// Checks and serializes one complete map entry.
-    fn serialize_entry<K, V>(
-        &mut self,
-        key: &K,
-        value: &V,
-    ) -> Result<(), Self::Error>
+    fn serialize_entry<K, V>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
     where
         K: Serialize + ?Sized,
         V: Serialize + ?Sized,
@@ -415,7 +387,7 @@ where
     }
 }
 
-impl<C, R, Q> SerializeStruct for JsonEncodeCompound<'_, C, R, Q>
+impl<C, R, Q> SerializeStruct for JsonEncodeCompound<'_, '_, C, R, Q>
 where
     C: SerializeStruct,
     R: Clone,
@@ -425,28 +397,17 @@ where
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
-    fn serialize_field<T>(
-        &mut self,
-        key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         match self.private {
             PrivateStruct::Number => {
-                let value = BudgetedPrivateValue::number(
-                    value,
-                    Rc::clone(&self.context),
-                );
+                let value = BudgetedPrivateValue::number(value, self.context);
                 return self.inner.serialize_field(key, &value);
             }
             PrivateStruct::RawValue => {
-                let value = BudgetedPrivateValue::raw_value(
-                    value,
-                    Rc::clone(&self.context),
-                    self.child_depth,
-                );
+                let value = BudgetedPrivateValue::raw_value(value, self.context, self.child_depth);
                 return self.inner.serialize_field(key, &value);
             }
             PrivateStruct::Regular => self.next_map_entry()?,
@@ -457,11 +418,7 @@ where
             .budget
             .consume_key_bytes_usize(key.len());
         self.record(key_result)?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, self.context, self.child_depth);
         self.inner.serialize_field(key, &value)
     }
 
@@ -481,7 +438,7 @@ where
     }
 }
 
-impl<C, R, Q> SerializeStructVariant for JsonEncodeCompound<'_, C, R, Q>
+impl<C, R, Q> SerializeStructVariant for JsonEncodeCompound<'_, '_, C, R, Q>
 where
     C: SerializeStructVariant,
     R: Clone,
@@ -491,11 +448,7 @@ where
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
-    fn serialize_field<T>(
-        &mut self,
-        key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -506,11 +459,7 @@ where
             .budget
             .consume_key_bytes_usize(key.len());
         self.record(key_result)?;
-        let value = BudgetedValue::new(
-            value,
-            Rc::clone(&self.context),
-            self.child_depth,
-        );
+        let value = BudgetedValue::new(value, self.context, self.child_depth);
         self.inner.serialize_field(key, &value)
     }
 

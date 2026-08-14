@@ -20,6 +20,7 @@ use qubit_budget::json::JsonValueLimits;
 use qubit_json::text::JsonEncodeError;
 use qubit_json::text::encode_to_vec;
 use qubit_json::text::encode_to_writer;
+use qubit_json::text::encode_to_writer_incremental;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error as _;
@@ -211,8 +212,8 @@ fn assert_online_rejection<T>(
     T: Serialize + ?Sized,
 {
     let mut session = limits.encode_session();
-    let error = encode_to_vec(value, &mut session)
-        .expect_err("the first value must be rejected online");
+    let error =
+        encode_to_vec(value, &mut session).expect_err("the first value must be rejected online");
     let JsonEncodeError::Budget(error) = error else {
         panic!("expected a budget error, got {error:?}");
     };
@@ -229,9 +230,8 @@ fn assert_online_rejection<T>(
 /// Verifies a budget failure leaves the destination writer unchanged.
 #[test]
 fn test_encode_to_writer_failure_does_not_touch_external_writer() {
-    let limits = JsonEncodeLimits::empty().with_output_bytes_limit(
-        ResourceLimit::new(JsonResource::OutputBytes, 3),
-    );
+    let limits = JsonEncodeLimits::empty()
+        .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 3));
     let mut session = JsonEncodeSession::owned(limits);
     let mut output = Vec::new();
 
@@ -249,8 +249,7 @@ fn test_encode_to_vec_counts_raw_value_once() {
         .expect("the fixture must be valid raw JSON");
     let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
 
-    let output = encode_to_vec(raw.as_ref(), &mut session)
-        .expect("the raw JSON value must encode");
+    let output = encode_to_vec(raw.as_ref(), &mut session).expect("the raw JSON value must encode");
 
     assert_eq!(output, br#"{"k":"v"}"#);
 }
@@ -272,14 +271,10 @@ fn test_encode_to_writer_serde_failure_does_not_touch_external_writer() {
 #[test]
 fn test_encode_to_vec_serde_failure_does_not_consume_output_budget() {
     let value_limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::empty()
-            .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+        StructureLimits::empty().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
     );
     let limits = JsonEncodeLimits::empty()
-        .with_output_bytes_limit(ResourceLimit::new(
-            JsonResource::OutputBytes,
-            16,
-        ))
+        .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 16))
         .with_value_limits(value_limits);
     let mut session = JsonEncodeSession::owned(limits);
     encode_to_vec(&true, &mut session).expect("the initial value should fit");
@@ -330,9 +325,8 @@ fn test_encode_to_vec_output_limit_stops_before_source_tail() {
         serialized: &serialized,
         len: 1_000,
     };
-    let limits = JsonEncodeLimits::empty().with_output_bytes_limit(
-        ResourceLimit::new(JsonResource::OutputBytes, 8),
-    );
+    let limits = JsonEncodeLimits::empty()
+        .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 8));
     let mut session = JsonEncodeSession::owned(limits);
 
     let error = encode_to_vec(&value, &mut session)
@@ -356,6 +350,83 @@ fn test_encode_to_writer_io_failure_can_leave_partial_output() {
 
     assert!(matches!(error, JsonEncodeError::Write(_)));
     assert_eq!(writer.bytes, b"[1");
+}
+
+/// Verifies incremental encoding matches transactional encoding on success.
+#[test]
+fn test_encode_to_writer_incremental_matches_encode_to_vec() {
+    let value = serde_json::json!({"items": [1, true, "text"]});
+    let mut expected_session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    let expected = encode_to_vec(&value, &mut expected_session)
+        .expect("transactional encoding should succeed");
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    let mut output = Vec::new();
+
+    encode_to_writer_incremental(&mut output, &value, &mut session)
+        .expect("incremental encoding should succeed");
+
+    assert_eq!(output, expected);
+}
+
+/// Verifies incremental encoding may leave accepted output on a budget error.
+#[test]
+fn test_encode_to_writer_incremental_preserves_partial_output_on_budget_error() {
+    let limits = JsonEncodeLimits::empty()
+        .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 4));
+    let mut session = JsonEncodeSession::owned(limits);
+    let mut output = Vec::new();
+
+    let error =
+        encode_to_writer_incremental(&mut output, &serde_json::json!([1, 2, 3]), &mut session)
+            .expect_err("the output limit must reject the document");
+
+    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    assert_eq!(output, b"[1,2");
+    assert_eq!(
+        session
+            .output_budget()
+            .expect("output budget should remain configured")
+            .used(),
+        4,
+    );
+}
+
+/// Verifies incremental encoding maps destination failures to `Write`.
+#[test]
+fn test_encode_to_writer_incremental_preserves_partial_output_on_io_error() {
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    let mut writer = PrefixThenFailWriter {
+        bytes: Vec::new(),
+        accepted: 2,
+    };
+
+    let error = encode_to_writer_incremental(&mut writer, &[1_u8, 2_u8], &mut session)
+        .expect_err("the destination writer must fail incrementally");
+
+    assert!(matches!(error, JsonEncodeError::Write(_)));
+    assert_eq!(writer.bytes, b"[1");
+}
+
+/// Verifies incremental Serde failures retain their accepted prefix and usage.
+#[test]
+fn test_encode_to_writer_incremental_preserves_partial_output_on_serde_error() {
+    let limits = JsonEncodeLimits::empty()
+        .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 16));
+    let mut session = JsonEncodeSession::owned(limits);
+    let mut output = Vec::new();
+
+    let error = encode_to_writer_incremental(&mut output, &FailsAfterPrefix, &mut session)
+        .expect_err("the custom serializer must fail after its prefix");
+
+    assert!(matches!(error, JsonEncodeError::Serialize(_)));
+    assert_eq!(output, b"[1");
+    assert_eq!(
+        session
+            .output_budget()
+            .expect("output budget should remain configured")
+            .used(),
+        2,
+    );
 }
 
 /// Verifies node accounting stops a long source before it is exhausted.
@@ -408,8 +479,7 @@ fn test_encode_to_vec_number_limit_stops_before_source_tail() {
 
     assert_online_rejection(
         &value,
-        JsonTestLimits::new()
-            .with_max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
+        JsonTestLimits::new().with_max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
         JsonResource::NumberBytes,
         &serialized_tail,
     );
