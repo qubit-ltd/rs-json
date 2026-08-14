@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [decoder, json_decode_differential, json_budget_invariants, json_encode_invariants]
+        target: [decoder, json_decode_differential, json_budget_invariants, json_encode_invariants, json_tree_invariants]
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
