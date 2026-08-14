@@ -23,15 +23,15 @@ use super::JsonLexicalPreflight;
 use super::display_budget_kind::DisplayBudgetKind;
 use super::json_output_buffer::JsonOutputAccounting;
 
-pub(super) struct JsonEncodeContext<'a, R, Q>
+pub(in crate::budget) struct JsonEncodeContext<'a, R, Q>
 where
     Q: ResourceQuantity,
 {
     /// Caller-owned budget charged by the traversal.
-    pub(super) budget: &'a mut JsonValueBudget<R, Q>,
+    pub(in crate::budget) budget: &'a mut JsonValueBudget<R, Q>,
 
     /// Live output accounting shared with the byte buffer.
-    pub(super) output: Rc<RefCell<JsonOutputAccounting<'a, R, Q>>>,
+    pub(in crate::budget) output: Rc<RefCell<JsonOutputAccounting<'a, R, Q>>>,
 }
 
 impl<R, Q> JsonEncodeContext<'_, R, Q>
@@ -57,36 +57,23 @@ where
     /// The fragment length is a safe lower bound for the complete output size.
     /// Structural traversal starts at `depth`, the fragment's root-inclusive
     /// position in the final document.
-    pub(super) fn preflight_raw<E>(
-        &mut self,
-        value: &str,
-        depth: usize,
-    ) -> Result<(), E>
+    pub(super) fn preflight_raw<E>(&mut self, value: &str, depth: usize) -> Result<(), E>
     where
         E: Error,
         R: Clone,
     {
         let output = self.output.borrow().check_available(value.len());
         self.record(output)?;
-        match JsonLexicalPreflight::at_depth(self.budget, depth)
-            .inspect(value.as_bytes())
-        {
+        match JsonLexicalPreflight::at_depth(self.budget, depth).inspect(value.as_bytes()) {
             Ok(()) => Ok(()),
-            Err(JsonSerdeError::Budget(error)) => {
-                self.record(Err(error.into()))
-            }
+            Err(JsonSerdeError::Budget(error)) => self.record(Err(error.into())),
             Err(JsonSerdeError::Quantity { resource, source }) => {
-                self.record(Err(MeasuredBudgetError::Quantity {
-                    resource,
-                    source,
-                }))
+                self.record(Err(MeasuredBudgetError::Quantity { resource, source }))
             }
             Err(JsonSerdeError::Json(_) | JsonSerdeError::Io(_)) => {
                 Err(E::custom("invalid raw JSON value"))
             }
-            Err(JsonSerdeError::Syntax(_)) => {
-                Err(E::custom("invalid raw JSON value"))
-            }
+            Err(JsonSerdeError::Syntax(_)) => Err(E::custom("invalid raw JSON value")),
         }
     }
 }
@@ -98,7 +85,7 @@ where
 /// writer, while private Number/RawValue emitters may call `to_string` first.
 /// This collector therefore owns the failure boundary and caps allocation
 /// before passing an already bounded `str` to the inner serializer.
-struct BudgetedDisplayCollector<'a, R, Q>
+struct BudgetedDisplayCollector<'context, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -106,19 +93,19 @@ where
     text: String,
 
     /// Shared traversal state retaining typed budget errors.
-    context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>,
+    context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
 
     /// Resource semantics applied to the collected text.
     kind: DisplayBudgetKind,
 }
 
-impl<'a, R, Q> BudgetedDisplayCollector<'a, R, Q>
+impl<'context, 'budget, R, Q> BudgetedDisplayCollector<'context, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
     /// Creates an empty collector for one resource kind.
     fn new(
-        context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>,
+        context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
         kind: DisplayBudgetKind,
     ) -> Self {
         Self {
@@ -129,32 +116,24 @@ where
     }
 }
 
-impl<R, Q> fmt::Write for BudgetedDisplayCollector<'_, R, Q>
+impl<R, Q> fmt::Write for BudgetedDisplayCollector<'_, '_, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
 {
     /// Checks the cumulative formatted length before growing the string.
     fn write_str(&mut self, value: &str) -> fmt::Result {
-        let next =
-            self.text.len().checked_add(value.len()).ok_or(fmt::Error)?;
-        let output_result =
-            self.context.borrow().output.borrow().check_available(next);
+        let next = self.text.len().checked_add(value.len()).ok_or(fmt::Error)?;
+        let output_result = self.context.borrow().output.borrow().check_available(next);
         self.context
             .borrow_mut()
             .record::<fmt::Error>(output_result)?;
         let point_result = {
             let context = self.context.borrow();
             match self.kind {
-                DisplayBudgetKind::String => {
-                    context.budget.check_string_bytes_usize(next)
-                }
-                DisplayBudgetKind::Key => {
-                    context.budget.check_key_bytes_usize(next)
-                }
-                DisplayBudgetKind::Number => {
-                    context.budget.check_number_bytes_usize(next)
-                }
+                DisplayBudgetKind::String => context.budget.check_string_bytes_usize(next),
+                DisplayBudgetKind::Key => context.budget.check_key_bytes_usize(next),
+                DisplayBudgetKind::Number => context.budget.check_number_bytes_usize(next),
                 DisplayBudgetKind::RawOutput => Ok(()),
             }
         };
@@ -167,9 +146,9 @@ where
 }
 
 /// Formats one display value into a budgeted collector.
-pub(super) fn collect_display<'a, E, T, R, Q>(
+pub(super) fn collect_display<'budget, 'context, E, T, R, Q>(
     value: &T,
-    context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>,
+    context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
     kind: DisplayBudgetKind,
 ) -> Result<String, E>
 where
@@ -185,15 +164,9 @@ where
     let payload_result = {
         let mut context = collector.context.borrow_mut();
         match kind {
-            DisplayBudgetKind::String => {
-                context.budget.consume_string_bytes_usize(text.len())
-            }
-            DisplayBudgetKind::Key => {
-                context.budget.consume_key_bytes_usize(text.len())
-            }
-            DisplayBudgetKind::Number => {
-                context.budget.consume_number_bytes_usize(text.len())
-            }
+            DisplayBudgetKind::String => context.budget.consume_string_bytes_usize(text.len()),
+            DisplayBudgetKind::Key => context.budget.consume_key_bytes_usize(text.len()),
+            DisplayBudgetKind::Number => context.budget.consume_number_bytes_usize(text.len()),
             DisplayBudgetKind::RawOutput => Ok(()),
         }
     };

@@ -22,6 +22,7 @@ pub use json_deserialize_error::JsonDeserializeError;
 pub use json_deserialize_error_category::JsonDeserializeErrorCategory;
 pub use json_encode::encode_to_vec;
 pub use json_encode::encode_to_writer;
+pub use json_encode::encode_to_writer_incremental;
 pub use json_encode_error::JsonEncodeError;
 
 pub use crate::budget::JsonSyntaxError;

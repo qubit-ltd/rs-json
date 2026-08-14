@@ -12,7 +12,6 @@
 
 use std::cell::RefCell;
 use std::fmt::Display;
-use std::rc::Rc;
 
 use qubit_budget::ResourceQuantity;
 use serde::Serialize;
@@ -24,7 +23,7 @@ use super::json_encode_context::JsonEncodeContext;
 use super::json_encode_context::collect_display;
 
 /// Wraps a map key so it is traversed once through a key-aware decorator.
-pub(super) struct BudgetedKey<'a, 'budget, T, R, Q>
+pub(super) struct BudgetedKey<'a, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -33,10 +32,10 @@ where
     value: &'a T,
 
     /// Shared traversal context.
-    context: Rc<RefCell<JsonEncodeContext<'budget, R, Q>>>,
+    context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
 }
 
-impl<'a, 'budget, T, R, Q> BudgetedKey<'a, 'budget, T, R, Q>
+impl<'a, 'budget, 'context, T, R, Q> BudgetedKey<'a, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -44,13 +43,13 @@ where
     /// Creates a key wrapper bound to the shared traversal context.
     pub(super) const fn new(
         value: &'a T,
-        context: Rc<RefCell<JsonEncodeContext<'budget, R, Q>>>,
+        context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
     ) -> Self {
         Self { value, context }
     }
 }
 
-impl<T, R, Q> Serialize for BudgetedKey<'_, '_, T, R, Q>
+impl<T, R, Q> Serialize for BudgetedKey<'_, '_, '_, T, R, Q>
 where
     T: Serialize + ?Sized,
     R: Clone,
@@ -63,13 +62,13 @@ where
     {
         self.value.serialize(JsonKeyBudgetSerializer {
             inner: serializer,
-            context: Rc::clone(&self.context),
+            context: self.context,
         })
     }
 }
 
 /// Decorates serde_json's map-key serializer with key-byte checks.
-struct JsonKeyBudgetSerializer<'a, S, R, Q>
+struct JsonKeyBudgetSerializer<'context, 'budget, S, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -77,10 +76,10 @@ where
     inner: S,
 
     /// Shared traversal context.
-    context: Rc<RefCell<JsonEncodeContext<'a, R, Q>>>,
+    context: &'context RefCell<JsonEncodeContext<'budget, R, Q>>,
 }
 
-impl<S, R, Q> JsonKeyBudgetSerializer<'_, S, R, Q>
+impl<S, R, Q> JsonKeyBudgetSerializer<'_, '_, S, R, Q>
 where
     S: Serializer,
     R: Clone,
@@ -107,7 +106,7 @@ macro_rules! serialize_key_number {
     };
 }
 
-impl<'a, S, R, Q> Serializer for JsonKeyBudgetSerializer<'a, S, R, Q>
+impl<'context, 'budget, S, R, Q> Serializer for JsonKeyBudgetSerializer<'context, 'budget, S, R, Q>
 where
     S: Serializer,
     R: Clone,
@@ -188,10 +187,7 @@ where
         self.inner.serialize_unit()
     }
 
-    fn serialize_unit_struct(
-        self,
-        name: &'static str,
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit_struct(name)
     }
 
@@ -227,25 +223,15 @@ where
     where
         T: Serialize + ?Sized,
     {
-        self.inner.serialize_newtype_variant(
-            name,
-            variant_index,
-            variant,
-            value,
-        )
+        self.inner
+            .serialize_newtype_variant(name, variant_index, variant, value)
     }
 
-    fn serialize_seq(
-        self,
-        len: Option<usize>,
-    ) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         self.inner.serialize_seq(len)
     }
 
-    fn serialize_tuple(
-        self,
-        len: usize,
-    ) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.inner.serialize_tuple(len)
     }
 
@@ -268,10 +254,7 @@ where
             .serialize_tuple_variant(name, variant_index, variant, len)
     }
 
-    fn serialize_map(
-        self,
-        len: Option<usize>,
-    ) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.inner.serialize_map(len)
     }
 
@@ -298,11 +281,8 @@ where
     where
         T: Display + ?Sized,
     {
-        let text = collect_display::<S::Error, _, _, Q>(
-            value,
-            Rc::clone(&self.context),
-            DisplayBudgetKind::Key,
-        )?;
+        let text =
+            collect_display::<S::Error, _, _, Q>(value, self.context, DisplayBudgetKind::Key)?;
         self.inner.serialize_str(&text)
     }
 
