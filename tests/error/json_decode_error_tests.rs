@@ -7,6 +7,11 @@
 // =============================================================================
 //! Tests for the public [`qubit_json::lenient::LenientJsonDecodeError`] type.
 
+use qubit_budget::ResourceLimit;
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
 use qubit_json::lenient::ErrorPrivacyPolicy;
 use qubit_json::lenient::JsonDecodeErrorKind;
 use qubit_json::lenient::JsonDecodeOptions;
@@ -16,6 +21,38 @@ use qubit_json::lenient::LenientJsonDecoder;
 use serde_json::Value;
 
 use crate::fixtures::PublicChoice;
+
+/// Verifies that budget errors retain their structured rejection details.
+///
+/// # Panics
+///
+/// Panics when admission does not reject the value or the public error omits
+/// its budget resource.
+#[test]
+fn test_budget_error_exposes_measured_rejection_details() {
+    let limits = JsonDecodeLimits::empty().with_value_limits(
+        JsonValueLimits::empty().with_string_bytes_limit(ResourceLimit::new(
+            JsonResource::StringBytes,
+            0,
+        )),
+    );
+    let mut session = JsonDecodeSession::owned(limits);
+
+    let error = LenientJsonDecoder::default()
+        .decode_with_session::<Value>(r#"{"k":"v"}"#, &mut session)
+        .expect_err("string budget must reject the normalized value");
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), JsonDecodeStage::Admission);
+    assert_eq!(
+        *error
+            .measured_budget_error()
+            .expect("budget details must be retained")
+            .resource(),
+        JsonResource::StringBytes,
+    );
+    assert!(std::error::Error::source(&error).is_some());
+}
 
 /// Verifies that error display for empty input uses message.
 ///

@@ -11,7 +11,11 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
+use qubit_budget::MeasuredBudgetError;
+use qubit_budget::json::JsonResource;
+
 use super::internal::JsonInputSizeLimit;
+use crate::budget::JsonSyntaxError;
 use crate::error::ErrorPrivacyPolicy;
 use crate::error::JsonDecodeErrorKind;
 use crate::error::JsonDecodeStage;
@@ -233,6 +237,91 @@ impl JsonDecodeError {
             normalized_input_bytes,
             privacy_policy,
         )
+    }
+
+    /// Creates an invalid-JSON error from non-recursive lexical admission.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - Structured lexical syntax error.
+    /// * `raw_input_bytes` - Raw input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length in bytes.
+    /// * `privacy_policy` - Policy controlling retained lexical diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// An invalid-JSON error retaining safe location metadata and, in detailed
+    /// mode, the lexical error source.
+    #[must_use]
+    pub(crate) fn invalid_lexical_json(
+        error: JsonSyntaxError,
+        raw_input_bytes: usize,
+        normalized_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
+    ) -> Self {
+        let line = error.line();
+        let column = error.column();
+        let error = Arc::new(error);
+        let (message, source) = match privacy_policy {
+            ErrorPrivacyPolicy::Redacted => (
+                Self::redacted_message("Failed to parse JSON", line, column),
+                None,
+            ),
+            ErrorPrivacyPolicy::Detailed => (
+                format!("Failed to parse JSON: {error}"),
+                Some(error as Arc<dyn Error + Send + Sync>),
+            ),
+        };
+        Self {
+            kind: JsonDecodeErrorKind::InvalidJson,
+            stage: JsonDecodeStage::Parse,
+            privacy_policy,
+            message,
+            expected_top_level: None,
+            actual_top_level: None,
+            raw_input_bytes,
+            normalized_input_bytes: Some(normalized_input_bytes),
+            size_limit: None,
+            normalized_line: Some(line),
+            normalized_column: Some(column),
+            source,
+        }
+    }
+
+    /// Creates an error for a decoded JSON value budget rejection.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - Complete measured budget error, including resource identity.
+    /// * `raw_input_bytes` - Raw input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length in bytes.
+    /// * `privacy_policy` - Privacy policy active during decoding.
+    ///
+    /// # Returns
+    ///
+    /// A budget error retaining the complete measured rejection as its source.
+    #[must_use]
+    pub(crate) fn budget(
+        error: MeasuredBudgetError<JsonResource, usize>,
+        raw_input_bytes: usize,
+        normalized_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
+    ) -> Self {
+        let message = format!("JSON resource budget rejected input: {error}");
+        Self {
+            kind: JsonDecodeErrorKind::Budget,
+            stage: JsonDecodeStage::Admission,
+            privacy_policy,
+            message,
+            expected_top_level: None,
+            actual_top_level: None,
+            raw_input_bytes,
+            normalized_input_bytes: Some(normalized_input_bytes),
+            size_limit: None,
+            normalized_line: None,
+            normalized_column: None,
+            source: Some(Arc::new(error)),
+        }
     }
 
     /// Creates an error for a valid JSON value with an unexpected top-level
@@ -522,6 +611,22 @@ impl JsonDecodeError {
         self.normalized_column
     }
 
+    /// Returns the complete decoded-value budget rejection when present.
+    ///
+    /// # Returns
+    ///
+    /// `Some(error)` for [`JsonDecodeErrorKind::Budget`], or `None` for all
+    /// normalization, syntax, top-level, and deserialization failures.
+    #[must_use]
+    #[inline(always)]
+    pub fn measured_budget_error(
+        &self,
+    ) -> Option<&MeasuredBudgetError<JsonResource, usize>> {
+        self.source.as_deref().and_then(|error| {
+            error.downcast_ref::<MeasuredBudgetError<JsonResource, usize>>()
+        })
+    }
+
     /// Builds a diagnostic that contains only stable text and parser location.
     ///
     /// # Parameters
@@ -574,6 +679,12 @@ impl PartialEq for JsonDecodeError {
             && self.size_limit == other.size_limit
             && self.normalized_line == other.normalized_line
             && self.normalized_column == other.normalized_column
+            && self
+                .measured_budget_error()
+                .map(MeasuredBudgetError::resource)
+                == other
+                    .measured_budget_error()
+                    .map(MeasuredBudgetError::resource)
     }
 }
 
@@ -601,14 +712,19 @@ impl fmt::Display for JsonDecodeError {
 }
 
 impl Error for JsonDecodeError {
-    /// Returns the decoder source under detailed privacy mode.
+    /// Returns a budget source unconditionally or an input-derived source under
+    /// detailed privacy mode.
     ///
     /// # Returns
     ///
-    /// `Some(source)` when detailed diagnostics expose a UTF-8 or serde
-    /// error, or `None` for redacted and source-free failures.
+    /// `Some(source)` for every budget rejection and when detailed diagnostics
+    /// expose a UTF-8 or serde error. Returns `None` for redacted input-derived
+    /// and source-free failures.
     #[inline(always)]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
+        if let Some(error) = self.measured_budget_error() {
+            return Some(error);
+        }
         match self.privacy_policy {
             ErrorPrivacyPolicy::Redacted => None,
             ErrorPrivacyPolicy::Detailed => self

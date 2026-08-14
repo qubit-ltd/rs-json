@@ -18,6 +18,7 @@ use qubit_json::lenient::JsonDecodeStage;
 fn test_decode_stage_display_uses_snake_case_tokens() {
     assert_eq!(JsonDecodeStage::DecodeText.to_string(), "decode_text");
     assert_eq!(JsonDecodeStage::Normalize.to_string(), "normalize");
+    assert_eq!(JsonDecodeStage::Admission.to_string(), "admission");
     assert_eq!(JsonDecodeStage::Parse.to_string(), "parse");
     assert_eq!(
         JsonDecodeStage::TopLevelCheck.to_string(),

@@ -26,6 +26,7 @@ fn test_decode_error_kind_display_uses_snake_case_names() {
     assert_eq!(JsonDecodeErrorKind::EmptyInput.to_string(), "empty_input");
     assert_eq!(JsonDecodeErrorKind::InvalidUtf8.to_string(), "invalid_utf8");
     assert_eq!(JsonDecodeErrorKind::InvalidJson.to_string(), "invalid_json");
+    assert_eq!(JsonDecodeErrorKind::Budget.to_string(), "budget");
     assert_eq!(
         JsonDecodeErrorKind::UnexpectedTopLevel.to_string(),
         "unexpected_top_level"
@@ -59,6 +60,11 @@ fn test_decode_error_kind_from_str() {
         JsonDecodeErrorKind::from_str("INVALID_JSON")
             .expect("INVALID_JSON must parse without case sensitivity"),
         JsonDecodeErrorKind::InvalidJson
+    );
+    assert_eq!(
+        JsonDecodeErrorKind::from_str("BUDGET")
+            .expect("BUDGET must parse without case sensitivity"),
+        JsonDecodeErrorKind::Budget
     );
     assert_eq!(
         JsonDecodeErrorKind::from_str("unexpected_top_level")
