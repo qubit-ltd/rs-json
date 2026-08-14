@@ -75,13 +75,13 @@ let reply: Reply = decoder.decode_with_session(
     &mut session,
 )?;
 assert_eq!(reply, Reply { ok: true });
-assert_eq!(session.value_budget().structure_budget().used_nodes(), 2);
+assert_eq!(session.value_budget().used_nodes(), Some(2));
 # Ok::<(), qubit_json::lenient::LenientJsonDecodeError>(())
 ```
 
-Every successful charge remains in the caller-owned session even if a later
-budget check, syntax check, or target deserialization fails. A
-`Budget`/`Admission` error exposes the structured rejection through
+Input charges remain in the caller-owned session even if a later budget check,
+syntax check, or target deserialization fails; value accounting is committed
+only after the complete top-level value succeeds. A `Budget`/`Admission` error exposes the structured rejection through
 `measured_budget_error()`. Ordinary `decode()` remains the faster normalization
 and direct-deserialization path and does not run value preflight.
 
@@ -271,11 +271,26 @@ The `lenient` module does not:
 
 ### Session and mutation failure semantics
 
-- Decode-session accounting is cumulative. Raw bytes, normalized bytes, and
-  value measurements charged before any error are not rolled back. A rejected
-  individual budget increment remains atomic, but earlier increments remain.
-- Strict encoding stages output accounting until complete serialization;
-  value accounting may already be charged if serialization later fails.
+Each `JsonDecodeSession::begin_value()` or `JsonEncodeSession::begin_value()`
+creates one value attempt. Its value measurements are staged and commit only
+when the complete attempt succeeds. Raw, normalized, and accepted-output byte
+charges are immediate. The following matrix applies to the public APIs:
+
+| API or failure point | Immediate accounting retained after failure | Staged value accounting | External side effects |
+| --- | --- | --- | --- |
+| Strict `text::decode_slice` syntax or typed failure | Raw input bytes | Rolled back | None |
+| Strict `text::inspect` lexical failure | Raw input bytes | Rolled back | None |
+| Lenient `decode_with_session` normalization, syntax, or typed failure | Raw and normalized input bytes | Rolled back | None |
+| `text::encode_to_vec` serialization or budget failure | None before a complete buffer is accepted | Rolled back | No returned vector |
+| Buffered `text::encode_to_writer` final write failure | Bytes accepted by the writer | Rolled back | The writer can retain an accepted prefix |
+| Incremental `text::encode_to_writer_incremental` serialization, budget, or I/O failure | Every accepted output byte | Rolled back | The writer can retain an accepted prefix |
+| Streamed value failure inside a manual session attempt | Raw, normalized, or accepted-output bytes already charged | Rolled back when the attempt drops | Any caller-managed effect remains |
+
+Value transactions do not control external side effects: a writer, callback,
+network peer, or other destination cannot be rolled back by dropping an
+attempt. Reuse the same session deliberately when retained I/O charges across
+attempts are part of the desired limit.
+
 - `JsonTreeProcessor::process_mut` is incremental. Visitor mutations and
   budget charges completed before a visitor or budget error remain observable.
 

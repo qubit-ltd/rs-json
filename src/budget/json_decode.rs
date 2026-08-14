@@ -23,7 +23,7 @@ use super::internal::JsonLexicalPreflight;
 /// Deserializes one admitted JSON slice into `T`.
 ///
 /// The session consumes the full input before lexical validation. Typed Serde
-/// decoding begins only after that validation has charged every JSON value.
+/// decoding begins only after that validation has staged every JSON value.
 ///
 /// # Parameters
 ///
@@ -39,7 +39,8 @@ use super::internal::JsonLexicalPreflight;
 /// Returns [`JsonSerdeError::Budget`] when input or value resources exceed the
 /// session limits. Returns [`JsonSerdeError::Json`] when the input is not one
 /// valid JSON value or cannot deserialize as `T`. Input bytes remain consumed
-/// after every attempted decode, including later lexical or typed failures.
+/// after every attempt, while staged value resources are retained only after
+/// complete typed deserialization succeeds.
 pub fn decode_slice<'de, T, R, Q>(
     input: &'de [u8],
     session: &mut JsonDecodeSession<'_, R, Q>,
@@ -55,7 +56,7 @@ where
 /// Deserializes one admitted JSON slice through a caller-provided seed.
 ///
 /// The session consumes the full input before lexical validation. Typed Serde
-/// decoding begins only after that validation has charged every JSON value.
+/// decoding begins only after that validation has staged every JSON value.
 ///
 /// # Parameters
 ///
@@ -72,7 +73,8 @@ where
 /// Returns [`JsonSerdeError::Budget`] when input or value resources exceed the
 /// session limits. Returns [`JsonSerdeError::Json`] when the input is not one
 /// valid JSON value or the seed rejects it. Input bytes remain consumed after
-/// every attempted decode, including later lexical or typed failures.
+/// every attempt, while staged value resources are retained only when the seed
+/// accepts one complete value.
 pub fn decode_slice_seed<'de, S, R, Q>(
     seed: S,
     input: &'de [u8],
@@ -83,15 +85,18 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    session
-        .consume_input_bytes_usize(input.len())
+    let mut attempt = session.begin_value();
+    attempt
+        .try_consume_input_bytes(input.len())
         .map_err(JsonSerdeError::from)?;
-    JsonLexicalPreflight::new(session.value_budget_mut()).inspect(input)?;
+    JsonLexicalPreflight::new(attempt.value_transaction_mut())
+        .inspect(input)?;
     let mut deserializer = JsonDeserializer::from_slice(input);
     let value = seed
         .deserialize(&mut deserializer)
         .map_err(JsonSerdeError::Json)?;
     deserializer.end().map_err(JsonSerdeError::Json)?;
+    attempt.commit();
     Ok(value)
 }
 

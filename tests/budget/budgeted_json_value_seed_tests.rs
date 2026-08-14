@@ -6,51 +6,134 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::marker::PhantomData;
-
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
 use qubit_budget::json::JsonResource;
-use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::value::BudgetedJsonValueSeed;
 use serde::Deserializer as SerdeDeserializer;
 use serde::de::DeserializeSeed;
 use serde::de::Error as DeError;
+use serde::de::Unexpected;
 use serde::de::Visitor;
-use serde::de::value::F64Deserializer;
-use serde::de::value::I64Deserializer;
-use serde::de::value::I128Deserializer;
-use serde::de::value::StrDeserializer;
-use serde::de::value::StringDeserializer;
-use serde::de::value::U64Deserializer;
-use serde::de::value::U128Deserializer;
-use serde::de::value::UnitDeserializer;
+use serde::de::value;
 use serde::forward_to_deserialize_any;
 use serde_json::Deserializer;
-use serde_json::Error;
-use serde_json::Number;
 use serde_json::json;
 
-/// Arbitrary-precision JSON number used to exercise serde_json's number
-/// deserializer path.
-const LARGE_NUMBER_TEXT: &str = "123456789012345678901234567890";
+#[test]
+fn budgeted_value_seed_rejects_decoded_nodes_incrementally() {
+    let limits = JsonValueLimits::empty().with_structure_limits(
+        StructureLimits::empty()
+            .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+    );
+    let mut budget = limits.budget();
+    let mut transaction = budget.transaction();
+    let mut deserializer = Deserializer::from_slice(br#"[1,2]"#);
 
-/// Deserializer that sends a seed directly to `visit_none`.
-struct NoneDeserializer<E>(PhantomData<E>);
+    let error = BudgetedJsonValueSeed::new(&mut transaction)
+        .deserialize(&mut deserializer)
+        .expect_err("the third decoded node should exceed the budget");
 
-impl<E> NoneDeserializer<E> {
-    /// Creates a deserializer that represents an absent optional value.
-    const fn new() -> Self {
-        Self(PhantomData)
-    }
+    assert!(error.to_string().contains("Nodes"));
+    assert_eq!(budget.used_nodes(), Some(0));
 }
 
-impl<'de, E> SerdeDeserializer<'de> for NoneDeserializer<E>
-where
-    E: DeError,
-{
-    type Error = E;
+#[test]
+fn budgeted_value_seed_returns_the_admitted_value() {
+    let mut budget = JsonValueLimits::empty().budget();
+    let mut transaction = budget.transaction();
+    let mut deserializer = Deserializer::from_slice(br#"{"key":[true]}"#);
+
+    let value = BudgetedJsonValueSeed::new(&mut transaction)
+        .deserialize(&mut deserializer)
+        .expect("the unconfigured budget should admit the value");
+
+    assert_eq!(value, json!({"key": [true]}));
+}
+
+/// Verifies duplicate keys count as separate decoded object entries.
+#[test]
+fn test_budgeted_value_seed_counts_duplicate_object_entries() {
+    let limits = JsonValueLimits::empty().with_structure_limits(
+        StructureLimits::empty().with_map_entries_limit(ResourceLimit::new(
+            JsonResource::MapEntries,
+            1,
+        )),
+    );
+    let mut budget = limits.budget();
+    let mut transaction = budget.transaction();
+    let mut deserializer =
+        Deserializer::from_slice(br#"{"key":null,"key":null}"#);
+
+    let error = BudgetedJsonValueSeed::new(&mut transaction)
+        .deserialize(&mut deserializer)
+        .expect_err(
+            "the duplicate second entry must exceed the object-entry limit",
+        );
+
+    assert!(error.to_string().contains("MapEntries"));
+}
+
+/// Exercises scalar and optional serde visitor branches that JSON text does
+/// not necessarily dispatch to consistently across serde_json versions.
+#[test]
+fn test_budgeted_value_seed_accepts_all_scalar_deserializer_shapes() {
+    let mut budget = JsonValueLimits::empty().budget();
+    let mut transaction = budget.transaction();
+
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(value::I64Deserializer::<value::Error>::new(-7))
+            .expect("signed integers are JSON numbers"),
+        json!(-7),
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(value::I128Deserializer::<value::Error>::new(1))
+            .expect("i128 values fitting JSON are numbers"),
+        json!(1),
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(value::U128Deserializer::<value::Error>::new(2))
+            .expect("u128 values fitting JSON are numbers"),
+        json!(2),
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(value::F64Deserializer::<value::Error>::new(3.5))
+            .expect("finite floats are JSON numbers"),
+        json!(3.5),
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(value::StrDeserializer::<value::Error>::new(
+                "borrowed"
+            ))
+            .expect("borrowed strings are copied into JSON values"),
+        json!("borrowed"),
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(value::StringDeserializer::<value::Error>::new(
+                String::from("owned")
+            ))
+            .expect("owned strings are accepted"),
+        json!("owned"),
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(value::UnitDeserializer::<value::Error>::new())
+            .expect("unit maps to JSON null"),
+        json!(null),
+    );
+}
+
+struct NoneDeserializer;
+
+impl<'de> SerdeDeserializer<'de> for NoneDeserializer {
+    type Error = value::Error;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
@@ -59,169 +142,197 @@ where
         visitor.visit_none()
     }
 
+    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_none()
+    }
+
+    fn deserialize_newtype_struct<V>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_newtype_struct(
+            value::BoolDeserializer::<value::Error>::new(true),
+        )
+    }
+
     forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str
-        string bytes byte_buf option unit unit_struct newtype_struct seq
-        tuple tuple_struct map struct enum identifier ignored_any
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf unit unit_struct seq tuple tuple_struct map struct
+        enum identifier ignored_any
     }
 }
 
-/// Deserializer that sends a seed directly to `visit_some`.
-struct SomeDeserializer<D>(D);
+struct SomeDeserializer;
 
-impl<'de, D> SerdeDeserializer<'de> for SomeDeserializer<D>
-where
-    D: SerdeDeserializer<'de>,
-{
-    type Error = D::Error;
+impl<'de> SerdeDeserializer<'de> for SomeDeserializer {
+    type Error = value::Error;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_some(self.0)
+        visitor.visit_some(value::BoolDeserializer::<value::Error>::new(true))
     }
 
-    forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 f32 f64 char str
-        string bytes byte_buf option unit unit_struct newtype_struct seq
-        tuple tuple_struct map struct enum identifier ignored_any
-    }
-}
-
-/// Deserializer that sends a seed directly to `visit_newtype_struct`.
-struct NewtypeDeserializer<D>(D);
-
-impl<'de, D> SerdeDeserializer<'de> for NewtypeDeserializer<D>
-where
-    D: SerdeDeserializer<'de>,
-{
-    type Error = D::Error;
-
-    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_newtype_struct(self.0)
+        self.deserialize_any(visitor)
     }
 
     forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 f32 f64 char str
-        string bytes byte_buf option unit unit_struct newtype_struct seq
-        tuple tuple_struct map struct enum identifier ignored_any
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf unit unit_struct newtype_struct seq tuple tuple_struct
+        map struct enum identifier ignored_any
     }
 }
 
+/// Covers explicit serde visitor branches for option/newtype delegation and
+/// non-representable numeric values.
 #[test]
-fn budgeted_value_seed_rejects_decoded_nodes_incrementally() {
-    let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::empty()
-            .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+fn test_budgeted_value_seed_handles_option_newtype_and_numeric_errors() {
+    let mut budget = JsonValueLimits::empty().budget();
+    let mut transaction = budget.transaction();
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(value::I128Deserializer::<value::Error>::new(
+                i128::MAX
+            ))
+            .expect("arbitrary precision supports i128"),
+        json!(i128::MAX),
     );
-    let mut budget = JsonValueBudget::new(limits);
-    let mut deserializer = Deserializer::from_slice(br#"[1,2]"#);
-
-    let error = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(&mut deserializer)
-        .expect_err("the third decoded node should exceed the budget");
-
-    assert!(error.to_string().contains("Nodes"));
-    assert_eq!(budget.structure_budget().used_nodes(), 2);
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(value::U128Deserializer::<value::Error>::new(
+                u128::MAX
+            ))
+            .expect("arbitrary precision supports u128"),
+        json!(u128::MAX),
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(I128DispatchDeserializer)
+            .expect("explicit i128 visitor dispatch is supported"),
+        json!(i128::MAX),
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(U128DispatchDeserializer)
+            .expect("explicit u128 visitor dispatch is supported"),
+        json!(u128::MAX),
+    );
+    assert!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(value::F64Deserializer::<value::Error>::new(f64::NAN))
+            .is_err()
+    );
+    assert!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(ExpectingDeserializer)
+            .is_err()
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(NoneDeserializer)
+            .expect("visit_none maps to null"),
+        json!(null),
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(SomeDeserializer)
+            .expect("visit_some delegates to child seed"),
+        json!(true),
+    );
+    assert_eq!(
+        BudgetedJsonValueSeed::new(&mut transaction)
+            .deserialize(NewtypeDeserializer)
+            .expect("newtype visitor delegates to child seed"),
+        json!(true),
+    );
 }
 
-#[test]
-fn budgeted_value_seed_returns_the_admitted_value() {
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let mut deserializer = Deserializer::from_slice(br#"{"key":[true]}"#);
+struct NewtypeDeserializer;
 
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(&mut deserializer)
-        .expect("the unconfigured budget should admit the value");
+struct I128DispatchDeserializer;
 
-    assert_eq!(value, json!({"key": [true]}));
+struct U128DispatchDeserializer;
+
+impl<'de> SerdeDeserializer<'de> for I128DispatchDeserializer {
+    type Error = value::Error;
+
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_i128(i128::MAX)
+    }
+
+    forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct map struct enum identifier ignored_any
+    }
 }
 
-/// Verifies decoded scalar forms map through the seed without JSON text input.
-#[test]
-fn budgeted_value_seed_accepts_value_deserializer_scalar_forms() {
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(I64Deserializer::<Error>::new(-1))
-        .expect("i64 deserializer should produce a JSON number");
-    assert_eq!(value, json!(-1));
+impl<'de> SerdeDeserializer<'de> for U128DispatchDeserializer {
+    type Error = value::Error;
 
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(F64Deserializer::<Error>::new(1.5))
-        .expect("f64 deserializer should produce a JSON number");
-    assert_eq!(value, json!(1.5));
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_u128(u128::MAX)
+    }
 
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(StringDeserializer::<Error>::new(String::from("text")))
-        .expect("string deserializer should produce a JSON string");
-    assert_eq!(value, json!("text"));
+    forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct map struct enum identifier ignored_any
+    }
+}
 
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(UnitDeserializer::<Error>::new())
-        .expect("unit deserializer should produce JSON null");
-    assert_eq!(value, json!(null));
+struct ExpectingDeserializer;
 
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(I128Deserializer::<Error>::new(-1))
-        .expect("i128 deserializer should produce a JSON number");
-    assert_eq!(value, json!(-1));
+impl<'de> SerdeDeserializer<'de> for ExpectingDeserializer {
+    type Error = value::Error;
 
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(U64Deserializer::<Error>::new(1))
-        .expect("u64 deserializer should produce a JSON number");
-    assert_eq!(value, json!(1));
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        Err(value::Error::invalid_type(Unexpected::Unit, &visitor))
+    }
 
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(U128Deserializer::<Error>::new(1))
-        .expect("u128 deserializer should produce a JSON number");
-    assert_eq!(value, json!(1));
+    forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct map struct enum identifier ignored_any
+    }
+}
 
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(StrDeserializer::<Error>::new("borrowed"))
-        .expect("str deserializer should produce a JSON string");
-    assert_eq!(value, json!("borrowed"));
+impl<'de> SerdeDeserializer<'de> for NewtypeDeserializer {
+    type Error = value::Error;
 
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(NoneDeserializer::<Error>::new())
-        .expect("none deserializer should produce JSON null");
-    assert_eq!(value, json!(null));
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_newtype_struct(
+            value::BoolDeserializer::<value::Error>::new(true),
+        )
+    }
 
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(SomeDeserializer(I64Deserializer::<Error>::new(2)))
-        .expect("some deserializer should delegate to its child seed");
-    assert_eq!(value, json!(2));
-
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(NewtypeDeserializer(I64Deserializer::<Error>::new(3)))
-        .expect("newtype deserializer should delegate to its child seed");
-    assert_eq!(value, json!(3));
-
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let error = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(F64Deserializer::<Error>::new(f64::NAN))
-        .expect_err("non-finite f64 should not be representable as JSON");
-    assert!(error.to_string().contains("not representable"));
-
-    let number = LARGE_NUMBER_TEXT
-        .parse::<Number>()
-        .expect("the number fixture must parse");
-    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
-    let value = BudgetedJsonValueSeed::new(&mut budget)
-        .deserialize(number)
-        .expect("serde_json number deserializer should produce a value");
-    assert_eq!(value.to_string(), LARGE_NUMBER_TEXT);
+    forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct map struct enum identifier ignored_any
+    }
 }
