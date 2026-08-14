@@ -11,6 +11,7 @@ use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonValueBudget;
 use serde_json::Value;
+use serde_json::map::Iter;
 
 use super::JsonBudgetRejection;
 use super::JsonTreeContext;
@@ -63,18 +64,26 @@ where
                 ReadFrameState::Enter => {
                     let value = frame.value;
                     let context = frame.context;
-                    if let JsonTreeLocation::ObjectValue { key } = context.location {
+                    if let JsonTreeLocation::ObjectValue { key } =
+                        context.location
+                    {
                         self.budget.consume_key_bytes_usize(key.len())?;
                     }
                     self.admit(value, context.depth)?;
                     visitor
                         .enter(value, context)
                         .map_err(JsonTreeProcessError::Visitor)?;
-                    frame.state = ReadFrameState::Children(ChildCursor::new(value, context.depth));
+                    frame.state = ReadFrameState::Children(ChildCursor::new(
+                        value,
+                        context.depth,
+                    ));
                 }
                 ReadFrameState::Children(cursor) => {
                     if let Some((value, location, depth)) = cursor.next() {
-                        pending.push(ReadFrame::enter(value, JsonTreeContext { depth, location }));
+                        pending.push(ReadFrame::enter(
+                            value,
+                            JsonTreeContext { depth, location },
+                        ));
                     } else {
                         frame.state = ReadFrameState::Leave;
                     }
@@ -117,7 +126,8 @@ where
                 let context = frame.location.context(frame.depth);
 
                 if let Some(key) = frame.location.key()
-                    && let Err(error) = self.budget.consume_key_bytes_usize(key.len())
+                    && let Err(error) =
+                        self.budget.consume_key_bytes_usize(key.len())
                 {
                     let rejection = visitor
                         .reject_budget(&mut frame.value, context, &error)
@@ -145,7 +155,8 @@ where
                     .map_err(JsonTreeProcessError::Visitor)?;
                 frame.entered = true;
                 if control == JsonTreeControl::Descend {
-                    frame.children = take_children(&mut frame.value, frame.depth);
+                    frame.children =
+                        take_children(&mut frame.value, frame.depth);
                 }
                 continue;
             }
@@ -176,13 +187,25 @@ where
     }
 
     /// Admits one node before any visitor callback.
-    fn admit(&mut self, value: &Value, depth: usize) -> Result<(), MeasuredBudgetError<R, Q>> {
+    fn admit(
+        &mut self,
+        value: &Value,
+        depth: usize,
+    ) -> Result<(), MeasuredBudgetError<R, Q>> {
         match value {
             Value::Null | Value::Bool(_) => self.budget.enter_node_usize(depth),
-            Value::Number(number) => self.budget.enter_number_usize(depth, number.as_str().len()),
-            Value::String(text) => self.budget.enter_string_usize(depth, text.len()),
-            Value::Array(values) => self.budget.enter_array_usize(depth, values.len()),
-            Value::Object(entries) => self.budget.enter_object_usize(depth, entries.len()),
+            Value::Number(number) => {
+                self.budget.enter_number_usize(depth, number.as_str().len())
+            }
+            Value::String(text) => {
+                self.budget.enter_string_usize(depth, text.len())
+            }
+            Value::Array(values) => {
+                self.budget.enter_array_usize(depth, values.len())
+            }
+            Value::Object(entries) => {
+                self.budget.enter_object_usize(depth, entries.len())
+            }
         }
     }
 }
@@ -235,7 +258,7 @@ enum ChildCursor<'value> {
     /// Object iterator over borrowed keys and values.
     Object {
         /// Next object entry.
-        iter: serde_json::map::Iter<'value>,
+        iter: Iter<'value>,
         /// Root-inclusive depth of each child.
         depth: usize,
     },
@@ -247,9 +270,9 @@ enum ChildCursor<'value> {
 impl<'value> ChildCursor<'value> {
     /// Creates a cursor for the immediate children of `value`.
     fn new(value: &'value Value, depth: usize) -> Self {
-        let child_depth = depth
-            .checked_add(1)
-            .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
+        let child_depth = depth.checked_add(1).expect(
+            "a materialized JSON tree cannot have usize::MAX nesting depth",
+        );
         match value {
             Value::Array(values) => Self::Array {
                 iter: values.iter().enumerate(),
@@ -259,19 +282,24 @@ impl<'value> ChildCursor<'value> {
                 iter: entries.iter(),
                 depth: child_depth,
             },
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Self::Empty,
+            Value::Null
+            | Value::Bool(_)
+            | Value::Number(_)
+            | Value::String(_) => Self::Empty,
         }
     }
 
     /// Returns the next child, its location, and its root-inclusive depth.
-    fn next(&mut self) -> Option<(&'value Value, JsonTreeLocation<'value>, usize)> {
+    fn next(
+        &mut self,
+    ) -> Option<(&'value Value, JsonTreeLocation<'value>, usize)> {
         match self {
-            Self::Array { iter, depth } => iter
-                .next()
-                .map(|(index, value)| (value, JsonTreeLocation::ArrayElement { index }, *depth)),
-            Self::Object { iter, depth } => iter
-                .next()
-                .map(|(key, value)| (value, JsonTreeLocation::ObjectValue { key }, *depth)),
+            Self::Array { iter, depth } => iter.next().map(|(index, value)| {
+                (value, JsonTreeLocation::ArrayElement { index }, *depth)
+            }),
+            Self::Object { iter, depth } => iter.next().map(|(key, value)| {
+                (value, JsonTreeLocation::ObjectValue { key }, *depth)
+            }),
             Self::Empty => None,
         }
     }
@@ -293,7 +321,9 @@ impl OwnedLocation {
     fn context(&self, depth: usize) -> JsonTreeContext<'_> {
         let location = match self {
             Self::Root => JsonTreeLocation::Root,
-            Self::ArrayElement(index) => JsonTreeLocation::ArrayElement { index: *index },
+            Self::ArrayElement(index) => {
+                JsonTreeLocation::ArrayElement { index: *index }
+            }
             Self::ObjectValue(key) => JsonTreeLocation::ObjectValue { key },
         };
         JsonTreeContext { depth, location }
@@ -349,9 +379,9 @@ struct ChildEntry {
 
 /// Detaches immediate children in reverse order, preserving traversal order.
 fn take_children(value: &mut Value, depth: usize) -> Vec<ChildEntry> {
-    let child_depth = depth
-        .checked_add(1)
-        .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
+    let child_depth = depth.checked_add(1).expect(
+        "a materialized JSON tree cannot have usize::MAX nesting depth",
+    );
     match value {
         Value::Array(values) => std::mem::take(values)
             .into_iter()
@@ -372,7 +402,9 @@ fn take_children(value: &mut Value, depth: usize) -> Vec<ChildEntry> {
                 value,
             })
             .collect(),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Vec::new(),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+            Vec::new()
+        }
     }
 }
 
