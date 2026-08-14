@@ -8,9 +8,10 @@
 //! Defines the typed payload used by decoder benchmarks.
 
 use serde::Deserialize;
+use serde::Serialize;
 
 /// Typed value used by constrained-decoder benchmarks.
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct BenchmarkRecord {
     /// Identifies the benchmark record.
     pub(crate) id: u64,

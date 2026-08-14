@@ -7,64 +7,92 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![中文文档](https://img.shields.io/badge/文档-中文版-blue.svg)](README.zh_CN.md)
 
-Lenient JSON decoder for Rust, designed for non-fully-trusted text inputs.
+Resource-aware JSON infrastructure for Rust. It combines predictable lenient
+input normalization, strict text codecs, budgeted value construction, and
+non-recursive tree processing without hiding Serde behind a new data model.
 
-## Budget-aware JSON processing
+## Choose the boundary you need
 
-`qubit-budget` owns JSON resource identities, limits, and mutable sessions.
-`qubit-json` owns JSON normalization, traversal, and Serde adapters. Import
-`JsonValueLimits`, `JsonDecodeLimits`, `JsonDecodeSession`, `JsonEncodeLimits`,
-and `JsonEncodeSession` from `qubit_budget::json`.
+| Module | Use it for | Boundary |
+| --- | --- | --- |
+| `lenient` | Normalizing fenced or lightly noisy text, then deserializing `T` | Only documented repairs; no guessed quotes, commas, or braces |
+| `text` | Strict budget-aware JSON decode and encode | Caller-owned decode/encode sessions; no text repair |
+| `value` | Building a `serde_json::Value` through a Serde seed | Decoded-value accounting; the implementation stays private |
+| `tree` | Visiting or mutating a materialized `Value` iteratively | `process_mut` is non-transactional |
 
-```rust
-use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession, JsonEncodeLimits, JsonEncodeSession};
+`qubit-budget` owns JSON resource identities, limits, budgets, and mutable
+sessions. `qubit-json` owns normalization, lexical admission, strict text
+adapters, value construction, and tree traversal.
 
-let decode = JsonDecodeSession::owned(JsonDecodeLimits::empty());
-let encode = JsonEncodeSession::owned(JsonEncodeLimits::empty());
-assert_eq!(decode.max_input_bytes(), None);
-assert_eq!(encode.max_output_bytes(), None);
+## Installation
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+qubit-json = "0.7"
+qubit-budget = { version = "0.4", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
 ```
 
-Input bytes and accepted value work are charged per attempt and are not rolled
-back after a later parse or Serde failure. Output bytes are staged and committed
-only after complete serialization succeeds. Therefore a serialization failure
-can leave value accounting charged while leaving output accounting unchanged.
+The direct `serde` dependency is only needed when deriving `Deserialize`.
+If your code names `serde_json::Value` or uses `serde_json` macros, add
+`serde_json` as a direct dependency. This crate intentionally does not
+re-export it.
 
-## Overview
+## Quick Start
 
-Qubit JSON provides a small and predictable decoding layer on top of
-`serde_json`. Its core type, `LenientJsonDecoder`, normalizes a limited set of
-common input issues before parsing and deserializing JSON values.
+### Decode a fenced response with cumulative budgets
 
-The crate is intended for cases where JSON text may come from sources such as:
+Suppose a service receives Markdown-wrapped JSON from a text channel, needs a
+typed result, and must account for all work across retries. Reuse one
+`JsonDecodeSession`: raw input, normalized input, and decoded-value resources
+are charged in that order. The normalized document is lexically admitted, then
+deserialized directly into `T`; there is no intermediate `serde_json::Value`.
 
-- Markdown-wrapped text
-- Markdown code blocks using backtick or tilde fences
-- copied snippets
-- CLI output streams
-- other text channels that may wrap otherwise valid JSON
+```rust
+use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession};
+use qubit_json::lenient::LenientJsonDecoder;
+use serde::Deserialize;
 
-It is intentionally narrow. The crate does not try to be a general JSON repair
-engine, and it does not attempt to guess missing quotes, commas, or braces.
+#[derive(Debug, Deserialize, PartialEq)]
+struct Reply {
+    ok: bool,
+}
 
-## Design Goals
+let limits = JsonDecodeLimits::empty()
+    .with_max_input_bytes(64)
+    .with_max_normalized_input_bytes(32)
+    .with_max_nodes(2)
+    .with_max_map_entries(1)
+    .with_max_key_bytes(2)
+    .with_max_payload_bytes(2);
+let mut session = JsonDecodeSession::owned(limits);
+let decoder = LenientJsonDecoder::default();
 
-- **Lenient but predictable**: only handle a small set of well-defined input
-  problems
-- **Object-oriented API**: use a reusable `LenientJsonDecoder` instance instead
-  of a loose bag of helper functions
-- **Serde-first**: delegate actual parsing and deserialization to `serde_json`
-- **Privacy-aware errors**: report stable, redacted diagnostics by default and
-  allow detailed serde diagnostics only by explicit configuration
-- **Low overhead**: avoid unnecessary allocation when normalization can borrow
-  the original input
+let reply: Reply = decoder.decode_with_session(
+    "```json\n{\"ok\":true}\n```",
+    &mut session,
+)?;
+assert_eq!(reply, Reply { ok: true });
+assert_eq!(session.value_budget().structure_budget().used_nodes(), 2);
+# Ok::<(), qubit_json::lenient::LenientJsonDecodeError>(())
+```
 
-## Features
+Every successful charge remains in the caller-owned session even if a later
+budget check, syntax check, or target deserialization fails. A
+`Budget`/`Admission` error exposes the structured rejection through
+`measured_budget_error()`. Ordinary `decode()` remains the faster normalization
+and direct-deserialization path and does not run value preflight.
 
-### `LenientJsonDecoder`
+## What It Provides
+
+### Lenient decoding
 
 - Reusable decoder object that holds immutable decoding options
 - `decode<T>()`: decodes any JSON top-level value into `T`
+- `decode_with_session<T>()`: adds cumulative raw, normalized, and value
+  accounting before direct deserialization
 - `decode_slice<T>()`: validates UTF-8 bytes and decodes them into `T`
 - `decode_value()`: decodes into `serde_json::Value`
 - `decode_object<T>()`: requires a top-level JSON object and deserializes `T`
@@ -94,8 +122,24 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `error_privacy_policy`: selects safe redacted errors (the default) or
   explicitly requested detailed serde diagnostics
 
-### Explicit Error Model
+### Strict text, value, and tree infrastructure
 
+- `text::decode_slice` / `text::decode_slice_seed` strictly decode bytes with a
+  `JsonDecodeSession`; `text::encode_to_vec` / `text::encode_to_writer` encode
+  with a `JsonEncodeSession`.
+- `text::JsonEncodeError::InvalidRawJson` retains the stable
+  `JsonSyntaxError` reason, offset, line, and column rather than rebuilding a
+  `serde_json::Error` from text.
+- `value::BudgetedJsonValueSeed` is the only public path for incrementally
+  building `serde_json::Value` while charging a value budget.
+- `tree::JsonTreeProcessor` accepts values whose borrow is shorter than the
+  budget borrow. `process_mut` keeps mutations and budget consumption completed
+  before an error; its restoration guard only keeps the root structurally
+  valid and does not restore the original value.
+
+### Explicit error model
+
+- `Budget`: caller-owned decoded-value limits reject work during `Admission`
 - `InputTooLarge`: raw or normalized input size exceeds its configured limit
 - `EmptyInput`: input becomes empty after normalization
 - `InvalidUtf8`: raw byte input is not valid UTF-8
@@ -114,48 +158,7 @@ engine, and it does not attempt to guess missing quotes, commas, or braces.
 - `Detailed` preserves the complete UTF-8 or serde source and may therefore
   expose input-derived diagnostics; use it only in controlled environments
 
-## Installation
-
-Add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-qubit-json = "0.7"
-qubit-budget = { version = "0.4", features = ["json"] }
-serde = { version = "1.0", features = ["derive"] }
-```
-
-The direct `serde` dependency is only needed when deriving `Deserialize` for
-typed decoding, as shown in the first quick-start example below.
-
-If your code names `serde_json::Value` or uses `serde_json` macros, add
-`serde_json` as a direct dependency. This crate intentionally does not
-re-export it.
-
-## Quick Start
-
-### Decode a JSON Object from a Markdown Code Fence
-
-```rust
-use serde::Deserialize;
-use qubit_json::lenient::LenientJsonDecoder;
-
-#[derive(Debug, Deserialize)]
-struct User {
-    name: String,
-    age: u8,
-}
-
-fn main() {
-    let decoder = LenientJsonDecoder::default();
-    let user: User = decoder
-        .decode_object("```json\n{\"name\":\"Alice\",\"age\":30}\n```")
-        .expect("decoder should extract and decode the fenced JSON object");
-
-    assert_eq!(user.name, "Alice");
-    assert_eq!(user.age, 30);
-}
-```
+## Additional Lenient Examples
 
 ### Decode JSON Containing Raw Control Characters in Strings
 
@@ -243,7 +246,9 @@ fn main() {
 }
 ```
 
-## Normalization Rules
+## Behavioral Contracts
+
+### Normalization rules
 
 When enabled, the decoder applies the following pipeline before parsing:
 
@@ -257,18 +262,29 @@ When enabled, the decoder applies the following pipeline before parsing:
 8. enforce the optional normalized JSON byte-size limit before allocation
 9. escape ASCII control characters inside JSON string literals
 
-The decoder does not:
+The `lenient` module does not:
 
 - add missing quotes
 - add missing commas
 - add missing braces or brackets
 - rewrite arbitrary malformed JSON into guessed valid JSON
 
+### Session and mutation failure semantics
+
+- Decode-session accounting is cumulative. Raw bytes, normalized bytes, and
+  value measurements charged before any error are not rolled back. A rejected
+  individual budget increment remains atomic, but earlier increments remain.
+- Strict encoding stages output accounting until complete serialization;
+  value accounting may already be charged if serialization later fails.
+- `JsonTreeProcessor::process_mut` is incremental. Visitor mutations and
+  budget charges completed before a visitor or budget error remain observable.
+
 ## When to Use
 
 Qubit JSON is a good fit when:
 
-- you need a reusable, configurable JSON decoder object
+- you need one resource-accounting vocabulary across text, values, and trees
+- you need a reusable, configurable lenient decoder object
 - your inputs are mostly valid JSON but may be wrapped or slightly noisy
 - you want stable and safe-by-default error categories around `serde_json`
 
@@ -276,31 +292,42 @@ It is not a good fit when:
 
 - you need aggressive repair for heavily malformed JSON
 - your inputs are not actually JSON
-- a plain `serde_json::from_str()` call is already sufficient
+- a plain `serde_json::from_str()` call already provides all required behavior
 
-## Alignment Notes
+## Compatibility and Upgrades
 
-This README reflects the current object model:
+Budgeted serialization recognizes private `serde_json` Number and RawValue
+protocol names. Production therefore pins `serde_json` exactly to `1.0.151`,
+and `src/budget/internal/serde_json_compat.rs` is the sole production owner of
+those tokens. When upgrading `serde_json`:
 
-- `LenientJsonDecoder` owns an internal `LenientJsonNormalizer`.
-- Public decoding APIs are `decode`, `decode_object`, `decode_array`,
-  `decode_value`, and `decode_slice`.
-- Normalization and error handling are implemented in
-  `src/internal/lenient_json_normalizer.rs` and `src/error/json_decode_error.rs`,
-  which are covered by tests in `tests/`.
-- Product requirements and implementation behavior are aligned with
-  `doc/json_prd.zh_CN.md` and `doc/json_design.zh_CN.md`.
+1. update the exact version in `Cargo.toml`;
+2. update both root and `fuzz/Cargo.lock` files;
+3. review upstream private Number and RawValue serializers against the compat
+   module;
+4. run private-protocol and serializer regressions, both dependency-tree
+   checks, the fuzz workspace check, and the full project quality gates.
+
+Do not add token checks outside the compatibility module or relax the exact
+version before that review succeeds.
+
+## Learn More
+
+- [中文文档](README.zh_CN.md)
+- [设计说明（中文）](doc/json_design.zh_CN.md)
+- [产品需求（中文）](doc/json_prd.zh_CN.md)
+- [基准基线（中文）](doc/benchmark_baseline.zh_CN.md)
+- [API documentation](https://docs.rs/qubit-json)
 
 ## Development Validation
 
 Run the repository checks with `./align-ci.sh` followed by `./ci-check.sh`.
-Criterion benchmarks cover small public-entry comparisons, HTTP-style strict
-byte decoding (with both reused and per-call decoder construction), LLM-style
-lenient typed decoding up to 1 MiB, normalization density, and representative
-failure paths. Compile them with:
+Criterion benchmarks include 1 KiB, 64 KiB, and 1 MiB budgeted strict and
+lenient decode/encode comparisons. Compile both benchmark targets with:
 
 ```bash
 cargo bench --bench decoder_bench --no-run
+cargo bench --bench budgeted_serde_json --no-run
 ```
 
 The optional fuzz target is development tooling and is not a runtime
