@@ -5,10 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Builds [`serde_json::Value`] values while charging a JSON value budget.
+//! Private Serde roles used to build budgeted JSON values.
 
-mod json_value_seed;
+mod json_key_seed;
+mod json_value_child_seed;
+mod json_value_visitor;
 
-pub use json_value_seed::JsonValueSeed;
-
-mod internal;
+pub(super) use json_key_seed::JsonKeySeed;
+pub(super) use json_value_child_seed::JsonValueChildSeed;
+pub(super) use json_value_visitor::JsonValueVisitor;
