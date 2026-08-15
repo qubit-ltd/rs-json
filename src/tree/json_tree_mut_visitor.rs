@@ -11,7 +11,7 @@ use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
 use serde_json::Value;
 
-use super::JsonBudgetRejection;
+use super::JsonTreeBudgetRejection;
 use super::JsonTreeContext;
 use super::JsonTreeControl;
 
@@ -39,7 +39,7 @@ where
         _value: &mut Value,
         _context: JsonTreeContext<'_>,
         _error: &MeasuredBudgetError<R, Q>,
-    ) -> Result<JsonBudgetRejection, Self::Error> {
-        Ok(JsonBudgetRejection::Abort)
+    ) -> Result<JsonTreeBudgetRejection, Self::Error> {
+        Ok(JsonTreeBudgetRejection::Abort)
     }
 }

@@ -11,10 +11,11 @@ use std::fmt::Debug;
 use std::io::Error as IoError;
 
 use qubit_budget::MeasuredBudgetError;
+use qubit_budget::ResourceQuantity;
 use serde_json::Error as JsonError;
 use thiserror::Error;
 
-use crate::budget::JsonSyntaxError;
+use super::JsonSyntaxError;
 
 /// Failure produced while encoding one JSON document.
 #[must_use]
@@ -35,4 +36,18 @@ where
     /// The final destination writer rejected buffered bytes.
     #[error("JSON output writer failed: {0}")]
     Write(#[source] IoError),
+}
+
+impl<R, Q> serde::ser::Error for JsonEncodeError<R, Q>
+where
+    R: Debug,
+    Q: ResourceQuantity,
+{
+    /// Converts a custom Serde failure into the encode-specific error.
+    fn custom<T>(message: T) -> Self
+    where
+        T: std::fmt::Display,
+    {
+        Self::Serialize(<JsonError as serde::ser::Error>::custom(message))
+    }
 }
