@@ -10,6 +10,35 @@
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_json::text::JsonTextDecoder;
+use serde::Deserializer;
+use serde::de::DeserializeSeed;
+use serde::de::Error as DeError;
+
+struct FailingSeed;
+
+impl<'de> DeserializeSeed<'de> for FailingSeed {
+    type Value = ();
+
+    fn deserialize<D>(self, _deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Err(D::Error::custom("seed failure"))
+    }
+}
+
+struct NonConsumingSeed;
+
+impl<'de> DeserializeSeed<'de> for NonConsumingSeed {
+    type Value = ();
+
+    fn deserialize<D>(self, _deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(())
+    }
+}
 
 /// Verifies a decoder returns a typed value for one complete document.
 #[test]
@@ -20,4 +49,35 @@ fn test_json_text_decoder_decodes_typed_value() {
         .expect("JSON boolean should decode");
 
     assert!(value);
+}
+
+/// Verifies validation accounts a complete document without deserializing it.
+#[test]
+fn test_json_text_decoder_validates_complete_document() {
+    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    JsonTextDecoder::new(&mut session)
+        .validate(br#"{"ok":[true,null]}"#)
+        .expect("a complete JSON document should validate");
+}
+
+/// Verifies seed deserialization failures retain safe Serde metadata.
+#[test]
+fn test_json_text_decoder_maps_seed_failure() {
+    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    assert!(
+        JsonTextDecoder::new(&mut session)
+            .decode_seed(FailingSeed, b"true")
+            .is_err()
+    );
+}
+
+/// Verifies a seed that leaves input unread is rejected by the final check.
+#[test]
+fn test_json_text_decoder_rejects_unconsumed_seed_input() {
+    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    assert!(
+        JsonTextDecoder::new(&mut session)
+            .decode_seed(NonConsumingSeed, b"true")
+            .is_err()
+    );
 }

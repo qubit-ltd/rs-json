@@ -31,10 +31,8 @@ use crate::fixtures::PublicChoice;
 #[test]
 fn test_budget_error_exposes_measured_rejection_details() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
-        JsonValueLimits::empty().with_string_bytes_limit(ResourceLimit::new(
-            JsonResource::StringBytes,
-            0,
-        )),
+        JsonValueLimits::empty()
+            .with_string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 0)),
     );
     let mut session = JsonDecodeSession::owned(limits);
 
@@ -101,13 +99,10 @@ fn test_error_exposes_top_level_mismatch_context() {
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_location()
- {
+fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_location() {
     let error = LenientJsonDecoder::default()
         .decode_value("  {\n")
-        .expect_err(
-            "incomplete JSON should fail after whitespace normalization",
-        );
+        .expect_err("incomplete JSON should fail after whitespace normalization");
 
     assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
     assert_eq!(error.stage(), LenientJsonDecodeStage::Parse);
@@ -130,8 +125,7 @@ fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_locatio
 #[test]
 fn test_error_source_for_invalid_json_preserves_serde_error() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::default().with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
     );
     let error = decoder
         .decode_value("{")
@@ -172,8 +166,7 @@ fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
     const SECRET: &str = "TOP_SECRET_VALUE";
 
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::default().with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
     );
     let error = decoder
         .decode::<PublicChoice>(&format!("\"{SECRET}\""))
@@ -247,16 +240,14 @@ fn test_invalid_utf8_exposes_safe_position_diagnostics() {
 #[test]
 fn test_invalid_utf8_detailed_error_retains_utf8_source() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::strict().with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
     );
     let error = decoder
         .decode_slice::<Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail");
     assert_eq!(error.utf8_valid_up_to(), Some(0));
     assert_eq!(error.utf8_error_len(), Some(1));
-    let source = std::error::Error::source(&error)
-        .expect("detailed errors must retain Utf8Error");
+    let source = std::error::Error::source(&error).expect("detailed errors must retain Utf8Error");
     assert!(source.downcast_ref::<std::str::Utf8Error>().is_some());
 }
 
@@ -271,8 +262,7 @@ fn test_normalization_errors_retain_the_configured_privacy_policy() {
         .decode_value("")
         .expect_err("empty input should fail normalization");
     let detailed = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::default().with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
     )
     .decode_value("")
     .expect_err("empty input should fail normalization");
@@ -324,8 +314,7 @@ fn test_error_partial_eq_compares_all_stable_fields() {
     assert_ne!(first, third);
 
     let detailed = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::default().with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
     )
     .decode_value("")
     .expect_err("empty input should return normalization error");
@@ -338,4 +327,6 @@ fn test_error_partial_eq_compares_all_stable_fields() {
         .decode_slice::<Value>(&[b'a', 0xff])
         .expect_err("invalid UTF-8 should return a decode error");
     assert_ne!(invalid_utf8_at_start, invalid_utf8_after_prefix);
+
+    assert_eq!(first.clone(), first);
 }

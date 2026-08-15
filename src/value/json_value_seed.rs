@@ -36,9 +36,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a root seed using the supplied decoded-value transaction.
-    pub fn new(
-        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
-    ) -> Self {
+    pub fn new(transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>) -> Self {
         Self { transaction }
     }
 }

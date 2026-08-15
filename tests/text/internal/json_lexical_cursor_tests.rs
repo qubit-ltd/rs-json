@@ -9,6 +9,8 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_json::text::JsonDecodeError;
+use qubit_json::text::JsonSyntaxErrorReason;
 use qubit_json::text::JsonTextDecoder;
 
 /// Verifies the lexical cursor skips JSON whitespace before and after a value.
@@ -20,4 +22,88 @@ fn test_cursor_skips_json_whitespace() {
         .expect("whitespace-wrapped JSON number should decode");
 
     assert_eq!(value, 7);
+}
+
+/// Verifies that malformed scalar and compound inputs reach stable lexical
+/// classifications through the public decoder boundary.
+#[test]
+fn test_cursor_reports_scalar_and_container_syntax_errors() {
+    let cases: &[(&[u8], JsonSyntaxErrorReason)] = &[
+        (b"", JsonSyntaxErrorReason::UnexpectedEnd),
+        (b"@", JsonSyntaxErrorReason::UnexpectedByte { byte: b'@' }),
+        (
+            b"truex",
+            JsonSyntaxErrorReason::UnexpectedByte { byte: b't' },
+        ),
+        (b"true false", JsonSyntaxErrorReason::TrailingCharacters),
+        (b"[1 2]", JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd),
+        (
+            b"[1,]",
+            JsonSyntaxErrorReason::UnexpectedByte { byte: b']' },
+        ),
+        (b"[1", JsonSyntaxErrorReason::UnexpectedEnd),
+        (b"{1:2}", JsonSyntaxErrorReason::ExpectedObjectKey),
+        (br#"{"a" 1}"#, JsonSyntaxErrorReason::ExpectedColon),
+        (
+            br#"{"a":1 "b":2}"#,
+            JsonSyntaxErrorReason::ExpectedCommaOrObjectEnd,
+        ),
+        (
+            br#"{"a":1,}"#,
+            JsonSyntaxErrorReason::UnexpectedByte { byte: b'}' },
+        ),
+        (br#"{"a":1"#, JsonSyntaxErrorReason::UnexpectedEnd),
+        (br#""\q""#, JsonSyntaxErrorReason::InvalidEscape),
+        (br#""\u12"#, JsonSyntaxErrorReason::UnexpectedEnd),
+        (br#""\u12x4""#, JsonSyntaxErrorReason::InvalidUnicodeEscape),
+        (br#""\uD800"#, JsonSyntaxErrorReason::UnexpectedEnd),
+        (br#""\uDC00""#, JsonSyntaxErrorReason::UnpairedSurrogate),
+        (b"01", JsonSyntaxErrorReason::InvalidNumber),
+        (b"1.", JsonSyntaxErrorReason::InvalidNumber),
+        (b"1e+", JsonSyntaxErrorReason::InvalidNumber),
+    ];
+
+    for (input, expected) in cases {
+        let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+        let error = JsonTextDecoder::new(&mut session)
+            .decode::<serde_json::Value>(input)
+            .expect_err("malformed input should be rejected");
+        let JsonDecodeError::Syntax(error) = error else {
+            panic!("expected a syntax error for {input:?}");
+        };
+        assert_eq!(error.reason(), *expected, "input: {input:?}");
+    }
+}
+
+/// Verifies UTF-8 width handling, Unicode escapes, and source coordinates.
+#[test]
+fn test_cursor_accepts_unicode_and_reports_coordinates() {
+    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let value = JsonTextDecoder::new(&mut session)
+        .decode::<String>("\"é\\uD83D\\uDE00\"".as_bytes())
+        .expect("valid UTF-8 and surrogate-pair escapes should decode");
+    assert_eq!(value, "é😀");
+
+    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let error = JsonTextDecoder::new(&mut session)
+        .decode::<serde_json::Value>("1\r\n@".as_bytes())
+        .expect_err("invalid byte should be rejected");
+    let JsonDecodeError::Syntax(error) = error else {
+        panic!("expected a syntax error");
+    };
+    assert_eq!(error.line(), 2);
+    assert_eq!(error.column(), 1);
+}
+
+/// Verifies invalid UTF-8 in a JSON string is classified without panicking.
+#[test]
+fn test_cursor_rejects_invalid_utf8_inside_string() {
+    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let error = JsonTextDecoder::new(&mut session)
+        .decode::<serde_json::Value>(b"\"\x80\"")
+        .expect_err("invalid UTF-8 should be rejected");
+    let JsonDecodeError::Syntax(error) = error else {
+        panic!("expected a syntax error");
+    };
+    assert_eq!(error.reason(), JsonSyntaxErrorReason::InvalidUtf8);
 }

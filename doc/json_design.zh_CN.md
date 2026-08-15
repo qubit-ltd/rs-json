@@ -40,7 +40,7 @@ BOM、Markdown 围栏及字符串内控制字符处理。它不推测缺失的 J
 use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession};
 use qubit_json::text::JsonTextDecoder;
 
-let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+let mut session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::new());
 let value: serde_json::Value = JsonTextDecoder::new(&mut session)
     .decode(br#"{"ok":true}"#)?;
 # Ok::<(), qubit_json::text::JsonDecodeError<

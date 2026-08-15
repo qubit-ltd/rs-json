@@ -30,14 +30,9 @@ impl Serialize for InvalidRawValue {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(
-            concat!("$", "serde_json", ":", ":private::RawValue"),
-            1,
-        )?;
-        state.serialize_field(
-            concat!("$", "serde_json", ":", ":private::RawValue"),
-            "[",
-        )?;
+        let mut state = serializer
+            .serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
+        state.serialize_field(concat!("$", "serde_json", ":", ":private::RawValue"), "[")?;
         state.end()
     }
 }
@@ -48,8 +43,7 @@ fn test_encoder_preserves_private_number_and_raw_value_protocol() {
     let number: Number = "123456789012345678901234567890"
         .parse()
         .expect("valid number");
-    let raw = RawValue::from_string("{\"ok\":true}".to_owned())
-        .expect("valid raw JSON");
+    let raw = RawValue::from_string("{\"ok\":true}".to_owned()).expect("valid raw JSON");
     let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
     let bytes = JsonTextEncoder::new(&mut session)
         .to_vec(&(&number, &raw))

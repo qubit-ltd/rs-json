@@ -12,8 +12,7 @@ use qubit_json::text::JsonSyntaxErrorReason;
 
 #[test]
 fn test_json_syntax_error_exposes_location_and_reason() {
-    let error =
-        JsonSyntaxError::new(7, 2, 3, JsonSyntaxErrorReason::ExpectedColon);
+    let error = JsonSyntaxError::new(7, 2, 3, JsonSyntaxErrorReason::ExpectedColon);
     assert_eq!(error.offset(), 7);
     assert_eq!(error.line(), 2);
     assert_eq!(error.column(), 3);

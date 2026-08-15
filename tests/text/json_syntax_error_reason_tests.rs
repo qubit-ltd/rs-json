@@ -17,3 +17,27 @@ fn test_json_syntax_error_reason_formats_unexpected_byte() {
         "unexpected byte 0x78",
     );
 }
+
+/// Verifies every public syntax reason has a stable display representation.
+#[test]
+fn test_json_syntax_error_reason_formats_every_variant() {
+    let reasons = [
+        JsonSyntaxErrorReason::UnexpectedEnd,
+        JsonSyntaxErrorReason::UnexpectedByte { byte: 0xff },
+        JsonSyntaxErrorReason::ExpectedColon,
+        JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd,
+        JsonSyntaxErrorReason::ExpectedCommaOrObjectEnd,
+        JsonSyntaxErrorReason::ExpectedObjectKey,
+        JsonSyntaxErrorReason::InvalidEscape,
+        JsonSyntaxErrorReason::InvalidUnicodeEscape,
+        JsonSyntaxErrorReason::UnpairedSurrogate,
+        JsonSyntaxErrorReason::InvalidUtf8,
+        JsonSyntaxErrorReason::InvalidNumber,
+        JsonSyntaxErrorReason::TrailingCharacters,
+        JsonSyntaxErrorReason::NestingOverflow,
+    ];
+
+    for reason in reasons {
+        assert!(!reason.to_string().is_empty());
+    }
+}

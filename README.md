@@ -63,7 +63,7 @@ caller-owned session and use its methods for one or more documents.
 use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession};
 use qubit_json::text::JsonTextDecoder;
 
-let mut decode_session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+let mut decode_session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::new());
 let value: serde_json::Value = JsonTextDecoder::new(&mut decode_session)
     .decode(br#"{"ok":true}"#)?;
 assert_eq!(value["ok"], true);
@@ -77,7 +77,7 @@ use qubit_budget::json::{JsonEncodeLimits, JsonEncodeSession};
 use qubit_json::text::JsonTextEncoder;
 
 let value = serde_json::json!({"ok": true});
-let mut encode_session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+let mut encode_session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::new());
 let mut encoder = JsonTextEncoder::new(&mut encode_session);
 let bytes = encoder.to_vec(&value)?;
 assert_eq!(bytes, br#"{"ok":true}"#);

@@ -37,7 +37,7 @@ fuzz_target!(|data: &[u8]| {
     let number_bytes = internal::fuzz_limit::limit(data, 14);
     let payload_bytes = internal::fuzz_limit::limit(data, 16);
 
-    let structure = StructureLimits::empty()
+    let structure = StructureLimits::new()
         .with_depth_limit(ResourceLimit::new(JsonResource::Depth, depth))
         .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes))
         .with_sequence_items_limit(ResourceLimit::new(

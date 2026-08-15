@@ -22,15 +22,8 @@ use super::display_budget_kind::DisplayBudgetKind;
 use super::json_encode_context::JsonEncodeContext;
 
 /// Wraps a serde_json private string payload with budget accounting.
-pub(super) struct BudgetedPrivateValue<
-    'a,
-    'transaction,
-    'budget,
-    'context,
-    T,
-    R,
-    Q,
-> where
+pub(super) struct BudgetedPrivateValue<'a, 'transaction, 'budget, 'context, T, R, Q>
+where
     T: ?Sized,
     Q: ResourceQuantity,
 {
@@ -53,9 +46,7 @@ where
     /// Creates a private arbitrary-precision number payload wrapper.
     pub(super) const fn number(
         value: &'a T,
-        context: &'context RefCell<
-            JsonEncodeContext<'transaction, 'budget, R, Q>,
-        >,
+        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         depth: usize,
     ) -> Self {
         Self {
@@ -68,9 +59,7 @@ where
     /// Creates a private raw JSON payload wrapper at its final depth.
     pub(super) const fn raw_value(
         value: &'a T,
-        context: &'context RefCell<
-            JsonEncodeContext<'transaction, 'budget, R, Q>,
-        >,
+        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         depth: usize,
     ) -> Self {
         Self {
@@ -199,10 +188,7 @@ where
         self.inner.serialize_unit()
     }
 
-    fn serialize_unit_struct(
-        self,
-        name: &'static str,
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit_struct(name)
     }
 
@@ -237,25 +223,15 @@ where
     where
         T: Serialize + ?Sized,
     {
-        self.inner.serialize_newtype_variant(
-            name,
-            variant_index,
-            variant,
-            value,
-        )
+        self.inner
+            .serialize_newtype_variant(name, variant_index, variant, value)
     }
 
-    fn serialize_seq(
-        self,
-        len: Option<usize>,
-    ) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         self.inner.serialize_seq(len)
     }
 
-    fn serialize_tuple(
-        self,
-        len: usize,
-    ) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.inner.serialize_tuple(len)
     }
 
@@ -278,10 +254,7 @@ where
             .serialize_tuple_variant(name, variant_index, variant, len)
     }
 
-    fn serialize_map(
-        self,
-        len: Option<usize>,
-    ) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.inner.serialize_map(len)
     }
 
@@ -313,8 +286,7 @@ where
             PrivateTextKind::RawValue { .. } => DisplayBudgetKind::RawOutput,
         };
         let depth = match self.kind {
-            PrivateTextKind::Number { depth }
-            | PrivateTextKind::RawValue { depth } => depth,
+            PrivateTextKind::Number { depth } | PrivateTextKind::RawValue { depth } => depth,
         };
         let text = JsonEncodeContext::collect_display::<S::Error, _>(
             self.context,
