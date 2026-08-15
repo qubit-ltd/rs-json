@@ -1,7 +1,3 @@
 {
-  "threshold_exempt_files": {
-    "qubit-json": [
-      "src/budget/internal/json_lexical_preflight.rs"
-    ]
-  }
+  "threshold_exempt_files": {}
 }

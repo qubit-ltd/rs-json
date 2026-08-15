@@ -1,0 +1,122 @@
+// =============================================================================
+//    Copyright (c) 2025 - 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
+//! Bounded output buffer for budget-aware JSON encoding.
+// qubit-style: allow source-test-pair
+// qubit-style: allow multiple-public-types
+
+use std::cell::RefCell;
+use std::io;
+use std::io::Write;
+use std::rc::Rc;
+
+use qubit_budget::ResourceQuantity;
+
+use super::json_output_accounting::JsonOutputAccounting;
+use crate::text::JsonEncodeError;
+
+/// Accumulates JSON bytes only while the configured output budget permits it.
+pub(in crate::text) struct JsonOutputBuffer<'a, R, Q>
+where
+    Q: ResourceQuantity,
+{
+    /// Bytes accepted by the in-memory buffer so far.
+    bytes: Vec<u8>,
+
+    /// Accounting shared with the online serializer checks.
+    accounting: Rc<RefCell<JsonOutputAccounting<'a, R, Q>>>,
+}
+
+impl<'a, R, Q> JsonOutputBuffer<'a, R, Q>
+where
+    Q: ResourceQuantity,
+{
+    /// Creates an empty bounded output buffer.
+    ///
+    /// # Parameters
+    ///
+    /// * `accounting` - Shared live budget and first-violation state.
+    ///
+    /// # Returns
+    ///
+    /// An empty writer with no recorded violation.
+    #[inline]
+    pub(in crate::text) const fn new(
+        accounting: Rc<RefCell<JsonOutputAccounting<'a, R, Q>>>,
+    ) -> Self {
+        Self {
+            bytes: Vec::new(),
+            accounting,
+        }
+    }
+
+    /// Resolves serialization and returns the accepted bytes or original error.
+    ///
+    /// # Parameters
+    ///
+    /// * `result` - Result returned by the JSON serializer.
+    /// # Returns
+    ///
+    /// The complete bounded output when serialization succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonEncodeError::Budget`] for a recorded output violation,
+    /// taking precedence over its erased I/O representation. Otherwise returns
+    /// [`JsonEncodeError::Serialize`] for the serializer failure.
+    pub(in crate::text) fn into_result(
+        self,
+        result: Result<(), serde_json::Error>,
+    ) -> Result<Vec<u8>, JsonEncodeError<R, Q>> {
+        let violation = self.accounting.borrow_mut().take_violation();
+        if let Some(error) = violation {
+            return Err(JsonEncodeError::Budget(error));
+        }
+        let syntax_error = self.accounting.borrow_mut().take_syntax_error();
+        if let Some(error) = syntax_error {
+            return Err(JsonEncodeError::InvalidRawJson(error));
+        }
+        result.map_err(JsonEncodeError::Serialize)?;
+        Ok(self.bytes)
+    }
+}
+
+impl<R, Q> Write for JsonOutputBuffer<'_, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    /// Appends one complete input slice after checking the resulting length.
+    ///
+    /// The buffer does not charge the output budget. Its caller consumes the
+    /// complete length only after successful serialization, so a failed Vec or
+    /// buffered-writer encode leaves output usage unchanged.
+    fn write(&mut self, input: &[u8]) -> io::Result<usize> {
+        let next = match self.bytes.len().checked_add(input.len()) {
+            Some(next) => next,
+            None => {
+                return Err(io::Error::other("JSON output length overflow"));
+            }
+        };
+        let accounting = self.accounting.borrow();
+        if let Err(error) = accounting.check_available(next) {
+            drop(accounting);
+            let mut accounting = self.accounting.borrow_mut();
+            accounting.record_violation(error);
+            return Err(io::Error::other("JSON output budget exceeded"));
+        }
+        drop(accounting);
+        self.bytes.extend_from_slice(input);
+        Ok(input.len())
+    }
+
+    /// Flushes the in-memory buffer without performing external I/O.
+    #[inline(always)]
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}

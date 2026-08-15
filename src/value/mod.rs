@@ -7,4 +7,8 @@
 // =============================================================================
 //! Builds [`serde_json::Value`] values while charging a JSON value budget.
 
-pub use crate::budget::accounting_json_value_seed::AccountingJsonValueSeed;
+mod json_value_seed;
+
+pub use json_value_seed::JsonValueSeed;
+
+mod internal;
