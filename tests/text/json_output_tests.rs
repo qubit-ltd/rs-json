@@ -1,14 +1,11 @@
 // =============================================================================
-//    Copyright (c) 2025 - 2026 Haixing Hu.
+//    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Integration test entry point for `qubit-json`.
+//! Public behavior tests for bounded JSON output.
 
-mod fixtures;
-mod lenient;
-mod text;
-mod tree;
-mod value;
+mod buffer_tests;
+mod writer_tests;
