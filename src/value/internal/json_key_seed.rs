@@ -22,8 +22,7 @@ pub(in crate::value) struct JsonKeySeed<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
-    pub(super) transaction:
-        &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    pub(super) transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 
     pub(super) prospective: usize,
 }

@@ -31,9 +31,7 @@ where
     #[error(transparent)]
     Syntax(#[from] JsonSyntaxError),
     /// Serde rejected an otherwise admitted document for the requested type.
-    #[error(
-        "JSON deserialization failed ({category:?}) at line {line}, column {column}"
-    )]
+    #[error("JSON deserialization failed ({category:?}) at line {line}, column {column}")]
     Deserialize {
         /// Broad Serde failure category.
         category: Category,

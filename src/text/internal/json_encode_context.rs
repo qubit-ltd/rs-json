@@ -31,12 +31,10 @@ where
     Q: ResourceQuantity,
 {
     /// Caller-owned transaction charged by the traversal.
-    pub(in crate::text) transaction:
-        &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    pub(in crate::text) transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 
     /// Live output accounting shared with the byte buffer.
-    pub(in crate::text) output:
-        Rc<RefCell<JsonOutputAccounting<'transaction, R, Q>>>,
+    pub(in crate::text) output: Rc<RefCell<JsonOutputAccounting<'transaction, R, Q>>>,
 }
 
 impl<R, Q> JsonEncodeContext<'_, '_, R, Q>
@@ -59,14 +57,24 @@ where
     }
 
     /// Stages one complete JSON measurement and maps any violation to Serde.
-    pub(super) fn admit<E>(
-        &mut self,
-        measurement: JsonMeasurement,
-    ) -> Result<(), E>
+    pub(super) fn admit<E>(&mut self, measurement: JsonMeasurement) -> Result<(), E>
     where
         E: Error,
     {
         let result = self.transaction.try_admit(measurement);
+        self.record(result)
+    }
+
+    /// Checks and charges a container before requesting its Serde compound.
+    pub(super) fn enter_container<E>(
+        &mut self,
+        kind: JsonContainerKind,
+        depth: usize,
+    ) -> Result<(), E>
+    where
+        E: Error,
+    {
+        let result = self.transaction.try_enter_container(kind, depth);
         self.record(result)
     }
 
@@ -88,11 +96,7 @@ where
     /// The fragment length is a safe lower bound for the complete output size.
     /// Structural traversal starts at `depth`, the fragment's root-inclusive
     /// position in the final document.
-    pub(super) fn preflight_raw<E>(
-        &mut self,
-        value: &str,
-        depth: usize,
-    ) -> Result<(), E>
+    pub(super) fn preflight_raw<E>(&mut self, value: &str, depth: usize) -> Result<(), E>
     where
         E: Error,
         R: Clone,
@@ -100,17 +104,16 @@ where
         let output = self.output.borrow().check_available(value.len());
         self.record(output)?;
         let result = {
-            let mut scanner =
-                JsonLexicalScanner::at_depth(&mut *self.transaction, depth);
+            let mut scanner = JsonLexicalScanner::at_depth(&mut *self.transaction, depth);
             scanner.scan(value.as_bytes())
         };
         match result {
             Ok(()) => Ok(()),
             Err(JsonLexicalError::Budget(error)) => self.record(Err(error)),
             Err(JsonLexicalError::Syntax(failure)) => {
-                self.output.borrow_mut().record_syntax_error(
-                    JsonSyntaxError::from_lexical(failure),
-                );
+                self.output
+                    .borrow_mut()
+                    .record_syntax_error(JsonSyntaxError::from_lexical(failure));
                 Err(E::custom("invalid raw JSON value"))
             }
         }
@@ -134,21 +137,15 @@ where
         {
             let mut context = collector.context.borrow_mut();
             match kind {
-                DisplayBudgetKind::String => {
-                    context.admit(JsonMeasurement::String {
-                        depth,
-                        bytes: text.len(),
-                    })
-                }
-                DisplayBudgetKind::Key => {
-                    context.admit(JsonMeasurement::Key { bytes: text.len() })
-                }
-                DisplayBudgetKind::Number => {
-                    context.admit(JsonMeasurement::Number {
-                        depth,
-                        bytes: text.len(),
-                    })
-                }
+                DisplayBudgetKind::String => context.admit(JsonMeasurement::String {
+                    depth,
+                    bytes: text.len(),
+                }),
+                DisplayBudgetKind::Key => context.admit(JsonMeasurement::Key { bytes: text.len() }),
+                DisplayBudgetKind::Number => context.admit(JsonMeasurement::Number {
+                    depth,
+                    bytes: text.len(),
+                }),
                 DisplayBudgetKind::RawOutput => Ok(()),
             }?;
         }

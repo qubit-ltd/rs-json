@@ -36,20 +36,12 @@ impl JsonTreeVisitor for ReadVisitor {
     type Error = std::convert::Infallible;
 
     /// Accepts one node before the processor visits its descendants.
-    fn enter(
-        &mut self,
-        _value: &Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn enter(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Ok(())
     }
 
     /// Accepts one node after the processor visits its descendants.
-    fn leave(
-        &mut self,
-        _value: &Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn leave(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -57,9 +49,7 @@ impl JsonTreeVisitor for ReadVisitor {
 /// Mirrors the object-key inspection performed by redaction visitors.
 struct RedactionShapeVisitor;
 
-impl JsonTreeMutVisitor<qubit_budget::json::JsonResource, usize>
-    for RedactionShapeVisitor
-{
+impl JsonTreeMutVisitor<qubit_budget::json::JsonResource, usize> for RedactionShapeVisitor {
     type Error = std::convert::Infallible;
 
     /// Removes the synthetic secret field and descends into the remaining
@@ -117,8 +107,7 @@ fn benchmark_read(c: &mut Criterion) {
             &value,
             |bencher, value| {
                 bencher.iter(|| {
-                    let mut budget =
-                        JsonValueBudget::new(JsonValueLimits::empty());
+                    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
                     let mut transaction = budget.transaction();
                     let mut visitor = ReadVisitor;
                     JsonTreeReader::new(&mut transaction)
@@ -138,8 +127,7 @@ fn benchmark_read(c: &mut Criterion) {
             &value,
             |bencher, value| {
                 bencher.iter(|| {
-                    let mut budget =
-                        JsonValueBudget::new(JsonValueLimits::empty());
+                    let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
                     let mut transaction = budget.transaction();
                     let mut visitor = ReadVisitor;
                     JsonTreeReader::new(&mut transaction)
@@ -184,8 +172,7 @@ fn benchmark_mut(c: &mut Criterion) {
                 bencher.iter_batched(
                     || value.clone(),
                     |mut value| {
-                        let mut budget =
-                            JsonValueBudget::new(JsonValueLimits::empty());
+                        let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
                         let mut transaction = budget.transaction();
                         let mut visitor = RedactionShapeVisitor;
                         JsonTreeMutator::new(&mut transaction)

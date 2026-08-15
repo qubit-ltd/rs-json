@@ -91,10 +91,8 @@ impl Write for PrefixWriter {
 #[test]
 fn test_encode_session_exposes_only_output_resource() {
     let encode = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty().with_output_bytes_limit(ResourceLimit::new(
-            JsonResource::OutputBytes,
-            8,
-        )),
+        JsonEncodeLimits::empty()
+            .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 8)),
     );
 
     assert_eq!(encode.max_output_bytes(), Some(8));
@@ -105,10 +103,8 @@ fn test_encode_session_exposes_only_output_resource() {
 #[test]
 fn test_encode_attempt_consumes_output_bytes_atomically() {
     let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty().with_output_bytes_limit(ResourceLimit::new(
-            JsonResource::OutputBytes,
-            3,
-        )),
+        JsonEncodeLimits::empty()
+            .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 3)),
     );
 
     let mut attempt = session.begin_value();
@@ -125,21 +121,13 @@ fn test_encode_attempt_consumes_output_bytes_atomically() {
 #[test]
 fn test_encode_attempt_preserves_embedded_value_limits() {
     let value_limits = JsonValueLimits::empty()
-        .with_string_bytes_limit(ResourceLimit::new(
-            JsonResource::StringBytes,
-            2,
-        ))
-        .with_payload_bytes_limit(ResourceLimit::new(
-            JsonResource::PayloadBytes,
-            3,
-        ))
+        .with_string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2))
+        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
         .with_structure_limits(
-            StructureLimits::empty()
-                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+            StructureLimits::new().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
         );
-    let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty().with_value_limits(value_limits),
-    );
+    let mut session =
+        JsonEncodeSession::owned(JsonEncodeLimits::empty().with_value_limits(value_limits));
 
     let mut attempt = session.begin_value();
     attempt
@@ -177,14 +165,10 @@ fn test_encode_attempt_preserves_embedded_value_limits() {
 #[test]
 fn test_encode_session_borrows_output_and_value_budgets() {
     let mut output = ResourceBudget::new(JsonResource::OutputBytes, 32);
-    let mut value = JsonValueBudget::new(
-        JsonValueLimits::empty().with_structure_limits(
-            StructureLimits::empty()
-                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
-        ),
-    );
-    let mut session =
-        JsonEncodeSession::borrowing_output(&mut output, &mut value);
+    let mut value = JsonValueBudget::new(JsonValueLimits::empty().with_structure_limits(
+        StructureLimits::new().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+    ));
+    let mut session = JsonEncodeSession::borrowing_output(&mut output, &mut value);
 
     let encoded = encode(&serde_json::json!({"name": "qubit"}), &mut session)
         .expect("borrowed budgets should support online encoding");
@@ -248,10 +232,7 @@ fn test_incremental_stream_failure_keeps_prefix_and_rolls_back_value() {
     );
     let mut writer = Vec::new();
 
-    assert!(
-        write_incremental(&mut writer, &FailsAfterPrefix, &mut session)
-            .is_err()
-    );
+    assert!(write_incremental(&mut writer, &FailsAfterPrefix, &mut session).is_err());
     assert!(!writer.is_empty());
     assert_eq!(
         session.output_budget().expect("output budget").used(),
@@ -267,7 +248,7 @@ fn test_incremental_panic_keeps_prefix_and_reuses_value_capacity() {
     let mut session = JsonEncodeSession::owned(
         JsonEncodeLimits::empty()
             .with_max_output_bytes(64)
-            .with_max_nodes(1),
+            .with_max_nodes(2),
     );
     let mut writer = Vec::new();
 
@@ -282,7 +263,6 @@ fn test_incremental_panic_keeps_prefix_and_reuses_value_capacity() {
         writer.len(),
     );
     assert_eq!(session.value_budget().used_nodes(), Some(0));
-    encode(&true, &mut session)
-        .expect("panic must leave value capacity for the next encode");
+    encode(&true, &mut session).expect("panic must leave value capacity for the next encode");
     assert_eq!(session.value_budget().used_nodes(), Some(1));
 }

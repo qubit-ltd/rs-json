@@ -24,8 +24,7 @@ use serde_json::Value;
 fn test_json_lexical_preflight_charges_nested_depth() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
         JsonValueLimits::empty().with_structure_limits(
-            StructureLimits::empty()
-                .with_depth_limit(ResourceLimit::new(JsonResource::Depth, 1)),
+            StructureLimits::new().with_depth_limit(ResourceLimit::new(JsonResource::Depth, 1)),
         ),
     );
     let mut session = JsonDecodeSession::owned(limits);

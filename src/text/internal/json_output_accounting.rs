@@ -34,9 +34,7 @@ where
 {
     /// Creates live accounting over the caller-owned output budget.
     #[inline]
-    pub(in crate::text) const fn new(
-        output: Option<&'a mut ResourceBudget<R, Q>>,
-    ) -> Self {
+    pub(in crate::text) const fn new(output: Option<&'a mut ResourceBudget<R, Q>>) -> Self {
         Self {
             output,
             violation: None,
@@ -45,10 +43,7 @@ where
     }
 
     /// Checks an output lower bound without consuming capacity.
-    pub(super) fn check_available(
-        &self,
-        amount: usize,
-    ) -> Result<(), MeasuredBudgetError<R, Q>>
+    pub(super) fn check_available(&self, amount: usize) -> Result<(), MeasuredBudgetError<R, Q>>
     where
         R: Clone,
     {
@@ -63,10 +58,7 @@ where
     }
 
     /// Consumes bytes accepted by the output destination.
-    pub(super) fn consume(
-        &mut self,
-        amount: usize,
-    ) -> Result<(), MeasuredBudgetError<R, Q>>
+    pub(super) fn consume(&mut self, amount: usize) -> Result<(), MeasuredBudgetError<R, Q>>
     where
         R: Clone,
     {
@@ -81,19 +73,14 @@ where
     }
 
     /// Records the first budget violation hidden by a writer error.
-    pub(super) fn record_violation(
-        &mut self,
-        error: MeasuredBudgetError<R, Q>,
-    ) {
+    pub(super) fn record_violation(&mut self, error: MeasuredBudgetError<R, Q>) {
         if self.violation.is_none() {
             self.violation = Some(error);
         }
     }
 
     /// Takes the first recorded violation, if one exists.
-    pub(super) fn take_violation(
-        &mut self,
-    ) -> Option<MeasuredBudgetError<R, Q>> {
+    pub(super) fn take_violation(&mut self) -> Option<MeasuredBudgetError<R, Q>> {
         self.violation.take()
     }
 

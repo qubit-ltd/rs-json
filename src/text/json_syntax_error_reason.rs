@@ -52,31 +52,17 @@ impl From<JsonLexicalErrorReason> for JsonSyntaxErrorReason {
     fn from(reason: JsonLexicalErrorReason) -> Self {
         match reason {
             JsonLexicalErrorReason::UnexpectedEnd => Self::UnexpectedEnd,
-            JsonLexicalErrorReason::UnexpectedByte { byte } => {
-                Self::UnexpectedByte { byte }
-            }
+            JsonLexicalErrorReason::UnexpectedByte { byte } => Self::UnexpectedByte { byte },
             JsonLexicalErrorReason::ExpectedColon => Self::ExpectedColon,
-            JsonLexicalErrorReason::ExpectedCommaOrArrayEnd => {
-                Self::ExpectedCommaOrArrayEnd
-            }
-            JsonLexicalErrorReason::ExpectedCommaOrObjectEnd => {
-                Self::ExpectedCommaOrObjectEnd
-            }
-            JsonLexicalErrorReason::ExpectedObjectKey => {
-                Self::ExpectedObjectKey
-            }
+            JsonLexicalErrorReason::ExpectedCommaOrArrayEnd => Self::ExpectedCommaOrArrayEnd,
+            JsonLexicalErrorReason::ExpectedCommaOrObjectEnd => Self::ExpectedCommaOrObjectEnd,
+            JsonLexicalErrorReason::ExpectedObjectKey => Self::ExpectedObjectKey,
             JsonLexicalErrorReason::InvalidEscape => Self::InvalidEscape,
-            JsonLexicalErrorReason::InvalidUnicodeEscape => {
-                Self::InvalidUnicodeEscape
-            }
-            JsonLexicalErrorReason::UnpairedSurrogate => {
-                Self::UnpairedSurrogate
-            }
+            JsonLexicalErrorReason::InvalidUnicodeEscape => Self::InvalidUnicodeEscape,
+            JsonLexicalErrorReason::UnpairedSurrogate => Self::UnpairedSurrogate,
             JsonLexicalErrorReason::InvalidUtf8 => Self::InvalidUtf8,
             JsonLexicalErrorReason::InvalidNumber => Self::InvalidNumber,
-            JsonLexicalErrorReason::TrailingCharacters => {
-                Self::TrailingCharacters
-            }
+            JsonLexicalErrorReason::TrailingCharacters => Self::TrailingCharacters,
             JsonLexicalErrorReason::NestingOverflow => Self::NestingOverflow,
         }
     }
@@ -86,37 +72,21 @@ impl fmt::Display for JsonSyntaxErrorReason {
     /// Formats the stable human-readable reason.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnexpectedEnd => {
-                formatter.write_str("unexpected end of input")
-            }
+            Self::UnexpectedEnd => formatter.write_str("unexpected end of input"),
             Self::UnexpectedByte { byte } => {
                 write!(formatter, "unexpected byte 0x{byte:02x}")
             }
             Self::ExpectedColon => formatter.write_str("expected ':'"),
-            Self::ExpectedCommaOrArrayEnd => {
-                formatter.write_str("expected ',' or ']' in array")
-            }
-            Self::ExpectedCommaOrObjectEnd => {
-                formatter.write_str("expected ',' or '}' in object")
-            }
-            Self::ExpectedObjectKey => {
-                formatter.write_str("expected object key")
-            }
+            Self::ExpectedCommaOrArrayEnd => formatter.write_str("expected ',' or ']' in array"),
+            Self::ExpectedCommaOrObjectEnd => formatter.write_str("expected ',' or '}' in object"),
+            Self::ExpectedObjectKey => formatter.write_str("expected object key"),
             Self::InvalidEscape => formatter.write_str("invalid string escape"),
-            Self::InvalidUnicodeEscape => {
-                formatter.write_str("invalid Unicode escape")
-            }
-            Self::UnpairedSurrogate => {
-                formatter.write_str("unpaired Unicode surrogate")
-            }
+            Self::InvalidUnicodeEscape => formatter.write_str("invalid Unicode escape"),
+            Self::UnpairedSurrogate => formatter.write_str("unpaired Unicode surrogate"),
             Self::InvalidUtf8 => formatter.write_str("invalid UTF-8"),
             Self::InvalidNumber => formatter.write_str("invalid JSON number"),
-            Self::TrailingCharacters => {
-                formatter.write_str("trailing characters")
-            }
-            Self::NestingOverflow => {
-                formatter.write_str("JSON nesting overflow")
-            }
+            Self::TrailingCharacters => formatter.write_str("trailing characters"),
+            Self::NestingOverflow => formatter.write_str("JSON nesting overflow"),
         }
     }
 }

@@ -25,19 +25,11 @@ struct FailingVisitor;
 impl JsonTreeVisitor for FailingVisitor {
     type Error = &'static str;
 
-    fn enter(
-        &mut self,
-        _value: &Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn enter(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Err("stop")
     }
 
-    fn leave(
-        &mut self,
-        _value: &Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn leave(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -45,11 +37,7 @@ impl JsonTreeVisitor for FailingVisitor {
 impl JsonTreeVisitor for RecordingVisitor {
     type Error = std::convert::Infallible;
 
-    fn enter(
-        &mut self,
-        value: &Value,
-        context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn enter(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         self.events.push(format!(
             "enter:{:?}:{}:{value}",
             context.location, context.depth
@@ -57,11 +45,7 @@ impl JsonTreeVisitor for RecordingVisitor {
         Ok(())
     }
 
-    fn leave(
-        &mut self,
-        value: &Value,
-        context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn leave(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         self.events.push(format!(
             "leave:{:?}:{}:{value}",
             context.location, context.depth

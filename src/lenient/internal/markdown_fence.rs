@@ -64,10 +64,7 @@ impl MarkdownFence {
     /// The fenced body when the active policy accepts the fence, or the
     /// unchanged input otherwise.
     #[must_use]
-    pub(super) fn strip_outer<'a>(
-        input: &'a str,
-        policy: &MarkdownFencePolicy,
-    ) -> &'a str {
+    pub(super) fn strip_outer<'a>(input: &'a str, policy: &MarkdownFencePolicy) -> &'a str {
         let (json_only, closing) = match policy {
             MarkdownFencePolicy::Disabled => return input,
             MarkdownFencePolicy::Any { closing } => (false, *closing),
@@ -76,8 +73,7 @@ impl MarkdownFence {
         let Some(opening_fence) = Self::parse_opening(input) else {
             return input;
         };
-        let Some((line_end, content_start)) = Self::first_line_break(input)
-        else {
+        let Some((line_end, content_start)) = Self::first_line_break(input) else {
             return input;
         };
         let info_string = input[opening_fence.marker_end..line_end].trim();
@@ -110,8 +106,7 @@ impl MarkdownFence {
         let line_end = bytes
             .iter()
             .position(|byte| matches!(*byte, b'\n' | b'\r'))?;
-        let next_line_start = if bytes[line_end] == b'\r'
-            && bytes.get(line_end + 1) == Some(&b'\n')
+        let next_line_start = if bytes[line_end] == b'\r' && bytes.get(line_end + 1) == Some(&b'\n')
         {
             line_end + 2
         } else {
@@ -185,8 +180,7 @@ impl MarkdownFence {
     /// `Some(length)` for a run of at least three matching marker bytes, or
     /// `None` otherwise.
     fn matching_marker_len(&self, line: &str) -> Option<usize> {
-        let count =
-            line.bytes().take_while(|byte| *byte == self.marker).count();
+        let count = line.bytes().take_while(|byte| *byte == self.marker).count();
         (count >= 3).then_some(count)
     }
 }

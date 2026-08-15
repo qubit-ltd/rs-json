@@ -41,17 +41,12 @@ where
     Q: ResourceQuantity,
 {
     /// Creates an encoder borrowing `session` for its lifetime.
-    pub fn new(
-        session: &'session mut JsonEncodeSession<'budget, R, Q>,
-    ) -> Self {
+    pub fn new(session: &'session mut JsonEncodeSession<'budget, R, Q>) -> Self {
         Self { session }
     }
 
     /// Encodes `value` into compact JSON and commits only complete success.
-    pub fn to_vec<T>(
-        &mut self,
-        value: &T,
-    ) -> Result<Vec<u8>, JsonEncodeError<R, Q>>
+    pub fn to_vec<T>(&mut self, value: &T) -> Result<Vec<u8>, JsonEncodeError<R, Q>>
     where
         T: Serialize + ?Sized,
     {
@@ -100,17 +95,14 @@ where
         let mut attempt = self.session.begin_value();
         let result = {
             let (output_budget, transaction) = attempt.split_mut();
-            let accounting =
-                Rc::new(RefCell::new(JsonOutputAccounting::new(output_budget)));
-            let mut output =
-                JsonOutputWriter::new(writer, Rc::clone(&accounting));
+            let accounting = Rc::new(RefCell::new(JsonOutputAccounting::new(output_budget)));
+            let mut output = JsonOutputWriter::new(writer, Rc::clone(&accounting));
             let result = {
                 let mut inner = JsonSerializer::new(&mut output);
-                let context =
-                    RefCell::new(super::internal::JsonEncodeContext {
-                        transaction,
-                        output: accounting,
-                    });
+                let context = RefCell::new(super::internal::JsonEncodeContext {
+                    transaction,
+                    output: accounting,
+                });
                 value.serialize(JsonEncodeSerializer::new(&mut inner, &context))
             };
             if result.is_ok() {
@@ -132,8 +124,7 @@ where
         T: Serialize + ?Sized,
     {
         let (output_budget, transaction) = attempt.split_mut();
-        let accounting =
-            Rc::new(RefCell::new(JsonOutputAccounting::new(output_budget)));
+        let accounting = Rc::new(RefCell::new(JsonOutputAccounting::new(output_budget)));
         let mut output = JsonOutputBuffer::new(Rc::clone(&accounting));
         let result = {
             let mut inner = JsonSerializer::new(&mut output);
@@ -159,8 +150,7 @@ where
         W: Write,
     {
         let (output_budget, _) = attempt.split_mut();
-        let accounting =
-            Rc::new(RefCell::new(JsonOutputAccounting::new(output_budget)));
+        let accounting = Rc::new(RefCell::new(JsonOutputAccounting::new(output_budget)));
         let mut output = JsonOutputWriter::new(writer, accounting);
         let result = output.write_all(bytes).map_err(JsonError::io);
         output.into_result(result)
