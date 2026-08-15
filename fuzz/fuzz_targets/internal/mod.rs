@@ -7,6 +7,9 @@
 // =============================================================================
 //! Internal fuzz-target-only data types.
 
-mod fuzz_record;
-
-pub(crate) use fuzz_record::FuzzRecord;
+#[allow(dead_code)]
+pub(crate) mod fuzz_input_limit;
+#[allow(dead_code)]
+pub(crate) mod fuzz_limit;
+#[allow(dead_code)]
+pub(crate) mod fuzz_record;
