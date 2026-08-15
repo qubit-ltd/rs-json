@@ -31,7 +31,7 @@ cargo +1.94.0 bench --bench decoder_bench
 | 1 MiB | 184.94 µs | 185.18 µs | 186.52 µs |
 
 “按次构造严格 decoder”在每个 Criterion 迭代内执行
-`LenientJsonDecoder::new(JsonDecodeOptions::strict())` 后再调用 `decode_slice`，与当前
+`LenientJsonDecoder::new(LenientJsonDecodeOptions::strict())` 后再调用 `decode_slice`，与当前
 `rs-http` 的响应和 SSE 调用方式一致。三种严格路径的数值接近，比较时应以同机多次运行及
 Criterion 的置信区间为准，而非将单次结果视为回归结论。
 
@@ -155,7 +155,7 @@ cargo bench --bench budgeted_serde_json -- --noplot
 
 `owned-session` 在每次迭代构造 `JsonDecodeSession::owned`；`borrowed-session` 在每次
 迭代构造借用 `JsonValueBudget` 的会话；`reused-session` 在迭代之间复用无限制会话。后两项
-`LenientJsonDecoder` 均采用 `JsonDecodeOptions::strict()`，其中带 session 的项复用一个
+`LenientJsonDecoder` 均采用 `LenientJsonDecodeOptions::strict()`，其中带 session 的项复用一个
 无限制会话。
 
 | 场景 | 约 1 KiB（延迟 / 吞吐 / 倍率） | 约 64 KiB（延迟 / 吞吐 / 倍率） | 约 1 MiB（延迟 / 吞吐 / 倍率） |

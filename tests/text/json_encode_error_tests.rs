@@ -10,6 +10,7 @@ use qubit_json::text::JsonSyntaxError;
 use qubit_json::text::JsonSyntaxErrorReason;
 use serde_json::Value;
 use serde_json::from_str;
+use std::error::Error;
 
 /// Verifies that Serde failures retain the encoding error category.
 #[test]
@@ -35,4 +36,14 @@ fn test_invalid_raw_json_preserves_syntax_error_details() {
     assert_eq!(syntax_error.offset(), 19);
     assert_eq!(syntax_error.line(), 3);
     assert_eq!(syntax_error.column(), 7);
+}
+
+/// Verifies Serde custom failures are preserved as serialization errors.
+#[test]
+fn test_serde_custom_error_preserves_message() {
+    let error = <JsonEncodeError<(), usize> as serde::ser::Error>::custom("fixture failure");
+
+    assert!(matches!(error, JsonEncodeError::Serialize(_)));
+    assert_eq!(error.to_string(), "JSON serialization failed: fixture failure");
+    assert!(error.source().is_some());
 }

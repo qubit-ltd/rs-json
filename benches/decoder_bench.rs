@@ -17,8 +17,11 @@ use criterion::Throughput;
 use criterion::criterion_group;
 use criterion::criterion_main;
 use internal::BenchmarkRecord;
-use qubit_json::lenient::JsonDecodeOptions;
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
+use qubit_json::lenient::LenientJsonDecodeOptions;
 use qubit_json::lenient::LenientJsonDecoder;
+use qubit_json::text::JsonTextDecoder;
 
 /// Runs the public decoder benchmarks over representative input normalization
 /// paths.
@@ -33,15 +36,16 @@ use qubit_json::lenient::LenientJsonDecoder;
 /// decoding contract.
 fn benchmark_decoder(c: &mut Criterion) {
     let default_decoder = LenientJsonDecoder::default();
-    let strict_decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
     let plain_input = r#"{"id":7,"text":"plain"}"#;
     consume_record(
         serde_json::from_str::<BenchmarkRecord>(plain_input)
             .expect("strict benchmark input must decode"),
     );
+    let mut strict_session =
+        JsonDecodeSession::owned(JsonDecodeLimits::empty());
     consume_record(
-        strict_decoder
-            .decode::<BenchmarkRecord>(plain_input)
+        JsonTextDecoder::new(&mut strict_session)
+            .decode::<BenchmarkRecord>(plain_input.as_bytes())
             .expect("strict decoder benchmark input must decode"),
     );
     consume_record(
@@ -59,9 +63,13 @@ fn benchmark_decoder(c: &mut Criterion) {
     });
     comparison.bench_function("strict_decoder", |bencher| {
         bencher.iter(|| {
+            let mut session =
+                JsonDecodeSession::owned(JsonDecodeLimits::empty());
+            let mut decoder = JsonTextDecoder::new(&mut session);
             black_box(
-                strict_decoder
-                    .decode::<BenchmarkRecord>(black_box(plain_input)),
+                decoder.decode::<BenchmarkRecord>(black_box(
+                    plain_input.as_bytes(),
+                )),
             )
         });
     });
@@ -80,9 +88,11 @@ fn benchmark_decoder(c: &mut Criterion) {
         serde_json::from_slice::<BenchmarkRecord>(plain_bytes)
             .expect("strict benchmark input must decode"),
     );
+    let mut strict_session =
+        JsonDecodeSession::owned(JsonDecodeLimits::empty());
     consume_record(
-        strict_decoder
-            .decode_slice::<BenchmarkRecord>(plain_bytes)
+        JsonTextDecoder::new(&mut strict_session)
+            .decode::<BenchmarkRecord>(plain_bytes)
             .expect("strict decoder benchmark input must decode"),
     );
     consume_record(
@@ -100,10 +110,10 @@ fn benchmark_decoder(c: &mut Criterion) {
     });
     bytes_comparison.bench_function("strict_decoder_decode_slice", |bencher| {
         bencher.iter(|| {
-            black_box(
-                strict_decoder
-                    .decode_slice::<BenchmarkRecord>(black_box(plain_bytes)),
-            )
+            let mut session =
+                JsonDecodeSession::owned(JsonDecodeLimits::empty());
+            let mut decoder = JsonTextDecoder::new(&mut session);
+            black_box(decoder.decode::<BenchmarkRecord>(black_box(plain_bytes)))
         });
     });
     bytes_comparison.bench_function(
@@ -197,7 +207,6 @@ fn benchmark_decoder(c: &mut Criterion) {
 /// Panics when a generated benchmark payload no longer satisfies its expected
 /// decoding contract.
 fn benchmark_downstream_scaling(c: &mut Criterion) {
-    let strict_decoder = LenientJsonDecoder::new(JsonDecodeOptions::strict());
     let default_decoder = LenientJsonDecoder::default();
     let mut plain_group = c.benchmark_group("downstream-plain-bytes");
 
@@ -207,17 +216,12 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             serde_json::from_slice::<BenchmarkRecord>(input.as_bytes())
                 .expect("strict byte benchmark input must decode"),
         );
+        let mut strict_session =
+            JsonDecodeSession::owned(JsonDecodeLimits::empty());
         consume_record(
-            strict_decoder
-                .decode_slice::<BenchmarkRecord>(input.as_bytes())
+            JsonTextDecoder::new(&mut strict_session)
+                .decode::<BenchmarkRecord>(input.as_bytes())
                 .expect("strict decoder byte benchmark input must decode"),
-        );
-        consume_record(
-            LenientJsonDecoder::new(JsonDecodeOptions::strict())
-                .decode_slice::<BenchmarkRecord>(input.as_bytes())
-                .expect(
-                    "constructed strict decoder benchmark input must decode",
-                ),
         );
         consume_record(
             default_decoder
@@ -241,9 +245,14 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             &input,
             |bencher, input| {
                 bencher.iter(|| {
-                    black_box(strict_decoder.decode_slice::<BenchmarkRecord>(
-                        black_box(input.as_bytes()),
-                    ))
+                    let mut session =
+                        JsonDecodeSession::owned(JsonDecodeLimits::empty());
+                    let mut decoder = JsonTextDecoder::new(&mut session);
+                    black_box(
+                        decoder.decode::<BenchmarkRecord>(black_box(
+                            input.as_bytes(),
+                        )),
+                    )
                 });
             },
         );
@@ -255,11 +264,14 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             &input,
             |bencher, input| {
                 bencher.iter(|| {
-                    let decoder =
-                        LenientJsonDecoder::new(JsonDecodeOptions::strict());
-                    black_box(decoder.decode_slice::<BenchmarkRecord>(
-                        black_box(input.as_bytes()),
-                    ))
+                    let mut session =
+                        JsonDecodeSession::owned(JsonDecodeLimits::empty());
+                    let mut decoder = JsonTextDecoder::new(&mut session);
+                    black_box(
+                        decoder.decode::<BenchmarkRecord>(black_box(
+                            input.as_bytes(),
+                        )),
+                    )
                 });
             },
         );
@@ -322,7 +334,8 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
     let malformed = &plain[..plain.len() - 1];
     let wrong_top_level = format!("[{plain}]");
     let bounded_decoder = LenientJsonDecoder::new(
-        JsonDecodeOptions::strict().with_max_input_bytes(Some(plain.len() - 1)),
+        LenientJsonDecodeOptions::strict()
+            .with_max_input_bytes(Some(plain.len() - 1)),
     );
     assert!(
         default_decoder
@@ -382,9 +395,11 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             ("last-field-type-error", last_field_type_error),
         ] {
             assert!(
-                strict_decoder
-                    .decode_slice::<BenchmarkRecord>(input.as_bytes())
-                    .is_err(),
+                JsonTextDecoder::new(&mut JsonDecodeSession::owned(
+                    JsonDecodeLimits::empty()
+                ))
+                .decode::<BenchmarkRecord>(input.as_bytes())
+                .is_err(),
                 "type-mismatched benchmark input must fail",
             );
             failure_group.throughput(Throughput::Bytes(input.len() as u64));
@@ -394,9 +409,14 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
                 |bencher, input| {
                     bencher.iter(|| {
                         black_box(
-                            strict_decoder.decode_slice::<BenchmarkRecord>(
-                                black_box(input.as_bytes()),
-                            ),
+                            JsonTextDecoder::new(
+                                &mut JsonDecodeSession::owned(
+                                    JsonDecodeLimits::empty(),
+                                ),
+                            )
+                            .decode::<BenchmarkRecord>(black_box(
+                                input.as_bytes(),
+                            )),
                         )
                     });
                 },
@@ -430,7 +450,7 @@ fn benchmark_control_character_scaling(c: &mut Criterion) {
                 control_stride,
             );
             let bounded_decoder = LenientJsonDecoder::new(
-                JsonDecodeOptions::default()
+                LenientJsonDecodeOptions::default()
                     .with_max_normalized_bytes(Some(normalized_limit)),
             );
             decoder
