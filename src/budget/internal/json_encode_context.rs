@@ -68,6 +68,30 @@ where
         self.record(result)
     }
 
+    /// Checks the prospective array length without charging value usage.
+    pub(super) fn check_sequence_items<E>(
+        &mut self,
+        items: usize,
+    ) -> Result<(), E>
+    where
+        E: Error,
+    {
+        let result = self.transaction.check_sequence_items(items);
+        self.record(result)
+    }
+
+    /// Checks the prospective object entry count without charging value usage.
+    pub(super) fn check_map_entries<E>(
+        &mut self,
+        entries: usize,
+    ) -> Result<(), E>
+    where
+        E: Error,
+    {
+        let result = self.transaction.check_map_entries(entries);
+        self.record(result)
+    }
+
     /// Checks and charges one raw JSON fragment before it reaches the writer.
     ///
     /// The fragment length is a safe lower bound for the complete output size.

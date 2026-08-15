@@ -594,8 +594,8 @@ fn test_json_encode_serializer_checks_sequence_items() {
     );
 }
 
-/// Verifies an unknown-length sequence is admitted after its actual item count
-/// is observed.
+/// Verifies an unknown-length sequence rejects before the next child is
+/// entered.
 #[test]
 fn test_json_encode_serializer_checks_unknown_sequence_after_traversal() {
     let serialized = Cell::new(0);
@@ -609,7 +609,7 @@ fn test_json_encode_serializer_checks_unknown_sequence_after_traversal() {
         JsonTestLimits::new().with_max_sequence_items(2),
         JsonResource::SequenceItems,
     );
-    assert_eq!(serialized.get(), value.len);
+    assert_eq!(serialized.get(), 3);
 }
 
 /// Verifies known and unknown maps enforce their actual entry count.
@@ -630,8 +630,7 @@ fn test_json_encode_serializer_checks_map_entries() {
     );
 }
 
-/// Verifies an unknown-length map is admitted after its actual entry count is
-/// observed.
+/// Verifies an unknown-length map rejects before the next value is entered.
 #[test]
 fn test_json_encode_serializer_checks_unknown_map_after_traversal() {
     let serialized = Cell::new(0);
@@ -645,7 +644,7 @@ fn test_json_encode_serializer_checks_unknown_map_after_traversal() {
         JsonTestLimits::new().with_max_map_entries(2),
         JsonResource::MapEntries,
     );
-    assert_eq!(serialized.get(), value.len);
+    assert_eq!(serialized.get(), 3);
 }
 
 /// Verifies nested output is checked with root-inclusive JSON depth.
@@ -995,7 +994,7 @@ fn test_underreported_sequence_is_rejected_after_third_child() {
         JsonTestLimits::new().with_max_sequence_items(2),
         JsonResource::SequenceItems,
     );
-    assert_eq!(observed.get(), 3);
+    assert_eq!(observed.get(), 2);
 }
 
 /// Verifies a high length hint does not charge items that were never emitted.
@@ -1021,7 +1020,7 @@ fn test_underreported_map_is_rejected_after_third_value() {
         JsonTestLimits::new().with_max_map_entries(2),
         JsonResource::MapEntries,
     );
-    assert_eq!(observed.get(), 3);
+    assert_eq!(observed.get(), 2);
 }
 
 /// Verifies a low struct length is rejected after the actual field count is
@@ -1034,7 +1033,7 @@ fn test_underreported_struct_is_rejected_after_third_value() {
         JsonTestLimits::new().with_max_map_entries(2),
         JsonResource::MapEntries,
     );
-    assert_eq!(observed.get(), 3);
+    assert_eq!(observed.get(), 2);
 }
 
 /// Verifies a low tuple-struct length is rejected after the actual item count
@@ -1047,7 +1046,7 @@ fn test_underreported_tuple_struct_is_rejected_after_third_value() {
         JsonTestLimits::new().with_max_sequence_items(2),
         JsonResource::SequenceItems,
     );
-    assert_eq!(observed.get(), 3);
+    assert_eq!(observed.get(), 2);
 }
 
 /// Verifies low tuple-variant lengths are rejected after the actual item count
@@ -1063,7 +1062,7 @@ fn test_underreported_tuple_variant_is_rejected_after_third_value() {
         JsonTestLimits::new().with_max_sequence_items(2),
         JsonResource::SequenceItems,
     );
-    assert_eq!(observed.get(), 3);
+    assert_eq!(observed.get(), 2);
 }
 
 /// Verifies low struct-variant lengths are rejected after the actual entry
@@ -1079,7 +1078,7 @@ fn test_underreported_struct_variant_is_rejected_after_third_value() {
         JsonTestLimits::new().with_max_map_entries(2),
         JsonResource::MapEntries,
     );
-    assert_eq!(observed.get(), 3);
+    assert_eq!(observed.get(), 2);
 }
 
 /// Verifies private number node and depth limits reject after their payload is

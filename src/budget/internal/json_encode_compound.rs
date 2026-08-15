@@ -191,7 +191,11 @@ where
     where
         E: Error,
     {
-        self.observed = self.observed.saturating_add(1);
+        let next = self.observed.checked_add(1).ok_or_else(|| {
+            E::custom("JSON sequence item count overflowed usize")
+        })?;
+        self.context.borrow_mut().check_sequence_items(next)?;
+        self.observed = next;
         Ok(())
     }
 
@@ -200,7 +204,11 @@ where
     where
         E: Error,
     {
-        self.observed = self.observed.saturating_add(1);
+        let next = self.observed.checked_add(1).ok_or_else(|| {
+            E::custom("JSON map entry count overflowed usize")
+        })?;
+        self.context.borrow_mut().check_map_entries(next)?;
+        self.observed = next;
         Ok(())
     }
 
