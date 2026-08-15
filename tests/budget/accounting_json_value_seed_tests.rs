@@ -6,11 +6,13 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Verifies incremental decoded-value accounting.
+
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::value::BudgetedJsonValueSeed;
+use qubit_json::value::AccountingJsonValueSeed as BudgetedJsonValueSeed;
 use serde::Deserializer as SerdeDeserializer;
 use serde::de::DeserializeSeed;
 use serde::de::Error as DeError;

@@ -191,9 +191,9 @@
 - 验收标准
   - `text` 提供严格 session decode/encode 和独立的公开错误类型；
     `JsonEncodeError::InvalidRawJson` 携带稳定 `JsonSyntaxError`。
-  - `value::BudgetedJsonValueSeed` 是 budgeted `serde_json::Value` seed 的唯一公开路径，
+  - `value::AccountingJsonValueSeed` 是 budgeted `serde_json::Value` seed 的唯一公开路径，
     不保留 `budget` 或 `tree` 兼容 alias。
-  - `JsonTreeProcessor::process` 的 value borrow 不与 budget borrow 绑定。
+  - `JsonTreeReader::process` 的 value borrow 不与 budget borrow 绑定。
   - `process_mut` 文档和测试明确：错误时保留此前 mutation 和 budget 消费；guard 只保证
     root 仍为有效 `Value`。
 

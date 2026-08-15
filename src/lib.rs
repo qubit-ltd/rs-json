@@ -99,13 +99,13 @@
 //!
 //! # Budgeted value construction
 //!
-//! [`value::BudgetedJsonValueSeed`] is the public seed for callers that need a
-//! materialized [`serde_json::Value`] and only have access to Serde's decoded
+//! [`value::AccountingJsonValueSeed`] is the public seed for callers that need
+//! a materialized [`serde_json::Value`] and only have access to Serde's decoded
 //! value events.
 //!
 //! ```rust
 //! use qubit_budget::json::{JsonValueBudget, JsonValueLimits};
-//! use qubit_json::value::BudgetedJsonValueSeed;
+//! use qubit_json::value::AccountingJsonValueSeed;
 //! use serde::de::DeserializeSeed;
 //! use serde_json::Deserializer;
 //!
@@ -114,7 +114,7 @@
 //! );
 //! let mut deserializer = Deserializer::from_slice(br#"{"key":[true]}"#);
 //! let mut transaction = budget.transaction();
-//! let value = BudgetedJsonValueSeed::new(&mut transaction)
+//! let value = AccountingJsonValueSeed::new(&mut transaction)
 //!     .deserialize(&mut deserializer)?;
 //! transaction.commit();
 //!

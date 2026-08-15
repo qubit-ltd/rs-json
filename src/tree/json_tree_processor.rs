@@ -6,6 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Implements non-recursive, read-only JSON tree processing.
+// qubit-style: allow multiple-public-types
+
+use std::ptr::NonNull;
 
 use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
@@ -13,6 +16,7 @@ use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonValueTransaction;
 use serde_json::Value;
 use serde_json::map::Iter;
+use serde_json::map::IterMut;
 
 use super::JsonBudgetRejection;
 use super::JsonTreeContext;
@@ -23,14 +27,14 @@ use super::JsonTreeProcessError;
 use super::JsonTreeVisitor;
 
 /// Processes JSON values while borrowing one staged JSON value transaction.
-pub struct JsonTreeProcessor<'transaction, 'budget, R, Q>
+pub struct JsonTreeReader<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 }
 
-impl<'transaction, 'budget, R, Q> JsonTreeProcessor<'transaction, 'budget, R, Q>
+impl<'transaction, 'budget, R, Q> JsonTreeReader<'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
@@ -109,10 +113,9 @@ where
     /// Mutation and budget accounting are incremental. If this method returns
     /// an error, mutations already made by the visitor and budget already
     /// consumed remain in effect; this operation does not roll either back.
-    /// The internal restoration guard only rebuilds detached tree structure so
-    /// `root` remains a valid [`Value`], and does not restore its original
-    /// contents.
-    pub fn process_mut<V>(
+    /// The traversal never detaches a child from `root`, so errors and panics
+    /// leave the JSON tree structurally valid without rebuilding it.
+    pub(crate) fn process_mut<V>(
         &mut self,
         root: &mut Value,
         visitor: &mut V,
@@ -120,15 +123,18 @@ where
     where
         V: JsonTreeMutVisitor<R, Q>,
     {
-        let value = std::mem::take(root);
-        let mut guard = RootRestoreGuard::new(root);
-        guard.stack.push(MutFrame::root(value));
+        let mut stack = vec![MutFrame::root(root)];
 
-        while !guard.stack.is_empty() {
-            let index = guard.stack.len() - 1;
-            if !guard.stack[index].entered {
-                let frame = &mut guard.stack[index];
+        while !stack.is_empty() {
+            let index = stack.len() - 1;
+            if !stack[index].entered {
+                let frame = &mut stack[index];
                 let context = frame.location.context(frame.depth);
+                // SAFETY: `MutFrame::root` and `MutFrame::child` create these
+                // pointers from the exclusively borrowed root. No ancestor
+                // container is structurally modified while a child frame is
+                // live, so the current value remains valid for this callback.
+                let value = unsafe { frame.value.as_mut() };
 
                 if let Some(key) = frame.location.key()
                     && let Err(error) = self
@@ -136,7 +142,7 @@ where
                         .try_admit(JsonMeasurement::Key { bytes: key.len() })
                 {
                     let rejection = visitor
-                        .reject_budget(&mut frame.value, context, &error)
+                        .reject_budget(value, context, &error)
                         .map_err(JsonTreeProcessError::Visitor)?;
                     if rejection == JsonBudgetRejection::Abort {
                         return Err(JsonTreeProcessError::Budget(error));
@@ -145,9 +151,9 @@ where
                     continue;
                 }
 
-                if let Err(error) = self.admit(&frame.value, frame.depth) {
+                if let Err(error) = self.admit(value, frame.depth) {
                     let rejection = visitor
-                        .reject_budget(&mut frame.value, context, &error)
+                        .reject_budget(value, context, &error)
                         .map_err(JsonTreeProcessError::Visitor)?;
                     if rejection == JsonBudgetRejection::Abort {
                         return Err(JsonTreeProcessError::Budget(error));
@@ -157,27 +163,21 @@ where
                 }
 
                 let control = visitor
-                    .visit(&mut frame.value, context)
+                    .visit(value, context)
                     .map_err(JsonTreeProcessError::Visitor)?;
                 frame.entered = true;
-                if control == JsonTreeControl::Descend {
-                    frame.children =
-                        take_children(&mut frame.value, frame.depth);
+                if control != JsonTreeControl::Descend {
+                    frame.finished = true;
                 }
                 continue;
             }
 
-            if let Some(child) = guard.stack[index].children.pop() {
-                guard.stack.push(MutFrame::child(child));
+            if let Some(child) = stack[index].next_child() {
+                stack.push(child);
                 continue;
             }
 
-            let frame = guard.stack.pop().expect("mutable frame exists");
-            if let Some(parent) = guard.stack.last_mut() {
-                insert_child(&mut parent.value, frame.location, frame.value);
-            } else {
-                guard.finish(frame.value);
-            }
+            let _ = stack.pop().expect("mutable frame exists");
         }
         Ok(())
     }
@@ -209,6 +209,41 @@ where
             },
         };
         self.transaction.try_admit(measurement)
+    }
+}
+
+/// Mutates JSON values while borrowing one staged JSON value transaction.
+pub struct JsonTreeMutator<'transaction, 'budget, R, Q>
+where
+    Q: ResourceQuantity,
+{
+    reader: JsonTreeReader<'transaction, 'budget, R, Q>,
+}
+
+impl<'transaction, 'budget, R, Q> JsonTreeMutator<'transaction, 'budget, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    /// Creates a mutator borrowing the supplied JSON value transaction.
+    pub fn new(
+        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    ) -> Self {
+        Self {
+            reader: JsonTreeReader::new(transaction),
+        }
+    }
+
+    /// Mutates every admitted node in depth-first order without Rust recursion.
+    pub fn process<V>(
+        &mut self,
+        root: &mut Value,
+        visitor: &mut V,
+    ) -> Result<(), JsonTreeProcessError<R, Q, V::Error>>
+    where
+        V: JsonTreeMutVisitor<R, Q>,
+    {
+        self.reader.process_mut(root, visitor)
     }
 }
 
@@ -340,127 +375,122 @@ impl OwnedLocation {
     }
 }
 
-/// Owns one detached value and the child values still awaiting processing.
+/// Tracks one in-place mutable traversal position.
 struct MutFrame {
     location: OwnedLocation,
     depth: usize,
-    value: Value,
-    children: Vec<ChildEntry>,
+    value: NonNull<Value>,
     entered: bool,
+    finished: bool,
+    cursor: Option<MutChildCursor>,
 }
 
 impl MutFrame {
-    fn root(value: Value) -> Self {
+    /// Creates the root frame from the exclusive mutable root borrow.
+    fn root(value: &mut Value) -> Self {
         Self {
             location: OwnedLocation::Root,
             depth: 1,
-            value,
-            children: Vec::new(),
+            value: NonNull::from(value),
             entered: false,
-        }
-    }
-
-    fn child(child: ChildEntry) -> Self {
-        let depth = child.depth;
-        Self {
-            location: child.location,
-            depth,
-            value: child.value,
-            children: Vec::new(),
-            entered: false,
-        }
-    }
-}
-
-/// Owns one detached child until its parent is ready to receive it.
-struct ChildEntry {
-    location: OwnedLocation,
-    depth: usize,
-    value: Value,
-}
-
-/// Detaches immediate children in reverse order, preserving traversal order.
-fn take_children(value: &mut Value, depth: usize) -> Vec<ChildEntry> {
-    let child_depth = depth.checked_add(1).expect(
-        "a materialized JSON tree cannot have usize::MAX nesting depth",
-    );
-    match value {
-        Value::Array(values) => std::mem::take(values)
-            .into_iter()
-            .enumerate()
-            .rev()
-            .map(|(index, value)| ChildEntry {
-                location: OwnedLocation::ArrayElement(index),
-                depth: child_depth,
-                value,
-            })
-            .collect(),
-        Value::Object(entries) => std::mem::take(entries)
-            .into_iter()
-            .rev()
-            .map(|(key, value)| ChildEntry {
-                location: OwnedLocation::ObjectValue(key),
-                depth: child_depth,
-                value,
-            })
-            .collect(),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-            Vec::new()
-        }
-    }
-}
-
-/// Inserts a completed child into its detached parent.
-fn insert_child(parent: &mut Value, location: OwnedLocation, value: Value) {
-    match (parent, location) {
-        (Value::Array(values), OwnedLocation::ArrayElement(_)) => {
-            values.push(value);
-        }
-        (Value::Object(entries), OwnedLocation::ObjectValue(key)) => {
-            entries.insert(key, value);
-        }
-        _ => unreachable!("mutable JSON frame remains synchronized"),
-    }
-}
-
-/// Reassembles detached tree parts if traversal exits with an error or panic.
-struct RootRestoreGuard<'a> {
-    root: &'a mut Value,
-    stack: Vec<MutFrame>,
-    finished: bool,
-}
-
-impl<'a> RootRestoreGuard<'a> {
-    fn new(root: &'a mut Value) -> Self {
-        Self {
-            root,
-            stack: Vec::new(),
             finished: false,
+            cursor: None,
         }
     }
 
-    fn finish(&mut self, value: Value) {
-        *self.root = value;
-        self.finished = true;
+    /// Creates one child frame retaining the parent-derived value pointer.
+    fn child(location: OwnedLocation, depth: usize, value: &mut Value) -> Self {
+        Self {
+            location,
+            depth,
+            value: NonNull::from(value),
+            entered: false,
+            finished: false,
+            cursor: None,
+        }
+    }
+
+    /// Returns the next mutable child while preserving the parent container.
+    fn next_child(&mut self) -> Option<Self> {
+        if self.finished {
+            return None;
+        }
+        let cursor = self
+            .cursor
+            .get_or_insert_with(|| MutChildCursor::new(self.value));
+        cursor.next(self.depth)
     }
 }
 
-impl Drop for RootRestoreGuard<'_> {
-    fn drop(&mut self) {
-        if self.finished || self.stack.is_empty() {
-            return;
-        }
-        let mut completed = None;
-        while let Some(mut frame) = self.stack.pop() {
-            if let Some((location, value)) = completed.take() {
-                insert_child(&mut frame.value, location, value);
+/// Lazily yields mutable children without detaching their parent container.
+enum MutChildCursor {
+    /// Array cursor indexed through the owned vector pointer.
+    Array {
+        values: NonNull<Vec<Value>>,
+        next: usize,
+    },
+    /// Object cursor retaining a suspended mutable iterator.
+    Object { iter: IterMut<'static> },
+    /// Scalar node with no children.
+    Empty,
+}
+
+impl MutChildCursor {
+    /// Creates a cursor whose references remain inside the borrowed root.
+    fn new(mut value: NonNull<Value>) -> Self {
+        // SAFETY: the pointer originates from the caller's exclusive root
+        // borrow. This cursor is used only while the frame owns that borrow.
+        match unsafe { value.as_mut() } {
+            Value::Array(values) => Self::Array {
+                values: NonNull::from(values),
+                next: 0,
+            },
+            Value::Object(entries) => {
+                let iter = entries.iter_mut();
+                // SAFETY: `MutFrame` keeps the root exclusively borrowed for
+                // the traversal. Parent object entries are never inserted,
+                // removed, or replaced while this iterator is suspended; each
+                // yielded child finishes before the iterator advances again.
+                let iter = unsafe {
+                    std::mem::transmute::<IterMut<'_>, IterMut<'static>>(iter)
+                };
+                Self::Object { iter }
             }
-            while let Some(child) = frame.children.pop() {
-                insert_child(&mut frame.value, child.location, child.value);
-            }
-            completed = Some((frame.location, frame.value));
+            Value::Null
+            | Value::Bool(_)
+            | Value::Number(_)
+            | Value::String(_) => Self::Empty,
         }
-        let (_, value) = completed.expect("root frame exists");
-        *self.root = value;
+    }
+
+    /// Returns the next child and its traversal metadata.
+    fn next(&mut self, parent_depth: usize) -> Option<MutFrame> {
+        let depth = parent_depth.checked_add(1).expect(
+            "a materialized JSON tree cannot have usize::MAX nesting depth",
+        );
+        match self {
+            Self::Array { values, next } => {
+                // SAFETY: the pointer belongs to the exclusively borrowed
+                // root, and the parent vector is structurally unchanged while
+                // its cursor or child frames are live.
+                let values = unsafe { values.as_mut() };
+                let index = *next;
+                let child = values.get_mut(index)?;
+                *next = next.checked_add(1)?;
+                Some(MutFrame::child(
+                    OwnedLocation::ArrayElement(index),
+                    depth,
+                    child,
+                ))
+            }
+            Self::Object { iter } => iter.next().map(|(key, child)| {
+                MutFrame::child(
+                    OwnedLocation::ObjectValue(key.clone()),
+                    depth,
+                    child,
+                )
+            }),
+            Self::Empty => None,
+        }
     }
 }

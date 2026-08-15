@@ -15,8 +15,8 @@ use qubit_json::tree::JsonBudgetRejection;
 use qubit_json::tree::JsonTreeContext;
 use qubit_json::tree::JsonTreeControl;
 use qubit_json::tree::JsonTreeMutVisitor;
+use qubit_json::tree::JsonTreeMutator as JsonTreeProcessor;
 use qubit_json::tree::JsonTreeProcessError;
-use qubit_json::tree::JsonTreeProcessor;
 use serde_json::Value;
 use serde_json::json;
 use serde_json::to_string;
@@ -127,7 +127,7 @@ fn test_process_mut_skips_rejected_subtree_after_replacement() {
     let mut value = json!({"first": true, "second": {"nested": false}});
 
     JsonTreeProcessor::new(&mut transaction)
-        .process_mut(&mut value, &mut ReplacingVisitor)
+        .process(&mut value, &mut ReplacingVisitor)
         .expect("visitor handles the resource rejection");
 
     assert_eq!(value, json!({"first": true, "second": "[redacted]"}));
@@ -149,7 +149,7 @@ fn test_process_mut_preserves_mutations_when_visitor_fails() {
     let mut value = json!({"original": true});
 
     let error = JsonTreeProcessor::new(&mut transaction)
-        .process_mut(&mut value, &mut FailingVisitor { calls: 0 })
+        .process(&mut value, &mut FailingVisitor { calls: 0 })
         .expect_err("the visitor deliberately fails");
 
     assert!(matches!(error, JsonTreeProcessError::Visitor("stop")));
@@ -179,7 +179,7 @@ fn test_process_mut_preserves_partial_mutation_and_budget_on_rejection() {
     let mut value = json!([0, 1]);
 
     let error = JsonTreeProcessor::new(&mut transaction)
-        .process_mut(&mut value, &mut FirstChildReplacingVisitor)
+        .process(&mut value, &mut FirstChildReplacingVisitor)
         .expect_err("the second child exceeds the node budget");
 
     assert!(matches!(
@@ -204,7 +204,7 @@ fn test_process_mut_restores_root_after_visitor_panic() {
     let mut value = json!({"first": [1, 2], "second": true});
 
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let _ = JsonTreeProcessor::new(&mut transaction).process_mut(
+        let _ = JsonTreeProcessor::new(&mut transaction).process(
             &mut value,
             &mut PanickingVisitor {
                 calls: 0,

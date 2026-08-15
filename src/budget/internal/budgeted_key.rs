@@ -17,11 +17,11 @@ use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonMeasurement;
 use serde::Serialize;
 use serde::Serializer;
-use serde::ser::Error;
 
 use super::display_budget_kind::DisplayBudgetKind;
 use super::json_encode_context::JsonEncodeContext;
 use super::json_encode_context::collect_display;
+use super::json_lexeme_length;
 
 /// Wraps a map key so it is traversed once through a key-aware decorator.
 pub(super) struct BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q>
@@ -99,9 +99,15 @@ where
 }
 
 macro_rules! serialize_key_number {
-    ($name:ident, $type:ty) => {
+    ($name:ident, signed $type:ty) => {
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            self.check(value.to_string().len())?;
+            self.check(json_lexeme_length::signed_integer(value.into()))?;
+            self.inner.$name(value)
+        }
+    };
+    ($name:ident, unsigned $type:ty) => {
+        fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
+            self.check(json_lexeme_length::unsigned_integer(value.into()))?;
             self.inner.$name(value)
         }
     };
@@ -129,33 +135,27 @@ where
         self.inner.serialize_bool(value)
     }
 
-    serialize_key_number!(serialize_i8, i8);
-    serialize_key_number!(serialize_i16, i16);
-    serialize_key_number!(serialize_i32, i32);
-    serialize_key_number!(serialize_i64, i64);
-    serialize_key_number!(serialize_i128, i128);
-    serialize_key_number!(serialize_u8, u8);
-    serialize_key_number!(serialize_u16, u16);
-    serialize_key_number!(serialize_u32, u32);
-    serialize_key_number!(serialize_u64, u64);
-    serialize_key_number!(serialize_u128, u128);
+    serialize_key_number!(serialize_i8, signed i8);
+    serialize_key_number!(serialize_i16, signed i16);
+    serialize_key_number!(serialize_i32, signed i32);
+    serialize_key_number!(serialize_i64, signed i64);
+    serialize_key_number!(serialize_i128, signed i128);
+    serialize_key_number!(serialize_u8, unsigned u8);
+    serialize_key_number!(serialize_u16, unsigned u16);
+    serialize_key_number!(serialize_u32, unsigned u32);
+    serialize_key_number!(serialize_u64, unsigned u64);
+    serialize_key_number!(serialize_u128, unsigned u128);
 
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
         if value.is_finite() {
-            let bytes = serde_json::to_string(&value)
-                .map_err(S::Error::custom)?
-                .len();
-            self.check(bytes)?;
+            self.check(json_lexeme_length::finite_f32(value))?;
         }
         self.inner.serialize_f32(value)
     }
 
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
         if value.is_finite() {
-            let bytes = serde_json::to_string(&value)
-                .map_err(S::Error::custom)?
-                .len();
-            self.check(bytes)?;
+            self.check(json_lexeme_length::finite_f64(value))?;
         }
         self.inner.serialize_f64(value)
     }

@@ -24,6 +24,7 @@ use super::json_encode_compound::BudgetedValue;
 use super::json_encode_compound::JsonEncodeCompound;
 use super::json_encode_context::JsonEncodeContext;
 use super::json_encode_context::collect_display;
+use super::json_lexeme_length;
 use super::private_struct_kind::PrivateStructKind;
 use super::serde_json_compat::classify_private_struct;
 
@@ -148,9 +149,15 @@ where
 }
 
 macro_rules! serialize_integer {
-    ($name:ident, $type:ty) => {
+    ($name:ident, signed $type:ty) => {
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            self.number(value.to_string().len())?;
+            self.number(json_lexeme_length::signed_integer(value.into()))?;
+            self.inner.$name(value)
+        }
+    };
+    ($name:ident, unsigned $type:ty) => {
+        fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
+            self.number(json_lexeme_length::unsigned_integer(value.into()))?;
             self.inner.$name(value)
         }
     };
@@ -228,24 +235,21 @@ where
         self.inner.serialize_bool(value)
     }
 
-    serialize_integer!(serialize_i8, i8);
-    serialize_integer!(serialize_i16, i16);
-    serialize_integer!(serialize_i32, i32);
-    serialize_integer!(serialize_i64, i64);
-    serialize_integer!(serialize_i128, i128);
-    serialize_integer!(serialize_u8, u8);
-    serialize_integer!(serialize_u16, u16);
-    serialize_integer!(serialize_u32, u32);
-    serialize_integer!(serialize_u64, u64);
-    serialize_integer!(serialize_u128, u128);
+    serialize_integer!(serialize_i8, signed i8);
+    serialize_integer!(serialize_i16, signed i16);
+    serialize_integer!(serialize_i32, signed i32);
+    serialize_integer!(serialize_i64, signed i64);
+    serialize_integer!(serialize_i128, signed i128);
+    serialize_integer!(serialize_u8, unsigned u8);
+    serialize_integer!(serialize_u16, unsigned u16);
+    serialize_integer!(serialize_u32, unsigned u32);
+    serialize_integer!(serialize_u64, unsigned u64);
+    serialize_integer!(serialize_u128, unsigned u128);
 
     /// Charges and delegates one floating-point number or JSON null.
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
         if value.is_finite() {
-            let bytes = serde_json::to_string(&value)
-                .map_err(S::Error::custom)?
-                .len();
-            self.number(bytes)?;
+            self.number(json_lexeme_length::finite_f32(value))?;
         } else {
             self.admit(JsonMeasurement::Null { depth: self.depth })?;
         }
@@ -255,10 +259,7 @@ where
     /// Charges and delegates one floating-point number or JSON null.
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
         if value.is_finite() {
-            let bytes = serde_json::to_string(&value)
-                .map_err(S::Error::custom)?
-                .len();
-            self.number(bytes)?;
+            self.number(json_lexeme_length::finite_f64(value))?;
         } else {
             self.admit(JsonMeasurement::Null { depth: self.depth })?;
         }
@@ -284,7 +285,7 @@ where
         for byte in value {
             self.admit(JsonMeasurement::Number {
                 depth: child_depth,
-                bytes: byte.to_string().len(),
+                bytes: json_lexeme_length::byte(*byte),
             })?;
         }
         self.inner.serialize_bytes(value)

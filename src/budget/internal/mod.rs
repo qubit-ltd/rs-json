@@ -13,6 +13,7 @@ mod display_budget_kind;
 mod json_encode_compound;
 mod json_encode_context;
 mod json_encode_serializer;
+mod json_lexeme_length;
 mod json_lexical_preflight;
 mod json_output_buffer;
 mod json_output_writer;

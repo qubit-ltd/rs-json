@@ -7,7 +7,7 @@
 // =============================================================================
 //! Budget-aware JSON/Serde adapters.
 
-pub(crate) mod budgeted_json_value_seed;
+pub(crate) mod accounting_json_value_seed;
 pub(crate) mod internal;
 mod json_decode;
 mod json_encode;
@@ -15,8 +15,8 @@ mod json_serde_error;
 mod json_syntax_error;
 mod json_syntax_error_reason;
 
+pub use json_decode::decode_admitted_slice_seed;
 pub use json_decode::decode_slice;
-pub use json_decode::decode_slice_seed;
 pub use json_encode::encode_to_vec;
 pub use json_encode::encode_to_writer;
 pub use json_encode::encode_to_writer_incremental;

@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Incremental budgeted deserialization into a JSON value tree.
+//! Incremental accounting deserialization into a JSON value tree.
 // qubit-style: allow source-test-pair
 
 use std::fmt;
@@ -13,8 +13,10 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use qubit_budget::ResourceQuantity;
+use qubit_budget::json::JsonContainerKind;
 use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonValueTransaction;
+use serde::Deserialize;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
 use serde::de::Error;
@@ -25,13 +27,13 @@ use serde_json::Map;
 use serde_json::Number;
 use serde_json::Value;
 
-/// Serde seed that constructs a [`Value`] while charging decoded resources.
+/// Serde seed that constructs a [`Value`] while accounting decoded resources.
 ///
 /// Unlike lexical JSON admission, this seed observes values after a Serde
 /// deserializer has decoded them. It is therefore suitable for default budget
 /// enforcement inside a type's ordinary [`serde::Deserialize`]
 /// implementation, where the original input bytes are unavailable.
-pub struct BudgetedJsonValueSeed<'transaction, 'budget, R, Q = usize>
+pub struct AccountingJsonValueSeed<'transaction, 'budget, R, Q = usize>
 where
     Q: ResourceQuantity,
 {
@@ -40,7 +42,7 @@ where
 }
 
 impl<'transaction, 'budget, R, Q>
-    BudgetedJsonValueSeed<'transaction, 'budget, R, Q>
+    AccountingJsonValueSeed<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -55,7 +57,7 @@ where
     }
 }
 
-impl<'de, R, Q> DeserializeSeed<'de> for BudgetedJsonValueSeed<'_, '_, R, Q>
+impl<'de, R, Q> DeserializeSeed<'de> for AccountingJsonValueSeed<'_, '_, R, Q>
 where
     R: Clone + Debug,
     Q: ResourceQuantity,
@@ -74,7 +76,7 @@ where
     }
 }
 
-/// Visitor used by [`BudgetedJsonValueSeed`].
+/// Visitor used by [`AccountingJsonValueSeed`].
 struct BudgetedJsonValueVisitor<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
@@ -113,11 +115,86 @@ where
     /// Creates a child seed borrowing the same transaction.
     fn child<'child>(
         &'child mut self,
-    ) -> BudgetedJsonValueSeed<'child, 'budget, R, Q> {
-        BudgetedJsonValueSeed {
+    ) -> AccountingJsonValueSeed<'child, 'budget, R, Q> {
+        AccountingJsonValueSeed {
             transaction: self.transaction,
             depth: self.depth.saturating_add(1),
         }
+    }
+
+    /// Creates a child seed that checks a container limit before decoding.
+    fn prospective_child<'child>(
+        &'child mut self,
+        kind: JsonContainerKind,
+        prospective: usize,
+    ) -> AccountingJsonValueChildSeed<'child, 'budget, R, Q> {
+        AccountingJsonValueChildSeed {
+            transaction: self.transaction,
+            depth: self.depth.saturating_add(1),
+            kind,
+            prospective,
+        }
+    }
+}
+
+/// A child seed that rejects excess container members before materialization.
+struct AccountingJsonValueChildSeed<'transaction, 'budget, R, Q>
+where
+    Q: ResourceQuantity,
+{
+    transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    depth: usize,
+    kind: JsonContainerKind,
+    prospective: usize,
+}
+
+impl<'de, R, Q> DeserializeSeed<'de>
+    for AccountingJsonValueChildSeed<'_, '_, R, Q>
+where
+    R: Clone + Debug,
+    Q: ResourceQuantity,
+{
+    type Value = Value;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        self.transaction
+            .check_container_count(self.kind, self.prospective)
+            .map_err(D::Error::custom)?;
+        AccountingJsonValueSeed {
+            transaction: self.transaction,
+            depth: self.depth,
+        }
+        .deserialize(deserializer)
+    }
+}
+
+/// A map-key seed that checks the prospective entry before decoding its key.
+struct AccountingJsonKeySeed<'transaction, 'budget, R, Q>
+where
+    Q: ResourceQuantity,
+{
+    transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    prospective: usize,
+}
+
+impl<'de, R, Q> DeserializeSeed<'de> for AccountingJsonKeySeed<'_, '_, R, Q>
+where
+    R: Clone + Debug,
+    Q: ResourceQuantity,
+{
+    type Value = String;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        self.transaction
+            .check_container_count(JsonContainerKind::Map, self.prospective)
+            .map_err(D::Error::custom)?;
+        String::deserialize(deserializer)
     }
 }
 
@@ -229,7 +306,7 @@ where
     where
         D: Deserializer<'de>,
     {
-        BudgetedJsonValueSeed {
+        AccountingJsonValueSeed {
             transaction: self.transaction,
             depth: self.depth,
         }
@@ -243,7 +320,7 @@ where
     where
         D: Deserializer<'de>,
     {
-        BudgetedJsonValueSeed {
+        AccountingJsonValueSeed {
             transaction: self.transaction,
             depth: self.depth,
         }
@@ -254,8 +331,17 @@ where
     where
         A: SeqAccess<'de>,
     {
-        let mut values = Vec::with_capacity(sequence.size_hint().unwrap_or(0));
-        while let Some(value) = sequence.next_element_seed(self.child())? {
+        let mut values = Vec::new();
+        loop {
+            let next = values.len().checked_add(1).ok_or_else(|| {
+                A::Error::custom("JSON sequence item count overflowed usize")
+            })?;
+            let Some(value) = sequence.next_element_seed(
+                self.prospective_child(JsonContainerKind::Sequence, next),
+            )?
+            else {
+                break;
+            };
             values.push(value);
         }
         self.admit(JsonMeasurement::Array {
@@ -269,12 +355,22 @@ where
     where
         A: MapAccess<'de>,
     {
-        let mut values = Map::with_capacity(map.size_hint().unwrap_or(0));
+        let mut values = Map::new();
         let mut entries = 0_usize;
-        while let Some(key) = map.next_key::<String>()? {
+        loop {
+            let next = entries.checked_add(1).ok_or_else(|| {
+                A::Error::custom("JSON map entry count overflowed usize")
+            })?;
+            let Some(key) = map.next_key_seed(AccountingJsonKeySeed {
+                transaction: self.transaction,
+                prospective: next,
+            })?
+            else {
+                break;
+            };
             self.admit(JsonMeasurement::Key { bytes: key.len() })?;
             let value = map.next_value_seed(self.child())?;
-            entries = entries.saturating_add(1);
+            entries = next;
             values.insert(key, value);
         }
         self.admit(JsonMeasurement::Object {

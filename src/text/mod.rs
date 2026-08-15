@@ -14,8 +14,8 @@ mod json_deserialize_error_category;
 mod json_encode;
 mod json_encode_error;
 
+pub use json_decode::decode_admitted_slice_seed;
 pub use json_decode::decode_slice;
-pub use json_decode::decode_slice_seed;
 pub use json_decode::inspect;
 pub use json_decode_error::JsonDecodeError;
 pub use json_deserialize_error::JsonDeserializeError;

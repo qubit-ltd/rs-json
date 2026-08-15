@@ -9,6 +9,7 @@
 
 use std::hint::black_box;
 
+use criterion::BatchSize;
 use criterion::BenchmarkId;
 use criterion::Criterion;
 use criterion::criterion_group;
@@ -18,7 +19,8 @@ use qubit_budget::json::JsonValueLimits;
 use qubit_json::tree::JsonTreeContext;
 use qubit_json::tree::JsonTreeControl;
 use qubit_json::tree::JsonTreeMutVisitor;
-use qubit_json::tree::JsonTreeProcessor;
+use qubit_json::tree::JsonTreeMutator;
+use qubit_json::tree::JsonTreeReader;
 use qubit_json::tree::JsonTreeVisitor;
 use serde_json::Map;
 use serde_json::Value;
@@ -119,7 +121,7 @@ fn benchmark_read(c: &mut Criterion) {
                         JsonValueBudget::new(JsonValueLimits::empty());
                     let mut transaction = budget.transaction();
                     let mut visitor = ReadVisitor;
-                    JsonTreeProcessor::new(&mut transaction)
+                    JsonTreeReader::new(&mut transaction)
                         .process(black_box(value), &mut visitor)
                         .expect("unlimited read traversal succeeds");
                     transaction.commit();
@@ -140,7 +142,7 @@ fn benchmark_read(c: &mut Criterion) {
                         JsonValueBudget::new(JsonValueLimits::empty());
                     let mut transaction = budget.transaction();
                     let mut visitor = ReadVisitor;
-                    JsonTreeProcessor::new(&mut transaction)
+                    JsonTreeReader::new(&mut transaction)
                         .process(black_box(value), &mut visitor)
                         .expect("unlimited read traversal succeeds");
                     transaction.commit();
@@ -156,7 +158,7 @@ fn benchmark_read(c: &mut Criterion) {
             let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
             let mut transaction = budget.transaction();
             let mut visitor = ReadVisitor;
-            JsonTreeProcessor::new(&mut transaction)
+            JsonTreeReader::new(&mut transaction)
                 .process(black_box(&value), &mut visitor)
                 .expect("unlimited read traversal succeeds");
             transaction.commit();
@@ -179,18 +181,21 @@ fn benchmark_mut(c: &mut Criterion) {
             BenchmarkId::new(name, "redaction-shape"),
             &value,
             |bencher, value| {
-                bencher.iter(|| {
-                    let mut value = value.clone();
-                    let mut budget =
-                        JsonValueBudget::new(JsonValueLimits::empty());
-                    let mut transaction = budget.transaction();
-                    let mut visitor = RedactionShapeVisitor;
-                    JsonTreeProcessor::new(&mut transaction)
-                        .process_mut(black_box(&mut value), &mut visitor)
-                        .expect("unlimited mutable traversal succeeds");
-                    transaction.commit();
-                    black_box(value);
-                });
+                bencher.iter_batched(
+                    || value.clone(),
+                    |mut value| {
+                        let mut budget =
+                            JsonValueBudget::new(JsonValueLimits::empty());
+                        let mut transaction = budget.transaction();
+                        let mut visitor = RedactionShapeVisitor;
+                        JsonTreeMutator::new(&mut transaction)
+                            .process(black_box(&mut value), &mut visitor)
+                            .expect("unlimited mutable traversal succeeds");
+                        transaction.commit();
+                        black_box(value);
+                    },
+                    BatchSize::SmallInput,
+                );
             },
         );
     }

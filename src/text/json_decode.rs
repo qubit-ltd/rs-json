@@ -16,8 +16,8 @@ use serde::de::DeserializeSeed;
 use super::JsonDecodeError;
 use super::JsonDeserializeError;
 use crate::budget::JsonSerdeError;
+use crate::budget::decode_admitted_slice_seed as decode_admitted_slice_seed_legacy;
 use crate::budget::decode_slice as decode_slice_legacy;
-use crate::budget::decode_slice_seed as decode_slice_seed_legacy;
 use crate::budget::internal::JsonLexicalPreflight;
 
 /// Decodes one strict JSON document into `T` while charging `session`.
@@ -55,7 +55,7 @@ where
 }
 
 /// Decodes one strict JSON document through a caller-supplied Serde seed.
-pub fn decode_slice_seed<'de, S, R, Q>(
+pub fn decode_admitted_slice_seed<'de, S, R, Q>(
     seed: S,
     input: &'de [u8],
     session: &mut JsonDecodeSession<'_, R, Q>,
@@ -65,7 +65,7 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    decode_slice_seed_legacy(seed, input, session).map_err(map_error)
+    decode_admitted_slice_seed_legacy(seed, input, session).map_err(map_error)
 }
 
 /// Converts the legacy unified error into a decode-specific error.
