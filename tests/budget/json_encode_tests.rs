@@ -79,6 +79,47 @@ struct CountedSequence<'a> {
     len: usize,
 }
 
+/// Sequence element that records entry into its `Serialize` implementation.
+struct CountedElement<'a> {
+    /// Number of element serializers entered.
+    serialized: &'a Cell<usize>,
+}
+
+impl Serialize for CountedElement<'_> {
+    /// Records the call before emitting a JSON null.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.serialized.set(self.serialized.get() + 1);
+        serializer.serialize_unit()
+    }
+}
+
+/// Unknown-length sequence used to verify pre-delegation item checks.
+struct CountedElementSequence<'a> {
+    /// Number of element serializers entered.
+    serialized: &'a Cell<usize>,
+    /// Number of elements offered by the source.
+    len: usize,
+}
+
+impl Serialize for CountedElementSequence<'_> {
+    /// Emits all source elements through the wrapped serializer.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(None)?;
+        for _ in 0..self.len {
+            sequence.serialize_element(&CountedElement {
+                serialized: self.serialized,
+            })?;
+        }
+        sequence.end()
+    }
+}
+
 impl Serialize for CountedSequence<'_> {
     /// Emits an unknown-length sequence while recording each entered element.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -367,6 +408,25 @@ fn test_encode_to_vec_known_map_limit_stops_before_source_tail() {
         JsonTestLimits::new().with_max_map_entries(1),
         JsonResource::MapEntries,
         &serialized_tail,
+        1,
+    );
+}
+
+/// Verifies an unknown sequence rejects the next item before entering its
+/// serializer.
+#[test]
+fn test_encode_to_vec_sequence_limit_stops_before_next_serialize() {
+    let serialized = Cell::new(0);
+    let value = CountedElementSequence {
+        serialized: &serialized,
+        len: 2,
+    };
+
+    assert_online_rejection(
+        &value,
+        JsonTestLimits::new().with_max_sequence_items(1),
+        JsonResource::SequenceItems,
+        &serialized,
         1,
     );
 }
