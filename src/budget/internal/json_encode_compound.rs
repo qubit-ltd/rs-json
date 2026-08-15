@@ -13,6 +13,7 @@
 use std::cell::RefCell;
 
 use qubit_budget::ResourceQuantity;
+use qubit_budget::json::JsonContainerKind;
 use qubit_budget::json::JsonMeasurement;
 use serde::Serialize;
 use serde::Serializer;
@@ -194,7 +195,9 @@ where
         let next = self.observed.checked_add(1).ok_or_else(|| {
             E::custom("JSON sequence item count overflowed usize")
         })?;
-        self.context.borrow_mut().check_sequence_items(next)?;
+        self.context
+            .borrow_mut()
+            .check_container_count(JsonContainerKind::Sequence, next)?;
         self.observed = next;
         Ok(())
     }
@@ -207,7 +210,9 @@ where
         let next = self.observed.checked_add(1).ok_or_else(|| {
             E::custom("JSON map entry count overflowed usize")
         })?;
-        self.context.borrow_mut().check_map_entries(next)?;
+        self.context
+            .borrow_mut()
+            .check_container_count(JsonContainerKind::Map, next)?;
         self.observed = next;
         Ok(())
     }

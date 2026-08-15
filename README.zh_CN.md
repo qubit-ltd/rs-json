@@ -115,14 +115,14 @@ session 中；value 计费只有在完整顶层值成功后才提交。`Budget`/
 
 ### 严格文本、value 与 tree 基础设施
 
-- `text::decode_slice` / `text::decode_slice_seed` 使用 `JsonDecodeSession` 严格
+- `text::decode_slice` / `text::decode_admitted_slice_seed` 使用 `JsonDecodeSession` 严格
   解码字节；`text::encode_to_vec` / `text::encode_to_writer` 使用
   `JsonEncodeSession` 编码。
 - `text::JsonEncodeError::InvalidRawJson` 直接保留稳定的 `JsonSyntaxError` reason、
   offset、line 和 column，不再用字符串重建 `serde_json::Error`。
-- `value::BudgetedJsonValueSeed` 是递增核算 value 预算并构造
+- `value::AccountingJsonValueSeed` 是递增核算 value 预算并构造
   `serde_json::Value` 的唯一公开路径。
-- `tree::JsonTreeProcessor` 允许输入 value 的借用短于 budget 借用。
+- `tree::JsonTreeReader` 允许输入 value 的借用短于 budget 借用。
   `process_mut` 返回错误时保留此前的 mutation 和预算消费；恢复 guard 只保证 root
   仍是结构有效的 `Value`，不会恢复原值。
 
@@ -273,7 +273,7 @@ value attempt。它暂存 value 计费，只有完整 attempt 成功时才提交
 value transaction 不控制外部副作用：丢弃 attempt 不能回滚 writer、回调、网络对端或其他
 目标。只有在希望跨 attempt 累计 I/O 计费时，才应有意复用同一个 session。
 
-- `JsonTreeProcessor::process_mut` 采用递增修改。visitor 或预算错误发生前已完成的
+- `JsonTreeMutator::process` 采用递增修改。visitor 或预算错误发生前已完成的
   mutation 和预算消费仍可观察。
 
 ## 适用场景

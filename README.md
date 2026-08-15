@@ -124,15 +124,15 @@ and direct-deserialization path and does not run value preflight.
 
 ### Strict text, value, and tree infrastructure
 
-- `text::decode_slice` / `text::decode_slice_seed` strictly decode bytes with a
+- `text::decode_slice` / `text::decode_admitted_slice_seed` strictly decode bytes with a
   `JsonDecodeSession`; `text::encode_to_vec` / `text::encode_to_writer` encode
   with a `JsonEncodeSession`.
 - `text::JsonEncodeError::InvalidRawJson` retains the stable
   `JsonSyntaxError` reason, offset, line, and column rather than rebuilding a
   `serde_json::Error` from text.
-- `value::BudgetedJsonValueSeed` is the only public path for incrementally
+- `value::AccountingJsonValueSeed` is the only public path for incrementally
   building `serde_json::Value` while charging a value budget.
-- `tree::JsonTreeProcessor` accepts values whose borrow is shorter than the
+- `tree::JsonTreeReader` accepts values whose borrow is shorter than the
   budget borrow. `process_mut` keeps mutations and budget consumption completed
   before an error; its restoration guard only keeps the root structurally
   valid and does not restore the original value.
@@ -291,7 +291,7 @@ network peer, or other destination cannot be rolled back by dropping an
 attempt. Reuse the same session deliberately when retained I/O charges across
 attempts are part of the desired limit.
 
-- `JsonTreeProcessor::process_mut` is incremental. Visitor mutations and
+- `JsonTreeMutator::process` is incremental. Visitor mutations and
   budget charges completed before a visitor or budget error remain observable.
 
 ## When to Use

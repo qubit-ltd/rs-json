@@ -7,7 +7,7 @@
 // =============================================================================
 //! Tests for budget-aware JSON APIs.
 
-mod budgeted_json_value_seed_tests;
+mod accounting_json_value_seed_tests;
 mod internal;
 mod json_decode_limits_tests;
 mod json_decode_session_tests;

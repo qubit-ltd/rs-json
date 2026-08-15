@@ -24,7 +24,7 @@ use qubit_json::tree::JsonBudgetRejection;
 use qubit_json::tree::JsonTreeContext;
 use qubit_json::tree::JsonTreeControl;
 use qubit_json::tree::JsonTreeMutVisitor;
-use qubit_json::tree::JsonTreeProcessor;
+use qubit_json::tree::JsonTreeMutator;
 use serde_json::Value;
 use serde_json::json;
 
@@ -206,8 +206,8 @@ fuzz_target!(|data: &[u8]| {
     let mut success_budget = generous_budget();
     {
         let mut transaction = success_budget.transaction();
-        JsonTreeProcessor::new(&mut transaction)
-            .process_mut(&mut success_value, &mut SuccessVisitor)
+        JsonTreeMutator::new(&mut transaction)
+            .process(&mut success_value, &mut SuccessVisitor)
             .expect("generous success traversal must complete");
         transaction.commit();
     }
@@ -222,8 +222,8 @@ fuzz_target!(|data: &[u8]| {
     );
     {
         let mut transaction = rejected_budget.transaction();
-        JsonTreeProcessor::new(&mut transaction)
-            .process_mut(&mut rejected_value, &mut RejectingVisitor)
+        JsonTreeMutator::new(&mut transaction)
+            .process(&mut rejected_value, &mut RejectingVisitor)
             .expect("rejecting visitor must handle every budget rejection");
         transaction.commit();
     }
@@ -235,7 +235,7 @@ fuzz_target!(|data: &[u8]| {
     let mut error_budget = generous_budget();
     let error = {
         let mut transaction = error_budget.transaction();
-        JsonTreeProcessor::new(&mut transaction).process_mut(
+        JsonTreeMutator::new(&mut transaction).process(
             &mut error_value,
             &mut ErrorVisitor {
                 stop_after,
@@ -260,7 +260,7 @@ fuzz_target!(|data: &[u8]| {
         let mut panic_budget = generous_budget();
         let mut transaction = panic_budget.transaction();
         let panic_result = catch_unwind(AssertUnwindSafe(|| {
-            let _ = JsonTreeProcessor::new(&mut transaction).process_mut(
+            let _ = JsonTreeMutator::new(&mut transaction).process(
                 &mut recovery_value,
                 &mut PanicVisitor {
                     panic_after,
@@ -277,7 +277,7 @@ fuzz_target!(|data: &[u8]| {
         let mut recovery_budget = generous_budget();
         let recovery_error = {
             let mut transaction = recovery_budget.transaction();
-            JsonTreeProcessor::new(&mut transaction).process_mut(
+            JsonTreeMutator::new(&mut transaction).process(
                 &mut recovery_value,
                 &mut ErrorVisitor {
                     // A fixed first callback guarantees that the abort-safe

@@ -50,7 +50,7 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    decode_slice_seed(PhantomSeed::<T>::new(), input, session)
+    decode_admitted_slice_seed(PhantomSeed::<T>::new(), input, session)
 }
 
 /// Deserializes one admitted JSON slice through a caller-provided seed.
@@ -75,7 +75,7 @@ where
 /// valid JSON value or the seed rejects it. Input bytes remain consumed after
 /// every attempt, while staged value resources are retained only when the seed
 /// accepts one complete value.
-pub fn decode_slice_seed<'de, S, R, Q>(
+pub fn decode_admitted_slice_seed<'de, S, R, Q>(
     seed: S,
     input: &'de [u8],
     session: &mut JsonDecodeSession<'_, R, Q>,

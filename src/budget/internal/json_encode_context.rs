@@ -15,6 +15,7 @@ use std::rc::Rc;
 
 use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
+use qubit_budget::json::JsonContainerKind;
 use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonValueTransaction;
 use serde::ser::Error;
@@ -68,27 +69,16 @@ where
         self.record(result)
     }
 
-    /// Checks the prospective array length without charging value usage.
-    pub(super) fn check_sequence_items<E>(
+    /// Checks one prospective container count without charging value usage.
+    pub(super) fn check_container_count<E>(
         &mut self,
-        items: usize,
+        kind: JsonContainerKind,
+        prospective: usize,
     ) -> Result<(), E>
     where
         E: Error,
     {
-        let result = self.transaction.check_sequence_items(items);
-        self.record(result)
-    }
-
-    /// Checks the prospective object entry count without charging value usage.
-    pub(super) fn check_map_entries<E>(
-        &mut self,
-        entries: usize,
-    ) -> Result<(), E>
-    where
-        E: Error,
-    {
-        let result = self.transaction.check_map_entries(entries);
+        let result = self.transaction.check_container_count(kind, prospective);
         self.record(result)
     }
 

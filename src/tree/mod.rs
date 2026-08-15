@@ -24,5 +24,6 @@ pub use json_tree_control::JsonTreeControl;
 pub use json_tree_location::JsonTreeLocation;
 pub use json_tree_mut_visitor::JsonTreeMutVisitor;
 pub use json_tree_process_error::JsonTreeProcessError;
-pub use json_tree_processor::JsonTreeProcessor;
+pub use json_tree_processor::JsonTreeMutator;
+pub use json_tree_processor::JsonTreeReader;
 pub use json_tree_visitor::JsonTreeVisitor;

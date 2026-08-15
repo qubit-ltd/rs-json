@@ -325,13 +325,13 @@ column；下游不需要从重建的 `serde_json::Error` 文本中解析诊断�
 
 ### 7.2 Value 构造
 
-`value::BudgetedJsonValueSeed` 是预算感知 `serde_json::Value` seed 的唯一公开路径。
+`value::AccountingJsonValueSeed` 是预算感知 `serde_json::Value` seed 的唯一公开路径。
 实现仍位于私有 budget 子模块，`budget` 和 `tree` 不再提供兼容 alias。该 seed 用于只能
 观察解码后 Serde 事件、无法访问原始 JSON 字节的调用链。
 
 ### 7.3 Tree 遍历
 
-`JsonTreeProcessor::process<'value, V>` 将输入 value 生命周期与 processor 持有的 budget
+`JsonTreeReader::process<'value, V>` 将输入 value 生命周期与 processor 持有的 budget
 生命周期分离。`process_mut` 是非事务操作：visitor mutation 和 budget consumption
 按遍历进度立即生效；若中途返回 visitor 或 budget 错误，已完成部分不会回滚。
 `RootRestoreGuard` 只负责把暂时拆出的子树重新组装成结构有效的 root，不恢复原始内容。

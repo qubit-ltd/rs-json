@@ -14,6 +14,7 @@ mod json_budget_serializer_tests;
 mod json_encode_compound_tests;
 mod json_encode_context_tests;
 mod json_encode_serializer_tests;
+mod json_lexeme_length_tests;
 mod json_lexical_preflight_depth_tests;
 mod json_lexical_preflight_resource_tests;
 mod json_lexical_preflight_tests;

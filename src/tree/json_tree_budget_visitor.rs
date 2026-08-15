@@ -16,7 +16,7 @@ use serde_json::Value;
 
 use super::JsonTreeContext;
 use super::JsonTreeProcessError;
-use super::JsonTreeProcessor;
+use super::JsonTreeReader;
 use super::JsonTreeVisitor;
 
 /// Fully accounts materialized JSON trees using an internally owned budget.
@@ -46,7 +46,7 @@ where
         value: &Value,
     ) -> Result<(), MeasuredBudgetError<R, Q>> {
         let mut transaction = self.budget.transaction();
-        let result = JsonTreeProcessor::new(&mut transaction)
+        let result = JsonTreeReader::new(&mut transaction)
             .process(value, &mut NoopVisitor)
             .map_err(extract_budget);
         if result.is_ok() {

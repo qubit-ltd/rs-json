@@ -9,7 +9,7 @@ use qubit_budget::json::JsonValueLimits;
 use qubit_json::tree::JsonTreeContext;
 use qubit_json::tree::JsonTreeLocation;
 use qubit_json::tree::JsonTreeProcessError;
-use qubit_json::tree::JsonTreeProcessor;
+use qubit_json::tree::JsonTreeReader as JsonTreeProcessor;
 use qubit_json::tree::JsonTreeVisitor;
 use serde_json::Value;
 use serde_json::json;
