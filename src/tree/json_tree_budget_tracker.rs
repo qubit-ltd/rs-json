@@ -34,6 +34,14 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a full-tree tracker with fresh budget state.
+    ///
+    /// # Parameters
+    ///
+    /// * `limits` - Resource limits used by the owned budget.
+    ///
+    /// # Returns
+    ///
+    /// A tracker initialized with the supplied limits.
     pub fn new(limits: JsonValueLimits<R, Q>) -> Self {
         Self {
             budget: JsonValueBudget::new(limits),
@@ -41,6 +49,19 @@ where
     }
 
     /// Charges every node and payload represented by `value`.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - JSON tree whose resources are charged.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the complete tree is admitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first measured budget rejection encountered while walking
+    /// the tree. Charges are committed only when the complete walk succeeds.
     pub fn account(
         &mut self,
         value: &Value,
@@ -56,21 +77,36 @@ where
     }
 
     /// Restores the owned budget to its original configured state.
+    ///
+    /// This clears accumulated charges and makes the tracker ready for a new
+    /// independent accounting run.
     pub fn reset(&mut self) {
         self.budget.reset();
     }
 
     /// Returns the owned budget for read-only inspection.
+    ///
+    /// # Returns
+    ///
+    /// A shared reference to the accumulated budget state.
     pub const fn budget(&self) -> &JsonValueBudget<R, Q> {
         &self.budget
     }
 
     /// Returns the owned budget for caller-managed accounting.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to the accumulated budget state.
     pub fn budget_mut(&mut self) -> &mut JsonValueBudget<R, Q> {
         &mut self.budget
     }
 
     /// Consumes this tracker and returns its accumulated budget state.
+    ///
+    /// # Returns
+    ///
+    /// The owned budget, including all charges accumulated by this tracker.
     pub fn into_budget(self) -> JsonValueBudget<R, Q> {
         self.budget
     }

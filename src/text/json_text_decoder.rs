@@ -38,6 +38,15 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a decoder that charges `session` for each attempted document.
+    ///
+    /// # Parameters
+    ///
+    /// * `session` - Caller-owned session that receives input and committed
+    ///   value accounting.
+    ///
+    /// # Returns
+    ///
+    /// A decoder borrowing `session` for its lifetime.
     pub const fn new(
         session: &'session mut JsonDecodeSession<'budget, R, Q>,
     ) -> Self {
@@ -45,6 +54,18 @@ where
     }
 
     /// Decodes one complete JSON document into `T`.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Target type deserialized from the admitted JSON document.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Complete JSON document to decode.
+    ///
+    /// # Returns
+    ///
+    /// The deserialized target value.
     ///
     /// # Errors
     ///
@@ -64,6 +85,19 @@ where
     }
 
     /// Decodes one complete JSON document through a caller-provided seed.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `S` - Seed that controls construction of the decoded value.
+    ///
+    /// # Parameters
+    ///
+    /// * `seed` - Deserialization seed used for the admitted document.
+    /// * `input` - Complete JSON document to decode.
+    ///
+    /// # Returns
+    ///
+    /// The value produced by `seed`.
     ///
     /// # Errors
     ///
@@ -100,6 +134,14 @@ where
 
     /// Validates and accounts for one complete JSON document without decoding
     /// a target Rust value.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Complete JSON document to validate and account.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the complete document is valid and admitted.
     ///
     /// # Errors
     ///

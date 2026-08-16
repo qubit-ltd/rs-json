@@ -68,6 +68,10 @@ impl LenientJsonDecoder {
     /// Decodes `input` into the target Rust type `T` without a top-level
     /// structure constraint.
     ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Target type deserialized from the normalized JSON text.
+    ///
     /// # Parameters
     ///
     /// * `input` - Raw JSON text to normalize and deserialize.
@@ -105,6 +109,10 @@ impl LenientJsonDecoder {
     /// * `session` - Reusable caller-owned accounting state. Input charges are
     ///   retained on both success and failure; value charges are retained only
     ///   after successful top-level decoding.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Target type deserialized from the admitted JSON text.
     ///
     /// # Returns
     ///
@@ -162,6 +170,10 @@ impl LenientJsonDecoder {
     /// # Parameters
     ///
     /// * `input` - Raw JSON bytes to validate, normalize, and deserialize.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Target type deserialized from the normalized JSON text.
     ///
     /// # Returns
     ///
@@ -225,6 +237,10 @@ impl LenientJsonDecoder {
     ///
     /// * `input` - Raw JSON text to normalize and deserialize.
     ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Target object type deserialized from the normalized JSON text.
+    ///
     /// # Returns
     ///
     /// The deserialized target value when the normalized input is a JSON
@@ -258,6 +274,10 @@ impl LenientJsonDecoder {
     /// # Parameters
     ///
     /// * `input` - Raw JSON text to normalize and deserialize.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Element type deserialized from each array item.
     ///
     /// # Returns
     ///

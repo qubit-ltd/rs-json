@@ -37,6 +37,14 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a mutator borrowing the supplied JSON value transaction.
+    ///
+    /// # Parameters
+    ///
+    /// * `transaction` - Transaction receiving node and payload charges.
+    ///
+    /// # Returns
+    ///
+    /// A mutator borrowing `transaction` for its lifetime.
     pub fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     ) -> Self {
@@ -44,6 +52,24 @@ where
     }
 
     /// Mutates every admitted node in depth-first order without Rust recursion.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `V` - Visitor receiving mutable admitted-node callbacks.
+    ///
+    /// # Parameters
+    ///
+    /// * `root` - Root JSON value to process and mutate.
+    /// * `visitor` - Visitor controlling mutations and descendant traversal.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the complete tree is processed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonTreeProcessError::Budget`] when resource admission fails,
+    /// or [`JsonTreeProcessError::Visitor`] when the visitor rejects a node.
     pub fn process<V>(
         &mut self,
         root: &mut Value,
