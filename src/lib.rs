@@ -59,7 +59,11 @@
 #![deny(missing_docs)]
 
 mod internal;
+/// Lenient decoding utilities and policy controls.
 pub mod lenient;
+/// Strict JSON text codecs with resource-aware budgets.
 pub mod text;
+/// Traversal and mutation APIs for budgeted materialized JSON trees.
 pub mod tree;
+/// Budgeted `serde_json::Value` construction helpers.
 pub mod value;
