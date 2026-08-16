@@ -15,8 +15,8 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::text::JsonDecodeError;
-use qubit_json::text::JsonTextDecoder;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecoder;
 use serde::de::IgnoredAny;
 
 /// Verifies object keys, strings, and numbers consume one shared payload
@@ -34,7 +34,7 @@ fn test_json_lexical_preflight_consumes_payload_for_keys_strings_and_numbers() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(br#"{"a":"bc","n":12}"#)
         .expect_err(
             "one key, string, and number must exceed four payload bytes",
@@ -72,7 +72,7 @@ fn test_json_lexical_preflight_charges_decoded_key_bytes() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(br#"{"\u4e2d":null}"#)
         .expect_err(
             "the decoded three-byte key must exceed the two-byte limit",
@@ -106,7 +106,7 @@ fn test_json_lexical_preflight_charges_each_value_node() {
             )
             .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(br#"{"value":true}"#)
         .expect_err("the object child must exceed the one-node budget");
 
@@ -139,7 +139,7 @@ fn test_json_lexical_preflight_checks_decoded_string_bytes() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(br#""\u4e2d""#)
         .expect_err("the decoded three-byte string must exceed the limit");
 
@@ -171,7 +171,7 @@ fn test_json_lexical_preflight_checks_number_lexical_bytes() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(b"1e+3")
         .expect_err("all four lexical number bytes must be charged");
 
@@ -204,7 +204,7 @@ fn test_json_lexical_preflight_checks_sequence_items() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(b"[null,null]")
         .expect_err("the second array item must exceed the point limit");
 
@@ -235,7 +235,7 @@ fn test_json_lexical_preflight_counts_duplicate_map_entries() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(br#"{"a":1,"a":2}"#)
         .expect_err("the duplicate second entry must still exceed the limit");
 
@@ -273,7 +273,7 @@ fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(input.as_bytes())
         .expect_err("private token text must consume the ordinary key limit");
 
@@ -306,7 +306,7 @@ fn test_json_lexical_preflight_charges_duplicate_entry_payloads() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(br#"{"a":1,"a":2}"#)
         .expect_err("both duplicate key-number pairs must consume payload");
 

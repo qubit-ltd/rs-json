@@ -21,8 +21,8 @@ use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::lenient::LenientJsonDecoder;
-use qubit_json::text::JsonTextDecoder;
+use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::NormalizingJsonDecoder;
 use serde::de::IgnoredAny;
 
 /// Verifies decode and encode sessions expose only their directional resources.
@@ -80,7 +80,7 @@ fn test_decode_session_borrowing_reuses_caller_owned_budgets() {
     {
         let mut session =
             JsonDecodeSession::borrowing_input(&mut input, &mut value);
-        JsonTextDecoder::new(&mut session)
+        JsonDecoder::new(&mut session)
             .decode::<IgnoredAny>(br#"{"a":1}"#)
             .expect("borrowed session should admit the document");
         assert_eq!(session.max_input_bytes(), Some(16_usize));
@@ -153,11 +153,11 @@ fn test_failed_second_value_preserves_first_commit_and_accumulates_input() {
             .build(),
     );
 
-    JsonTextDecoder::new(&mut session)
+    JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(first)
         .expect("first value must fit");
     assert!(
-        JsonTextDecoder::new(&mut session)
+        JsonDecoder::new(&mut session)
             .decode::<IgnoredAny>(second)
             .is_err()
     );
@@ -167,7 +167,7 @@ fn test_failed_second_value_preserves_first_commit_and_accumulates_input() {
         first.len() + second.len(),
     );
 
-    JsonTextDecoder::new(&mut session)
+    JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(third)
         .expect("rolled-back second value must leave room for the third");
     assert_eq!(session.value_budget().used_nodes(), Some(2));
@@ -198,7 +198,7 @@ fn test_decode_attempt_panic_retains_input_and_reuses_value_capacity() {
     assert!(result.is_err());
     assert_eq!(session.input_budget().expect("input budget").used(), 4,);
     assert_eq!(session.value_budget().used_nodes(), Some(0));
-    JsonTextDecoder::new(&mut session)
+    JsonDecoder::new(&mut session)
         .decode::<IgnoredAny>(b"null")
         .expect("rolled-back value capacity must remain reusable");
     assert_eq!(session.value_budget().used_nodes(), Some(1));
@@ -218,7 +218,7 @@ fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity
             .max_nodes(1)
             .build(),
     );
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
 
     assert!(
         decoder

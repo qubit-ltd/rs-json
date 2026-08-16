@@ -7,8 +7,8 @@
 // =============================================================================
 //! Tests size-limit discriminator behavior through public error diagnostics.
 
-use qubit_json::lenient::LenientJsonDecodeOptions;
-use qubit_json::lenient::LenientJsonDecoder;
+use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecoder;
 
 /// Verifies that raw-size failures expose only the raw limit.
 ///
@@ -17,8 +17,8 @@ use qubit_json::lenient::LenientJsonDecoder;
 /// Panics when the public raw-size diagnostics are not observed.
 #[test]
 fn test_raw_size_limit_exposes_only_raw_limit() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(7))
             .build(),
     );
@@ -41,8 +41,8 @@ fn test_raw_size_limit_exposes_only_raw_limit() {
 /// Panics when the public normalized-size diagnostics are not observed.
 #[test]
 fn test_normalized_size_limit_exposes_only_normalized_limit() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_normalized_bytes(Some(7))
             .build(),
     );

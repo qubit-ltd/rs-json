@@ -7,12 +7,12 @@
 // =============================================================================
 //! Tests for lenient normalization behavior through the public decoder.
 
-use qubit_json::lenient::LenientJsonDecodeErrorKind;
-use qubit_json::lenient::LenientJsonDecodeOptions;
-use qubit_json::lenient::LenientJsonDecodeStage;
-use qubit_json::lenient::LenientJsonDecoder;
-use qubit_json::lenient::MarkdownFenceClosing;
-use qubit_json::lenient::MarkdownFencePolicy;
+use qubit_json::decode::MarkdownFenceClosing;
+use qubit_json::decode::MarkdownFencePolicy;
+use qubit_json::decode::NormalizingJsonDecodeErrorKind;
+use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodeStage;
+use qubit_json::decode::NormalizingJsonDecoder;
 use serde_json::json;
 use serde_json::to_string;
 
@@ -23,11 +23,11 @@ use serde_json::to_string;
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_empty_input_for_empty_string() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_value("")
         .expect_err("empty input should be rejected before JSON parsing");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
     assert_eq!(error.normalized_input_bytes(), None);
 }
 
@@ -38,11 +38,11 @@ fn test_decode_value_reports_empty_input_for_empty_string() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_empty_input_for_whitespace_by_default() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder.decode_value(" \n\t ").expect_err(
         "whitespace-only input should be empty after default trimming",
     );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
     assert_eq!(error.normalized_input_bytes(), None);
 }
 
@@ -53,16 +53,16 @@ fn test_decode_value_reports_empty_input_for_whitespace_by_default() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_respects_input_size_limit() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(6))
             .build(),
     );
     let error = decoder
         .decode_value("{\"a\":1}")
         .expect_err("input above the configured byte limit should be rejected");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InputTooLarge);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Normalize);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Normalize);
     assert_eq!(error.raw_input_bytes(), 7);
     assert_eq!(error.max_input_bytes(), Some(6));
     assert!(error.to_string().contains("6 bytes"));
@@ -75,8 +75,8 @@ fn test_decode_value_respects_input_size_limit() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_accepts_input_at_size_limit() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(7))
             .build(),
     );
@@ -93,15 +93,15 @@ fn test_decode_value_accepts_input_at_size_limit() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(0))
             .build(),
     );
     let error = decoder
         .decode_value("{")
         .expect_err("size guard should run before parser handling");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InputTooLarge);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
 }
 
 /// Verifies that decode value rejects control-character expansion above the
@@ -114,8 +114,8 @@ fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
 fn test_decode_value_rejects_control_character_expansion_above_normalized_size_limit()
  {
     let input = "\"\u{0000}\"";
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_normalized_bytes(Some(7))
             .build(),
     );
@@ -124,8 +124,8 @@ fn test_decode_value_rejects_control_character_expansion_above_normalized_size_l
         "control-character expansion above the normalized limit must fail",
     );
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InputTooLarge);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Normalize);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Normalize);
     assert_eq!(error.raw_input_bytes(), input.len());
     assert_eq!(error.normalized_input_bytes(), Some(8));
     assert_eq!(error.max_input_bytes(), None);
@@ -141,8 +141,8 @@ fn test_decode_value_rejects_control_character_expansion_above_normalized_size_l
 #[test]
 fn test_decode_value_accepts_control_character_expansion_at_normalized_size_limit()
  {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_normalized_bytes(Some(8))
             .build(),
     );
@@ -165,8 +165,8 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
     let input = "\n```json\n\"\u{0000}\"\n```\n";
     let normalized_bytes = "\"\\u0000\"".len();
 
-    let accepted = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let accepted = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_normalized_bytes(Some(normalized_bytes))
             .build(),
     )
@@ -176,15 +176,15 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
     );
     assert_eq!(accepted, "\u{0000}");
 
-    let error = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let error = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_normalized_bytes(Some(normalized_bytes - 1))
             .build(),
     )
     .decode::<String>(input)
     .expect_err("one byte below the post-fence normalized size must fail");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InputTooLarge);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Normalize);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Normalize);
     assert_eq!(error.raw_input_bytes(), input.len());
     assert_eq!(error.normalized_input_bytes(), Some(normalized_bytes));
     assert_eq!(error.max_normalized_bytes(), Some(normalized_bytes - 1));
@@ -197,7 +197,7 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_utf8_bom_by_default() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let value = decoder
         .decode_value("\u{feff}{\"a\":1}")
         .expect("default decoder should strip a leading UTF-8 BOM");
@@ -211,11 +211,11 @@ fn test_decode_value_strips_utf8_bom_by_default() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder.decode_value("\u{feff}").expect_err(
         "input containing only BOM should become empty after normalization",
     );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
     assert_eq!(error.normalized_input_bytes(), Some(0));
 }
 
@@ -226,15 +226,15 @@ fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_can_leave_utf8_bom_when_disabled() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .strip_utf8_bom(false)
             .build(),
     );
     let error = decoder.decode_value("\u{feff}{\"a\":1}").expect_err(
         "BOM should remain and break parsing when BOM stripping is disabled",
     );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value trims surrounding whitespace by default.
@@ -244,7 +244,7 @@ fn test_decode_value_can_leave_utf8_bom_when_disabled() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_trims_surrounding_whitespace_by_default() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let value = decoder.decode_value("\n{\"text\":\"abc\"}\n").expect(
         "leading and trailing control characters outside strings should be trimmed by default",
     );
@@ -260,8 +260,8 @@ fn test_decode_value_trims_surrounding_whitespace_by_default() {
 #[test]
 fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled()
  {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .trim_whitespace(false)
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .build(),
@@ -269,7 +269,7 @@ fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled(
     let error = decoder
         .decode_value("   ")
         .expect_err("whitespace-only input should reach JSON parser when trimming is disabled");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value accepts terminal unicode whitespace when trimming
@@ -281,7 +281,7 @@ fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled(
 #[test]
 fn test_decode_value_accepts_terminal_unicode_whitespace_when_trimming_enabled()
 {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let value = decoder
         .decode_value("```json\n{\"a\":1}\n```\u{00a0}")
         .expect("default trimming should remove terminal Unicode whitespace");
@@ -297,8 +297,8 @@ fn test_decode_value_accepts_terminal_unicode_whitespace_when_trimming_enabled()
 #[test]
 fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled()
  {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .trim_whitespace(false)
             .build(),
     );
@@ -307,7 +307,7 @@ fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled(
         .expect_err(
             "terminal Unicode whitespace should remain without trimming",
         );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value randomized inputs do not panic and round trip
@@ -320,15 +320,15 @@ fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled(
 fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid()
 {
     let decoders = [
-        LenientJsonDecoder::default(),
-        LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::builder()
+        NormalizingJsonDecoder::default(),
+        NormalizingJsonDecoder::new(
+            NormalizingJsonDecodeOptions::builder()
                 .trim_whitespace(false)
                 .markdown_fence_policy(MarkdownFencePolicy::Disabled)
                 .build(),
         ),
-        LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::builder()
+        NormalizingJsonDecoder::new(
+            NormalizingJsonDecodeOptions::builder()
                 .markdown_fence_policy(MarkdownFencePolicy::JsonOnly {
                     closing: MarkdownFenceClosing::Required,
                 })
@@ -416,8 +416,8 @@ fn next_u64(seed: &mut u64) -> u64 {
 #[test]
 fn test_decode_value_with_trim_disabled_and_escape_enabled_still_decodes_owned_output()
  {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .trim_whitespace(false)
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .escape_control_chars_in_strings(true)
@@ -436,7 +436,7 @@ fn test_decode_value_with_trim_disabled_and_escape_enabled_still_decodes_owned_o
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_trims_before_control_character_repair() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let value = decoder
         .decode_value("```json\n  {\"text\":\"a\nb\"}  \n```")
         .expect("outer whitespace should be removed before repair allocates an owned string");

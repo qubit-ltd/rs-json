@@ -7,9 +7,9 @@
 // =============================================================================
 use std::error::Error;
 
-use qubit_json::text::JsonEncodeError;
-use qubit_json::text::JsonSyntaxError;
-use qubit_json::text::JsonSyntaxErrorReason;
+use qubit_json::decode::JsonSyntaxError;
+use qubit_json::decode::JsonSyntaxErrorReason;
+use qubit_json::encode::JsonEncodeError;
 use serde_json::Value;
 use serde_json::from_str;
 

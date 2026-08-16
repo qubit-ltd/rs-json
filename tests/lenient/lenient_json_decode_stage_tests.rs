@@ -5,9 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for the public `LenientJsonDecodeStage` type.
+//! Tests for the public `NormalizingJsonDecodeStage` type.
 
-use qubit_json::lenient::LenientJsonDecodeStage;
+use qubit_json::decode::NormalizingJsonDecodeStage;
 
 /// Verifies that decode stage display uses snake case tokens.
 ///
@@ -17,18 +17,24 @@ use qubit_json::lenient::LenientJsonDecodeStage;
 #[test]
 fn test_decode_stage_display_uses_snake_case_tokens() {
     assert_eq!(
-        LenientJsonDecodeStage::DecodeText.to_string(),
+        NormalizingJsonDecodeStage::DecodeText.to_string(),
         "decode_text"
     );
-    assert_eq!(LenientJsonDecodeStage::Normalize.to_string(), "normalize");
-    assert_eq!(LenientJsonDecodeStage::Admission.to_string(), "admission");
-    assert_eq!(LenientJsonDecodeStage::Parse.to_string(), "parse");
     assert_eq!(
-        LenientJsonDecodeStage::TopLevelCheck.to_string(),
+        NormalizingJsonDecodeStage::Normalize.to_string(),
+        "normalize"
+    );
+    assert_eq!(
+        NormalizingJsonDecodeStage::Admission.to_string(),
+        "admission"
+    );
+    assert_eq!(NormalizingJsonDecodeStage::Parse.to_string(), "parse");
+    assert_eq!(
+        NormalizingJsonDecodeStage::TopLevelCheck.to_string(),
         "top_level_check"
     );
     assert_eq!(
-        LenientJsonDecodeStage::Deserialize.to_string(),
+        NormalizingJsonDecodeStage::Deserialize.to_string(),
         "deserialize"
     );
 }

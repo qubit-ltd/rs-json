@@ -16,7 +16,7 @@ use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::text::JsonTextEncoder;
+use qubit_json::encode::JsonEncoder;
 use serde_json::Value;
 
 mod internal;
@@ -49,14 +49,14 @@ fuzz_target!(|data: &[u8]| {
         .value_limits(value_limits)
         .build();
     let mut vector_session = JsonEncodeSession::owned(limits);
-    let encoded = JsonTextEncoder::new(&mut vector_session).to_vec(&value);
+    let encoded = JsonEncoder::new(&mut vector_session).to_vec(&value);
     let mut buffered_session = JsonEncodeSession::owned(limits);
     let mut buffered_output = Vec::new();
-    let buffered = JsonTextEncoder::new(&mut buffered_session)
+    let buffered = JsonEncoder::new(&mut buffered_session)
         .write_buffered(&mut buffered_output, &value);
     let mut incremental_session = JsonEncodeSession::owned(limits);
     let mut incremental_output = Vec::new();
-    let incremental = JsonTextEncoder::new(&mut incremental_session)
+    let incremental = JsonEncoder::new(&mut incremental_session)
         .write_incremental(&mut incremental_output, &value);
 
     assert!(

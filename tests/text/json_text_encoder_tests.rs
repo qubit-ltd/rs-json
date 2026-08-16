@@ -20,8 +20,8 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::text::JsonEncodeError;
-use qubit_json::text::JsonTextEncoder;
+use qubit_json::encode::JsonEncodeError;
+use qubit_json::encode::JsonEncoder;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error as _;
@@ -333,7 +333,7 @@ fn test_encode_counts_raw_value_once() {
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
 
-    let output = JsonTextEncoder::new(&mut session)
+    let output = JsonEncoder::new(&mut session)
         .to_vec(raw.as_ref())
         .expect("the raw JSON value must encode");
 

@@ -7,7 +7,7 @@
 // =============================================================================
 //! Tests structured JSON syntax error reasons.
 
-use qubit_json::text::JsonSyntaxErrorReason;
+use qubit_json::decode::JsonSyntaxErrorReason;
 
 #[test]
 fn syntax_reasons_have_stable_display_text() {

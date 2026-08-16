@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for the public [`qubit_json::lenient::LenientJsonDecoder`] API.
+//! Tests for the public [`qubit_json::decode::NormalizingJsonDecoder`] API.
 
 use qubit_budget::ResourceBudget;
 use qubit_budget::ResourceLimit;
@@ -14,13 +14,13 @@ use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::lenient::ErrorPrivacyPolicy;
-use qubit_json::lenient::JsonTopLevelKind;
-use qubit_json::lenient::LenientJsonDecodeErrorKind;
-use qubit_json::lenient::LenientJsonDecodeOptions;
-use qubit_json::lenient::LenientJsonDecodeStage;
-use qubit_json::lenient::LenientJsonDecoder;
-use qubit_json::lenient::MarkdownFencePolicy;
+use qubit_json::decode::DiagnosticPolicy;
+use qubit_json::decode::JsonRootKind;
+use qubit_json::decode::MarkdownFencePolicy;
+use qubit_json::decode::NormalizingJsonDecodeErrorKind;
+use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodeStage;
+use qubit_json::decode::NormalizingJsonDecoder;
 use serde_json::Error as JsonError;
 use serde_json::Value;
 use serde_json::json;
@@ -61,10 +61,10 @@ fn value_budget_session(
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_new_exposes_configured_options() {
-    let options = LenientJsonDecodeOptions::builder()
+    let options = NormalizingJsonDecodeOptions::builder()
         .markdown_fence_policy(MarkdownFencePolicy::Disabled)
         .build();
-    let decoder = LenientJsonDecoder::new(options.clone());
+    let decoder = NormalizingJsonDecoder::new(options.clone());
     assert_eq!(decoder.options(), &options);
 }
 
@@ -75,16 +75,16 @@ fn test_new_exposes_configured_options() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_default_uses_default_options() {
-    let decoder = LenientJsonDecoder::default();
-    assert_eq!(decoder.options(), &LenientJsonDecodeOptions::default());
+    let decoder = NormalizingJsonDecoder::default();
+    assert_eq!(decoder.options(), &NormalizingJsonDecodeOptions::default());
 }
 
 /// Verifies convenience decode ignores value limits unless configured in
 /// options.
 #[test]
 fn test_decode_without_value_limits_ignores_structure() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(256))
             .max_normalized_bytes(Some(256))
             .build(),
@@ -98,8 +98,8 @@ fn test_decode_without_value_limits_ignores_structure() {
 /// Verifies convenience decode enforces configured value limits.
 #[test]
 fn test_decode_with_value_limits_rejects_excessive_depth() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .value_limits(Some(
                 JsonValueLimits::<JsonResource, usize>::builder()
                     .max_depth(1)
@@ -111,15 +111,15 @@ fn test_decode_with_value_limits_rejects_excessive_depth() {
         "depth limit must reject nested values on convenience decode",
     );
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Budget);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Admission);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Admission);
 }
 
 /// Verifies `decode_value` applies configured value limits.
 #[test]
 fn test_decode_value_with_value_limits_rejects_excessive_nodes() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .value_limits(Some(
                 JsonValueLimits::<JsonResource, usize>::builder()
                     .max_nodes(1)
@@ -131,14 +131,14 @@ fn test_decode_value_with_value_limits_rejects_excessive_nodes() {
         .decode_value("[null]")
         .expect_err("node limit must reject nested array values");
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Budget);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Admission);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Admission);
 }
 
 /// Verifies that callers can share one budget session with lenient decoding.
 #[test]
 fn test_decode_with_session_charges_caller_owned_input_budget() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let mut input = ResourceBudget::from_limit(ResourceLimit::new(
         JsonResource::InputBytes,
         16,
@@ -166,7 +166,7 @@ fn test_decode_with_session_charges_caller_owned_input_budget() {
 /// normalized JSON measurements.
 #[test]
 fn test_decode_with_session_charges_exact_value_resources_cumulatively() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .max_depth(3)
         .max_nodes(6)
@@ -199,7 +199,8 @@ fn test_decode_with_session_charges_exact_value_resources_cumulatively() {
 /// numbers, escapes, and malformed UTF-8 boundaries.
 #[test]
 fn test_strict_decode_exercises_lexical_error_shapes() {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecodeOptions::strict());
+    let decoder =
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict());
     for input in ["false", "[]", "{}"] {
         let mut session = value_budget_session(
             JsonValueLimits::<JsonResource, usize>::builder().build(),
@@ -248,7 +249,7 @@ fn test_strict_decode_exercises_lexical_error_shapes() {
 /// classification or resource identity.
 #[test]
 fn test_decode_with_session_classifies_each_value_budget_rejection() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let cases = [
         (
             JsonValueLimits::<JsonResource, usize>::builder()
@@ -321,8 +322,8 @@ fn test_decode_with_session_classifies_each_value_budget_rejection() {
         let error = decoder
             .decode_with_session::<Value>(input, &mut session)
             .expect_err(expectation);
-        assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Budget);
-        assert_eq!(error.stage(), LenientJsonDecodeStage::Admission);
+        assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Budget);
+        assert_eq!(error.stage(), NormalizingJsonDecodeStage::Admission);
         assert_eq!(
             *error
                 .measured_budget_error()
@@ -342,7 +343,7 @@ fn test_decode_with_session_classifies_each_value_budget_rejection() {
 /// published, or the session cannot use its remaining capacity.
 #[test]
 fn test_decode_with_session_budget_rejection_preserves_committed_charges() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .max_nodes(5)
         .max_payload_bytes(4)
@@ -356,8 +357,8 @@ fn test_decode_with_session_budget_rejection_preserves_committed_charges() {
         .decode_with_session::<Value>(r#"{"cc":"ddd"}"#, &mut session)
         .expect_err("the second string must exceed the payload budget");
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Budget);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Admission);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Admission);
     assert_eq!(
         *error
             .measured_budget_error()
@@ -389,7 +390,7 @@ fn test_decode_with_session_accounts_normalized_fenced_value() {
     const INPUT: &str =
         "```json\n{\"escaped\":\"\\u4e2d\",\"number\":1e+3}\n```";
 
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let mut input_budget =
         ResourceBudget::new(JsonResource::InputBytes, INPUT.len());
     let mut normalized_budget = ResourceBudget::new(
@@ -442,7 +443,7 @@ fn test_decode_with_session_accounts_normalized_fenced_value() {
 /// budget admission failures.
 #[test]
 fn test_decode_with_session_preserves_non_budget_error_classification() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .max_nodes(8)
         .max_payload_bytes(16)
@@ -452,16 +453,25 @@ fn test_decode_with_session_preserves_non_budget_error_classification() {
     let syntax_error = decoder
         .decode_with_session::<Value>(r#"{"value":]"#, &mut syntax_session)
         .expect_err("malformed normalized JSON must remain a lexical error");
-    assert_eq!(syntax_error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
-    assert_eq!(syntax_error.stage(), LenientJsonDecodeStage::Parse);
+    assert_eq!(
+        syntax_error.kind(),
+        NormalizingJsonDecodeErrorKind::InvalidJson
+    );
+    assert_eq!(syntax_error.stage(), NormalizingJsonDecodeStage::Parse);
     assert!(syntax_error.measured_budget_error().is_none());
 
     let mut target_session = value_budget_session(limits);
     let target_error = decoder
         .decode_with_session::<Message>(r#"{"text":7}"#, &mut target_session)
         .expect_err("valid JSON with the wrong target type must remain a deserialize error");
-    assert_eq!(target_error.kind(), LenientJsonDecodeErrorKind::Deserialize);
-    assert_eq!(target_error.stage(), LenientJsonDecodeStage::Deserialize);
+    assert_eq!(
+        target_error.kind(),
+        NormalizingJsonDecodeErrorKind::Deserialize
+    );
+    assert_eq!(
+        target_error.stage(),
+        NormalizingJsonDecodeStage::Deserialize
+    );
     assert!(target_error.measured_budget_error().is_none());
     assert_eq!(target_session.value_budget().used_nodes(), Some(0),);
 }
@@ -480,12 +490,12 @@ fn test_decode_with_session_syntax_failure_retains_input_and_reuses_value_budget
             .max_nodes(1)
             .build(),
     );
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
 
     let error = decoder
         .decode_with_session::<Value>(rejected, &mut session)
         .expect_err("malformed normalized JSON must be rejected");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
     assert_eq!(
         session
             .input_budget()
@@ -538,10 +548,10 @@ fn test_decode_with_session_budget_rejection_rolls_back_value() {
             .build(),
     );
 
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_with_session::<Value>(input, &mut session)
         .expect_err("two nodes must exceed the one-node value budget");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Budget);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Budget);
     assert_eq!(
         session
             .input_budget()
@@ -572,17 +582,17 @@ fn test_decode_with_session_preserves_serde_syntax_position() {
             .max_nodes(2)
             .build(),
     );
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
-            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
+            .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
     );
     let error = decoder
         .decode_with_session::<Value>("{", &mut session)
         .expect_err("an incomplete object must return an invalid JSON error");
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Parse);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Parse);
     assert_eq!(error.normalized_line(), Some(1));
     assert_eq!(error.normalized_column(), Some(1));
     let source = std::error::Error::source(&error)
@@ -605,11 +615,14 @@ fn test_decode_with_session_rejects_unpaired_surrogate_without_panicking() {
         .build();
 
     let mut string_session = value_budget_session(limits);
-    let string_error = LenientJsonDecoder::default()
+    let string_error = NormalizingJsonDecoder::default()
         .decode_with_session::<String>(INPUT, &mut string_session)
         .expect_err("an unpaired surrogate must return an invalid JSON error");
-    assert_eq!(string_error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
-    assert_eq!(string_error.stage(), LenientJsonDecodeStage::Parse);
+    assert_eq!(
+        string_error.kind(),
+        NormalizingJsonDecodeErrorKind::InvalidJson
+    );
+    assert_eq!(string_error.stage(), NormalizingJsonDecodeStage::Parse);
     assert_eq!(string_error.raw_input_bytes(), INPUT.len());
     assert_eq!(string_error.normalized_input_bytes(), Some(INPUT.len()));
     assert_eq!(string_error.normalized_line(), Some(1));
@@ -618,9 +631,9 @@ fn test_decode_with_session_rejects_unpaired_surrogate_without_panicking() {
     assert!(std::error::Error::source(&string_error).is_none());
     assert_eq!(string_session.value_budget().used_nodes(), Some(0),);
 
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
-            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
+            .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
     );
     let mut raw_value_session = value_budget_session(limits);
@@ -629,13 +642,10 @@ fn test_decode_with_session_rejects_unpaired_surrogate_without_panicking() {
         .expect_err("RawValue must not bypass lexical surrogate rejection");
     assert_eq!(
         raw_value_error.kind(),
-        LenientJsonDecodeErrorKind::InvalidJson
+        NormalizingJsonDecodeErrorKind::InvalidJson
     );
-    assert_eq!(raw_value_error.stage(), LenientJsonDecodeStage::Parse);
-    assert_eq!(
-        raw_value_error.privacy_policy(),
-        ErrorPrivacyPolicy::Detailed
-    );
+    assert_eq!(raw_value_error.stage(), NormalizingJsonDecodeStage::Parse);
+    assert_eq!(raw_value_error.privacy_policy(), DiagnosticPolicy::Detailed);
     assert!(raw_value_error.measured_budget_error().is_none());
     let source = std::error::Error::source(&raw_value_error)
         .expect("detailed lexical errors must retain their stable source");
@@ -650,7 +660,8 @@ fn test_decode_with_session_rejects_unpaired_surrogate_without_panicking() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_strict_decoder_preserves_serde_json_grammar() {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecodeOptions::strict());
+    let decoder =
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict());
 
     let canonical: Value = decoder
         .decode(" \n{\"ok\":true}\t")
@@ -665,8 +676,8 @@ fn test_strict_decoder_preserves_serde_json_grammar() {
         let error = decoder
             .decode_value(input)
             .expect_err("strict mode must reject lenient-only input forms");
-        assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
-        assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted,);
+        assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+        assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted,);
     }
 }
 
@@ -677,7 +688,7 @@ fn test_strict_decoder_preserves_serde_json_grammar() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_parses_normalized_json() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let value = decoder
         .decode_value("```json\n{\"name\":\"alice\",\"age\":30}\n```")
         .expect("default decoder should parse JSON wrapped in a Markdown code fence");
@@ -691,7 +702,7 @@ fn test_decode_value_parses_normalized_json() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_typed_value_succeeds() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let person: User = decoder
         .decode("{\"name\":\"alice\",\"age\":30}")
         .expect("valid JSON object should deserialize into User");
@@ -711,7 +722,7 @@ fn test_decode_typed_value_succeeds() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_decodes_valid_utf8_without_changing_semantics() {
-    let value: Value = LenientJsonDecoder::default()
+    let value: Value = NormalizingJsonDecoder::default()
         .decode_slice(b"{\"ok\":true}")
         .expect("valid UTF-8 JSON bytes must decode");
     assert_eq!(value, json!({"ok": true}));
@@ -724,12 +735,13 @@ fn test_decode_slice_decodes_valid_utf8_without_changing_semantics() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_rejects_invalid_utf8_for_byte_target() {
-    let error = LenientJsonDecoder::new(LenientJsonDecodeOptions::strict())
-        .decode_slice::<ByteBuffer>(b"\"\xff\"")
-        .expect_err(
-            "invalid UTF-8 must be rejected before byte deserialization",
-        );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidUtf8);
+    let error =
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict())
+            .decode_slice::<ByteBuffer>(b"\"\xff\"")
+            .expect_err(
+                "invalid UTF-8 must be rejected before byte deserialization",
+            );
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidUtf8);
 }
 
 /// Verifies that decode slice invokes target deserializer once on failure.
@@ -740,10 +752,11 @@ fn test_decode_slice_rejects_invalid_utf8_for_byte_target() {
 #[test]
 fn test_decode_slice_invokes_target_deserializer_once_on_failure() {
     reset_deserialize_calls();
-    let error = LenientJsonDecoder::new(LenientJsonDecodeOptions::strict())
-        .decode_slice::<CountedFailure>(br#""value""#)
-        .expect_err("the counted target intentionally rejects valid JSON");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Deserialize);
+    let error =
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict())
+            .decode_slice::<CountedFailure>(br#""value""#)
+            .expect_err("the counted target intentionally rejects valid JSON");
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
     assert_eq!(deserialize_calls(), 1);
 }
 
@@ -754,10 +767,10 @@ fn test_decode_slice_invokes_target_deserializer_once_on_failure() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_accepts_non_rewrite_strict_overrides() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(64))
-            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+            .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
     );
     let value: Value = decoder
@@ -773,16 +786,16 @@ fn test_decode_slice_accepts_non_rewrite_strict_overrides() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_preserves_deserialize_error_mapping() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
-            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
+            .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
     );
     let error = decoder.decode_slice::<Message>(b"{\"text\":7}").expect_err(
         "valid JSON with the wrong field type must fail deserialization",
     );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Deserialize);
-    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Detailed);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Detailed);
     assert!(std::error::Error::source(&error).is_some());
 }
 
@@ -793,11 +806,12 @@ fn test_decode_slice_preserves_deserialize_error_mapping() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_preserves_invalid_json_mapping() {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecodeOptions::strict());
+    let decoder =
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict());
     let error = decoder
         .decode_slice::<Message>(b"{\"text\":\"broken\"")
         .expect_err("malformed typed JSON must remain an invalid JSON error");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode slice checks raw size before utf8.
@@ -807,15 +821,15 @@ fn test_decode_slice_preserves_invalid_json_mapping() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_checks_raw_size_before_utf8() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(1))
             .build(),
     );
     let error = decoder
         .decode_slice::<Value>(&[0xff, 0xfe])
         .expect_err("raw size must be checked before UTF-8");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InputTooLarge);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
 }
 
 /// Verifies that decode slice accepts input at exact raw size limit.
@@ -826,8 +840,8 @@ fn test_decode_slice_checks_raw_size_before_utf8() {
 #[test]
 fn test_decode_slice_accepts_input_at_exact_raw_size_limit() {
     let input = b"null";
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(input.len()))
             .build(),
     );
@@ -846,11 +860,11 @@ fn test_decode_slice_accepts_input_at_exact_raw_size_limit() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_classifies_invalid_utf8() {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_slice::<Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail before normalization");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidUtf8);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::DecodeText);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidUtf8);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::DecodeText);
     assert_eq!(error.raw_input_bytes(), 1);
     assert_eq!(error.normalized_input_bytes(), None);
 }
@@ -862,11 +876,11 @@ fn test_decode_slice_classifies_invalid_utf8() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_reports_empty_input_from_normalizer() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode::<User>("")
         .expect_err("empty input should fail during normalization");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
 }
 
 /// Verifies that decode typed value applies normalization pipeline.
@@ -876,7 +890,7 @@ fn test_decode_reports_empty_input_from_normalizer() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_typed_value_applies_normalization_pipeline() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let message: Message = decoder
         .decode("```json\n{\"text\":\"a\nb\"}\n```")
         .expect("typed decode should still normalize fenced JSON and repair string control chars");
@@ -895,14 +909,17 @@ fn test_decode_typed_value_applies_normalization_pipeline() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_requires_object_top_level() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_object::<User>("[{\"name\":\"alice\",\"age\":30}]")
         .expect_err("top-level array should be rejected by decode_object");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::UnexpectedTopLevel);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::TopLevelCheck);
-    assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Object));
-    assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Array));
+    assert_eq!(
+        error.kind(),
+        NormalizingJsonDecodeErrorKind::UnexpectedTopLevel
+    );
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::TopLevelCheck);
+    assert_eq!(error.expected_top_level(), Some(JsonRootKind::Object));
+    assert_eq!(error.actual_top_level(), Some(JsonRootKind::Array));
 }
 
 /// Verifies that decode object reports empty input from normalizer.
@@ -912,11 +929,11 @@ fn test_decode_object_requires_object_top_level() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_reports_empty_input_from_normalizer() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_object::<User>("")
         .expect_err("empty input should fail during normalization");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
 }
 
 /// Verifies that decode object reports invalid json for malformed array.
@@ -926,11 +943,11 @@ fn test_decode_object_reports_empty_input_from_normalizer() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_reports_invalid_json_for_malformed_array() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder.decode_object::<User>("[").expect_err(
         "malformed JSON should be reported before top-level checking",
     );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode object reports invalid json for malformed scalar.
@@ -940,11 +957,11 @@ fn test_decode_object_reports_invalid_json_for_malformed_array() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_reports_invalid_json_for_malformed_scalar() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder.decode_object::<User>("\"unterminated").expect_err(
         "malformed scalar JSON should not be treated as a top-level mismatch",
     );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode array requires array top level.
@@ -954,13 +971,16 @@ fn test_decode_object_reports_invalid_json_for_malformed_scalar() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_requires_array_top_level() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_array::<User>("{\"name\":\"alice\",\"age\":30}")
         .expect_err("top-level object should be rejected by decode_array");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::UnexpectedTopLevel);
-    assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Array));
-    assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Object));
+    assert_eq!(
+        error.kind(),
+        NormalizingJsonDecodeErrorKind::UnexpectedTopLevel
+    );
+    assert_eq!(error.expected_top_level(), Some(JsonRootKind::Array));
+    assert_eq!(error.actual_top_level(), Some(JsonRootKind::Object));
 }
 
 /// Verifies that decode array reports empty input from normalizer.
@@ -970,11 +990,11 @@ fn test_decode_array_requires_array_top_level() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_reports_empty_input_from_normalizer() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_array::<User>("")
         .expect_err("empty input should fail during normalization");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
 }
 
 /// Verifies that decode array reports invalid json for malformed object.
@@ -984,11 +1004,11 @@ fn test_decode_array_reports_empty_input_from_normalizer() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_reports_invalid_json_for_malformed_object() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder.decode_array::<User>("{").expect_err(
         "malformed JSON should be reported before top-level checking",
     );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode object rejects scalar top level.
@@ -998,13 +1018,16 @@ fn test_decode_array_reports_invalid_json_for_malformed_object() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_rejects_scalar_top_level() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_object::<User>("42")
         .expect_err("top-level scalar should be rejected by decode_object");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::UnexpectedTopLevel);
-    assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Object));
-    assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Other));
+    assert_eq!(
+        error.kind(),
+        NormalizingJsonDecodeErrorKind::UnexpectedTopLevel
+    );
+    assert_eq!(error.expected_top_level(), Some(JsonRootKind::Object));
+    assert_eq!(error.actual_top_level(), Some(JsonRootKind::Other));
 }
 
 /// Verifies that decode array rejects scalar top level.
@@ -1014,13 +1037,16 @@ fn test_decode_object_rejects_scalar_top_level() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_rejects_scalar_top_level() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_array::<User>("42")
         .expect_err("top-level scalar should be rejected by decode_array");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::UnexpectedTopLevel);
-    assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Array));
-    assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Other));
+    assert_eq!(
+        error.kind(),
+        NormalizingJsonDecodeErrorKind::UnexpectedTopLevel
+    );
+    assert_eq!(error.expected_top_level(), Some(JsonRootKind::Array));
+    assert_eq!(error.actual_top_level(), Some(JsonRootKind::Other));
 }
 
 /// Verifies that decode array succeeds.
@@ -1030,7 +1056,7 @@ fn test_decode_array_rejects_scalar_top_level() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_succeeds() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let people = decoder
         .decode_array::<User>("[{\"name\":\"alice\",\"age\":30}]")
         .expect("top-level array should deserialize into Vec<User>");
@@ -1050,13 +1076,13 @@ fn test_decode_array_succeeds() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_reports_deserialize_error_after_top_level_check() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_object::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
         .expect_err(
             "valid object with wrong field type should return Deserialize",
         );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
 }
 
 /// Verifies that decode array reports deserialize error after top level check.
@@ -1066,13 +1092,13 @@ fn test_decode_object_reports_deserialize_error_after_top_level_check() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_reports_deserialize_error_after_top_level_check() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_array::<User>("[{\"name\":\"alice\",\"age\":\"old\"}]")
         .expect_err(
             "valid array with wrong element type should return Deserialize",
         );
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
 }
 
 /// Verifies that decode allows generic scalar targets.
@@ -1082,7 +1108,7 @@ fn test_decode_array_reports_deserialize_error_after_top_level_check() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_allows_generic_scalar_targets() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let value: i64 = decoder
         .decode("42")
         .expect("scalar JSON should deserialize into i64");
@@ -1096,11 +1122,11 @@ fn test_decode_allows_generic_scalar_targets() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_reports_invalid_json() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode::<User>("{")
         .expect_err("broken JSON should return InvalidJson");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode reports deserialize error.
@@ -1110,11 +1136,11 @@ fn test_decode_reports_invalid_json() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_reports_deserialize_error() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
         .expect_err("JSON with a wrong field type should return Deserialize");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
 }
 
 /// Verifies that decode reports invalid json when data error precedes syntax
@@ -1125,14 +1151,14 @@ fn test_decode_reports_deserialize_error() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_reports_invalid_json_when_data_error_precedes_syntax_error() {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode::<SingleValue>("{\"value\":\"wrong\",")
         .expect_err(
             "incomplete JSON must take precedence over a field type error",
         );
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Parse);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Parse);
 }
 
 /// Verifies that decode object reports invalid json when data error precedes
@@ -1144,12 +1170,12 @@ fn test_decode_reports_invalid_json_when_data_error_precedes_syntax_error() {
 #[test]
 fn test_decode_object_reports_invalid_json_when_data_error_precedes_syntax_error()
  {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_object::<SingleValue>("{\"value\":\"wrong\",")
         .expect_err("incomplete object JSON must take precedence over a field type error");
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Parse);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Parse);
 }
 
 /// Verifies that decode array reports invalid json when data error precedes
@@ -1161,12 +1187,12 @@ fn test_decode_object_reports_invalid_json_when_data_error_precedes_syntax_error
 #[test]
 fn test_decode_array_reports_invalid_json_when_data_error_precedes_syntax_error()
  {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_array::<u8>("[\"wrong\",")
         .expect_err("incomplete array JSON must take precedence over an element type error");
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Parse);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Parse);
 }
 
 /// Verifies that decode object reports invalid json for non token start.
@@ -1176,8 +1202,8 @@ fn test_decode_array_reports_invalid_json_when_data_error_precedes_syntax_error(
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_reports_invalid_json_for_non_token_start() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .trim_whitespace(false)
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .build(),
@@ -1185,7 +1211,7 @@ fn test_decode_object_reports_invalid_json_for_non_token_start() {
     let error = decoder
         .decode_object::<User>(" \n\t ")
         .expect_err("invalid syntax should still be mapped as InvalidJson");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decoder reuses configuration between calls.
@@ -1195,8 +1221,8 @@ fn test_decode_object_reports_invalid_json_for_non_token_start() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decoder_reuses_configuration_between_calls() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .build(),
     );
@@ -1204,12 +1230,12 @@ fn test_decoder_reuses_configuration_between_calls() {
     let first = decoder
         .decode_value("```json\n{\"a\":1}\n```")
         .expect_err("disabled fence stripping must reject the first input");
-    assert_eq!(first.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(first.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 
     let second = decoder
         .decode_value("```json\n{\"a\":2}\n```")
         .expect_err("disabled fence stripping must reject the second input");
-    assert_eq!(second.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(second.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decoders with different configs do not share state.
@@ -1219,19 +1245,19 @@ fn test_decoder_reuses_configuration_between_calls() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decoders_with_different_configs_do_not_share_state() {
-    let strict_decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let strict_decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .build(),
     );
-    let permissive_decoder = LenientJsonDecoder::default();
+    let permissive_decoder = NormalizingJsonDecoder::default();
 
     assert_eq!(
         strict_decoder
             .decode_value("```json\n{\"a\":1}\n```")
             .expect_err("code fence should stay when stripping is disabled")
             .kind(),
-        LenientJsonDecodeErrorKind::InvalidJson
+        NormalizingJsonDecodeErrorKind::InvalidJson
     );
     let value = permissive_decoder
         .decode_value("```json\n{\"a\":1}\n```")
@@ -1246,15 +1272,15 @@ fn test_decoders_with_different_configs_do_not_share_state() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decoder_keeps_trim_whitespace_setting_for_empty_text() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
             .trim_whitespace(false)
             .build(),
     );
     let error = decoder
         .decode_value(" \n\t")
         .expect_err("trim disabled should leave whitespace for parser");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode object preserves u128 without value round trip.
@@ -1264,7 +1290,7 @@ fn test_decoder_keeps_trim_whitespace_setting_for_empty_text() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_preserves_u128_without_value_round_trip() {
-    let decoded: ExactInteger = LenientJsonDecoder::default()
+    let decoded: ExactInteger = NormalizingJsonDecoder::default()
         .decode_object(r#"{"value":340282366920938463463374607431768211455}"#)
         .expect("direct object decoding should preserve u128::MAX");
 
@@ -1278,7 +1304,7 @@ fn test_decode_object_preserves_u128_without_value_round_trip() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_preserves_u128_without_value_round_trip() {
-    let decoded: Vec<ExactInteger> = LenientJsonDecoder::default()
+    let decoded: Vec<ExactInteger> = NormalizingJsonDecoder::default()
         .decode_array(r#"[{"value":340282366920938463463374607431768211455}]"#)
         .expect("direct array decoding should preserve u128::MAX");
 
@@ -1292,9 +1318,9 @@ fn test_decode_array_preserves_u128_without_value_round_trip() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_preserves_duplicate_field_rejection() {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_object::<SingleValue>(r#"{"value":1,"value":2}"#)
         .expect_err("direct object decoding should reject duplicate fields");
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
 }

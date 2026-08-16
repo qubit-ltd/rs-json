@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use qubit_json::tree::JsonTreeBudgetRejection;
+use qubit_json::value::traverse::JsonTreeBudgetRejection;
 
 /// Verifies the fail-closed default and explicit continuation choice.
 #[test]

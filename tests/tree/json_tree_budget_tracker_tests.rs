@@ -7,7 +7,7 @@
 // =============================================================================
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::tree::JsonTreeBudgetTracker;
+use qubit_json::value::traverse::JsonTreeBudgetTracker;
 use serde_json::json;
 
 /// Verifies that a tracker accounts a materialized JSON tree.

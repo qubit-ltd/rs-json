@@ -5,19 +5,20 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for the public [`qubit_json::lenient::LenientJsonDecodeError`] type.
+//! Tests for the public [`qubit_json::decode::NormalizingJsonDecodeError`]
+//! type.
 
 use qubit_budget::ResourceLimit;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::lenient::ErrorPrivacyPolicy;
-use qubit_json::lenient::JsonTopLevelKind;
-use qubit_json::lenient::LenientJsonDecodeErrorKind;
-use qubit_json::lenient::LenientJsonDecodeOptions;
-use qubit_json::lenient::LenientJsonDecodeStage;
-use qubit_json::lenient::LenientJsonDecoder;
+use qubit_json::decode::DiagnosticPolicy;
+use qubit_json::decode::JsonRootKind;
+use qubit_json::decode::NormalizingJsonDecodeErrorKind;
+use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodeStage;
+use qubit_json::decode::NormalizingJsonDecoder;
 use serde_json::Value;
 
 use crate::fixtures::PublicChoice;
@@ -42,12 +43,12 @@ fn test_budget_error_exposes_measured_rejection_details() {
         .build();
     let mut session = JsonDecodeSession::owned(limits);
 
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_with_session::<Value>(r#"{"k":"v"}"#, &mut session)
         .expect_err("string budget must reject the normalized value");
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Budget);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Admission);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Admission);
     assert_eq!(
         *error
             .measured_budget_error()
@@ -65,11 +66,11 @@ fn test_budget_error_exposes_measured_rejection_details() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_display_for_empty_input_uses_message() {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_value("")
         .expect_err("empty input should return a normalization error");
     assert_eq!(error.to_string(), "JSON input is empty after normalization");
-    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
+    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
     assert_eq!(error.raw_input_bytes(), 0);
     assert_eq!(error.normalized_input_bytes(), None);
     assert_eq!(error.utf8_valid_up_to(), None);
@@ -84,14 +85,14 @@ fn test_error_display_for_empty_input_uses_message() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_exposes_top_level_mismatch_context() {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_object::<Value>("[]")
         .expect_err("top-level array should fail an object contract");
-    assert_eq!(error.expected_top_level(), Some(JsonTopLevelKind::Object));
-    assert_eq!(error.actual_top_level(), Some(JsonTopLevelKind::Array));
+    assert_eq!(error.expected_top_level(), Some(JsonRootKind::Object));
+    assert_eq!(error.actual_top_level(), Some(JsonRootKind::Array));
     assert_eq!(error.raw_input_bytes(), 2);
     assert_eq!(error.normalized_input_bytes(), Some(2));
-    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
+    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
     assert_eq!(
         error.to_string(),
         "Unexpected JSON top-level type: expected object, got array"
@@ -107,14 +108,14 @@ fn test_error_exposes_top_level_mismatch_context() {
 #[test]
 fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_location()
  {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_value("  {\n")
         .expect_err(
             "incomplete JSON should fail after whitespace normalization",
         );
 
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InvalidJson);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Parse);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Parse);
     assert_eq!(error.raw_input_bytes(), 4);
     assert_eq!(error.normalized_input_bytes(), Some(1));
     assert_eq!(error.normalized_line(), Some(1));
@@ -133,9 +134,9 @@ fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_locatio
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_source_for_invalid_json_preserves_serde_error() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
-            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
+            .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
     );
     let error = decoder
@@ -155,11 +156,11 @@ fn test_error_source_for_invalid_json_preserves_serde_error() {
 fn test_default_error_privacy_redacts_input_derived_serde_details() {
     const SECRET: &str = "TOP_SECRET_VALUE";
 
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode::<PublicChoice>(&format!("\"{SECRET}\""))
         .expect_err("an unknown enum variant should fail deserialization");
 
-    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
+    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
     assert!(!error.to_string().contains(SECRET));
     assert!(!format!("{error:?}").contains(SECRET));
     assert!(std::error::Error::source(&error).is_none());
@@ -176,16 +177,16 @@ fn test_default_error_privacy_redacts_input_derived_serde_details() {
 fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
     const SECRET: &str = "TOP_SECRET_VALUE";
 
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
-            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
+            .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
     );
     let error = decoder
         .decode::<PublicChoice>(&format!("\"{SECRET}\""))
         .expect_err("an unknown enum variant should fail deserialization");
 
-    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Detailed);
+    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Detailed);
     assert!(error.to_string().contains(SECRET));
     assert!(format!("{error:?}").contains(SECRET));
     let source = std::error::Error::source(&error)
@@ -200,11 +201,11 @@ fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_default_invalid_json_error_does_not_expose_serde_source() {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_value("{")
         .expect_err("invalid JSON should fail parsing");
 
-    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
+    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
     assert!(std::error::Error::source(&error).is_none());
 }
 
@@ -215,10 +216,10 @@ fn test_default_invalid_json_error_does_not_expose_serde_source() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_invalid_utf8_redacted_error_does_not_expose_source() {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode_slice::<Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail");
-    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
+    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
     assert_eq!(error.utf8_valid_up_to(), Some(0));
     assert_eq!(error.utf8_error_len(), Some(1));
     assert!(std::error::Error::source(&error).is_none());
@@ -232,13 +233,13 @@ fn test_invalid_utf8_redacted_error_does_not_expose_source() {
 /// Panics when the decoder omits the valid prefix or invalid sequence length.
 #[test]
 fn test_invalid_utf8_exposes_safe_position_diagnostics() {
-    let definite = LenientJsonDecoder::default()
+    let definite = NormalizingJsonDecoder::default()
         .decode_slice::<Value>(&[b'{', 0xff])
         .expect_err("invalid UTF-8 must fail");
     assert_eq!(definite.utf8_valid_up_to(), Some(1));
     assert_eq!(definite.utf8_error_len(), Some(1));
 
-    let incomplete = LenientJsonDecoder::default()
+    let incomplete = NormalizingJsonDecoder::default()
         .decode_slice::<Value>(&[0xe2, 0x82])
         .expect_err("incomplete UTF-8 must fail");
     assert_eq!(incomplete.utf8_valid_up_to(), Some(0));
@@ -252,9 +253,9 @@ fn test_invalid_utf8_exposes_safe_position_diagnostics() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_invalid_utf8_detailed_error_retains_utf8_source() {
-    let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
-            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+    let decoder = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
+            .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
     );
     let error = decoder
@@ -274,19 +275,19 @@ fn test_invalid_utf8_detailed_error_retains_utf8_source() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_normalization_errors_retain_the_configured_privacy_policy() {
-    let redacted = LenientJsonDecoder::default()
+    let redacted = NormalizingJsonDecoder::default()
         .decode_value("")
         .expect_err("empty input should fail normalization");
-    let detailed = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
-            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+    let detailed = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
+            .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
     )
     .decode_value("")
     .expect_err("empty input should fail normalization");
 
-    assert_eq!(redacted.privacy_policy(), ErrorPrivacyPolicy::Redacted);
-    assert_eq!(detailed.privacy_policy(), ErrorPrivacyPolicy::Detailed);
+    assert_eq!(redacted.privacy_policy(), DiagnosticPolicy::Redacted);
+    assert_eq!(detailed.privacy_policy(), DiagnosticPolicy::Detailed);
 }
 
 /// Verifies that error display for deserialize error uses context message.
@@ -296,11 +297,11 @@ fn test_normalization_errors_retain_the_configured_privacy_policy() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_display_for_deserialize_error_uses_context_message() {
-    let error = LenientJsonDecoder::default()
+    let error = NormalizingJsonDecoder::default()
         .decode::<u64>("\"text\"")
         .expect_err("string JSON should not deserialize into u64");
-    assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Deserialize);
-    assert_eq!(error.stage(), LenientJsonDecodeStage::Deserialize);
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Deserialize);
     assert_eq!(error.raw_input_bytes(), 6);
     assert_eq!(error.normalized_input_bytes(), Some(6));
     assert_eq!(
@@ -317,7 +318,7 @@ fn test_error_display_for_deserialize_error_uses_context_message() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_partial_eq_compares_all_stable_fields() {
-    let decoder = LenientJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
     let first = decoder
         .decode_value("{\n")
         .expect_err("invalid JSON should return parse error");
@@ -331,9 +332,9 @@ fn test_error_partial_eq_compares_all_stable_fields() {
         .expect_err("empty input should return normalization error");
     assert_ne!(first, third);
 
-    let detailed = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::builder()
-            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+    let detailed = NormalizingJsonDecoder::new(
+        NormalizingJsonDecodeOptions::builder()
+            .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
     )
     .decode_value("")

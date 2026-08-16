@@ -8,7 +8,7 @@
 //! Tests bounded JSON output error precedence.
 
 use qubit_budget::json::JsonResource;
-use qubit_json::text::JsonEncodeError;
+use qubit_json::encode::JsonEncodeError;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error as _;

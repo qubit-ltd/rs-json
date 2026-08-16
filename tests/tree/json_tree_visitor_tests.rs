@@ -5,9 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use qubit_json::tree::JsonTreeContext;
-use qubit_json::tree::JsonTreeLocation;
-use qubit_json::tree::JsonTreeVisitor;
+use qubit_json::value::traverse::JsonTreeContext;
+use qubit_json::value::traverse::JsonTreeLocation;
+use qubit_json::value::traverse::JsonTreeVisitor;
 use serde_json::Value;
 
 struct Visitor;

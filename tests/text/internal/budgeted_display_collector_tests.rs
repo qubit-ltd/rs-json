@@ -10,7 +10,7 @@
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::text::JsonTextEncoder;
+use qubit_json::encode::JsonEncoder;
 use serde::Serialize;
 use serde::Serializer;
 
@@ -36,7 +36,7 @@ fn test_budgeted_display_collector_rejects_excess_text() {
     );
 
     assert!(
-        JsonTextEncoder::new(&mut session)
+        JsonEncoder::new(&mut session)
             .to_vec(&DisplayValue)
             .is_err()
     );

@@ -21,10 +21,10 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::lenient::LenientJsonDecodeOptions;
-use qubit_json::lenient::LenientJsonDecoder;
-use qubit_json::text::JsonTextDecoder;
-use qubit_json::text::JsonTextEncoder;
+use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecoder;
+use qubit_json::encode::JsonEncoder;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -95,7 +95,8 @@ fn benchmark_document(target_bytes: usize) -> Vec<u8> {
 ///
 /// Panics when a generated document cannot be decoded by a benchmark path.
 fn decode(criterion: &mut Criterion) {
-    let decoder = LenientJsonDecoder::new(LenientJsonDecodeOptions::strict());
+    let decoder =
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict());
     let mut group = criterion.benchmark_group("budgeted-json-decode");
 
     for target_bytes in DOCUMENT_SIZES {
@@ -130,7 +131,7 @@ fn decode(criterion: &mut Criterion) {
                             .build(),
                     );
                     black_box(
-                        JsonTextDecoder::new(&mut session)
+                        JsonDecoder::new(&mut session)
                             .decode::<Fixture>(black_box(input))
                             .expect("fixture must decode"),
                     )
@@ -149,7 +150,7 @@ fn decode(criterion: &mut Criterion) {
                     let mut session =
                         JsonDecodeSession::borrowing_value(&mut value);
                     black_box(
-                        JsonTextDecoder::new(&mut session)
+                        JsonDecoder::new(&mut session)
                             .decode::<Fixture>(black_box(input))
                             .expect("fixture must decode"),
                     )
@@ -165,7 +166,7 @@ fn decode(criterion: &mut Criterion) {
             |bencher, input| {
                 bencher.iter(|| {
                     black_box(
-                        JsonTextDecoder::new(&mut reused_session)
+                        JsonDecoder::new(&mut reused_session)
                             .decode::<Fixture>(black_box(input))
                             .expect("fixture must decode"),
                     )
@@ -250,7 +251,7 @@ fn encode(criterion: &mut Criterion) {
                             .build(),
                     );
                     black_box(
-                        JsonTextEncoder::new(&mut session)
+                        JsonEncoder::new(&mut session)
                             .to_vec(black_box(fixture))
                             .expect("fixture must encode"),
                     )
@@ -269,7 +270,7 @@ fn encode(criterion: &mut Criterion) {
                     let mut session =
                         JsonEncodeSession::borrowing_value(&mut value);
                     black_box(
-                        JsonTextEncoder::new(&mut session)
+                        JsonEncoder::new(&mut session)
                             .to_vec(black_box(fixture))
                             .expect("fixture must encode"),
                     )
@@ -285,7 +286,7 @@ fn encode(criterion: &mut Criterion) {
             |bencher, fixture| {
                 bencher.iter(|| {
                     black_box(
-                        JsonTextEncoder::new(&mut reused_session)
+                        JsonEncoder::new(&mut reused_session)
                             .to_vec(black_box(fixture))
                             .expect("fixture must encode"),
                     )
@@ -302,7 +303,7 @@ fn encode(criterion: &mut Criterion) {
                             .build(),
                     );
                     black_box(
-                        JsonTextEncoder::new(&mut session).write_incremental(
+                        JsonEncoder::new(&mut session).write_incremental(
                             std::io::sink(),
                             black_box(fixture),
                         ),

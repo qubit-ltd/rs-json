@@ -15,7 +15,7 @@ use std::fmt;
 use qubit_budget::BudgetError;
 use qubit_budget::Observation;
 use qubit_budget::json::JsonResource;
-use qubit_json::text::JsonEncodeError;
+use qubit_json::encode::JsonEncodeError;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeMap;

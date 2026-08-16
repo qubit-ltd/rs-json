@@ -14,14 +14,14 @@ mod internal;
 use internal::fuzz_input_limit::is_fuzz_input_within_limit;
 use internal::fuzz_record::FuzzRecord;
 use libfuzzer_sys::fuzz_target;
-use qubit_json::lenient::ErrorPrivacyPolicy;
-use qubit_json::lenient::LenientJsonDecodeError as JsonDecodeError;
-use qubit_json::lenient::LenientJsonDecodeErrorKind;
-use qubit_json::lenient::LenientJsonDecodeOptions;
-use qubit_json::lenient::LenientJsonDecodeStage;
-use qubit_json::lenient::LenientJsonDecoder;
-use qubit_json::lenient::MarkdownFenceClosing;
-use qubit_json::lenient::MarkdownFencePolicy;
+use qubit_json::decode::DiagnosticPolicy;
+use qubit_json::decode::MarkdownFenceClosing;
+use qubit_json::decode::MarkdownFencePolicy;
+use qubit_json::decode::NormalizingJsonDecodeError as JsonDecodeError;
+use qubit_json::decode::NormalizingJsonDecodeErrorKind;
+use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodeStage;
+use qubit_json::decode::NormalizingJsonDecoder;
 
 /// Verifies stable diagnostics shared by every redacted decoder configuration.
 ///
@@ -36,24 +36,24 @@ use qubit_json::lenient::MarkdownFencePolicy;
 /// or source retention.
 fn assert_error_invariants(error: &JsonDecodeError, raw_input_bytes: usize) {
     assert_eq!(error.raw_input_bytes(), raw_input_bytes);
-    assert_eq!(error.privacy_policy(), ErrorPrivacyPolicy::Redacted);
+    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
     assert!(std::error::Error::source(error).is_none());
     let expected_stage = match error.kind() {
-        LenientJsonDecodeErrorKind::InputTooLarge
-        | LenientJsonDecodeErrorKind::EmptyInput => {
-            LenientJsonDecodeStage::Normalize
+        NormalizingJsonDecodeErrorKind::InputTooLarge
+        | NormalizingJsonDecodeErrorKind::EmptyInput => {
+            NormalizingJsonDecodeStage::Normalize
         }
-        LenientJsonDecodeErrorKind::InvalidUtf8 => {
-            LenientJsonDecodeStage::DecodeText
+        NormalizingJsonDecodeErrorKind::InvalidUtf8 => {
+            NormalizingJsonDecodeStage::DecodeText
         }
-        LenientJsonDecodeErrorKind::InvalidJson => {
-            LenientJsonDecodeStage::Parse
+        NormalizingJsonDecodeErrorKind::InvalidJson => {
+            NormalizingJsonDecodeStage::Parse
         }
-        LenientJsonDecodeErrorKind::UnexpectedTopLevel => {
-            LenientJsonDecodeStage::TopLevelCheck
+        NormalizingJsonDecodeErrorKind::UnexpectedTopLevel => {
+            NormalizingJsonDecodeStage::TopLevelCheck
         }
-        LenientJsonDecodeErrorKind::Deserialize => {
-            LenientJsonDecodeStage::Deserialize
+        NormalizingJsonDecodeErrorKind::Deserialize => {
+            NormalizingJsonDecodeStage::Deserialize
         }
         _ => return,
     };
@@ -65,7 +65,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    let default_decoder = LenientJsonDecoder::default();
+    let default_decoder = NormalizingJsonDecoder::default();
     match default_decoder.decode_slice::<serde_json::Value>(data) {
         Ok(value) => {
             let encoded = serde_json::to_vec(&value)
@@ -76,20 +76,20 @@ fuzz_target!(|data: &[u8]| {
         Err(error) => assert_error_invariants(&error, data.len()),
     }
     if !data.is_empty() {
-        let bounded = LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::builder()
+        let bounded = NormalizingJsonDecoder::new(
+            NormalizingJsonDecodeOptions::builder()
                 .max_input_bytes(Some(data.len() - 1))
                 .build(),
         );
         let error = bounded
             .decode_slice::<serde_json::Value>(data)
             .expect_err("an input above its raw byte limit must fail");
-        assert_eq!(error.kind(), LenientJsonDecodeErrorKind::InputTooLarge);
+        assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
         assert_error_invariants(&error, data.len());
     }
 
     let strict_result =
-        LenientJsonDecoder::new(LenientJsonDecodeOptions::strict())
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict())
             .decode_slice::<serde_json::Value>(data);
     let serde_result = serde_json::from_slice::<serde_json::Value>(data);
     match (strict_result, serde_result) {
@@ -109,23 +109,23 @@ fuzz_target!(|data: &[u8]| {
 
     let decoders = [
         default_decoder.clone(),
-        LenientJsonDecoder::new(LenientJsonDecodeOptions::strict()),
-        LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::builder()
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict()),
+        NormalizingJsonDecoder::new(
+            NormalizingJsonDecodeOptions::builder()
                 .markdown_fence_policy(MarkdownFencePolicy::Any {
                     closing: MarkdownFenceClosing::Optional,
                 })
                 .build(),
         ),
-        LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::builder()
+        NormalizingJsonDecoder::new(
+            NormalizingJsonDecodeOptions::builder()
                 .markdown_fence_policy(MarkdownFencePolicy::JsonOnly {
                     closing: MarkdownFenceClosing::Required,
                 })
                 .build(),
         ),
-        LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::builder()
+        NormalizingJsonDecoder::new(
+            NormalizingJsonDecodeOptions::builder()
                 .max_normalized_bytes(Some(input.len()))
                 .build(),
         ),

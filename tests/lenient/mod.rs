@@ -6,7 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-mod error_privacy_policy_tests;
+mod diagnostic_policy_tests;
 mod internal;
 mod json_top_level_kind_tests;
 mod lenient_api_tests;

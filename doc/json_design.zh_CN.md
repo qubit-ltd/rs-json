@@ -21,18 +21,18 @@ src/
 
 ## Lenient
 
-`LenientJsonDecoder` 持有不可变 `LenientJsonDecodeOptions`，只执行显式配置的规则：空白、
+`NormalizingJsonDecoder` 持有不可变 `NormalizingJsonDecodeOptions`，只执行显式配置的规则：空白、
 BOM、Markdown 围栏及字符串内控制字符处理。它不推测缺失的 JSON 标点或结构。
 
 普通 `decode` 等便捷入口默认只执行规范化，并仅强制 raw/normalized 输入字节限制；
 它们不会进行词法 value 准入。若要在这些入口上限制 depth、nodes 或 payload，请在
-`LenientJsonDecodeOptions` 中配置 `value_limits`。`decode_with_session` 先累计原始输入与规范化输入，
+`NormalizingJsonDecodeOptions` 中配置 `value_limits`。`decode_with_session` 先累计原始输入与规范化输入，
 再进行词法准入并将解码后 value 的消耗暂存；完整强类型解码成功才提交 value 消耗。失败后
 输入消耗仍留在 session 中。
 
-`LenientJsonDecodeError` 是该领域唯一公开的解码错误。其 kind、stage、top-level 及安全位置
+`NormalizingJsonDecodeError` 是该领域唯一公开的解码错误。其 kind、stage、top-level 及安全位置
 元数据表达空输入、UTF-8、大小限制、规范化、语法、准入或类型反序列化失败。默认
-`ErrorPrivacyPolicy::Redacted` 不暴露输入派生诊断；`Detailed` 必须由调用方明确选择。
+`DiagnosticPolicy::Redacted` 不暴露输入派生诊断；`Detailed` 必须由调用方明确选择。
 
 ## Strict text
 
@@ -40,20 +40,20 @@ BOM、Markdown 围栏及字符串内控制字符处理。它不推测缺失的 J
 
 ```rust
 use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession};
-use qubit_json::text::JsonTextDecoder;
+use qubit_json::decode::JsonDecoder;
 
 let mut session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::new());
-let value: serde_json::Value = JsonTextDecoder::new(&mut session)
+let value: serde_json::Value = JsonDecoder::new(&mut session)
     .decode(br#"{"ok":true}"#)?;
-# Ok::<(), qubit_json::text::JsonDecodeError<
+# Ok::<(), qubit_json::decode::JsonDecodeError<
 #     qubit_budget::json::JsonResource,
 # >>(())
 ```
 
-`JsonTextDecoder` 借用一个 `JsonDecodeSession`，提供 `decode`、`decode_seed` 和 `validate`。
+`JsonDecoder` 借用一个 `JsonDecodeSession`，提供 `decode`、`decode_seed` 和 `validate`。
 每次尝试先记录输入，再经共享 scanner 准入；值 transaction 只在完整成功时提交。
 
-`JsonTextEncoder` 借用一个 `JsonEncodeSession`，提供 `to_vec`、`write_buffered` 和
+`JsonEncoder` 借用一个 `JsonEncodeSession`，提供 `to_vec`、`write_buffered` 和
 `write_incremental`。buffered 写入在完整字节序列可用后才写入目标；incremental 写入可在失败
 时保留已接受前缀。
 
@@ -82,10 +82,10 @@ visitor 失败。
 
 公开错误恰好按领域划分为五种：
 
-1. `lenient::LenientJsonDecodeError`
-2. `text::JsonDecodeError`
-3. `text::JsonEncodeError`
-4. `text::JsonSyntaxError`
+1. `decode::NormalizingJsonDecodeError`
+2. `decode::JsonDecodeError`
+3. `decode::JsonEncodeError`
+4. `decode::JsonSyntaxError`
 5. `tree::JsonTreeProcessError`
 
 每种错误只暴露其领域能稳定提供的上下文；没有根级错误聚合或兼容别名。

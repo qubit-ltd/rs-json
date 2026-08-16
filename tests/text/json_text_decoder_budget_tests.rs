@@ -14,9 +14,9 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::text::JsonDecodeError;
-use qubit_json::text::JsonSyntaxErrorReason;
-use qubit_json::text::JsonTextDecoder;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::JsonSyntaxErrorReason;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
@@ -39,7 +39,7 @@ fn escaped_and_direct_unicode_charge_equal_decoded_payload() {
     for input in [br#""\u4e2d""#.as_slice(), "\"中\"".as_bytes()] {
         let mut session = JsonDecodeSession::owned(limits);
         assert_eq!(
-            JsonTextDecoder::new(&mut session)
+            JsonDecoder::new(&mut session)
                 .decode::<String>(input)
                 .expect("three decoded UTF-8 bytes must fit"),
             "中"
@@ -65,7 +65,7 @@ fn deeply_nested_input_fails_by_limit_without_stack_overflow() {
     );
 
     assert!(matches!(
-        JsonTextDecoder::new(&mut session)
+        JsonDecoder::new(&mut session)
             .decode::<serde_json::Value>(input.as_bytes()),
         Err(JsonDecodeError::Budget(_))
     ));
@@ -128,7 +128,7 @@ fn json_decode_reports_structured_syntax_locations() {
         let mut session = JsonDecodeSession::owned(
             JsonDecodeLimits::<JsonResource, usize>::builder().build(),
         );
-        let error = JsonTextDecoder::new(&mut session)
+        let error = JsonDecoder::new(&mut session)
             .decode::<serde_json::Value>(input)
             .expect_err("input should be rejected");
         let JsonDecodeError::Syntax(error) = error else {
@@ -147,7 +147,7 @@ fn json_decode_counts_unicode_columns_and_crlf_lines() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<serde_json::Value>(input)
         .expect_err("missing colon should be rejected");
     let JsonDecodeError::Syntax(error) = error else {
@@ -168,11 +168,11 @@ fn typed_decode_failure_consumes_input_before_the_next_attempt() {
     );
 
     assert!(matches!(
-        JsonTextDecoder::new(&mut session).decode::<u8>(br#""x""#),
+        JsonDecoder::new(&mut session).decode::<u8>(br#""x""#),
         Err(JsonDecodeError::Deserialize { .. })
     ));
     assert!(matches!(
-        JsonTextDecoder::new(&mut session).decode::<u8>(b"0"),
+        JsonDecoder::new(&mut session).decode::<u8>(b"0"),
         Err(JsonDecodeError::Budget(_))
     ));
 }
@@ -190,7 +190,7 @@ fn seed_rejection_keeps_input_and_rolls_back_value() {
     );
 
     assert!(
-        JsonTextDecoder::new(&mut session)
+        JsonDecoder::new(&mut session)
             .decode_seed(RejectSeed, input)
             .is_err()
     );
@@ -218,7 +218,7 @@ fn syntax_rejection_rolls_back_value_and_reuses_session() {
     );
 
     assert!(
-        JsonTextDecoder::new(&mut session)
+        JsonDecoder::new(&mut session)
             .decode::<serde_json::Value>(rejected)
             .is_err()
     );
@@ -232,7 +232,7 @@ fn syntax_rejection_rolls_back_value_and_reuses_session() {
     assert_eq!(session.value_budget().used_nodes(), Some(0));
 
     assert_eq!(
-        JsonTextDecoder::new(&mut session)
+        JsonDecoder::new(&mut session)
             .decode::<serde_json::Value>(accepted)
             .expect("a fresh value must fit after syntax rollback"),
         serde_json::Value::Null
@@ -260,7 +260,7 @@ fn budget_rejection_keeps_input_and_rolls_back_value() {
     );
 
     assert!(matches!(
-        JsonTextDecoder::new(&mut session).decode::<serde_json::Value>(input),
+        JsonDecoder::new(&mut session).decode::<serde_json::Value>(input),
         Err(JsonDecodeError::Budget(_))
     ));
     assert_eq!(
@@ -290,7 +290,7 @@ fn decoder_seed_admits_arbitrary_precision_numbers() {
             .build(),
     );
 
-    JsonTextDecoder::new(&mut session)
+    JsonDecoder::new(&mut session)
         .decode_seed(IgnoreSeed, input)
         .expect("the exact arbitrary-precision lexical number limit must fit");
 }
@@ -313,7 +313,7 @@ fn point_limit_fails_before_seed_and_keeps_work_charged() {
             )
             .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode_seed(PanicSeed, br#""ab""#)
         .expect_err("string limit must fail");
     assert!(matches!(error, JsonDecodeError::Budget(_)));
@@ -333,7 +333,7 @@ fn decoder_supports_usize_quantities() {
         .build();
     let mut session = JsonDecodeSession::<JsonResource, usize>::owned(limits);
 
-    let value: serde_json::Value = JsonTextDecoder::new(&mut session)
+    let value: serde_json::Value = JsonDecoder::new(&mut session)
         .decode(br#"[1,"x"]"#)
         .expect("usize JSON budgets must admit a fitting document");
     assert_eq!(session.value_budget().used_nodes(), Some(3));

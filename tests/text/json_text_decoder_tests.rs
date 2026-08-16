@@ -10,7 +10,7 @@
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::text::JsonTextDecoder;
+use qubit_json::decode::JsonDecoder;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
 use serde::de::Error as DeError;
@@ -47,7 +47,7 @@ fn test_json_text_decoder_decodes_typed_value() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let value = JsonTextDecoder::new(&mut session)
+    let value = JsonDecoder::new(&mut session)
         .decode::<bool>(b"true")
         .expect("JSON boolean should decode");
 
@@ -60,7 +60,7 @@ fn test_json_text_decoder_validates_complete_document() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    JsonTextDecoder::new(&mut session)
+    JsonDecoder::new(&mut session)
         .validate(br#"{"ok":[true,null]}"#)
         .expect("a complete JSON document should validate");
 }
@@ -72,7 +72,7 @@ fn test_json_text_decoder_maps_seed_failure() {
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     assert!(
-        JsonTextDecoder::new(&mut session)
+        JsonDecoder::new(&mut session)
             .decode_seed(FailingSeed, b"true")
             .is_err()
     );
@@ -85,7 +85,7 @@ fn test_json_text_decoder_rejects_unconsumed_seed_input() {
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     assert!(
-        JsonTextDecoder::new(&mut session)
+        JsonDecoder::new(&mut session)
             .decode_seed(NonConsumingSeed, b"true")
             .is_err()
     );

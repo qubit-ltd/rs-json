@@ -12,8 +12,8 @@ use std::io::Write;
 
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonEncodeSession;
-use qubit_json::text::JsonEncodeError;
-use qubit_json::text::JsonTextEncoder;
+use qubit_json::encode::JsonEncodeError;
+use qubit_json::encode::JsonEncoder;
 use serde::Serialize;
 
 /// Encodes one value through the stateful encoder API.
@@ -26,7 +26,7 @@ where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
-    JsonTextEncoder::new(session).to_vec(value)
+    JsonEncoder::new(session).to_vec(value)
 }
 
 /// Writes one buffered document through the stateful encoder API.
@@ -41,7 +41,7 @@ where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
-    JsonTextEncoder::new(session).write_buffered(writer, value)
+    JsonEncoder::new(session).write_buffered(writer, value)
 }
 
 /// Streams one document through the stateful encoder API.
@@ -56,5 +56,5 @@ where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
-    JsonTextEncoder::new(session).write_incremental(writer, value)
+    JsonEncoder::new(session).write_incremental(writer, value)
 }

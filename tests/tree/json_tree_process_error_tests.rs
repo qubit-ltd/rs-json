@@ -6,7 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use qubit_budget::json::JsonResource;
-use qubit_json::tree::JsonTreeProcessError;
+use qubit_json::value::traverse::JsonTreeProcessError;
 
 /// Verifies that visitor failures retain their domain payload.
 #[test]
