@@ -28,6 +28,17 @@ pub struct JsonSyntaxError {
 
 impl JsonSyntaxError {
     /// Creates a syntax error from a source position and stable reason.
+    ///
+    /// # Parameters
+    ///
+    /// * `offset` - Zero-based byte offset at which the error was observed.
+    /// * `line` - One-based source line containing the error.
+    /// * `column` - One-based UTF-8 character column containing the error.
+    /// * `reason` - Stable classification of the lexical failure.
+    ///
+    /// # Returns
+    ///
+    /// A syntax error containing the supplied location and classification.
     #[inline]
     pub const fn new(
         offset: usize,
@@ -54,6 +65,10 @@ impl JsonSyntaxError {
     }
 
     /// Returns the zero-based byte offset.
+    ///
+    /// # Returns
+    ///
+    /// The zero-based byte offset at which the error was observed.
     #[must_use]
     #[inline(always)]
     pub const fn offset(&self) -> usize {
@@ -61,6 +76,10 @@ impl JsonSyntaxError {
     }
 
     /// Returns the one-based source line.
+    ///
+    /// # Returns
+    ///
+    /// The one-based source line containing the error.
     #[must_use]
     #[inline(always)]
     pub const fn line(&self) -> usize {
@@ -68,6 +87,10 @@ impl JsonSyntaxError {
     }
 
     /// Returns the one-based UTF-8 character column.
+    ///
+    /// # Returns
+    ///
+    /// The one-based UTF-8 character column containing the error.
     #[must_use]
     #[inline(always)]
     pub const fn column(&self) -> usize {
@@ -75,6 +98,10 @@ impl JsonSyntaxError {
     }
 
     /// Returns the stable syntax classification.
+    ///
+    /// # Returns
+    ///
+    /// The stable lexical failure classification.
     #[inline(always)]
     pub const fn reason(&self) -> JsonSyntaxErrorReason {
         self.reason
