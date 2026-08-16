@@ -76,7 +76,8 @@ fn test_default_uses_default_options() {
     assert_eq!(decoder.options(), &LenientJsonDecodeOptions::default());
 }
 
-/// Verifies convenience decode ignores value limits unless configured in options.
+/// Verifies convenience decode ignores value limits unless configured in
+/// options.
 #[test]
 fn test_decode_without_value_limits_ignores_structure() {
     let decoder = LenientJsonDecoder::new(
@@ -85,9 +86,9 @@ fn test_decode_without_value_limits_ignores_structure() {
             .with_max_normalized_bytes(Some(256)),
     );
 
-    decoder
-        .decode::<Value>("[[[[null]]]]")
-        .expect("without value limits, nested structure is accepted within byte cap");
+    decoder.decode::<Value>("[[[[null]]]]").expect(
+        "without value limits, nested structure is accepted within byte cap",
+    );
 }
 
 /// Verifies convenience decode enforces configured value limits.
@@ -98,9 +99,9 @@ fn test_decode_with_value_limits_rejects_excessive_depth() {
             JsonValueLimits::empty().with_max_depth(1),
         )),
     );
-    let error = decoder
-        .decode::<Value>("[null]")
-        .expect_err("depth limit must reject nested values on convenience decode");
+    let error = decoder.decode::<Value>("[null]").expect_err(
+        "depth limit must reject nested values on convenience decode",
+    );
 
     assert_eq!(error.kind(), LenientJsonDecodeErrorKind::Budget);
     assert_eq!(error.stage(), LenientJsonDecodeStage::Admission);

@@ -75,7 +75,6 @@ where
     ///
     /// Returns [`JsonEncodeError::Budget`] when accounting rejects the value
     /// or output, or a serialization error when Serde rejects `value`.
-    #[must_use]
     pub fn to_vec<T>(
         &mut self,
         value: &T,
@@ -116,7 +115,6 @@ where
     ///
     /// Returns [`JsonEncodeError::Budget`] when accounting rejects the value
     /// or output, or a serialization/writer error on failure.
-    #[must_use]
     pub fn write_buffered<W, T>(
         &mut self,
         writer: W,
@@ -157,7 +155,6 @@ where
     /// Returns [`JsonEncodeError::Budget`] when accounting rejects output,
     /// or a serialization/writer error on failure. Accepted output prefixes
     /// remain written when a later operation fails.
-    #[must_use]
     pub fn write_incremental<W, T>(
         &mut self,
         writer: W,

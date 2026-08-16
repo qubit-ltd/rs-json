@@ -360,14 +360,14 @@ fn test_encode_serde_failure_rolls_back_borrowed_budgets() {
                 .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
         ),
     );
-    let mut session =
-        JsonEncodeSession::borrowing_output(&mut output, &mut value);
+    {
+        let mut session =
+            JsonEncodeSession::borrowing_output(&mut output, &mut value);
+        let error = encode(&FailsAfterPrefix, &mut session)
+            .expect_err("the custom serializer must fail");
 
-    let error = encode(&FailsAfterPrefix, &mut session)
-        .expect_err("the custom serializer must fail");
-
-    assert!(matches!(error, JsonEncodeError::Serialize(_)));
-    drop(session);
+        assert!(matches!(error, JsonEncodeError::Serialize(_)));
+    }
     assert_eq!(output.used(), 0);
     assert_eq!(value.used_nodes(), Some(0));
 }
@@ -383,14 +383,14 @@ fn test_encode_output_budget_rejection_rolls_back_borrowed_budgets() {
                 .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
         ),
     );
-    let mut session =
-        JsonEncodeSession::borrowing_output(&mut output, &mut value);
+    {
+        let mut session =
+            JsonEncodeSession::borrowing_output(&mut output, &mut value);
+        let error = encode(&[1_u8, 2_u8], &mut session)
+            .expect_err("the complete output must exceed the configured limit");
 
-    let error = encode(&[1_u8, 2_u8], &mut session)
-        .expect_err("the complete output must exceed the configured limit");
-
-    assert!(matches!(error, JsonEncodeError::Budget(_)));
-    drop(session);
+        assert!(matches!(error, JsonEncodeError::Budget(_)));
+    }
     assert_eq!(output.used(), 0);
     assert_eq!(value.used_nodes(), Some(0));
 }
@@ -463,19 +463,20 @@ fn test_write_buffered_io_failure_can_leave_partial_output() {
                 .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
         ),
     );
-    let mut session =
-        JsonEncodeSession::borrowing_output(&mut output, &mut value);
     let mut writer = PrefixWriter {
         accepted: Vec::new(),
         maximum: 2,
     };
 
-    let error = write_buffered(&mut writer, &[1_u8, 2_u8], &mut session)
-        .expect_err("the destination writer must fail during final commit");
+    {
+        let mut session =
+            JsonEncodeSession::borrowing_output(&mut output, &mut value);
+        let error = write_buffered(&mut writer, &[1_u8, 2_u8], &mut session)
+            .expect_err("the destination writer must fail during final commit");
 
-    assert!(matches!(error, JsonEncodeError::Write(_)));
-    assert_eq!(writer.accepted, b"[1");
-    drop(session);
+        assert!(matches!(error, JsonEncodeError::Write(_)));
+        assert_eq!(writer.accepted, b"[1");
+    }
     assert_eq!(output.used(), writer.accepted.len());
     assert_eq!(value.used_nodes(), Some(0));
 }
@@ -540,19 +541,20 @@ fn test_write_incremental_preserves_partial_output_on_io_error() {
                 .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
         ),
     );
-    let mut session =
-        JsonEncodeSession::borrowing_output(&mut output, &mut value);
     let mut writer = PrefixWriter {
         accepted: Vec::new(),
         maximum: 2,
     };
 
-    let error = write_incremental(&mut writer, &[1_u8, 2_u8], &mut session)
-        .expect_err("the destination writer must fail incrementally");
+    {
+        let mut session =
+            JsonEncodeSession::borrowing_output(&mut output, &mut value);
+        let error = write_incremental(&mut writer, &[1_u8, 2_u8], &mut session)
+            .expect_err("the destination writer must fail incrementally");
 
-    assert!(matches!(error, JsonEncodeError::Write(_)));
-    assert_eq!(writer.accepted, b"[1");
-    drop(session);
+        assert!(matches!(error, JsonEncodeError::Write(_)));
+        assert_eq!(writer.accepted, b"[1");
+    }
     assert_eq!(output.used(), writer.accepted.len());
     assert_eq!(value.used_nodes(), Some(0));
 }
@@ -601,16 +603,17 @@ fn test_write_incremental_panic_rolls_back_value_budget() {
                 .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
         ),
     );
-    let mut session =
-        JsonEncodeSession::borrowing_output(&mut output, &mut value);
     let mut writer = Vec::new();
 
-    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-        write_incremental(&mut writer, &PanicsAfterPrefix, &mut session)
-    }));
+    {
+        let mut session =
+            JsonEncodeSession::borrowing_output(&mut output, &mut value);
+        let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            write_incremental(&mut writer, &PanicsAfterPrefix, &mut session)
+        }));
 
-    assert!(result.is_err());
-    drop(session);
+        assert!(result.is_err());
+    }
     assert_eq!(output.used(), writer.len());
     assert_eq!(value.used_nodes(), Some(0));
 }

@@ -65,7 +65,8 @@ pub struct LenientJsonDecodeOptions {
     /// Optional JSON value-resource limits enforced by lexical admission.
     ///
     /// When set, convenience decode entry points perform the same lexical
-    /// admission as [`crate::lenient::LenientJsonDecoder::decode_with_session`]
+    /// admission as
+    /// [`crate::lenient::LenientJsonDecoder::decode_with_session`]
     /// before parsing or deserialization. When unset, only raw and normalized
     /// input byte limits apply on those entry points.
     value_limits: Option<JsonValueLimits>,

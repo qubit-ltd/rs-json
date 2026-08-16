@@ -72,7 +72,6 @@ where
     ///
     /// Returns [`JsonTreeProcessError::Budget`] when resource admission fails,
     /// or [`JsonTreeProcessError::Visitor`] when the visitor rejects a node.
-    #[must_use]
     pub fn process<V>(
         &mut self,
         root: &mut Value,
