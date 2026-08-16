@@ -10,7 +10,6 @@
 use std::cell::RefCell;
 use std::io;
 use std::io::Write;
-use std::rc::Rc;
 
 use qubit_budget::ResourceQuantity;
 
@@ -26,7 +25,7 @@ where
     writer: W,
 
     /// Shared output budget and first-failure state.
-    accounting: Rc<RefCell<JsonOutputAccounting<'a, R, Q>>>,
+    accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
 
     /// A copy of the first destination error for typed conversion after
     /// serde_json has erased it.
@@ -40,7 +39,7 @@ where
     /// Creates an incremental writer over shared output accounting.
     pub(in crate::text) const fn new(
         writer: W,
-        accounting: Rc<RefCell<JsonOutputAccounting<'a, R, Q>>>,
+        accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
     ) -> Self {
         Self {
             writer,
@@ -94,18 +93,22 @@ where
                         io::ErrorKind::WriteZero,
                         "JSON output writer accepted no bytes",
                     );
-                    self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
+                    self.io_error =
+                        Some(io::Error::new(error.kind(), error.to_string()));
                     return Err(error);
                 }
                 let mut accounting = self.accounting.borrow_mut();
                 if let Err(error) = accounting.consume(written) {
                     accounting.record_violation(error);
-                    return Err(io::Error::other("JSON output budget exceeded"));
+                    return Err(io::Error::other(
+                        "JSON output budget exceeded",
+                    ));
                 }
                 Ok(written)
             }
             Err(error) => {
-                self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
+                self.io_error =
+                    Some(io::Error::new(error.kind(), error.to_string()));
                 Err(error)
             }
         }
@@ -116,7 +119,8 @@ where
         match self.writer.flush() {
             Ok(()) => Ok(()),
             Err(error) => {
-                self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
+                self.io_error =
+                    Some(io::Error::new(error.kind(), error.to_string()));
                 Err(error)
             }
         }

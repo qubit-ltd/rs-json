@@ -12,7 +12,6 @@
 use std::cell::RefCell;
 use std::io;
 use std::io::Write;
-use std::rc::Rc;
 
 use qubit_budget::ResourceQuantity;
 
@@ -28,7 +27,7 @@ where
     bytes: Vec<u8>,
 
     /// Accounting shared with the online serializer checks.
-    accounting: Rc<RefCell<JsonOutputAccounting<'a, R, Q>>>,
+    accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
 }
 
 impl<'a, R, Q> JsonOutputBuffer<'a, R, Q>
@@ -46,7 +45,7 @@ where
     /// An empty writer with no recorded violation.
     #[inline]
     pub(in crate::text) const fn new(
-        accounting: Rc<RefCell<JsonOutputAccounting<'a, R, Q>>>,
+        accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
     ) -> Self {
         Self {
             bytes: Vec::new(),
