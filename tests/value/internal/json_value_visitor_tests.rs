@@ -7,6 +7,7 @@
 // =============================================================================
 //! Tests JSON value visitor construction through the public seed.
 
+use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::value::JsonValueSeed;
 use serde::de::DeserializeSeed;
@@ -16,7 +17,9 @@ use serde_json::json;
 /// Verifies the value visitor materializes nested scalar JSON values.
 #[test]
 fn test_json_value_visitor_builds_nested_value() {
-    let mut budget = JsonValueLimits::empty().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"{"key":[true,3]}"#);
     let value = JsonValueSeed::new(&mut transaction)

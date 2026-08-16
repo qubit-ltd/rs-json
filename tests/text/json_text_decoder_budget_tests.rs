@@ -26,12 +26,16 @@ use serde::de::IgnoredAny;
 /// Verifies escaped and direct Unicode text consume the same decoded payload.
 #[test]
 fn escaped_and_direct_unicode_charge_equal_decoded_payload() {
-    let limits = JsonDecodeLimits::empty().with_value_limits(
-        JsonValueLimits::empty().with_payload_bytes_limit(ResourceLimit::new(
-            JsonResource::PayloadBytes,
-            3,
-        )),
-    );
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .value_limits(
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .payload_bytes_limit(ResourceLimit::new(
+                    JsonResource::PayloadBytes,
+                    3,
+                ))
+                .build(),
+        )
+        .build();
     for input in [br#""\u4e2d""#.as_slice(), "\"中\"".as_bytes()] {
         let mut session = JsonDecodeSession::owned(limits);
         assert_eq!(
@@ -48,15 +52,17 @@ fn escaped_and_direct_unicode_charge_equal_decoded_payload() {
 #[test]
 fn deeply_nested_input_fails_by_limit_without_stack_overflow() {
     let input = format!("{}0{}", "[".repeat(20_000), "]".repeat(20_000));
-    let mut session =
-        JsonDecodeSession::owned(JsonDecodeLimits::empty().with_value_limits(
-            JsonValueLimits::empty().with_structure_limits(
-                StructureLimits::new().with_depth_limit(ResourceLimit::new(
-                    JsonResource::Depth,
-                    128,
-                )),
-            ),
-        ));
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .value_limits(
+                JsonValueLimits::<JsonResource, usize>::builder()
+                    .structure_limits(StructureLimits::builder().depth_limit(
+                        ResourceLimit::new(JsonResource::Depth, 128),
+                    ))
+                    .build(),
+            )
+            .build(),
+    );
 
     assert!(matches!(
         JsonTextDecoder::new(&mut session)
@@ -119,7 +125,9 @@ fn json_decode_reports_structured_syntax_locations() {
         ),
     ];
     for (input, offset, line, column, reason) in cases {
-        let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+        let mut session = JsonDecodeSession::owned(
+            JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+        );
         let error = JsonTextDecoder::new(&mut session)
             .decode::<serde_json::Value>(input)
             .expect_err("input should be rejected");
@@ -136,7 +144,9 @@ fn json_decode_reports_structured_syntax_locations() {
 #[test]
 fn json_decode_counts_unicode_columns_and_crlf_lines() {
     let input = "{\r\n  \"中\" 1}".as_bytes();
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     let error = JsonTextDecoder::new(&mut session)
         .decode::<serde_json::Value>(input)
         .expect_err("missing colon should be rejected");
@@ -152,10 +162,9 @@ fn json_decode_counts_unicode_columns_and_crlf_lines() {
 #[test]
 fn typed_decode_failure_consumes_input_before_the_next_attempt() {
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty().with_input_bytes_limit(ResourceLimit::new(
-            JsonResource::InputBytes,
-            3,
-        )),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 3))
+            .build(),
     );
 
     assert!(matches!(
@@ -174,9 +183,10 @@ fn typed_decode_failure_consumes_input_before_the_next_attempt() {
 fn seed_rejection_keeps_input_and_rolls_back_value() {
     let input = br#"{"value":1}"#;
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_max_input_bytes(64)
-            .with_max_nodes(8),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(64)
+            .max_nodes(8)
+            .build(),
     );
 
     assert!(
@@ -201,9 +211,10 @@ fn syntax_rejection_rolls_back_value_and_reuses_session() {
     let rejected = br#"{"value":]"#;
     let accepted = br#"null"#;
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_max_input_bytes(rejected.len() + accepted.len())
-            .with_max_nodes(1),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(rejected.len() + accepted.len())
+            .max_nodes(1)
+            .build(),
     );
 
     assert!(
@@ -242,9 +253,10 @@ fn syntax_rejection_rolls_back_value_and_reuses_session() {
 fn budget_rejection_keeps_input_and_rolls_back_value() {
     let input = br#"[null]"#;
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_max_input_bytes(input.len())
-            .with_max_nodes(1),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(input.len())
+            .max_nodes(1)
+            .build(),
     );
 
     assert!(matches!(
@@ -265,12 +277,18 @@ fn budget_rejection_keeps_input_and_rolls_back_value() {
 #[test]
 fn decoder_seed_admits_arbitrary_precision_numbers() {
     let input = b"123456789012345678901234567890";
-    let mut session =
-        JsonDecodeSession::owned(JsonDecodeLimits::empty().with_value_limits(
-            JsonValueLimits::empty().with_number_bytes_limit(
-                ResourceLimit::new(JsonResource::NumberBytes, input.len()),
-            ),
-        ));
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .value_limits(
+                JsonValueLimits::<JsonResource, usize>::builder()
+                    .number_bytes_limit(ResourceLimit::new(
+                        JsonResource::NumberBytes,
+                        input.len(),
+                    ))
+                    .build(),
+            )
+            .build(),
+    );
 
     JsonTextDecoder::new(&mut session)
         .decode_seed(IgnoreSeed, input)
@@ -281,16 +299,19 @@ fn decoder_seed_admits_arbitrary_precision_numbers() {
 #[test]
 fn point_limit_fails_before_seed_and_keeps_work_charged() {
     let limits =
-        JsonDecodeLimits::empty().with_value_limits(
-            JsonValueLimits::empty()
-                .with_structure_limits(StructureLimits::new().with_nodes_limit(
-                    ResourceLimit::new(JsonResource::Nodes, 1),
-                ))
-                .with_string_bytes_limit(ResourceLimit::new(
-                    JsonResource::StringBytes,
-                    1,
-                )),
-        );
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .value_limits(
+                JsonValueLimits::<JsonResource, usize>::builder()
+                    .structure_limits(StructureLimits::builder().nodes_limit(
+                        ResourceLimit::new(JsonResource::Nodes, 1),
+                    ))
+                    .string_bytes_limit(ResourceLimit::new(
+                        JsonResource::StringBytes,
+                        1,
+                    ))
+                    .build(),
+            )
+            .build();
     let mut session = JsonDecodeSession::owned(limits);
     let error = JsonTextDecoder::new(&mut session)
         .decode_seed(PanicSeed, br#""ab""#)
@@ -301,14 +322,15 @@ fn point_limit_fails_before_seed_and_keeps_work_charged() {
 
 #[test]
 fn decoder_supports_usize_quantities() {
-    let limits = JsonDecodeLimits::empty().with_value_limits(
-        JsonValueLimits::empty().with_structure_limits(
-            StructureLimits::new().with_nodes_limit(ResourceLimit::new(
-                JsonResource::Nodes,
-                4_usize,
-            )),
-        ),
-    );
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .value_limits(
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .structure_limits(StructureLimits::builder().nodes_limit(
+                    ResourceLimit::new(JsonResource::Nodes, 4_usize),
+                ))
+                .build(),
+        )
+        .build();
     let mut session = JsonDecodeSession::<JsonResource, usize>::owned(limits);
 
     let value: serde_json::Value = JsonTextDecoder::new(&mut session)

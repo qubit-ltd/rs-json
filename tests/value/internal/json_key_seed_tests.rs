@@ -18,12 +18,12 @@ use serde_json::Deserializer;
 /// Verifies a second object key is rejected before it is materialized.
 #[test]
 fn test_json_key_seed_checks_prospective_object_entry() {
-    let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::new().with_map_entries_limit(ResourceLimit::new(
-            JsonResource::MapEntries,
-            1,
-        )),
-    );
+    let limits =
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .structure_limits(StructureLimits::builder().map_entries_limit(
+                ResourceLimit::new(JsonResource::MapEntries, 1),
+            ))
+            .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"{"a":null,"b":null}"#);

@@ -9,6 +9,7 @@
 
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::text::JsonEncodeError;
 use qubit_json::text::JsonTextEncoder;
 
@@ -16,7 +17,9 @@ use qubit_json::text::JsonTextEncoder;
 #[test]
 fn test_json_output_accounting_reports_output_budget() {
     let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty().with_max_output_bytes(1),
+        JsonEncodeLimits::<JsonResource, usize>::builder()
+            .max_output_bytes(1)
+            .build(),
     );
     let error = JsonTextEncoder::new(&mut session)
         .to_vec(&"ok")

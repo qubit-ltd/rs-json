@@ -23,7 +23,7 @@
 //! use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession};
 //! use qubit_json::text::JsonTextDecoder;
 //!
-//! let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+//! let mut session = JsonDecodeSession::owned(JsonDecodeLimits::builder().build());
 //! let value: serde_json::Value = JsonTextDecoder::new(&mut session)
 //!     .decode(br#"{"ok":true}"#)?;
 //! assert_eq!(value["ok"], true);

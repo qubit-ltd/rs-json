@@ -30,12 +30,16 @@ use crate::fixtures::PublicChoice;
 /// its budget resource.
 #[test]
 fn test_budget_error_exposes_measured_rejection_details() {
-    let limits = JsonDecodeLimits::empty().with_value_limits(
-        JsonValueLimits::empty().with_string_bytes_limit(ResourceLimit::new(
-            JsonResource::StringBytes,
-            0,
-        )),
-    );
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .value_limits(
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .string_bytes_limit(ResourceLimit::new(
+                    JsonResource::StringBytes,
+                    0,
+                ))
+                .build(),
+        )
+        .build();
     let mut session = JsonDecodeSession::owned(limits);
 
     let error = LenientJsonDecoder::default()

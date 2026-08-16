@@ -91,10 +91,12 @@ impl Write for PrefixWriter {
 #[test]
 fn test_encode_session_exposes_only_output_resource() {
     let encode = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty().with_output_bytes_limit(ResourceLimit::new(
-            JsonResource::OutputBytes,
-            8,
-        )),
+        JsonEncodeLimits::<JsonResource, usize>::builder()
+            .output_bytes_limit(ResourceLimit::new(
+                JsonResource::OutputBytes,
+                8,
+            ))
+            .build(),
     );
 
     assert_eq!(encode.max_output_bytes(), Some(8));
@@ -105,10 +107,12 @@ fn test_encode_session_exposes_only_output_resource() {
 #[test]
 fn test_encode_attempt_consumes_output_bytes_atomically() {
     let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty().with_output_bytes_limit(ResourceLimit::new(
-            JsonResource::OutputBytes,
-            3,
-        )),
+        JsonEncodeLimits::<JsonResource, usize>::builder()
+            .output_bytes_limit(ResourceLimit::new(
+                JsonResource::OutputBytes,
+                3,
+            ))
+            .build(),
     );
 
     let mut attempt = session.begin_value();
@@ -124,21 +128,18 @@ fn test_encode_attempt_consumes_output_bytes_atomically() {
 /// Verifies encode attempts preserve every embedded JSON value limit.
 #[test]
 fn test_encode_attempt_preserves_embedded_value_limits() {
-    let value_limits = JsonValueLimits::empty()
-        .with_string_bytes_limit(ResourceLimit::new(
-            JsonResource::StringBytes,
-            2,
-        ))
-        .with_payload_bytes_limit(ResourceLimit::new(
-            JsonResource::PayloadBytes,
-            3,
-        ))
-        .with_structure_limits(
-            StructureLimits::new()
-                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
-        );
+    let value_limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2))
+        .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
+        .structure_limits(
+            StructureLimits::builder()
+                .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+        )
+        .build();
     let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty().with_value_limits(value_limits),
+        JsonEncodeLimits::<JsonResource, usize>::builder()
+            .value_limits(value_limits)
+            .build(),
     );
 
     let mut attempt = session.begin_value();
@@ -178,10 +179,12 @@ fn test_encode_attempt_preserves_embedded_value_limits() {
 fn test_encode_session_borrows_output_and_value_budgets() {
     let mut output = ResourceBudget::new(JsonResource::OutputBytes, 32);
     let mut value = JsonValueBudget::new(
-        JsonValueLimits::empty().with_structure_limits(
-            StructureLimits::new()
-                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
-        ),
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .structure_limits(
+                StructureLimits::builder()
+                    .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+            )
+            .build(),
     );
     let mut session =
         JsonEncodeSession::borrowing_output(&mut output, &mut value);
@@ -204,9 +207,10 @@ fn test_encode_session_borrows_output_and_value_budgets() {
 #[test]
 fn test_encode_stream_failure_rolls_back_output_and_value() {
     let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty()
-            .with_max_output_bytes(64)
-            .with_max_nodes(2),
+        JsonEncodeLimits::<JsonResource, usize>::builder()
+            .max_output_bytes(64)
+            .max_nodes(2)
+            .build(),
     );
 
     assert!(encode(&FailsAfterPrefix, &mut session).is_err());
@@ -219,9 +223,10 @@ fn test_encode_stream_failure_rolls_back_output_and_value() {
 #[test]
 fn test_buffered_writer_failure_keeps_prefix_and_rolls_back_value() {
     let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty()
-            .with_max_output_bytes(64)
-            .with_max_nodes(3),
+        JsonEncodeLimits::<JsonResource, usize>::builder()
+            .max_output_bytes(64)
+            .max_nodes(3)
+            .build(),
     );
     let mut writer = PrefixWriter {
         accepted: Vec::new(),
@@ -242,9 +247,10 @@ fn test_buffered_writer_failure_keeps_prefix_and_rolls_back_value() {
 #[test]
 fn test_incremental_stream_failure_keeps_prefix_and_rolls_back_value() {
     let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty()
-            .with_max_output_bytes(64)
-            .with_max_nodes(2),
+        JsonEncodeLimits::<JsonResource, usize>::builder()
+            .max_output_bytes(64)
+            .max_nodes(2)
+            .build(),
     );
     let mut writer = Vec::new();
 
@@ -265,9 +271,10 @@ fn test_incremental_stream_failure_keeps_prefix_and_rolls_back_value() {
 #[test]
 fn test_incremental_panic_keeps_prefix_and_reuses_value_capacity() {
     let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty()
-            .with_max_output_bytes(64)
-            .with_max_nodes(2),
+        JsonEncodeLimits::<JsonResource, usize>::builder()
+            .max_output_bytes(64)
+            .max_nodes(2)
+            .build(),
     );
     let mut writer = Vec::new();
 

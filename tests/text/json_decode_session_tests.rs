@@ -29,16 +29,17 @@ use serde::de::IgnoredAny;
 #[test]
 fn decode_and_encode_sessions_have_independent_directional_resources() {
     let decode = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty().with_input_bytes_limit(ResourceLimit::new(
-            JsonResource::InputBytes,
-            8,
-        )),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 8))
+            .build(),
     );
     let encode = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty().with_output_bytes_limit(ResourceLimit::new(
-            JsonResource::OutputBytes,
-            8,
-        )),
+        JsonEncodeLimits::<JsonResource, usize>::builder()
+            .output_bytes_limit(ResourceLimit::new(
+                JsonResource::OutputBytes,
+                8,
+            ))
+            .build(),
     );
 
     assert_eq!(decode.max_input_bytes(), Some(8));
@@ -49,10 +50,9 @@ fn decode_and_encode_sessions_have_independent_directional_resources() {
 #[test]
 fn test_decode_attempt_consumes_input_bytes_atomically() {
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty().with_input_bytes_limit(ResourceLimit::new(
-            JsonResource::InputBytes,
-            3,
-        )),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 3))
+            .build(),
     );
 
     let mut attempt = session.begin_value();
@@ -70,10 +70,12 @@ fn test_decode_attempt_consumes_input_bytes_atomically() {
 fn test_decode_session_borrowing_reuses_caller_owned_budgets() {
     let mut input = ResourceBudget::new(JsonResource::InputBytes, 16_usize);
     let mut value = JsonValueBudget::new(
-        JsonValueLimits::empty().with_payload_bytes_limit(ResourceLimit::new(
-            JsonResource::PayloadBytes,
-            3_usize,
-        )),
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .payload_bytes_limit(ResourceLimit::new(
+                JsonResource::PayloadBytes,
+                3_usize,
+            ))
+            .build(),
     );
     {
         let mut session =
@@ -94,21 +96,18 @@ fn test_decode_session_borrowing_reuses_caller_owned_budgets() {
 /// Verifies decode sessions preserve every embedded JSON value limit.
 #[test]
 fn test_decode_session_preserves_embedded_value_limits() {
-    let value_limits = JsonValueLimits::empty()
-        .with_string_bytes_limit(ResourceLimit::new(
-            JsonResource::StringBytes,
-            2,
-        ))
-        .with_payload_bytes_limit(ResourceLimit::new(
-            JsonResource::PayloadBytes,
-            3,
-        ))
-        .with_structure_limits(
-            StructureLimits::new()
-                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
-        );
+    let value_limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2))
+        .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
+        .structure_limits(
+            StructureLimits::builder()
+                .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+        )
+        .build();
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty().with_value_limits(value_limits),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .value_limits(value_limits)
+            .build(),
     );
 
     let mut attempt = session.begin_value();
@@ -148,9 +147,10 @@ fn test_failed_second_value_preserves_first_commit_and_accumulates_input() {
     let second = br#"[null,null]"#;
     let third = b"null";
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_max_input_bytes(64)
-            .with_max_nodes(3),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(64)
+            .max_nodes(3)
+            .build(),
     );
 
     JsonTextDecoder::new(&mut session)
@@ -178,9 +178,10 @@ fn test_failed_second_value_preserves_first_commit_and_accumulates_input() {
 #[test]
 fn test_decode_attempt_panic_retains_input_and_reuses_value_capacity() {
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_max_input_bytes(8)
-            .with_max_nodes(1),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(8)
+            .max_nodes(1)
+            .build(),
     );
 
     let result = catch_unwind(AssertUnwindSafe(|| {
@@ -211,10 +212,11 @@ fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity
     let rejected = "```json\nnull\n```";
     let accepted = "null";
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_max_input_bytes(rejected.len() + accepted.len())
-            .with_max_normalized_input_bytes(8)
-            .with_max_nodes(1),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(rejected.len() + accepted.len())
+            .max_normalized_input_bytes(8)
+            .max_nodes(1)
+            .build(),
     );
     let decoder = LenientJsonDecoder::default();
 

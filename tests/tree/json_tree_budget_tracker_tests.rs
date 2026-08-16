@@ -5,6 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::tree::JsonTreeBudgetTracker;
 use serde_json::json;
@@ -12,8 +13,11 @@ use serde_json::json;
 /// Verifies that a tracker accounts a materialized JSON tree.
 #[test]
 fn test_budget_tracker_accounts_a_materialized_tree() {
-    let mut tracker =
-        JsonTreeBudgetTracker::new(JsonValueLimits::empty().with_max_nodes(2));
+    let mut tracker = JsonTreeBudgetTracker::new(
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .max_nodes(2)
+            .build(),
+    );
 
     tracker
         .account(&json!({"ok": true}))
@@ -24,7 +28,9 @@ fn test_budget_tracker_accounts_a_materialized_tree() {
 /// Verifies that tracker budget accessors expose and transfer state.
 #[test]
 fn test_budget_tracker_exposes_and_transfers_budget_state() {
-    let mut tracker = JsonTreeBudgetTracker::new(JsonValueLimits::empty());
+    let mut tracker = JsonTreeBudgetTracker::new(
+        JsonValueLimits::<JsonResource, usize>::builder().build(),
+    );
     assert_eq!(tracker.budget().used_nodes(), None);
     tracker
         .account(&json!({"key": true}))
@@ -38,8 +44,11 @@ fn test_budget_tracker_exposes_and_transfers_budget_state() {
 /// Verifies failed accounting rolls back and reset clears prior admissions.
 #[test]
 fn test_budget_tracker_rolls_back_rejection_and_resets() {
-    let mut tracker =
-        JsonTreeBudgetTracker::new(JsonValueLimits::empty().with_max_nodes(1));
+    let mut tracker = JsonTreeBudgetTracker::new(
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .max_nodes(1)
+            .build(),
+    );
 
     tracker.account(&json!(true)).expect("one node should fit");
     assert!(tracker.account(&json!([true])).is_err());

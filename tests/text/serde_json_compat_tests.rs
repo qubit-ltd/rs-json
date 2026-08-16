@@ -13,6 +13,7 @@ mod json_private_tests;
 
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::text::JsonEncodeError;
 use qubit_json::text::JsonTextEncoder;
 use serde::Serialize;
@@ -50,7 +51,9 @@ fn test_encoder_preserves_private_number_and_raw_value_protocol() {
         .expect("valid number");
     let raw = RawValue::from_string("{\"ok\":true}".to_owned())
         .expect("valid raw JSON");
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    let mut session = JsonEncodeSession::owned(
+        JsonEncodeLimits::<JsonResource, usize>::builder().build(),
+    );
     let bytes = JsonTextEncoder::new(&mut session)
         .to_vec(&(&number, &raw))
         .expect("private serde_json shapes encode");
@@ -60,7 +63,9 @@ fn test_encoder_preserves_private_number_and_raw_value_protocol() {
 /// Reports invalid private raw text as a syntax-specific encode error.
 #[test]
 fn test_encoder_reports_invalid_private_raw_value_as_syntax_error() {
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    let mut session = JsonEncodeSession::owned(
+        JsonEncodeLimits::<JsonResource, usize>::builder().build(),
+    );
     let error = JsonTextEncoder::new(&mut session)
         .to_vec(&InvalidRawValue)
         .expect_err("invalid private raw JSON must fail");

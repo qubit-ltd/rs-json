@@ -9,12 +9,15 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::text::JsonTextDecoder;
 
 /// Verifies nested arrays resume their enclosing container frames.
 #[test]
 fn test_container_frames_resume_nested_arrays() {
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     let value = JsonTextDecoder::new(&mut session)
         .decode::<serde_json::Value>(br#"[[1],2]"#)
         .expect("nested array JSON should decode");

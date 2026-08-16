@@ -424,17 +424,17 @@ impl LenientJsonDecoder {
 
     /// Creates the budget session for one lenient decode operation.
     fn decode_session(&self) -> JsonDecodeSession<'static> {
-        let mut limits = JsonDecodeLimits::empty();
+        let mut limits = JsonDecodeLimits::builder();
         if let Some(maximum) = self.options().max_input_bytes() {
-            limits = limits.with_max_input_bytes(maximum);
+            limits = limits.max_input_bytes(maximum);
         }
         if let Some(maximum) = self.options().max_normalized_bytes() {
-            limits = limits.with_max_normalized_input_bytes(maximum);
+            limits = limits.max_normalized_input_bytes(maximum);
         }
         if let Some(value_limits) = self.options().value_limits() {
-            limits = limits.with_value_limits(value_limits);
+            limits = limits.value_limits(value_limits);
         }
-        JsonDecodeSession::owned(limits)
+        JsonDecodeSession::owned(limits.build())
     }
 
     /// Runs lexical admission when value limits are configured.

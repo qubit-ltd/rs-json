@@ -9,6 +9,7 @@
 
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeMap;
@@ -27,7 +28,9 @@ use crate::text::json_encode_test_support::encode;
 #[test]
 fn test_budgeted_private_value_checks_number_bytes() {
     let number: Number = from_str("123456789").expect("number should parse");
-    let limits = JsonEncodeLimits::empty().with_max_number_bytes(8);
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_number_bytes(8)
+        .build();
     let mut session = JsonEncodeSession::owned(limits);
 
     assert!(encode(&number, &mut session).is_err());
@@ -188,8 +191,9 @@ fn test_budgeted_private_value_delegates_scalar_serializer_paths() {
     ];
     for value in values {
         for raw in [false, true] {
-            let mut session =
-                JsonEncodeSession::owned(JsonEncodeLimits::empty());
+            let mut session = JsonEncodeSession::owned(
+                JsonEncodeLimits::<JsonResource, usize>::builder().build(),
+            );
             let _ = encode(&PrivateShape { raw, value }, &mut session);
         }
     }

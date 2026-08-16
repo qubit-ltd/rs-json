@@ -25,10 +25,12 @@ use serde_json::json;
 
 #[test]
 fn budgeted_value_seed_rejects_decoded_nodes_incrementally() {
-    let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::new()
-            .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
-    );
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .structure_limits(
+            StructureLimits::builder()
+                .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+        )
+        .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"[1,2]"#);
@@ -43,7 +45,9 @@ fn budgeted_value_seed_rejects_decoded_nodes_incrementally() {
 
 #[test]
 fn budgeted_value_seed_returns_the_admitted_value() {
-    let mut budget = JsonValueLimits::empty().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"{"key":[true]}"#);
 
@@ -57,12 +61,12 @@ fn budgeted_value_seed_returns_the_admitted_value() {
 /// Verifies duplicate keys count as separate decoded object entries.
 #[test]
 fn test_budgeted_value_seed_counts_duplicate_object_entries() {
-    let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::new().with_map_entries_limit(ResourceLimit::new(
-            JsonResource::MapEntries,
-            1,
-        )),
-    );
+    let limits =
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .structure_limits(StructureLimits::builder().map_entries_limit(
+                ResourceLimit::new(JsonResource::MapEntries, 1),
+            ))
+            .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
     let mut deserializer =
@@ -81,7 +85,9 @@ fn test_budgeted_value_seed_counts_duplicate_object_entries() {
 /// not necessarily dispatch to consistently across serde_json versions.
 #[test]
 fn test_budgeted_value_seed_accepts_all_scalar_deserializer_shapes() {
-    let mut budget = JsonValueLimits::empty().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
 
     assert_eq!(
@@ -135,7 +141,7 @@ fn test_budgeted_value_seed_accepts_all_scalar_deserializer_shapes() {
 /// Verifies scalar visitor paths also instantiate for byte-sized quantities.
 #[test]
 fn test_budgeted_value_seed_supports_u8_resource_quantities() {
-    let mut budget = JsonValueLimits::<JsonResource, u8>::new().budget();
+    let mut budget = JsonValueLimits::<JsonResource, u8>::builder().budget();
     let mut transaction = budget.transaction();
 
     assert_eq!(
@@ -223,7 +229,9 @@ impl<'de> SerdeDeserializer<'de> for SomeDeserializer {
 /// non-representable numeric values.
 #[test]
 fn test_budgeted_value_seed_handles_option_newtype_and_numeric_errors() {
-    let mut budget = JsonValueLimits::empty().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     assert_eq!(
         JsonValueSeed::new(&mut transaction)

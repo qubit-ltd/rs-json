@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeMap;
@@ -27,7 +28,9 @@ use crate::text::json_encode_test_support::encode;
 #[test]
 fn test_budgeted_key_checks_key_bytes() {
     let values = BTreeMap::from([(String::from("key"), true)]);
-    let limits = JsonEncodeLimits::empty().with_max_key_bytes(2);
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_key_bytes(2)
+        .build();
     let mut session = JsonEncodeSession::owned(limits);
 
     assert!(encode(&values, &mut session).is_err());
@@ -182,7 +185,9 @@ fn test_budgeted_key_checks_each_scalar_serializer_path() {
         ScalarKey::HumanReadable,
     ];
     for key in keys {
-        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+        let mut session = JsonEncodeSession::owned(
+            JsonEncodeLimits::<JsonResource, usize>::builder().build(),
+        );
         let _ = encode(&OneKey(key), &mut session);
     }
 }

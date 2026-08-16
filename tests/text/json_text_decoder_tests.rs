@@ -9,6 +9,7 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::text::JsonTextDecoder;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
@@ -43,7 +44,9 @@ impl<'de> DeserializeSeed<'de> for NonConsumingSeed {
 /// Verifies a decoder returns a typed value for one complete document.
 #[test]
 fn test_json_text_decoder_decodes_typed_value() {
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     let value = JsonTextDecoder::new(&mut session)
         .decode::<bool>(b"true")
         .expect("JSON boolean should decode");
@@ -54,7 +57,9 @@ fn test_json_text_decoder_decodes_typed_value() {
 /// Verifies validation accounts a complete document without deserializing it.
 #[test]
 fn test_json_text_decoder_validates_complete_document() {
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     JsonTextDecoder::new(&mut session)
         .validate(br#"{"ok":[true,null]}"#)
         .expect("a complete JSON document should validate");
@@ -63,7 +68,9 @@ fn test_json_text_decoder_validates_complete_document() {
 /// Verifies seed deserialization failures retain safe Serde metadata.
 #[test]
 fn test_json_text_decoder_maps_seed_failure() {
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     assert!(
         JsonTextDecoder::new(&mut session)
             .decode_seed(FailingSeed, b"true")
@@ -74,7 +81,9 @@ fn test_json_text_decoder_maps_seed_failure() {
 /// Verifies a seed that leaves input unread is rejected by the final check.
 #[test]
 fn test_json_text_decoder_rejects_unconsumed_seed_input() {
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     assert!(
         JsonTextDecoder::new(&mut session)
             .decode_seed(NonConsumingSeed, b"true")

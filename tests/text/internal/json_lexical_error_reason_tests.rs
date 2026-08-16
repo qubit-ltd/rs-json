@@ -9,6 +9,7 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::text::JsonDecodeError;
 use qubit_json::text::JsonSyntaxErrorReason;
 use qubit_json::text::JsonTextDecoder;
@@ -16,7 +17,9 @@ use qubit_json::text::JsonTextDecoder;
 /// Verifies trailing bytes retain their stable lexical rejection reason.
 #[test]
 fn test_lexical_error_reason_reports_trailing_characters() {
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     let error = JsonTextDecoder::new(&mut session)
         .validate(b"true false")
         .expect_err("trailing JSON value must be rejected");
