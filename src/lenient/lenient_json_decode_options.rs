@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Defines the options used to configure the lenient JSON decoder.
+// qubit-style: allow multiple-public-types
 
 use qubit_budget::json::JsonValueLimits;
 
@@ -126,6 +127,13 @@ impl LenientJsonDecodeOptions {
         }
     }
 
+    /// Creates a builder initialized with the default lenient options.
+    #[inline]
+    #[must_use]
+    pub const fn builder() -> LenientJsonDecodeOptionsBuilder {
+        LenientJsonDecodeOptionsBuilder::new()
+    }
+
     /// Returns whether leading and trailing whitespace is removed.
     ///
     /// # Returns
@@ -135,22 +143,6 @@ impl LenientJsonDecodeOptions {
     #[must_use]
     pub const fn trim_whitespace(&self) -> bool {
         self.trim_whitespace
-    }
-
-    /// Returns these options with whitespace trimming enabled or disabled.
-    ///
-    /// # Parameters
-    ///
-    /// * `enabled` - Whether to remove surrounding whitespace.
-    ///
-    /// # Returns
-    ///
-    /// The updated option set.
-    #[inline(always)]
-    #[must_use]
-    pub const fn with_trim_whitespace(mut self, enabled: bool) -> Self {
-        self.trim_whitespace = enabled;
-        self
     }
 
     /// Returns whether a leading UTF-8 byte order mark is removed.
@@ -163,22 +155,6 @@ impl LenientJsonDecodeOptions {
     #[must_use]
     pub const fn strip_utf8_bom(&self) -> bool {
         self.strip_utf8_bom
-    }
-
-    /// Returns these options with UTF-8 byte order mark stripping configured.
-    ///
-    /// # Parameters
-    ///
-    /// * `enabled` - Whether to remove a leading UTF-8 byte order mark.
-    ///
-    /// # Returns
-    ///
-    /// The updated option set.
-    #[inline(always)]
-    #[must_use]
-    pub const fn with_strip_utf8_bom(mut self, enabled: bool) -> Self {
-        self.strip_utf8_bom = enabled;
-        self
     }
 
     /// Returns the policy used to remove one outer Markdown code fence.
@@ -202,26 +178,6 @@ impl LenientJsonDecodeOptions {
         &self.markdown_fence_policy
     }
 
-    /// Returns these options with a Markdown fence policy.
-    ///
-    /// # Parameters
-    ///
-    /// * `markdown_fence_policy` - Policy used to recognize and remove one
-    ///   outer Markdown code fence.
-    ///
-    /// # Returns
-    ///
-    /// The updated option set.
-    #[inline(always)]
-    #[must_use]
-    pub const fn with_markdown_fence_policy(
-        mut self,
-        markdown_fence_policy: MarkdownFencePolicy,
-    ) -> Self {
-        self.markdown_fence_policy = markdown_fence_policy;
-        self
-    }
-
     /// Returns whether raw control characters in JSON strings are escaped.
     ///
     /// # Returns
@@ -232,27 +188,6 @@ impl LenientJsonDecodeOptions {
     #[must_use]
     pub const fn escape_control_chars_in_strings(&self) -> bool {
         self.escape_control_chars_in_strings
-    }
-
-    /// Returns these options with JSON-string control character escaping
-    /// configured.
-    ///
-    /// # Parameters
-    ///
-    /// * `enabled` - Whether to escape raw ASCII control characters inside JSON
-    ///   strings.
-    ///
-    /// # Returns
-    ///
-    /// The updated option set.
-    #[inline(always)]
-    #[must_use]
-    pub const fn with_escape_control_chars_in_strings(
-        mut self,
-        enabled: bool,
-    ) -> Self {
-        self.escape_control_chars_in_strings = enabled;
-        self
     }
 
     /// Returns the raw input byte-size limit.
@@ -267,26 +202,6 @@ impl LenientJsonDecodeOptions {
         self.max_input_bytes
     }
 
-    /// Returns these options with a raw input byte-size limit.
-    ///
-    /// # Parameters
-    ///
-    /// * `max_input_bytes` - `Some(limit)` to cap the raw input at `limit`
-    ///   bytes, or `None` to remove the limit.
-    ///
-    /// # Returns
-    ///
-    /// The updated option set.
-    #[inline(always)]
-    #[must_use]
-    pub const fn with_max_input_bytes(
-        mut self,
-        max_input_bytes: Option<usize>,
-    ) -> Self {
-        self.max_input_bytes = max_input_bytes;
-        self
-    }
-
     /// Returns the normalized JSON byte-size limit.
     ///
     /// # Returns
@@ -297,30 +212,6 @@ impl LenientJsonDecodeOptions {
     #[must_use]
     pub const fn max_normalized_bytes(&self) -> Option<usize> {
         self.max_normalized_bytes
-    }
-
-    /// Returns these options with a normalized JSON byte-size limit.
-    ///
-    /// The decoder calculates the normalized size before allocating repaired
-    /// text for raw control characters, so this limit also bounds the
-    /// allocation caused by supported control-character escaping.
-    ///
-    /// # Parameters
-    ///
-    /// * `max_normalized_bytes` - `Some(limit)` to cap normalized JSON at
-    ///   `limit` bytes, or `None` to remove the limit.
-    ///
-    /// # Returns
-    ///
-    /// The updated option set.
-    #[inline(always)]
-    #[must_use]
-    pub const fn with_max_normalized_bytes(
-        mut self,
-        max_normalized_bytes: Option<usize>,
-    ) -> Self {
-        self.max_normalized_bytes = max_normalized_bytes;
-        self
     }
 
     /// Returns the configured JSON value-resource limits.
@@ -335,30 +226,6 @@ impl LenientJsonDecodeOptions {
         self.value_limits
     }
 
-    /// Returns these options with JSON value-resource limits.
-    ///
-    /// Configure this when convenience decode entry points must reject
-    /// oversized JSON structure, nodes, or payload before parsing or
-    /// deserialization.
-    ///
-    /// # Parameters
-    ///
-    /// * `value_limits` - `Some(limits)` to enable lexical admission on
-    ///   convenience entry points, or `None` to disable value admission.
-    ///
-    /// # Returns
-    ///
-    /// The updated option set.
-    #[inline(always)]
-    #[must_use]
-    pub const fn with_value_limits(
-        mut self,
-        value_limits: Option<JsonValueLimits>,
-    ) -> Self {
-        self.value_limits = value_limits;
-        self
-    }
-
     /// Returns the privacy policy applied to decoding error diagnostics.
     ///
     /// # Returns
@@ -369,28 +236,116 @@ impl LenientJsonDecodeOptions {
     pub const fn error_privacy_policy(&self) -> ErrorPrivacyPolicy {
         self.error_privacy_policy
     }
+}
 
-    /// Returns these options with the requested error privacy policy.
-    ///
-    /// The policy determines whether serde diagnostics derived from input
-    /// values are retained in returned errors.
-    ///
-    /// # Parameters
-    ///
-    /// * `error_privacy_policy` - Policy applied when constructing decoding
-    ///   errors.
-    ///
-    /// # Returns
-    ///
-    /// The updated option set.
-    #[inline(always)]
+/// Builder for [`LenientJsonDecodeOptions`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LenientJsonDecodeOptionsBuilder {
+    options: LenientJsonDecodeOptions,
+}
+
+impl LenientJsonDecodeOptionsBuilder {
+    /// Creates a builder initialized with the default lenient options.
+    #[inline]
     #[must_use]
-    pub const fn with_error_privacy_policy(
-        mut self,
-        error_privacy_policy: ErrorPrivacyPolicy,
-    ) -> Self {
-        self.error_privacy_policy = error_privacy_policy;
+    pub const fn new() -> Self {
+        Self {
+            options: LenientJsonDecodeOptions::lenient(),
+        }
+    }
+
+    /// Configures whether surrounding whitespace is removed.
+    #[inline]
+    #[must_use]
+    pub const fn trim_whitespace(mut self, enabled: bool) -> Self {
+        self.options.trim_whitespace = enabled;
         self
+    }
+
+    /// Configures whether a leading UTF-8 byte order mark is removed.
+    #[inline]
+    #[must_use]
+    pub const fn strip_utf8_bom(mut self, enabled: bool) -> Self {
+        self.options.strip_utf8_bom = enabled;
+        self
+    }
+
+    /// Configures the policy used to remove one outer Markdown code fence.
+    #[inline]
+    #[must_use]
+    pub const fn markdown_fence_policy(
+        mut self,
+        policy: MarkdownFencePolicy,
+    ) -> Self {
+        self.options.markdown_fence_policy = policy;
+        self
+    }
+
+    /// Configures whether raw control characters in JSON strings are escaped.
+    #[inline]
+    #[must_use]
+    pub const fn escape_control_chars_in_strings(
+        mut self,
+        enabled: bool,
+    ) -> Self {
+        self.options.escape_control_chars_in_strings = enabled;
+        self
+    }
+
+    /// Configures the raw input byte-size limit.
+    #[inline]
+    #[must_use]
+    pub const fn max_input_bytes(mut self, maximum: Option<usize>) -> Self {
+        self.options.max_input_bytes = maximum;
+        self
+    }
+
+    /// Configures the normalized JSON byte-size limit.
+    #[inline]
+    #[must_use]
+    pub const fn max_normalized_bytes(
+        mut self,
+        maximum: Option<usize>,
+    ) -> Self {
+        self.options.max_normalized_bytes = maximum;
+        self
+    }
+
+    /// Configures optional JSON value-resource limits.
+    #[inline]
+    #[must_use]
+    pub const fn value_limits(
+        mut self,
+        limits: Option<JsonValueLimits>,
+    ) -> Self {
+        self.options.value_limits = limits;
+        self
+    }
+
+    /// Configures the privacy policy applied to decoding errors.
+    #[inline]
+    #[must_use]
+    pub const fn error_privacy_policy(
+        mut self,
+        policy: ErrorPrivacyPolicy,
+    ) -> Self {
+        self.options.error_privacy_policy = policy;
+        self
+    }
+
+    /// Builds the configured lenient JSON decode options.
+    #[inline]
+    #[must_use]
+    pub const fn build(self) -> LenientJsonDecodeOptions {
+        self.options
+    }
+}
+
+impl Default for LenientJsonDecodeOptionsBuilder {
+    /// Creates a builder initialized with the default lenient options.
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }
 

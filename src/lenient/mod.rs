@@ -22,6 +22,7 @@ pub use json_top_level_kind::JsonTopLevelKind;
 pub use lenient_json_decode_error::LenientJsonDecodeError;
 pub use lenient_json_decode_error_kind::LenientJsonDecodeErrorKind;
 pub use lenient_json_decode_options::LenientJsonDecodeOptions;
+pub use lenient_json_decode_options::LenientJsonDecodeOptionsBuilder;
 pub use lenient_json_decode_stage::LenientJsonDecodeStage;
 pub use lenient_json_decoder::LenientJsonDecoder;
 pub use markdown_fence_closing::MarkdownFenceClosing;
