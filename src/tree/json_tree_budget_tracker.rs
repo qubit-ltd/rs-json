@@ -63,7 +63,6 @@ where
     ///
     /// Returns the first measured budget rejection encountered while walking
     /// the tree. Charges are committed only when the complete walk succeeds.
-    #[must_use]
     pub fn account(
         &mut self,
         value: &Value,

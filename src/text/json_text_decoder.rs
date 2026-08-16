@@ -75,7 +75,6 @@ where
     /// JSON document, or [`JsonDecodeError::Deserialize`] when the admitted
     /// value cannot be decoded into `T`. Input charges remain after errors;
     /// staged value charges roll back.
-    #[must_use]
     pub fn decode<'de, T>(
         &mut self,
         input: &'de [u8],
@@ -108,7 +107,6 @@ where
     /// [`JsonDecodeError::Deserialize`] when the seed or final deserializer
     /// state rejects the admitted document. Input charges remain after errors;
     /// staged value charges roll back.
-    #[must_use]
     pub fn decode_seed<'de, S>(
         &mut self,
         seed: S,
@@ -152,7 +150,6 @@ where
     /// rejected, or [`JsonDecodeError::Syntax`] when `input` is not one
     /// complete JSON document. Input charges remain after errors; admitted
     /// value charges commit only on success.
-    #[must_use]
     pub fn validate(
         &mut self,
         input: &[u8],
