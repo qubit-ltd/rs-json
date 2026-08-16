@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Implements non-recursive, mutable JSON tree processing.
 
@@ -35,7 +37,9 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a mutator borrowing the supplied JSON value transaction.
-    pub fn new(transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>) -> Self {
+    pub fn new(
+        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    ) -> Self {
         Self { transaction }
     }
 
@@ -70,6 +74,7 @@ where
                         return Err(JsonTreeProcessError::Budget(error));
                     }
                     frame.entered = true;
+                    frame.finished = true;
                     continue;
                 }
                 if let Err(error) = self.admit(value, frame.depth) {
@@ -80,6 +85,7 @@ where
                         return Err(JsonTreeProcessError::Budget(error));
                     }
                     frame.entered = true;
+                    frame.finished = true;
                     continue;
                 }
                 let control = visitor
@@ -101,7 +107,11 @@ where
     }
 
     /// Admits one node before invoking its mutable visitor callback.
-    fn admit(&mut self, value: &Value, depth: usize) -> Result<(), MeasuredBudgetError<R, Q>> {
+    fn admit(
+        &mut self,
+        value: &Value,
+        depth: usize,
+    ) -> Result<(), MeasuredBudgetError<R, Q>> {
         let measurement = match value {
             Value::Null => JsonMeasurement::Null { depth },
             Value::Bool(_) => JsonMeasurement::Boolean { depth },
@@ -139,7 +149,9 @@ impl OwnedLocation {
     fn context(&self, depth: usize) -> JsonTreeContext<'_> {
         let location = match self {
             Self::Root => JsonTreeLocation::Root,
-            Self::ArrayElement(index) => JsonTreeLocation::ArrayElement { index: *index },
+            Self::ArrayElement(index) => {
+                JsonTreeLocation::ArrayElement { index: *index }
+            }
             Self::ObjectValue(key) => JsonTreeLocation::ObjectValue { key },
         };
         JsonTreeContext { depth, location }
@@ -224,17 +236,22 @@ impl MutChildCursor {
                 let iter = entries.iter_mut();
                 // SAFETY: no entry is inserted, removed, or replaced while this
                 // iterator is suspended.
-                let iter = unsafe { std::mem::transmute::<IterMut<'_>, IterMut<'static>>(iter) };
+                let iter = unsafe {
+                    std::mem::transmute::<IterMut<'_>, IterMut<'static>>(iter)
+                };
                 Self::Object { iter }
             }
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Self::Empty,
+            Value::Null
+            | Value::Bool(_)
+            | Value::Number(_)
+            | Value::String(_) => Self::Empty,
         }
     }
     /// Returns the next child and its traversal metadata.
     fn next(&mut self, parent_depth: usize) -> Option<MutFrame> {
-        let depth = parent_depth
-            .checked_add(1)
-            .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
+        let depth = parent_depth.checked_add(1).expect(
+            "a materialized JSON tree cannot have usize::MAX nesting depth",
+        );
         match self {
             Self::Array { values, next } => {
                 // SAFETY: the parent vector is structurally unchanged while its
@@ -250,7 +267,11 @@ impl MutChildCursor {
                 ))
             }
             Self::Object { iter } => iter.next().map(|(key, child)| {
-                MutFrame::child(OwnedLocation::ObjectValue(key.clone()), depth, child)
+                MutFrame::child(
+                    OwnedLocation::ObjectValue(key.clone()),
+                    depth,
+                    child,
+                )
             }),
             Self::Empty => None,
         }
