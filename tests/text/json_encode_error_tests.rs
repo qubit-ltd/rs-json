@@ -16,7 +16,8 @@ use serde_json::from_str;
 /// Verifies that Serde failures retain the encoding error category.
 #[test]
 fn test_serialize_error_variant_is_distinct() {
-    let error = from_str::<Value>("not-json").expect_err("fixture must be invalid JSON");
+    let error = from_str::<Value>("not-json")
+        .expect_err("fixture must be invalid JSON");
     let error = JsonEncodeError::<(), usize>::Serialize(error);
 
     assert!(matches!(error, JsonEncodeError::Serialize(_)));
@@ -25,7 +26,8 @@ fn test_serialize_error_variant_is_distinct() {
 /// Verifies that invalid raw JSON retains stable lexical diagnostics.
 #[test]
 fn test_invalid_raw_json_preserves_syntax_error_details() {
-    let syntax_error = JsonSyntaxError::new(19, 3, 7, JsonSyntaxErrorReason::InvalidEscape);
+    let syntax_error =
+        JsonSyntaxError::new(19, 3, 7, JsonSyntaxErrorReason::InvalidEscape);
     let error = JsonEncodeError::<(), usize>::InvalidRawJson(syntax_error);
     let JsonEncodeError::InvalidRawJson(syntax_error) = error else {
         panic!("expected an invalid raw JSON error");
@@ -40,7 +42,9 @@ fn test_invalid_raw_json_preserves_syntax_error_details() {
 /// Verifies Serde custom failures are preserved as serialization errors.
 #[test]
 fn test_serde_custom_error_preserves_message() {
-    let error = <JsonEncodeError<(), usize> as serde::ser::Error>::custom("fixture failure");
+    let error = <JsonEncodeError<(), usize> as serde::ser::Error>::custom(
+        "fixture failure",
+    );
 
     assert!(matches!(error, JsonEncodeError::Serialize(_)));
     assert_eq!(

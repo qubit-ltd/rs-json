@@ -77,8 +77,9 @@ fn test_json_encoder_preserves_value_budget_error_precedence() {
         .with_max_string_bytes(2)
         .encode_session();
 
-    let error = encode(&MaskedString("hello"), &mut session)
-        .expect_err("the serializer must retain its original value-budget error");
+    let error = encode(&MaskedString("hello"), &mut session).expect_err(
+        "the serializer must retain its original value-budget error",
+    );
 
     let JsonEncodeError::Budget(error) = error else {
         panic!("expected the original string budget error");

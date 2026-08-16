@@ -18,7 +18,8 @@ use serde_json::error::Category;
 /// Verifies that strict text decoding uses the operation-specific error API.
 #[test]
 fn test_decoder_decodes_valid_slice() {
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty().with_max_nodes(4));
+    let mut session =
+        JsonDecodeSession::owned(JsonDecodeLimits::empty().with_max_nodes(4));
     let value: bool = JsonTextDecoder::new(&mut session)
         .decode(b"true")
         .expect("valid JSON decodes");
@@ -59,7 +60,8 @@ fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
     );
 
     assert!(matches!(
-        JsonTextDecoder::<JsonResource, usize>::new(&mut session).decode::<u64>(rejected),
+        JsonTextDecoder::<JsonResource, usize>::new(&mut session)
+            .decode::<u64>(rejected),
         Err(JsonDecodeError::Deserialize { .. })
     ));
     assert_eq!(
@@ -84,7 +86,8 @@ fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
 /// input without constructing a typed value.
 #[test]
 fn test_validate_accounts_document() {
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty().with_max_nodes(4));
+    let mut session =
+        JsonDecodeSession::owned(JsonDecodeLimits::empty().with_max_nodes(4));
     JsonTextDecoder::new(&mut session)
         .validate(br#"{"ok":true}"#)
         .expect("valid JSON should pass lexical inspection");

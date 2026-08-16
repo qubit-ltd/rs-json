@@ -8,6 +8,7 @@
 //! Byte cursor for iterative lexical JSON scanning.
 
 use qubit_budget::ResourceQuantity;
+use qubit_budget::json::JsonContainerKind;
 use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonValueTransaction;
 
@@ -29,7 +30,8 @@ where
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 }
 
-impl<'input, 'transaction, 'budget, R, Q> JsonLexicalCursor<'input, 'transaction, 'budget, R, Q>
+impl<'input, 'transaction, 'budget, R, Q>
+    JsonLexicalCursor<'input, 'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
@@ -67,7 +69,10 @@ where
     }
 
     /// Builds a structured syntax error at the current cursor position.
-    pub(super) fn syntax(&self, reason: JsonLexicalErrorReason) -> JsonLexicalError<R, Q> {
+    pub(super) fn syntax(
+        &self,
+        reason: JsonLexicalErrorReason,
+    ) -> JsonLexicalError<R, Q> {
         let (line, column) = self.line_column();
         JsonLexicalError::Syntax(JsonLexicalFailure {
             offset: self.offset,
@@ -88,17 +93,23 @@ where
             Some(b'{') => {
                 self.offset += 1;
                 self.transaction
-                    .try_enter_container(qubit_budget::json::JsonContainerKind::Map, depth)
+                    .try_enter_container(JsonContainerKind::Map, depth)
                     .map_err(JsonLexicalError::from)?;
-                stack.push(JsonLexicalContainerFrame::ObjectKey { depth, entries: 0 });
+                stack.push(JsonLexicalContainerFrame::ObjectKey {
+                    depth,
+                    entries: 0,
+                });
                 Ok(())
             }
             Some(b'[') => {
                 self.offset += 1;
                 self.transaction
-                    .try_enter_container(qubit_budget::json::JsonContainerKind::Sequence, depth)
+                    .try_enter_container(JsonContainerKind::Sequence, depth)
                     .map_err(JsonLexicalError::from)?;
-                stack.push(JsonLexicalContainerFrame::ArrayValue { depth, items: 0 });
+                stack.push(JsonLexicalContainerFrame::ArrayValue {
+                    depth,
+                    items: 0,
+                });
                 Ok(())
             }
             Some(b'"') => {
@@ -113,11 +124,20 @@ where
                     .try_admit(JsonMeasurement::Number { depth, bytes })
                     .map_err(JsonLexicalError::from)
             }
-            Some(b't') => self.literal(b"true", JsonMeasurement::Boolean { depth }),
-            Some(b'f') => self.literal(b"false", JsonMeasurement::Boolean { depth }),
-            Some(b'n') => self.literal(b"null", JsonMeasurement::Null { depth }),
+            Some(b't') => {
+                self.literal(b"true", JsonMeasurement::Boolean { depth })
+            }
+            Some(b'f') => {
+                self.literal(b"false", JsonMeasurement::Boolean { depth })
+            }
+            Some(b'n') => {
+                self.literal(b"null", JsonMeasurement::Null { depth })
+            }
             None => Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd)),
-            Some(byte) => Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte { byte })),
+            Some(byte) => {
+                Err(self
+                    .syntax(JsonLexicalErrorReason::UnexpectedByte { byte }))
+            }
         }
     }
 
@@ -130,7 +150,9 @@ where
         if !self.input[self.offset..].starts_with(literal) {
             return Err(match self.peek() {
                 None => self.syntax(JsonLexicalErrorReason::UnexpectedEnd),
-                Some(byte) => self.syntax(JsonLexicalErrorReason::UnexpectedByte { byte }),
+                Some(byte) => {
+                    self.syntax(JsonLexicalErrorReason::UnexpectedByte { byte })
+                }
             });
         }
         let end = self.offset.saturating_add(literal.len());
@@ -160,24 +182,26 @@ where
                         self.offset += 1;
                         return Ok(());
                     }
-                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte {
-                        byte: self.peek().unwrap_or_default(),
-                    }));
+                    return Err(self.syntax(
+                        JsonLexicalErrorReason::UnexpectedByte {
+                            byte: self.peek().unwrap_or_default(),
+                        },
+                    ));
                 }
-                let items = items
-                    .checked_add(1)
-                    .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
+                let items = items.checked_add(1).ok_or_else(|| {
+                    self.syntax(JsonLexicalErrorReason::NestingOverflow)
+                })?;
                 self.transaction
-                    .check_container_count(
-                        qubit_budget::json::JsonContainerKind::Sequence,
-                        items,
-                    )
+                    .check_container_count(JsonContainerKind::Sequence, items)
                     .map_err(JsonLexicalError::from)?;
-                stack.push(JsonLexicalContainerFrame::ArrayDelimiter { depth, items });
+                stack.push(JsonLexicalContainerFrame::ArrayDelimiter {
+                    depth,
+                    items,
+                });
                 self.value(
-                    depth
-                        .checked_add(1)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?,
+                    depth.checked_add(1).ok_or_else(|| {
+                        self.syntax(JsonLexicalErrorReason::NestingOverflow)
+                    })?,
                     stack,
                 )
             }
@@ -186,15 +210,22 @@ where
                 match self.peek() {
                     Some(b',') => {
                         self.offset += 1;
-                        stack.push(JsonLexicalContainerFrame::ArrayValue { depth, items });
+                        stack.push(JsonLexicalContainerFrame::ArrayValue {
+                            depth,
+                            items,
+                        });
                         Ok(())
                     }
                     Some(b']') => {
                         self.offset += 1;
                         Ok(())
                     }
-                    None => Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd)),
-                    Some(_) => Err(self.syntax(JsonLexicalErrorReason::ExpectedCommaOrArrayEnd)),
+                    None => {
+                        Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd))
+                    }
+                    Some(_) => Err(self.syntax(
+                        JsonLexicalErrorReason::ExpectedCommaOrArrayEnd,
+                    )),
                 }
             }
             JsonLexicalContainerFrame::ObjectKey { depth, entries } => {
@@ -204,18 +235,22 @@ where
                         self.offset += 1;
                         return Ok(());
                     }
-                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte {
-                        byte: self.peek().unwrap_or_default(),
-                    }));
+                    return Err(self.syntax(
+                        JsonLexicalErrorReason::UnexpectedByte {
+                            byte: self.peek().unwrap_or_default(),
+                        },
+                    ));
                 }
                 if self.peek() != Some(b'"') {
-                    return Err(self.syntax(JsonLexicalErrorReason::ExpectedObjectKey));
+                    return Err(
+                        self.syntax(JsonLexicalErrorReason::ExpectedObjectKey)
+                    );
                 }
-                let entries = entries
-                    .checked_add(1)
-                    .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
+                let entries = entries.checked_add(1).ok_or_else(|| {
+                    self.syntax(JsonLexicalErrorReason::NestingOverflow)
+                })?;
                 self.transaction
-                    .check_container_count(qubit_budget::json::JsonContainerKind::Map, entries)
+                    .check_container_count(JsonContainerKind::Map, entries)
                     .map_err(JsonLexicalError::from)?;
                 let bytes = self.string_bytes()?;
                 self.transaction
@@ -224,16 +259,23 @@ where
                 self.skip_whitespace();
                 if self.peek() != Some(b':') {
                     return Err(match self.peek() {
-                        None => self.syntax(JsonLexicalErrorReason::UnexpectedEnd),
-                        Some(_) => self.syntax(JsonLexicalErrorReason::ExpectedColon),
+                        None => {
+                            self.syntax(JsonLexicalErrorReason::UnexpectedEnd)
+                        }
+                        Some(_) => {
+                            self.syntax(JsonLexicalErrorReason::ExpectedColon)
+                        }
                     });
                 }
                 self.offset += 1;
-                stack.push(JsonLexicalContainerFrame::ObjectDelimiter { depth, entries });
+                stack.push(JsonLexicalContainerFrame::ObjectDelimiter {
+                    depth,
+                    entries,
+                });
                 self.value(
-                    depth
-                        .checked_add(1)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?,
+                    depth.checked_add(1).ok_or_else(|| {
+                        self.syntax(JsonLexicalErrorReason::NestingOverflow)
+                    })?,
                     stack,
                 )
             }
@@ -242,15 +284,22 @@ where
                 match self.peek() {
                     Some(b',') => {
                         self.offset += 1;
-                        stack.push(JsonLexicalContainerFrame::ObjectKey { depth, entries });
+                        stack.push(JsonLexicalContainerFrame::ObjectKey {
+                            depth,
+                            entries,
+                        });
                         Ok(())
                     }
                     Some(b'}') => {
                         self.offset += 1;
                         Ok(())
                     }
-                    None => Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd)),
-                    Some(_) => Err(self.syntax(JsonLexicalErrorReason::ExpectedCommaOrObjectEnd)),
+                    None => {
+                        Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd))
+                    }
+                    Some(_) => Err(self.syntax(
+                        JsonLexicalErrorReason::ExpectedCommaOrObjectEnd,
+                    )),
                 }
             }
         }
@@ -270,21 +319,28 @@ where
                 Some(b'\\') => {
                     self.offset += 1;
                     let bytes = match self.peek() {
-                        Some(b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't') => {
+                        Some(
+                            b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r'
+                            | b't',
+                        ) => {
                             self.offset += 1;
                             1
                         }
                         Some(b'u') => self.unicode_escape_bytes()?,
                         None => {
-                            return Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd));
+                            return Err(self.syntax(
+                                JsonLexicalErrorReason::UnexpectedEnd,
+                            ));
                         }
                         Some(_) => {
-                            return Err(self.syntax(JsonLexicalErrorReason::InvalidEscape));
+                            return Err(self.syntax(
+                                JsonLexicalErrorReason::InvalidEscape,
+                            ));
                         }
                     };
-                    decoded = decoded
-                        .checked_add(bytes)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
+                    decoded = decoded.checked_add(bytes).ok_or_else(|| {
+                        self.syntax(JsonLexicalErrorReason::NestingOverflow)
+                    })?;
                 }
                 Some(0x20..=0x7F) => {
                     let start = self.offset;
@@ -297,66 +353,89 @@ where
                     }
                     decoded = decoded
                         .checked_add(self.offset - start)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
+                        .ok_or_else(|| {
+                            self.syntax(JsonLexicalErrorReason::NestingOverflow)
+                        })?;
                 }
                 Some(byte) if byte >= 0x80 => {
-                    let width = Self::utf8_width(byte)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::InvalidUtf8))?;
-                    let end = self
-                        .offset
-                        .checked_add(width)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
-                    let text = self
-                        .input
-                        .get(self.offset..end)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::UnexpectedEnd))?;
+                    let width = Self::utf8_width(byte).ok_or_else(|| {
+                        self.syntax(JsonLexicalErrorReason::InvalidUtf8)
+                    })?;
+                    let end =
+                        self.offset.checked_add(width).ok_or_else(|| {
+                            self.syntax(JsonLexicalErrorReason::NestingOverflow)
+                        })?;
+                    let text =
+                        self.input.get(self.offset..end).ok_or_else(|| {
+                            self.syntax(JsonLexicalErrorReason::UnexpectedEnd)
+                        })?;
                     let character = std::str::from_utf8(text)
                         .ok()
                         .and_then(|text| text.chars().next())
                         .filter(|character| character.len_utf8() == width)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::InvalidUtf8))?;
+                        .ok_or_else(|| {
+                            self.syntax(JsonLexicalErrorReason::InvalidUtf8)
+                        })?;
                     self.offset = end;
                     decoded = decoded
                         .checked_add(character.len_utf8())
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
+                        .ok_or_else(|| {
+                            self.syntax(JsonLexicalErrorReason::NestingOverflow)
+                        })?;
                 }
                 None => {
-                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd));
+                    return Err(
+                        self.syntax(JsonLexicalErrorReason::UnexpectedEnd)
+                    );
                 }
                 Some(byte) => {
-                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte { byte }));
+                    return Err(self.syntax(
+                        JsonLexicalErrorReason::UnexpectedByte { byte },
+                    ));
                 }
             }
         }
     }
 
     /// Consumes a Unicode escape and returns its decoded UTF-8 byte length.
-    fn unicode_escape_bytes(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
+    fn unicode_escape_bytes(
+        &mut self,
+    ) -> Result<usize, JsonLexicalError<R, Q>> {
         debug_assert_eq!(self.peek(), Some(b'u'));
         self.offset += 1;
         let first = self.hex_quad()?;
         let scalar = if (0xD800..=0xDBFF).contains(&first) {
-            if self.input.get(self.offset..self.offset.saturating_add(2)) != Some(b"\\u") {
+            if self.input.get(self.offset..self.offset.saturating_add(2))
+                != Some(b"\\u")
+            {
                 return Err(match self.peek() {
                     None => self.syntax(JsonLexicalErrorReason::UnexpectedEnd),
-                    Some(_) => self.syntax(JsonLexicalErrorReason::UnpairedSurrogate),
+                    Some(_) => {
+                        self.syntax(JsonLexicalErrorReason::UnpairedSurrogate)
+                    }
                 });
             }
             self.offset += 2;
             let second = self.hex_quad()?;
             if !(0xDC00..=0xDFFF).contains(&second) {
-                return Err(self.syntax(JsonLexicalErrorReason::UnpairedSurrogate));
+                return Err(
+                    self.syntax(JsonLexicalErrorReason::UnpairedSurrogate)
+                );
             }
-            0x1_0000 + ((u32::from(first) - 0xD800) << 10) + (u32::from(second) - 0xDC00)
+            0x1_0000
+                + ((u32::from(first) - 0xD800) << 10)
+                + (u32::from(second) - 0xDC00)
         } else {
             if (0xDC00..=0xDFFF).contains(&first) {
-                return Err(self.syntax(JsonLexicalErrorReason::UnpairedSurrogate));
+                return Err(
+                    self.syntax(JsonLexicalErrorReason::UnpairedSurrogate)
+                );
             }
             u32::from(first)
         };
-        char::from_u32(scalar)
-            .map(char::len_utf8)
-            .ok_or_else(|| self.syntax(JsonLexicalErrorReason::UnpairedSurrogate))
+        char::from_u32(scalar).map(char::len_utf8).ok_or_else(|| {
+            self.syntax(JsonLexicalErrorReason::UnpairedSurrogate)
+        })
     }
 
     /// Consumes four hexadecimal digits from a Unicode escape.
@@ -368,10 +447,13 @@ where
                 Some(byte @ b'a'..=b'f') => u16::from(byte - b'a' + 10),
                 Some(byte @ b'A'..=b'F') => u16::from(byte - b'A' + 10),
                 None => {
-                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd));
+                    return Err(
+                        self.syntax(JsonLexicalErrorReason::UnexpectedEnd)
+                    );
                 }
                 Some(_) => {
-                    return Err(self.syntax(JsonLexicalErrorReason::InvalidUnicodeEscape));
+                    return Err(self
+                        .syntax(JsonLexicalErrorReason::InvalidUnicodeEscape));
                 }
             };
             value = (value << 4) | digit;
@@ -469,9 +551,10 @@ where
                     index += 1;
                 }
                 _ => {
-                    let character = std::str::from_utf8(&self.input[index..end])
-                        .ok()
-                        .and_then(|text| text.chars().next());
+                    let character =
+                        std::str::from_utf8(&self.input[index..end])
+                            .ok()
+                            .and_then(|text| text.chars().next());
                     if let Some(character) = character {
                         index += character.len_utf8();
                     } else {

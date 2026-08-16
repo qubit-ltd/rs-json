@@ -18,13 +18,14 @@ use crate::text::json_encode_test_support::encode;
 /// Ensures arbitrary-precision numbers and raw fragments stay budget-aware.
 #[test]
 fn test_private_serde_json_shapes_encode_through_budget() {
-    let number: Number =
-        from_str("12345678901234567890").expect("arbitrary-precision number should parse");
-    let raw = RawValue::from_string(String::from("{\"ok\":true}")).expect("raw JSON should parse");
+    let number: Number = from_str("12345678901234567890")
+        .expect("arbitrary-precision number should parse");
+    let raw = RawValue::from_string(String::from("{\"ok\":true}"))
+        .expect("raw JSON should parse");
     let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
 
-    let output =
-        encode(&(&number, &raw), &mut session).expect("private serde_json shapes should encode");
+    let output = encode(&(&number, &raw), &mut session)
+        .expect("private serde_json shapes should encode");
 
     assert_eq!(output, br#"[12345678901234567890,{"ok":true}]"#);
 }
@@ -33,7 +34,8 @@ fn test_private_serde_json_shapes_encode_through_budget() {
 #[test]
 fn test_real_number_uses_private_number_classification() {
     const NUMBER_TEXT: &str = "12345678901234567890";
-    let number: Number = from_str(NUMBER_TEXT).expect("arbitrary-precision number should parse");
+    let number: Number =
+        from_str(NUMBER_TEXT).expect("arbitrary-precision number should parse");
     let limits = JsonEncodeLimits::empty()
         .with_max_nodes(1)
         .with_max_map_entries(0)
@@ -51,7 +53,8 @@ fn test_real_number_uses_private_number_classification() {
 /// Ensures a real RawValue is budgeted as its represented JSON structure.
 #[test]
 fn test_real_raw_value_uses_private_raw_value_classification() {
-    let raw = RawValue::from_string(String::from("{\"ok\":true}")).expect("raw JSON should parse");
+    let raw = RawValue::from_string(String::from("{\"ok\":true}"))
+        .expect("raw JSON should parse");
     let limits = JsonEncodeLimits::empty()
         .with_max_nodes(2)
         .with_max_map_entries(1)

@@ -29,12 +29,16 @@ use serde::de::IgnoredAny;
 #[test]
 fn decode_and_encode_sessions_have_independent_directional_resources() {
     let decode = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 8)),
+        JsonDecodeLimits::empty().with_input_bytes_limit(ResourceLimit::new(
+            JsonResource::InputBytes,
+            8,
+        )),
     );
     let encode = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty()
-            .with_output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 8)),
+        JsonEncodeLimits::empty().with_output_bytes_limit(ResourceLimit::new(
+            JsonResource::OutputBytes,
+            8,
+        )),
     );
 
     assert_eq!(decode.max_input_bytes(), Some(8));
@@ -45,8 +49,10 @@ fn decode_and_encode_sessions_have_independent_directional_resources() {
 #[test]
 fn test_decode_attempt_consumes_input_bytes_atomically() {
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 3)),
+        JsonDecodeLimits::empty().with_input_bytes_limit(ResourceLimit::new(
+            JsonResource::InputBytes,
+            3,
+        )),
     );
 
     let mut attempt = session.begin_value();
@@ -64,11 +70,14 @@ fn test_decode_attempt_consumes_input_bytes_atomically() {
 fn test_decode_session_borrowing_reuses_caller_owned_budgets() {
     let mut input = ResourceBudget::new(JsonResource::InputBytes, 16_usize);
     let mut value = JsonValueBudget::new(
-        JsonValueLimits::empty()
-            .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3_usize)),
+        JsonValueLimits::empty().with_payload_bytes_limit(ResourceLimit::new(
+            JsonResource::PayloadBytes,
+            3_usize,
+        )),
     );
     {
-        let mut session = JsonDecodeSession::borrowing_input(&mut input, &mut value);
+        let mut session =
+            JsonDecodeSession::borrowing_input(&mut input, &mut value);
         JsonTextDecoder::new(&mut session)
             .decode::<IgnoredAny>(br#"{"a":1}"#)
             .expect("borrowed session should admit the document");
@@ -86,13 +95,21 @@ fn test_decode_session_borrowing_reuses_caller_owned_budgets() {
 #[test]
 fn test_decode_session_preserves_embedded_value_limits() {
     let value_limits = JsonValueLimits::empty()
-        .with_string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2))
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
+        .with_string_bytes_limit(ResourceLimit::new(
+            JsonResource::StringBytes,
+            2,
+        ))
+        .with_payload_bytes_limit(ResourceLimit::new(
+            JsonResource::PayloadBytes,
+            3,
+        ))
         .with_structure_limits(
-            StructureLimits::new().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+            StructureLimits::new()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
         );
-    let mut session =
-        JsonDecodeSession::owned(JsonDecodeLimits::empty().with_value_limits(value_limits));
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::empty().with_value_limits(value_limits),
+    );
 
     let mut attempt = session.begin_value();
     attempt
@@ -189,7 +206,8 @@ fn test_decode_attempt_panic_retains_input_and_reuses_value_capacity() {
 /// Verifies lenient normalization and typed decode failures retain immediate
 /// input charges but roll back staged values before the next attempt.
 #[test]
-fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity() {
+fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity()
+ {
     let rejected = "```json\nnull\n```";
     let accepted = "null";
     let mut session = JsonDecodeSession::owned(
@@ -220,6 +238,8 @@ fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity
 
     decoder
         .decode_with_session::<IgnoredAny>(accepted, &mut session)
-        .expect("typed failure must leave value capacity for the next document");
+        .expect(
+            "typed failure must leave value capacity for the next document",
+        );
     assert_eq!(session.value_budget().used_nodes(), Some(1));
 }

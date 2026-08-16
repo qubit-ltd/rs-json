@@ -175,7 +175,10 @@ impl LenientJsonDecoder {
     /// # Panics
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
-    pub fn decode_slice<T>(&self, input: &[u8]) -> Result<T, LenientJsonDecodeError>
+    pub fn decode_slice<T>(
+        &self,
+        input: &[u8],
+    ) -> Result<T, LenientJsonDecodeError>
     where
         T: DeserializeOwned,
     {
@@ -193,7 +196,11 @@ impl LenientJsonDecoder {
             ));
         }
         let input = std::str::from_utf8(input).map_err(|error| {
-            LenientJsonDecodeError::invalid_utf8(error, raw_input_bytes, privacy_policy)
+            LenientJsonDecodeError::invalid_utf8(
+                error,
+                raw_input_bytes,
+                privacy_policy,
+            )
         })?;
         let normalized = self
             .normalizer
@@ -233,7 +240,10 @@ impl LenientJsonDecoder {
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     #[inline(always)]
-    pub fn decode_object<T>(&self, input: &str) -> Result<T, LenientJsonDecodeError>
+    pub fn decode_object<T>(
+        &self,
+        input: &str,
+    ) -> Result<T, LenientJsonDecodeError>
     where
         T: DeserializeOwned,
     {
@@ -263,7 +273,10 @@ impl LenientJsonDecoder {
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     #[inline(always)]
-    pub fn decode_array<T>(&self, input: &str) -> Result<Vec<T>, LenientJsonDecodeError>
+    pub fn decode_array<T>(
+        &self,
+        input: &str,
+    ) -> Result<Vec<T>, LenientJsonDecodeError>
     where
         T: DeserializeOwned,
     {
@@ -287,7 +300,10 @@ impl LenientJsonDecoder {
     ///
     /// Returns [`LenientJsonDecodeError`] when input normalization or JSON
     /// parsing fails.
-    pub fn decode_value(&self, input: &str) -> Result<Value, LenientJsonDecodeError> {
+    pub fn decode_value(
+        &self,
+        input: &str,
+    ) -> Result<Value, LenientJsonDecodeError> {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().error_privacy_policy();
         let mut session = self.decode_session();
@@ -390,7 +406,10 @@ impl LenientJsonDecoder {
     ///
     /// Returns [`LenientJsonDecodeError`] when normalization, JSON parsing, or
     /// target deserialization fails.
-    fn normalize_then_deserialize<T>(&self, input: &str) -> Result<T, LenientJsonDecodeError>
+    fn normalize_then_deserialize<T>(
+        &self,
+        input: &str,
+    ) -> Result<T, LenientJsonDecodeError>
     where
         T: DeserializeOwned,
     {
@@ -438,20 +457,22 @@ impl LenientJsonDecoder {
                 normalized_input_bytes,
                 privacy_policy,
             ),
-            JsonLexicalError::Syntax(error) => match from_str::<&RawValue>(normalized) {
-                Ok(_) => LenientJsonDecodeError::invalid_lexical_json(
-                    error,
-                    raw_input_bytes,
-                    normalized_input_bytes,
-                    privacy_policy,
-                ),
-                Err(error) => LenientJsonDecodeError::invalid_json(
-                    error,
-                    raw_input_bytes,
-                    normalized_input_bytes,
-                    privacy_policy,
-                ),
-            },
+            JsonLexicalError::Syntax(error) => {
+                match from_str::<&RawValue>(normalized) {
+                    Ok(_) => LenientJsonDecodeError::invalid_lexical_json(
+                        error,
+                        raw_input_bytes,
+                        normalized_input_bytes,
+                        privacy_policy,
+                    ),
+                    Err(error) => LenientJsonDecodeError::invalid_json(
+                        error,
+                        raw_input_bytes,
+                        normalized_input_bytes,
+                        privacy_policy,
+                    ),
+                }
+            }
         }
     }
 

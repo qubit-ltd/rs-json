@@ -12,7 +12,8 @@ use serde_json::json;
 /// Verifies that a tracker accounts a materialized JSON tree.
 #[test]
 fn test_budget_tracker_accounts_a_materialized_tree() {
-    let mut tracker = JsonTreeBudgetTracker::new(JsonValueLimits::empty().with_max_nodes(2));
+    let mut tracker =
+        JsonTreeBudgetTracker::new(JsonValueLimits::empty().with_max_nodes(2));
 
     tracker
         .account(&json!({"ok": true}))
@@ -37,7 +38,8 @@ fn test_budget_tracker_exposes_and_transfers_budget_state() {
 /// Verifies failed accounting rolls back and reset clears prior admissions.
 #[test]
 fn test_budget_tracker_rolls_back_rejection_and_resets() {
-    let mut tracker = JsonTreeBudgetTracker::new(JsonValueLimits::empty().with_max_nodes(1));
+    let mut tracker =
+        JsonTreeBudgetTracker::new(JsonValueLimits::empty().with_max_nodes(1));
 
     tracker.account(&json!(true)).expect("one node should fit");
     assert!(tracker.account(&json!([true])).is_err());

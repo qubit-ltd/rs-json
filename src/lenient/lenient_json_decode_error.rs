@@ -199,7 +199,8 @@ impl LenientJsonDecodeError {
     ) -> Self {
         let valid_up_to = error.valid_up_to();
         let error_len = error.error_len();
-        let source = (privacy_policy == ErrorPrivacyPolicy::Detailed).then_some(error);
+        let source =
+            (privacy_policy == ErrorPrivacyPolicy::Detailed).then_some(error);
         Self {
             privacy_policy,
             failure: LenientJsonDecodeFailure::InvalidUtf8 {
@@ -387,18 +388,28 @@ impl LenientJsonDecodeError {
     #[inline(always)]
     pub const fn kind(&self) -> LenientJsonDecodeErrorKind {
         match self.failure {
-            LenientJsonDecodeFailure::InvalidUtf8 { .. } => LenientJsonDecodeErrorKind::InvalidUtf8,
+            LenientJsonDecodeFailure::InvalidUtf8 { .. } => {
+                LenientJsonDecodeErrorKind::InvalidUtf8
+            }
             LenientJsonDecodeFailure::InputTooLarge { .. }
             | LenientJsonDecodeFailure::NormalizedInputTooLarge { .. } => {
                 LenientJsonDecodeErrorKind::InputTooLarge
             }
-            LenientJsonDecodeFailure::EmptyInput { .. } => LenientJsonDecodeErrorKind::EmptyInput,
-            LenientJsonDecodeFailure::InvalidJson { .. } => LenientJsonDecodeErrorKind::InvalidJson,
-            LenientJsonDecodeFailure::Budget { .. } => LenientJsonDecodeErrorKind::Budget,
+            LenientJsonDecodeFailure::EmptyInput { .. } => {
+                LenientJsonDecodeErrorKind::EmptyInput
+            }
+            LenientJsonDecodeFailure::InvalidJson { .. } => {
+                LenientJsonDecodeErrorKind::InvalidJson
+            }
+            LenientJsonDecodeFailure::Budget { .. } => {
+                LenientJsonDecodeErrorKind::Budget
+            }
             LenientJsonDecodeFailure::UnexpectedTopLevel { .. } => {
                 LenientJsonDecodeErrorKind::UnexpectedTopLevel
             }
-            LenientJsonDecodeFailure::Deserialize { .. } => LenientJsonDecodeErrorKind::Deserialize,
+            LenientJsonDecodeFailure::Deserialize { .. } => {
+                LenientJsonDecodeErrorKind::Deserialize
+            }
         }
     }
 
@@ -406,16 +417,26 @@ impl LenientJsonDecodeError {
     #[inline(always)]
     pub const fn stage(&self) -> LenientJsonDecodeStage {
         match self.failure {
-            LenientJsonDecodeFailure::InvalidUtf8 { .. } => LenientJsonDecodeStage::DecodeText,
+            LenientJsonDecodeFailure::InvalidUtf8 { .. } => {
+                LenientJsonDecodeStage::DecodeText
+            }
             LenientJsonDecodeFailure::InputTooLarge { .. }
             | LenientJsonDecodeFailure::NormalizedInputTooLarge { .. }
-            | LenientJsonDecodeFailure::EmptyInput { .. } => LenientJsonDecodeStage::Normalize,
-            LenientJsonDecodeFailure::InvalidJson { .. } => LenientJsonDecodeStage::Parse,
-            LenientJsonDecodeFailure::Budget { .. } => LenientJsonDecodeStage::Admission,
+            | LenientJsonDecodeFailure::EmptyInput { .. } => {
+                LenientJsonDecodeStage::Normalize
+            }
+            LenientJsonDecodeFailure::InvalidJson { .. } => {
+                LenientJsonDecodeStage::Parse
+            }
+            LenientJsonDecodeFailure::Budget { .. } => {
+                LenientJsonDecodeStage::Admission
+            }
             LenientJsonDecodeFailure::UnexpectedTopLevel { .. } => {
                 LenientJsonDecodeStage::TopLevelCheck
             }
-            LenientJsonDecodeFailure::Deserialize { .. } => LenientJsonDecodeStage::Deserialize,
+            LenientJsonDecodeFailure::Deserialize { .. } => {
+                LenientJsonDecodeStage::Deserialize
+            }
         }
     }
 
@@ -429,7 +450,9 @@ impl LenientJsonDecodeError {
     #[inline(always)]
     pub const fn expected_top_level(&self) -> Option<JsonTopLevelKind> {
         match self.failure {
-            LenientJsonDecodeFailure::UnexpectedTopLevel { expected, .. } => Some(expected),
+            LenientJsonDecodeFailure::UnexpectedTopLevel {
+                expected, ..
+            } => Some(expected),
             _ => None,
         }
     }
@@ -438,7 +461,9 @@ impl LenientJsonDecodeError {
     #[inline(always)]
     pub const fn actual_top_level(&self) -> Option<JsonTopLevelKind> {
         match self.failure {
-            LenientJsonDecodeFailure::UnexpectedTopLevel { actual, .. } => Some(actual),
+            LenientJsonDecodeFailure::UnexpectedTopLevel { actual, .. } => {
+                Some(actual)
+            }
             _ => None,
         }
     }
@@ -454,7 +479,8 @@ impl LenientJsonDecodeError {
                 raw_input_bytes, ..
             }
             | LenientJsonDecodeFailure::NormalizedInputTooLarge {
-                raw_input_bytes, ..
+                raw_input_bytes,
+                ..
             }
             | LenientJsonDecodeFailure::EmptyInput {
                 raw_input_bytes, ..
@@ -466,7 +492,8 @@ impl LenientJsonDecodeError {
                 raw_input_bytes, ..
             }
             | LenientJsonDecodeFailure::UnexpectedTopLevel {
-                raw_input_bytes, ..
+                raw_input_bytes,
+                ..
             }
             | LenientJsonDecodeFailure::Deserialize {
                 raw_input_bytes, ..
@@ -478,7 +505,9 @@ impl LenientJsonDecodeError {
     #[inline(always)]
     pub const fn utf8_valid_up_to(&self) -> Option<usize> {
         match self.failure {
-            LenientJsonDecodeFailure::InvalidUtf8 { valid_up_to, .. } => Some(valid_up_to),
+            LenientJsonDecodeFailure::InvalidUtf8 { valid_up_to, .. } => {
+                Some(valid_up_to)
+            }
             _ => None,
         }
     }
@@ -487,7 +516,9 @@ impl LenientJsonDecodeError {
     #[inline(always)]
     pub const fn utf8_error_len(&self) -> Option<usize> {
         match self.failure {
-            LenientJsonDecodeFailure::InvalidUtf8 { error_len, .. } => error_len,
+            LenientJsonDecodeFailure::InvalidUtf8 { error_len, .. } => {
+                error_len
+            }
             _ => None,
         }
     }
@@ -529,7 +560,9 @@ impl LenientJsonDecodeError {
     #[inline(always)]
     pub const fn max_input_bytes(&self) -> Option<usize> {
         match self.failure {
-            LenientJsonDecodeFailure::InputTooLarge { maximum, .. } => Some(maximum),
+            LenientJsonDecodeFailure::InputTooLarge { maximum, .. } => {
+                Some(maximum)
+            }
             _ => None,
         }
     }
@@ -539,7 +572,10 @@ impl LenientJsonDecodeError {
     #[inline(always)]
     pub const fn max_normalized_bytes(&self) -> Option<usize> {
         match self.failure {
-            LenientJsonDecodeFailure::NormalizedInputTooLarge { maximum, .. } => Some(maximum),
+            LenientJsonDecodeFailure::NormalizedInputTooLarge {
+                maximum,
+                ..
+            } => Some(maximum),
             _ => None,
         }
     }
@@ -574,7 +610,9 @@ impl LenientJsonDecodeError {
 
     /// Returns the complete decoded-value budget rejection when present.
     #[inline(always)]
-    pub const fn measured_budget_error(&self) -> Option<&MeasuredBudgetError<JsonResource, usize>> {
+    pub const fn measured_budget_error(
+        &self,
+    ) -> Option<&MeasuredBudgetError<JsonResource, usize>> {
         match &self.failure {
             LenientJsonDecodeFailure::Budget { source, .. } => Some(source),
             _ => None,
@@ -621,7 +659,10 @@ impl PartialEq for LenientJsonDecodeFailure {
                     error_len: right_len,
                     ..
                 },
-            ) => (left_raw, left_valid, left_len) == (right_raw, right_valid, right_len),
+            ) => {
+                (left_raw, left_valid, left_len)
+                    == (right_raw, right_valid, right_len)
+            }
             (
                 Self::InputTooLarge {
                     raw_input_bytes: left_raw,
@@ -722,7 +763,12 @@ impl PartialEq for LenientJsonDecodeFailure {
                 },
             ) => {
                 (left_raw, left_normalized, left_expected, left_actual)
-                    == (right_raw, right_normalized, right_expected, right_actual)
+                    == (
+                        right_raw,
+                        right_normalized,
+                        right_expected,
+                        right_actual,
+                    )
             }
             _ => false,
         }
@@ -734,7 +780,8 @@ impl Eq for LenientJsonDecodeFailure {}
 impl PartialEq for LenientJsonDecodeError {
     /// Compares the privacy policy and all structured diagnostics.
     fn eq(&self, other: &Self) -> bool {
-        self.privacy_policy == other.privacy_policy && self.failure == other.failure
+        self.privacy_policy == other.privacy_policy
+            && self.failure == other.failure
     }
 }
 
@@ -775,7 +822,9 @@ impl fmt::Display for LenientJsonDecodeFailure {
                 f,
                 "Normalized JSON input is too large: {normalized_input_bytes} bytes exceed configured limit {maximum} bytes"
             ),
-            Self::EmptyInput { .. } => f.write_str("JSON input is empty after normalization"),
+            Self::EmptyInput { .. } => {
+                f.write_str("JSON input is empty after normalization")
+            }
             Self::InvalidJson {
                 line,
                 column,

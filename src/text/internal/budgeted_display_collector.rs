@@ -15,15 +15,21 @@ use qubit_budget::ResourceQuantity;
 use super::json_encode_context::JsonEncodeContext;
 
 /// Collects display text without growing beyond the live output budget.
-pub(super) struct BudgetedDisplayCollector<'context, 'transaction, 'budget, R, Q>
-where
+pub(super) struct BudgetedDisplayCollector<
+    'context,
+    'transaction,
+    'budget,
+    R,
+    Q,
+> where
     Q: ResourceQuantity,
 {
     /// Text accepted by the relevant budget so far.
     pub(super) text: String,
 
     /// Shared traversal state retaining typed budget errors.
-    pub(super) context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+    pub(super) context:
+        &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 }
 
 impl<'context, 'transaction, 'budget, R, Q>
@@ -33,7 +39,9 @@ where
 {
     /// Creates an empty collector bound to the shared encode context.
     pub(super) fn new(
-        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+        context: &'context RefCell<
+            JsonEncodeContext<'transaction, 'budget, R, Q>,
+        >,
     ) -> Self {
         Self {
             text: String::new(),
@@ -49,8 +57,10 @@ where
 {
     /// Checks cumulative length before growing the string.
     fn write_str(&mut self, value: &str) -> fmt::Result {
-        let next = self.text.len().checked_add(value.len()).ok_or(fmt::Error)?;
-        let output_result = self.context.borrow().output.borrow().check_available(next);
+        let next =
+            self.text.len().checked_add(value.len()).ok_or(fmt::Error)?;
+        let output_result =
+            self.context.borrow().output.borrow().check_available(next);
         self.context
             .borrow_mut()
             .record::<fmt::Error>(output_result)?;

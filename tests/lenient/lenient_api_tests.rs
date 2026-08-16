@@ -22,7 +22,8 @@ use qubit_json::lenient::LenientJsonDecoder;
 #[test]
 fn test_lenient_domain_owns_its_public_types() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict().with_error_privacy_policy(ErrorPrivacyPolicy::Redacted),
+        LenientJsonDecodeOptions::strict()
+            .with_error_privacy_policy(ErrorPrivacyPolicy::Redacted),
     );
     let error = decoder
         .decode::<u64>(r#""TOP_SECRET""#)
