@@ -71,7 +71,9 @@ where
     }
 
     /// Creates a child visitor borrowing the same transaction.
-    fn child<'child>(&'child mut self) -> JsonValueVisitor<'child, 'budget, R, Q> {
+    fn child<'child>(
+        &'child mut self,
+    ) -> JsonValueVisitor<'child, 'budget, R, Q> {
         JsonValueVisitor::new(self.transaction, self.depth.saturating_add(1))
     }
 
@@ -137,8 +139,9 @@ where
     where
         E: Error,
     {
-        let number = Number::from_i128(value)
-            .expect("serde_json arbitrary-precision support must represent i128");
+        let number = Number::from_i128(value).expect(
+            "serde_json arbitrary-precision support must represent i128",
+        );
         self.enter_number(number)
     }
 
@@ -154,8 +157,9 @@ where
     where
         E: Error,
     {
-        let number = Number::from_u128(value)
-            .expect("serde_json arbitrary-precision support must represent u128");
+        let number = Number::from_u128(value).expect(
+            "serde_json arbitrary-precision support must represent u128",
+        );
         self.enter_number(number)
     }
 
@@ -163,8 +167,9 @@ where
     where
         E: Error,
     {
-        let number = Number::from_f64(value)
-            .ok_or_else(|| E::custom("non-finite float is not representable as JSON"))?;
+        let number = Number::from_f64(value).ok_or_else(|| {
+            E::custom("non-finite float is not representable as JSON")
+        })?;
         self.enter_number(number)
     }
 
@@ -213,7 +218,10 @@ where
         deserializer.deserialize_any(self)
     }
 
-    fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    fn visit_newtype_struct<D>(
+        self,
+        deserializer: D,
+    ) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -226,12 +234,12 @@ where
     {
         let mut values = Vec::new();
         loop {
-            let next = values
-                .len()
-                .checked_add(1)
-                .ok_or_else(|| A::Error::custom("JSON sequence item count overflowed usize"))?;
-            let Some(value) = sequence
-                .next_element_seed(self.prospective_child(JsonContainerKind::Sequence, next))?
+            let next = values.len().checked_add(1).ok_or_else(|| {
+                A::Error::custom("JSON sequence item count overflowed usize")
+            })?;
+            let Some(value) = sequence.next_element_seed(
+                self.prospective_child(JsonContainerKind::Sequence, next),
+            )?
             else {
                 break;
             };
@@ -251,9 +259,9 @@ where
         let mut values = Map::new();
         let mut entries = 0_usize;
         loop {
-            let next = entries
-                .checked_add(1)
-                .ok_or_else(|| A::Error::custom("JSON map entry count overflowed usize"))?;
+            let next = entries.checked_add(1).ok_or_else(|| {
+                A::Error::custom("JSON map entry count overflowed usize")
+            })?;
             let Some(key) = map.next_key_seed(JsonKeySeed {
                 transaction: self.transaction,
                 prospective: next,

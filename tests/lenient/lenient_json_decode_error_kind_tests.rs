@@ -58,7 +58,8 @@ fn test_decode_error_kind_from_str() {
         LenientJsonDecodeErrorKind::InputTooLarge
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::from_str("empty_input").expect("empty_input must parse"),
+        LenientJsonDecodeErrorKind::from_str("empty_input")
+            .expect("empty_input must parse"),
         LenientJsonDecodeErrorKind::EmptyInput
     );
     assert_eq!(
@@ -82,7 +83,8 @@ fn test_decode_error_kind_from_str() {
         LenientJsonDecodeErrorKind::UnexpectedTopLevel
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::from_str("deserialize").expect("deserialize must parse"),
+        LenientJsonDecodeErrorKind::from_str("deserialize")
+            .expect("deserialize must parse"),
         LenientJsonDecodeErrorKind::Deserialize
     );
     assert_eq!(

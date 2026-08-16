@@ -32,10 +32,12 @@ use crate::fixtures::JsonTestLimits;
 use crate::text::json_encode_test_support::encode;
 
 /// Private token used by serde_json for arbitrary-precision numbers.
-const JSON_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
+const JSON_NUMBER_TOKEN: &str =
+    concat!("$", "serde_json", ":", ":private::Number");
 
 /// Private token used by serde_json for raw JSON fragments.
-const JSON_RAW_VALUE_TOKEN: &str = concat!("$", "serde_json", ":", ":private::RawValue");
+const JSON_RAW_VALUE_TOKEN: &str =
+    concat!("$", "serde_json", ":", ":private::RawValue");
 
 struct SkipFieldStruct;
 
@@ -56,8 +58,8 @@ impl Serialize for SkipFieldStruct {
 #[test]
 fn test_json_encode_compound_forwards_skip_field() {
     let mut session = JsonTestLimits::new().encode_session();
-    let encoded =
-        encode(&SkipFieldStruct, &mut session).expect("skipped fields should be forwarded");
+    let encoded = encode(&SkipFieldStruct, &mut session)
+        .expect("skipped fields should be forwarded");
     assert_eq!(encoded, br#"{"kept":true}"#);
 }
 
@@ -218,7 +220,8 @@ impl Serialize for UnderreportedStruct<'_> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("UnderreportedStruct", 1)?;
+        let mut state =
+            serializer.serialize_struct("UnderreportedStruct", 1)?;
         state.serialize_field("a", &ObservedUnit(self.0))?;
         state.serialize_field("b", &ObservedUnit(self.0))?;
         state.serialize_field("c", &ObservedUnit(self.0))?;
@@ -235,7 +238,8 @@ impl Serialize for UnderreportedTupleStruct<'_> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_tuple_struct("Underreported", 1)?;
+        let mut state =
+            serializer.serialize_tuple_struct("Underreported", 1)?;
         for _ in 0..3 {
             state.serialize_field(&ObservedUnit(self.0))?;
         }
@@ -259,13 +263,15 @@ impl Serialize for UnderreportedVariant<'_> {
         S: Serializer,
     {
         if self.tuple {
-            let mut state = serializer.serialize_tuple_variant("E", 0, "V", 1)?;
+            let mut state =
+                serializer.serialize_tuple_variant("E", 0, "V", 1)?;
             for _ in 0..3 {
                 state.serialize_field(&ObservedUnit(self.observed))?;
             }
             state.end()
         } else {
-            let mut state = serializer.serialize_struct_variant("E", 0, "V", 1)?;
+            let mut state =
+                serializer.serialize_struct_variant("E", 0, "V", 1)?;
             state.serialize_field("a", &ObservedUnit(self.observed))?;
             state.serialize_field("b", &ObservedUnit(self.observed))?;
             state.serialize_field("c", &ObservedUnit(self.observed))?;
@@ -299,8 +305,8 @@ where
     T: Serialize + ?Sized,
 {
     let mut budget = limits.encode_session();
-    let error =
-        encode(value, &mut budget).expect_err("the configured JSON limit must reject the value");
+    let error = encode(value, &mut budget)
+        .expect_err("the configured JSON limit must reject the value");
     let JsonEncodeError::Budget(error) = error else {
         panic!("expected a budget error, got {error:?}");
     };
@@ -320,7 +326,8 @@ where
 {
     let expected = to_vec(value).expect("reference JSON");
     let mut budget = JsonTestLimits::new().encode_session();
-    let actual = encode(value, &mut budget).expect("budget-aware JSON should serialize");
+    let actual =
+        encode(value, &mut budget).expect("budget-aware JSON should serialize");
     assert_eq!(actual, expected);
 }
 
@@ -329,13 +336,16 @@ fn assert_node_count<T>(value: &T, nodes: usize)
 where
     T: Serialize + ?Sized,
 {
-    let mut exact = JsonTestLimits::new().with_max_nodes(nodes).encode_session();
-    encode(value, &mut exact).expect("the exact node budget should accept the value");
+    let mut exact =
+        JsonTestLimits::new().with_max_nodes(nodes).encode_session();
+    encode(value, &mut exact)
+        .expect("the exact node budget should accept the value");
 
     let mut insufficient = JsonTestLimits::new()
         .with_max_nodes(nodes.saturating_sub(1))
         .encode_session();
-    let error = encode(value, &mut insufficient).expect_err("one fewer node must reject the value");
+    let error = encode(value, &mut insufficient)
+        .expect_err("one fewer node must reject the value");
     let JsonEncodeError::Budget(error) = error else {
         panic!("expected a budget error, got {error:?}");
     };
@@ -707,7 +717,8 @@ fn test_json_encode_serializer_charges_arbitrary_precision_number_once() {
         .expect("the arbitrary-precision number should parse");
     assert_resource(
         &number,
-        JsonTestLimits::new().with_max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
+        JsonTestLimits::new()
+            .with_max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
         JsonResource::NumberBytes,
     );
     assert_node_count(&number, 1);
@@ -751,7 +762,8 @@ fn test_json_preflight_ignores_private_number_map_metadata_inside_raw_value() {
     assert_eq!(output, LARGE_NUMBER_TEXT.as_bytes());
     assert_resource(
         &raw,
-        JsonTestLimits::new().with_max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
+        JsonTestLimits::new()
+            .with_max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
         JsonResource::NumberBytes,
     );
 }
@@ -759,12 +771,14 @@ fn test_json_preflight_ignores_private_number_map_metadata_inside_raw_value() {
 /// Verifies RawValue object text cannot impersonate serde_json's Number token.
 #[test]
 fn test_raw_value_charges_single_number_token_object_as_object() {
-    let raw = RawValue::from_string(format!(r#"{{"{JSON_NUMBER_TOKEN}":"x"}}"#))
-        .expect("fixture must contain valid raw JSON");
-    let mut budget = JsonTestLimits::new().with_max_key_bytes(0).encode_session();
+    let raw =
+        RawValue::from_string(format!(r#"{{"{JSON_NUMBER_TOKEN}":"x"}}"#))
+            .expect("fixture must contain valid raw JSON");
+    let mut budget =
+        JsonTestLimits::new().with_max_key_bytes(0).encode_session();
 
-    let error =
-        encode(&raw, &mut budget).expect_err("the raw object's key must consume the key budget");
+    let error = encode(&raw, &mut budget)
+        .expect_err("the raw object's key must consume the key budget");
 
     assert!(matches!(
         error,
@@ -946,7 +960,8 @@ fn test_collect_str_output_lower_bound_preserves_valid_boundaries() {
         .with_max_output_bytes(10)
         .encode_session();
     assert_eq!(
-        encode(&map, &mut budget).expect("collected map key must fit its exact output limit"),
+        encode(&map, &mut budget)
+            .expect("collected map key must fit its exact output limit"),
         br#"{"a":null}"#,
     );
 
@@ -963,7 +978,8 @@ fn test_collect_str_output_lower_bound_preserves_valid_boundaries() {
         .with_max_output_bytes(3)
         .encode_session();
     assert_eq!(
-        encode(&number, &mut budget).expect("collected Number must fit its exact output limit"),
+        encode(&number, &mut budget)
+            .expect("collected Number must fit its exact output limit"),
         b"123",
     );
 }
@@ -1068,7 +1084,8 @@ fn test_underreported_struct_variant_is_rejected_after_third_value() {
 /// Verifies private number node and depth limits reject after their payload is
 /// collected into one complete measurement.
 #[test]
-fn test_json_encode_serializer_checks_private_number_after_payload_collection() {
+fn test_json_encode_serializer_checks_private_number_after_payload_collection()
+{
     let serialized = Cell::new(0);
     let value = CountedPrivateNumber {
         serialized: &serialized,
@@ -1106,8 +1123,9 @@ fn test_json_encode_serializer_measures_simulated_raw_value_structure_once() {
         .with_max_number_bytes(3)
         .encode_session();
 
-    let output = encode(&value, &mut budget)
-        .expect("private raw metadata must not consume JSON key or string limits");
+    let output = encode(&value, &mut budget).expect(
+        "private raw metadata must not consume JSON key or string limits",
+    );
 
     assert_eq!(output, b"123");
     assert_eq!(serialized.get(), 1);
@@ -1126,8 +1144,8 @@ fn test_json_encode_serializer_measures_actual_raw_value_structure() {
         .with_max_string_bytes(0)
         .encode_session();
 
-    let output =
-        encode(&raw, &mut budget).expect("the raw JSON structure should fit its exact limits");
+    let output = encode(&raw, &mut budget)
+        .expect("the raw JSON structure should fit its exact limits");
 
     assert_eq!(output, br#"{"ok":[1,true]}"#);
 }
@@ -1171,8 +1189,8 @@ fn test_json_encode_serializer_checks_raw_depth_before_tail() {
 /// Verifies an impossible raw output size is rejected before raw traversal.
 #[test]
 fn test_json_encode_serializer_checks_raw_output_lower_bound() {
-    let raw =
-        RawValue::from_string(String::from("[null]")).expect("fixture must contain valid raw JSON");
+    let raw = RawValue::from_string(String::from("[null]"))
+        .expect("fixture must contain valid raw JSON");
     assert_resource(
         &raw,
         JsonTestLimits::new()
@@ -1185,8 +1203,8 @@ fn test_json_encode_serializer_checks_raw_output_lower_bound() {
 /// Verifies raw output insufficiency precedes the fragment's depth failure.
 #[test]
 fn test_json_encode_serializer_prioritizes_raw_output_over_depth() {
-    let raw =
-        RawValue::from_string(String::from("[null]")).expect("fixture must contain valid raw JSON");
+    let raw = RawValue::from_string(String::from("[null]"))
+        .expect("fixture must contain valid raw JSON");
     assert_resource(
         &raw,
         JsonTestLimits::new()
@@ -1199,8 +1217,8 @@ fn test_json_encode_serializer_prioritizes_raw_output_over_depth() {
 /// Verifies raw lower bounds use remaining output in a reused encode session.
 #[test]
 fn test_json_encode_serializer_checks_raw_output_remaining_in_reused_session() {
-    let raw =
-        RawValue::from_string(String::from("[null]")).expect("fixture must contain valid raw JSON");
+    let raw = RawValue::from_string(String::from("[null]"))
+        .expect("fixture must contain valid raw JSON");
     let mut session = JsonTestLimits::new()
         .with_max_output_bytes(8)
         .with_max_nodes(1)
@@ -1215,8 +1233,8 @@ fn test_json_encode_serializer_checks_raw_output_remaining_in_reused_session() {
     assert_eq!(output.used(), 4);
     assert_eq!(output.remaining(), 4);
 
-    let error =
-        encode(&raw, &mut session).expect_err("the raw fragment must exceed live remaining output");
+    let error = encode(&raw, &mut session)
+        .expect_err("the raw fragment must exceed live remaining output");
 
     assert!(matches!(
         error,

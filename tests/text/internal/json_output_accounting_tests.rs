@@ -15,7 +15,9 @@ use qubit_json::text::JsonTextEncoder;
 /// Verifies output accounting returns a typed budget violation.
 #[test]
 fn test_json_output_accounting_reports_output_budget() {
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty().with_max_output_bytes(1));
+    let mut session = JsonEncodeSession::owned(
+        JsonEncodeLimits::empty().with_max_output_bytes(1),
+    );
     let error = JsonTextEncoder::new(&mut session)
         .to_vec(&"ok")
         .expect_err("encoded string exceeds one output byte");

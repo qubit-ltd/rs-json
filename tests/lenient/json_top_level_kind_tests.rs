@@ -59,7 +59,8 @@ fn test_top_level_kind_from_str() {
         JsonTopLevelKind::Object
     );
     assert_eq!(
-        JsonTopLevelKind::from_str("ARRAY").expect("ARRAY must parse without case sensitivity"),
+        JsonTopLevelKind::from_str("ARRAY")
+            .expect("ARRAY must parse without case sensitivity"),
         JsonTopLevelKind::Array
     );
     assert_eq!(

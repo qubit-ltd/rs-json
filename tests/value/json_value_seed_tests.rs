@@ -26,7 +26,8 @@ use serde_json::json;
 #[test]
 fn budgeted_value_seed_rejects_decoded_nodes_incrementally() {
     let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::new().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+        StructureLimits::new()
+            .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
     );
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
@@ -57,16 +58,21 @@ fn budgeted_value_seed_returns_the_admitted_value() {
 #[test]
 fn test_budgeted_value_seed_counts_duplicate_object_entries() {
     let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::new()
-            .with_map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)),
+        StructureLimits::new().with_map_entries_limit(ResourceLimit::new(
+            JsonResource::MapEntries,
+            1,
+        )),
     );
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
-    let mut deserializer = Deserializer::from_slice(br#"{"key":null,"key":null}"#);
+    let mut deserializer =
+        Deserializer::from_slice(br#"{"key":null,"key":null}"#);
 
     let error = JsonValueSeed::new(&mut transaction)
         .deserialize(&mut deserializer)
-        .expect_err("the duplicate second entry must exceed the object-entry limit");
+        .expect_err(
+            "the duplicate second entry must exceed the object-entry limit",
+        );
 
     assert!(error.to_string().contains("MapEntries"));
 }
@@ -104,7 +110,9 @@ fn test_budgeted_value_seed_accepts_all_scalar_deserializer_shapes() {
     );
     assert_eq!(
         JsonValueSeed::new(&mut transaction)
-            .deserialize(value::StrDeserializer::<value::Error>::new("borrowed"))
+            .deserialize(value::StrDeserializer::<value::Error>::new(
+                "borrowed"
+            ))
             .expect("borrowed strings are copied into JSON values"),
         json!("borrowed"),
     );
@@ -173,7 +181,9 @@ impl<'de> SerdeDeserializer<'de> for NoneDeserializer {
     where
         V: Visitor<'de>,
     {
-        visitor.visit_newtype_struct(value::BoolDeserializer::<value::Error>::new(true))
+        visitor.visit_newtype_struct(
+            value::BoolDeserializer::<value::Error>::new(true),
+        )
     }
 
     forward_to_deserialize_any! {
@@ -217,13 +227,17 @@ fn test_budgeted_value_seed_handles_option_newtype_and_numeric_errors() {
     let mut transaction = budget.transaction();
     assert_eq!(
         JsonValueSeed::new(&mut transaction)
-            .deserialize(value::I128Deserializer::<value::Error>::new(i128::MAX))
+            .deserialize(value::I128Deserializer::<value::Error>::new(
+                i128::MAX
+            ))
             .expect("arbitrary precision supports i128"),
         json!(i128::MAX),
     );
     assert_eq!(
         JsonValueSeed::new(&mut transaction)
-            .deserialize(value::U128Deserializer::<value::Error>::new(u128::MAX))
+            .deserialize(value::U128Deserializer::<value::Error>::new(
+                u128::MAX
+            ))
             .expect("arbitrary precision supports u128"),
         json!(u128::MAX),
     );
@@ -335,7 +349,9 @@ impl<'de> SerdeDeserializer<'de> for NewtypeDeserializer {
     where
         V: Visitor<'de>,
     {
-        visitor.visit_newtype_struct(value::BoolDeserializer::<value::Error>::new(true))
+        visitor.visit_newtype_struct(
+            value::BoolDeserializer::<value::Error>::new(true),
+        )
     }
 
     forward_to_deserialize_any! {

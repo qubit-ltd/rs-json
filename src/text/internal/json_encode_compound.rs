@@ -33,8 +33,14 @@ use super::private_struct_kind::PrivateStructKind;
 
 /// Wraps a Serde compound serializer and checks container operations before
 /// delegating them.
-pub(in crate::text) struct JsonEncodeCompound<'transaction, 'budget, 'context, C, R, Q>
-where
+pub(in crate::text) struct JsonEncodeCompound<
+    'transaction,
+    'budget,
+    'context,
+    C,
+    R,
+    Q,
+> where
     Q: ResourceQuantity,
 {
     /// Underlying Serde compound serializer.
@@ -62,7 +68,9 @@ where
     /// Creates a wrapper for a regular JSON array or object compound.
     pub(super) const fn new(
         inner: C,
-        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+        context: &'context RefCell<
+            JsonEncodeContext<'transaction, 'budget, R, Q>,
+        >,
         child_depth: usize,
     ) -> Self {
         Self {
@@ -77,7 +85,9 @@ where
     /// Creates a wrapper for serde_json's private number compound.
     pub(super) const fn number(
         inner: C,
-        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+        context: &'context RefCell<
+            JsonEncodeContext<'transaction, 'budget, R, Q>,
+        >,
         depth: usize,
     ) -> Self {
         Self {
@@ -92,7 +102,9 @@ where
     /// Creates a wrapper for serde_json's private raw-value compound.
     pub(super) const fn raw_value(
         inner: C,
-        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+        context: &'context RefCell<
+            JsonEncodeContext<'transaction, 'budget, R, Q>,
+        >,
         depth: usize,
     ) -> Self {
         Self {
@@ -109,10 +121,9 @@ where
     where
         E: Error,
     {
-        let next = self
-            .observed
-            .checked_add(1)
-            .ok_or_else(|| E::custom("JSON sequence item count overflowed usize"))?;
+        let next = self.observed.checked_add(1).ok_or_else(|| {
+            E::custom("JSON sequence item count overflowed usize")
+        })?;
         self.context
             .borrow_mut()
             .check_container_count(JsonContainerKind::Sequence, next)?;
@@ -125,10 +136,9 @@ where
     where
         E: Error,
     {
-        let next = self
-            .observed
-            .checked_add(1)
-            .ok_or_else(|| E::custom("JSON map entry count overflowed usize"))?;
+        let next = self.observed.checked_add(1).ok_or_else(|| {
+            E::custom("JSON map entry count overflowed usize")
+        })?;
         self.context
             .borrow_mut()
             .check_container_count(JsonContainerKind::Map, next)?;
@@ -290,7 +300,11 @@ where
     }
 
     /// Checks and serializes one complete map entry.
-    fn serialize_entry<K, V>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
+    fn serialize_entry<K, V>(
+        &mut self,
+        key: &K,
+        value: &V,
+    ) -> Result<(), Self::Error>
     where
         K: Serialize + ?Sized,
         V: Serialize + ?Sized,
@@ -317,17 +331,29 @@ where
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
-    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         match self.private_kind {
             Some(PrivateStructKind::Number) => {
-                let value = BudgetedPrivateValue::number(value, self.context, self.child_depth);
+                let value = BudgetedPrivateValue::number(
+                    value,
+                    self.context,
+                    self.child_depth,
+                );
                 return self.inner.serialize_field(key, &value);
             }
             Some(PrivateStructKind::RawValue) => {
-                let value = BudgetedPrivateValue::raw_value(value, self.context, self.child_depth);
+                let value = BudgetedPrivateValue::raw_value(
+                    value,
+                    self.context,
+                    self.child_depth,
+                );
                 return self.inner.serialize_field(key, &value);
             }
             None => self.next_map_entry()?,
@@ -365,7 +391,11 @@ where
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
-    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {

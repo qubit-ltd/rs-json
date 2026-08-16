@@ -24,7 +24,8 @@ pub(in crate::value) struct JsonValueChildSeed<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
-    pub(super) transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    pub(super) transaction:
+        &'transaction mut JsonValueTransaction<'budget, R, Q>,
 
     pub(super) depth: usize,
 
@@ -47,6 +48,9 @@ where
         self.transaction
             .check_container_count(self.kind, self.prospective)
             .map_err(D::Error::custom)?;
-        deserializer.deserialize_any(JsonValueVisitor::new(self.transaction, self.depth))
+        deserializer.deserialize_any(JsonValueVisitor::new(
+            self.transaction,
+            self.depth,
+        ))
     }
 }

@@ -38,7 +38,9 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a decoder that charges `session` for each attempted document.
-    pub const fn new(session: &'session mut JsonDecodeSession<'budget, R, Q>) -> Self {
+    pub const fn new(
+        session: &'session mut JsonDecodeSession<'budget, R, Q>,
+    ) -> Self {
         Self { session }
     }
 
@@ -51,7 +53,10 @@ where
     /// JSON document, or [`JsonDecodeError::Deserialize`] when the admitted
     /// value cannot be decoded into `T`. Input charges remain after errors;
     /// staged value charges roll back.
-    pub fn decode<'de, T>(&mut self, input: &'de [u8]) -> Result<T, JsonDecodeError<R, Q>>
+    pub fn decode<'de, T>(
+        &mut self,
+        input: &'de [u8],
+    ) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {
@@ -102,7 +107,10 @@ where
     /// rejected, or [`JsonDecodeError::Syntax`] when `input` is not one
     /// complete JSON document. Input charges remain after errors; admitted
     /// value charges commit only on success.
-    pub fn validate(&mut self, input: &[u8]) -> Result<(), JsonDecodeError<R, Q>> {
+    pub fn validate(
+        &mut self,
+        input: &[u8],
+    ) -> Result<(), JsonDecodeError<R, Q>> {
         let mut attempt = self.session.begin_value();
         attempt
             .try_consume_input_bytes(input.len())

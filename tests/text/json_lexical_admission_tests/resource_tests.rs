@@ -24,13 +24,17 @@ use serde::de::IgnoredAny;
 #[test]
 fn test_json_lexical_preflight_consumes_payload_for_keys_strings_and_numbers() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
-        JsonValueLimits::empty()
-            .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 4)),
+        JsonValueLimits::empty().with_payload_bytes_limit(ResourceLimit::new(
+            JsonResource::PayloadBytes,
+            4,
+        )),
     );
     let mut session = JsonDecodeSession::owned(limits);
     let error = JsonTextDecoder::new(&mut session)
         .decode::<IgnoredAny>(br#"{"a":"bc","n":12}"#)
-        .expect_err("one key, string, and number must exceed four payload bytes");
+        .expect_err(
+            "one key, string, and number must exceed four payload bytes",
+        );
 
     assert!(matches!(
         error,
@@ -52,14 +56,17 @@ fn test_json_lexical_preflight_consumes_payload_for_keys_strings_and_numbers() {
 fn test_json_lexical_preflight_charges_decoded_key_bytes() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
         JsonValueLimits::empty().with_structure_limits(
-            StructureLimits::<JsonResource, usize>::new()
-                .with_key_bytes_limit(ResourceLimit::new(JsonResource::KeyBytes, 2)),
+            StructureLimits::<JsonResource, usize>::new().with_key_bytes_limit(
+                ResourceLimit::new(JsonResource::KeyBytes, 2),
+            ),
         ),
     );
     let mut session = JsonDecodeSession::owned(limits);
     let error = JsonTextDecoder::new(&mut session)
         .decode::<IgnoredAny>(br#"{"\u4e2d":null}"#)
-        .expect_err("the decoded three-byte key must exceed the two-byte limit");
+        .expect_err(
+            "the decoded three-byte key must exceed the two-byte limit",
+        );
 
     assert!(matches!(
         error,
@@ -80,7 +87,8 @@ fn test_json_lexical_preflight_charges_decoded_key_bytes() {
 fn test_json_lexical_preflight_charges_each_value_node() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
         JsonValueLimits::empty().with_structure_limits(
-            StructureLimits::new().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)),
+            StructureLimits::new()
+                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)),
         ),
     );
     let mut session = JsonDecodeSession::owned(limits);
@@ -107,8 +115,10 @@ fn test_json_lexical_preflight_charges_each_value_node() {
 #[test]
 fn test_json_lexical_preflight_checks_decoded_string_bytes() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
-        JsonValueLimits::empty()
-            .with_string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2)),
+        JsonValueLimits::empty().with_string_bytes_limit(ResourceLimit::new(
+            JsonResource::StringBytes,
+            2,
+        )),
     );
     let mut session = JsonDecodeSession::owned(limits);
     let error = JsonTextDecoder::new(&mut session)
@@ -133,8 +143,10 @@ fn test_json_lexical_preflight_checks_decoded_string_bytes() {
 #[test]
 fn test_json_lexical_preflight_checks_number_lexical_bytes() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
-        JsonValueLimits::empty()
-            .with_number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, 3)),
+        JsonValueLimits::empty().with_number_bytes_limit(ResourceLimit::new(
+            JsonResource::NumberBytes,
+            3,
+        )),
     );
     let mut session = JsonDecodeSession::owned(limits);
     let error = JsonTextDecoder::new(&mut session)
@@ -160,8 +172,9 @@ fn test_json_lexical_preflight_checks_number_lexical_bytes() {
 fn test_json_lexical_preflight_checks_sequence_items() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
         JsonValueLimits::empty().with_structure_limits(
-            StructureLimits::new()
-                .with_sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, 1)),
+            StructureLimits::new().with_sequence_items_limit(
+                ResourceLimit::new(JsonResource::SequenceItems, 1),
+            ),
         ),
     );
     let mut session = JsonDecodeSession::owned(limits);
@@ -188,8 +201,10 @@ fn test_json_lexical_preflight_checks_sequence_items() {
 fn test_json_lexical_preflight_counts_duplicate_map_entries() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
         JsonValueLimits::empty().with_structure_limits(
-            StructureLimits::new()
-                .with_map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)),
+            StructureLimits::new().with_map_entries_limit(ResourceLimit::new(
+                JsonResource::MapEntries,
+                1,
+            )),
         ),
     );
     let mut session = JsonDecodeSession::owned(limits);
@@ -214,12 +229,16 @@ fn test_json_lexical_preflight_counts_duplicate_map_entries() {
 /// Verifies private serde_json token text is an ordinary lexical object key.
 #[test]
 fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
-    const PRIVATE_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
+    const PRIVATE_NUMBER_TOKEN: &str =
+        concat!("$", "serde_json", ":", ":private::Number");
     let input = format!(r#"{{"{PRIVATE_NUMBER_TOKEN}":"x"}}"#);
     let limits = JsonDecodeLimits::empty().with_value_limits(
         JsonValueLimits::empty().with_structure_limits(
             StructureLimits::<JsonResource, usize>::new().with_key_bytes_limit(
-                ResourceLimit::new(JsonResource::KeyBytes, PRIVATE_NUMBER_TOKEN.len() - 1),
+                ResourceLimit::new(
+                    JsonResource::KeyBytes,
+                    PRIVATE_NUMBER_TOKEN.len() - 1,
+                ),
             ),
         ),
     );
@@ -247,8 +266,10 @@ fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
 #[test]
 fn test_json_lexical_preflight_charges_duplicate_entry_payloads() {
     let limits = JsonDecodeLimits::empty().with_value_limits(
-        JsonValueLimits::empty()
-            .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3)),
+        JsonValueLimits::empty().with_payload_bytes_limit(ResourceLimit::new(
+            JsonResource::PayloadBytes,
+            3,
+        )),
     );
     let mut session = JsonDecodeSession::owned(limits);
     let error = JsonTextDecoder::new(&mut session)

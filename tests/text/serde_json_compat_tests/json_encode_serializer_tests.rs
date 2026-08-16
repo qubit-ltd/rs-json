@@ -20,7 +20,8 @@ use serde::ser::SerializeStruct;
 use crate::text::json_encode_test_support::encode;
 
 /// Private struct name emitted by serde_json arbitrary-precision numbers.
-const JSON_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
+const JSON_NUMBER_TOKEN: &str =
+    concat!("$", "serde_json", ":", ":private::Number");
 
 /// A regular struct whose field name resembles serde_json private metadata.
 struct ForgedPrivateKey;
@@ -54,7 +55,10 @@ impl Serialize for CollectedArbitraryPrecisionNumber {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct(JSON_NUMBER_TOKEN, 1)?;
-        state.serialize_field(JSON_NUMBER_TOKEN, &CollectedNumberPayload(self))?;
+        state.serialize_field(
+            JSON_NUMBER_TOKEN,
+            &CollectedNumberPayload(self),
+        )?;
         state.end()
     }
 }
@@ -117,8 +121,9 @@ fn test_json_encode_serializer_classifies_collected_private_number() {
         .with_max_number_bytes(NUMBER_TEXT.len());
     let mut session = JsonEncodeSession::owned(limits);
 
-    let output = encode(&number, &mut session)
-        .expect("private collected number should consume only the number budget");
+    let output = encode(&number, &mut session).expect(
+        "private collected number should consume only the number budget",
+    );
 
     assert_eq!(output, NUMBER_TEXT.as_bytes());
 }

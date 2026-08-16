@@ -14,16 +14,20 @@ pub(super) enum SerdeJsonCompat {}
 
 impl SerdeJsonCompat {
     /// Private struct name emitted for arbitrary-precision JSON numbers.
-    const NUMBER_TOKEN: &'static str = concat!("$", "serde_json", ":", ":private::Number");
+    const NUMBER_TOKEN: &'static str =
+        concat!("$", "serde_json", ":", ":private::Number");
 
     /// Private struct name emitted for raw JSON fragments.
-    const RAW_VALUE_TOKEN: &'static str = concat!("$", "serde_json", ":", ":private::RawValue");
+    const RAW_VALUE_TOKEN: &'static str =
+        concat!("$", "serde_json", ":", ":private::RawValue");
 
     /// Classifies one serde_json private struct name.
     ///
     /// Returns the corresponding private shape for a pinned serde_json token,
     /// or `None` when `name` is an ordinary Serde struct name.
-    pub(super) fn classify_private_struct(name: &'static str) -> Option<PrivateStructKind> {
+    pub(super) fn classify_private_struct(
+        name: &'static str,
+    ) -> Option<PrivateStructKind> {
         match name {
             Self::NUMBER_TOKEN => Some(PrivateStructKind::Number),
             Self::RAW_VALUE_TOKEN => Some(PrivateStructKind::RawValue),

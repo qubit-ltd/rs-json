@@ -44,7 +44,9 @@ where
     /// Creates a key wrapper bound to the shared traversal context.
     pub(super) const fn new(
         value: &'a T,
-        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+        context: &'context RefCell<
+            JsonEncodeContext<'transaction, 'budget, R, Q>,
+        >,
     ) -> Self {
         Self { value, context }
     }
@@ -186,7 +188,10 @@ where
         self.inner.serialize_unit()
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(
+        self,
+        name: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit_struct(name)
     }
 
@@ -222,15 +227,25 @@ where
     where
         T: Serialize + ?Sized,
     {
-        self.inner
-            .serialize_newtype_variant(name, variant_index, variant, value)
+        self.inner.serialize_newtype_variant(
+            name,
+            variant_index,
+            variant,
+            value,
+        )
     }
 
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeSeq, Self::Error> {
         self.inner.serialize_seq(len)
     }
 
-    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(
+        self,
+        len: usize,
+    ) -> Result<Self::SerializeTuple, Self::Error> {
         self.inner.serialize_tuple(len)
     }
 
@@ -253,7 +268,10 @@ where
             .serialize_tuple_variant(name, variant_index, variant, len)
     }
 
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(
+        self,
+        len: Option<usize>,
+    ) -> Result<Self::SerializeMap, Self::Error> {
         self.inner.serialize_map(len)
     }
 
