@@ -33,6 +33,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a lexical scanner bound to one value transaction.
+    #[inline(always)]
     pub(crate) const fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     ) -> Self {
@@ -43,6 +44,7 @@ where
     }
 
     /// Creates a lexical scanner rooted at an enclosing serializer depth.
+    #[inline(always)]
     pub(crate) const fn at_depth(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
         root_depth: usize,

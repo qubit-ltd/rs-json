@@ -26,6 +26,7 @@ use super::internal::JsonOutputBuffer;
 use super::internal::JsonOutputWriter;
 
 /// Encodes strict JSON text while charging a caller-managed session.
+#[must_use = "a JSON text encoder must be used to encode output"]
 pub struct JsonTextEncoder<'session, 'budget, R, Q = usize>
 where
     Q: ResourceQuantity,
@@ -49,6 +50,7 @@ where
     /// # Returns
     ///
     /// An encoder borrowing `session` for its lifetime.
+    #[inline(always)]
     pub fn new(
         session: &'session mut JsonEncodeSession<'budget, R, Q>,
     ) -> Self {

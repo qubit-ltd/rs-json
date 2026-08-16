@@ -8,6 +8,7 @@
 //! Defines the [`LenientJsonDecoder`] type and its public decoding methods.
 
 use qubit_budget::ResourceBudget;
+use qubit_budget::json::JsonDecodeAttempt;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
@@ -217,6 +218,13 @@ impl LenientJsonDecoder {
         let normalized = self
             .normalizer
             .normalize_after_raw_charge(input, &mut attempt)?;
+        Self::admit_normalized_if_configured(
+            self,
+            &mut attempt,
+            normalized.as_ref(),
+            raw_input_bytes,
+            privacy_policy,
+        )?;
         let value = Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,
@@ -329,6 +337,13 @@ impl LenientJsonDecoder {
         let mut session = self.decode_session();
         let mut attempt = session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
+        Self::admit_normalized_if_configured(
+            self,
+            &mut attempt,
+            normalized.as_ref(),
+            raw_input_bytes,
+            privacy_policy,
+        )?;
         let value = Self::parse_value(
             normalized.as_ref(),
             raw_input_bytes,
@@ -374,6 +389,13 @@ impl LenientJsonDecoder {
         let mut attempt = session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
         let normalized_input_bytes = normalized.len();
+        Self::admit_normalized_if_configured(
+            self,
+            &mut attempt,
+            normalized.as_ref(),
+            raw_input_bytes,
+            privacy_policy,
+        )?;
         let actual = JsonTopLevelKind::of_normalized_json(normalized.as_ref());
         if actual != expected {
             Self::validate_json(
@@ -409,7 +431,33 @@ impl LenientJsonDecoder {
         if let Some(maximum) = self.options().max_normalized_bytes() {
             limits = limits.with_max_normalized_input_bytes(maximum);
         }
+        if let Some(value_limits) = self.options().value_limits() {
+            limits = limits.with_value_limits(value_limits);
+        }
         JsonDecodeSession::owned(limits)
+    }
+
+    /// Runs lexical admission when value limits are configured.
+    fn admit_normalized_if_configured(
+        &self,
+        attempt: &mut JsonDecodeAttempt<'_, JsonResource, usize>,
+        normalized: &str,
+        raw_input_bytes: usize,
+        privacy_policy: ErrorPrivacyPolicy,
+    ) -> Result<(), LenientJsonDecodeError> {
+        if self.options().value_limits().is_some() {
+            JsonLexicalScanner::new(attempt.value_transaction_mut())
+                .scan(normalized.as_bytes())
+                .map_err(|error| {
+                    Self::map_admission_error(
+                        error,
+                        normalized,
+                        raw_input_bytes,
+                        privacy_policy,
+                    )
+                })?;
+        }
+        Ok(())
     }
 
     /// Normalizes and directly deserializes input without value preflight.
@@ -438,6 +486,13 @@ impl LenientJsonDecoder {
         let mut session = self.decode_session();
         let mut attempt = session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
+        Self::admit_normalized_if_configured(
+            self,
+            &mut attempt,
+            normalized.as_ref(),
+            raw_input_bytes,
+            privacy_policy,
+        )?;
         let value = Self::deserialize_normalized(
             normalized.as_ref(),
             raw_input_bytes,

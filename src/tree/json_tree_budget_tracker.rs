@@ -42,6 +42,7 @@ where
     /// # Returns
     ///
     /// A tracker initialized with the supplied limits.
+    #[inline]
     pub fn new(limits: JsonValueLimits<R, Q>) -> Self {
         Self {
             budget: JsonValueBudget::new(limits),
@@ -89,6 +90,8 @@ where
     /// # Returns
     ///
     /// A shared reference to the accumulated budget state.
+    #[must_use]
+    #[inline(always)]
     pub const fn budget(&self) -> &JsonValueBudget<R, Q> {
         &self.budget
     }
@@ -98,6 +101,8 @@ where
     /// # Returns
     ///
     /// A mutable reference to the accumulated budget state.
+    #[must_use]
+    #[inline(always)]
     pub fn budget_mut(&mut self) -> &mut JsonValueBudget<R, Q> {
         &mut self.budget
     }
@@ -107,6 +112,8 @@ where
     /// # Returns
     ///
     /// The owned budget, including all charges accumulated by this tracker.
+    #[must_use]
+    #[inline(always)]
     pub fn into_budget(self) -> JsonValueBudget<R, Q> {
         self.budget
     }

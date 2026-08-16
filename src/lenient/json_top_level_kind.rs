@@ -57,6 +57,7 @@ impl JsonTopLevelKind {
     ///
     /// [`Self::Object`] for objects, [`Self::Array`] for arrays, and
     /// [`Self::Other`] for scalar-like values.
+    #[must_use]
     #[inline]
     pub fn of(value: &Value) -> Self {
         match value {

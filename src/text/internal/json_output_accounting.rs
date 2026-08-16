@@ -91,6 +91,8 @@ where
     }
 
     /// Takes the first recorded violation, if one exists.
+    #[must_use]
+    #[inline(always)]
     pub(super) fn take_violation(
         &mut self,
     ) -> Option<MeasuredBudgetError<R, Q>> {
@@ -105,6 +107,8 @@ where
     }
 
     /// Takes the first recorded raw JSON syntax failure.
+    #[must_use]
+    #[inline(always)]
     pub(super) fn take_syntax_error(&mut self) -> Option<JsonSyntaxError> {
         self.syntax_error.take()
     }

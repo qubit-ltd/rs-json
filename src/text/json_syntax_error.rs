@@ -102,6 +102,7 @@ impl JsonSyntaxError {
     /// # Returns
     ///
     /// The stable lexical failure classification.
+    #[must_use]
     #[inline(always)]
     pub const fn reason(&self) -> JsonSyntaxErrorReason {
         self.reason

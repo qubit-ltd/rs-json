@@ -24,7 +24,9 @@ src/
 `LenientJsonDecoder` 持有不可变 `LenientJsonDecodeOptions`，只执行显式配置的规则：空白、
 BOM、Markdown 围栏及字符串内控制字符处理。它不推测缺失的 JSON 标点或结构。
 
-普通 `decode` 规范化后直接进入 Serde。`decode_with_session` 先累计原始输入与规范化输入，
+普通 `decode` 等便捷入口默认只执行规范化，并仅强制 raw/normalized 输入字节限制；
+它们不会进行词法 value 准入。若要在这些入口上限制 depth、nodes 或 payload，请在
+`LenientJsonDecodeOptions` 中配置 `value_limits`。`decode_with_session` 先累计原始输入与规范化输入，
 再进行词法准入并将解码后 value 的消耗暂存；完整强类型解码成功才提交 value 消耗。失败后
 输入消耗仍留在 session 中。
 

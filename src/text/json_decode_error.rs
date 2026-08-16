@@ -49,6 +49,7 @@ where
     Q: Copy + Debug,
 {
     /// Converts a shared lexical failure at the strict text boundary.
+    #[inline]
     pub(crate) fn from_lexical(error: JsonLexicalError<R, Q>) -> Self {
         match error {
             JsonLexicalError::Budget(error) => Self::Budget(error),
@@ -59,6 +60,7 @@ where
     }
 
     /// Copies privacy-safe metadata from a Serde JSON error.
+    #[inline]
     pub(super) fn from_serde(error: &JsonError) -> Self {
         Self::Deserialize {
             category: error.classify(),

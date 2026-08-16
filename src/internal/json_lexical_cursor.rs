@@ -37,6 +37,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a cursor positioned at the beginning of `input`.
+    #[inline(always)]
     pub(super) const fn new(
         input: &'input [u8],
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
@@ -49,6 +50,8 @@ where
     }
 
     /// Returns whether the cursor has consumed the complete input.
+    #[must_use]
+    #[inline(always)]
     pub(super) fn is_at_end(&self) -> bool {
         self.offset == self.input.len()
     }
@@ -64,6 +67,8 @@ where
     }
 
     /// Returns the current byte without advancing.
+    #[must_use]
+    #[inline(always)]
     fn peek(&self) -> Option<u8> {
         self.input.get(self.offset).copied()
     }

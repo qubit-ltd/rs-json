@@ -49,6 +49,7 @@ pub enum JsonSyntaxErrorReason {
 
 impl From<JsonLexicalErrorReason> for JsonSyntaxErrorReason {
     /// Exhaustively maps the shared lexical reason into the public text reason.
+    #[inline]
     fn from(reason: JsonLexicalErrorReason) -> Self {
         match reason {
             JsonLexicalErrorReason::UnexpectedEnd => Self::UnexpectedEnd,
