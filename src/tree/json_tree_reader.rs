@@ -20,7 +20,6 @@ use super::JsonTreeProcessError;
 use super::JsonTreeVisitor;
 
 /// Processes JSON values while borrowing one staged JSON value transaction.
-#[must_use = "a JSON tree reader must be used to process a tree"]
 pub struct JsonTreeReader<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
@@ -43,6 +42,7 @@ where
     ///
     /// A reader borrowing `transaction` for its lifetime.
     #[inline(always)]
+    #[must_use]
     pub fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     ) -> Self {
@@ -68,6 +68,7 @@ where
     ///
     /// Returns [`JsonTreeProcessError::Budget`] when resource admission fails,
     /// or [`JsonTreeProcessError::Visitor`] when the visitor rejects a node.
+    #[must_use]
     pub fn process<V>(
         &mut self,
         value: &Value,

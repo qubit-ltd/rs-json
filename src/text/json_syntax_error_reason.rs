@@ -12,7 +12,6 @@ use std::fmt;
 use crate::internal::JsonLexicalErrorReason;
 
 /// The concrete reason why a JSON document was rejected lexically.
-#[must_use]
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JsonSyntaxErrorReason {

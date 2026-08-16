@@ -26,7 +26,6 @@ use super::internal::JsonOutputBuffer;
 use super::internal::JsonOutputWriter;
 
 /// Encodes strict JSON text while charging a caller-managed session.
-#[must_use = "a JSON text encoder must be used to encode output"]
 pub struct JsonTextEncoder<'session, 'budget, R, Q = usize>
 where
     Q: ResourceQuantity,
@@ -51,6 +50,7 @@ where
     ///
     /// An encoder borrowing `session` for its lifetime.
     #[inline(always)]
+    #[must_use]
     pub fn new(
         session: &'session mut JsonEncodeSession<'budget, R, Q>,
     ) -> Self {
@@ -75,6 +75,7 @@ where
     ///
     /// Returns [`JsonEncodeError::Budget`] when accounting rejects the value
     /// or output, or a serialization error when Serde rejects `value`.
+    #[must_use]
     pub fn to_vec<T>(
         &mut self,
         value: &T,
@@ -115,6 +116,7 @@ where
     ///
     /// Returns [`JsonEncodeError::Budget`] when accounting rejects the value
     /// or output, or a serialization/writer error on failure.
+    #[must_use]
     pub fn write_buffered<W, T>(
         &mut self,
         writer: W,
@@ -155,6 +157,7 @@ where
     /// Returns [`JsonEncodeError::Budget`] when accounting rejects output,
     /// or a serialization/writer error on failure. Accepted output prefixes
     /// remain written when a later operation fails.
+    #[must_use]
     pub fn write_incremental<W, T>(
         &mut self,
         writer: W,

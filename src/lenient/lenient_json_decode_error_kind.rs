@@ -21,13 +21,13 @@ use std::str::FromStr;
 /// #![deny(unused_must_use)]
 /// use qubit_json::lenient::LenientJsonDecodeErrorKind;
 ///
+/// #[must_use]
 /// fn error_kind() -> LenientJsonDecodeErrorKind {
 ///     LenientJsonDecodeErrorKind::InvalidJson
 /// }
 ///
 /// error_kind();
 /// ```
-#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LenientJsonDecodeErrorKind {

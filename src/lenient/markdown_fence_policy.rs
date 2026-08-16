@@ -20,13 +20,13 @@ use super::MarkdownFenceClosing;
 /// #![deny(unused_must_use)]
 /// use qubit_json::lenient::MarkdownFencePolicy;
 ///
+/// #[must_use]
 /// fn fence_policy() -> MarkdownFencePolicy {
 ///     MarkdownFencePolicy::Disabled
 /// }
 ///
 /// fence_policy();
 /// ```
-#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MarkdownFencePolicy {

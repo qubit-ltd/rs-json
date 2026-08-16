@@ -59,7 +59,7 @@ impl LenientJsonNormalizer {
     ///
     /// The immutable normalization options.
     #[inline(always)]
-    #[must_use = "the normalizer options should be inspected or retained"]
+    #[must_use]
     pub(crate) const fn options(&self) -> &LenientJsonDecodeOptions {
         &self.options
     }

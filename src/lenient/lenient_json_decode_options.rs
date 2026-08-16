@@ -35,7 +35,6 @@ use super::MarkdownFencePolicy;
 /// let _decoder = LenientJsonDecoder::new(options);
 /// let _moved_options = options;
 /// ```
-#[must_use = "JSON decoding options have no effect until used to construct a decoder"]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LenientJsonDecodeOptions {
     /// Controls whether leading and trailing whitespace is removed before any
@@ -82,6 +81,7 @@ impl LenientJsonDecodeOptions {
     /// An option set that enables every supported normalization rule, applies
     /// no input-size limit, and redacts input-derived error details.
     #[inline]
+    #[must_use]
     pub const fn lenient() -> Self {
         Self {
             trim_whitespace: true,
@@ -110,6 +110,7 @@ impl LenientJsonDecodeOptions {
     /// delegates parsing and deserialization to `serde_json`, and redacts
     /// input-derived error details.
     #[inline]
+    #[must_use]
     pub const fn strict() -> Self {
         Self {
             trim_whitespace: false,
@@ -144,6 +145,7 @@ impl LenientJsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
+    #[must_use]
     pub const fn with_trim_whitespace(mut self, enabled: bool) -> Self {
         self.trim_whitespace = enabled;
         self
@@ -171,6 +173,7 @@ impl LenientJsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
+    #[must_use]
     pub const fn with_strip_utf8_bom(mut self, enabled: bool) -> Self {
         self.strip_utf8_bom = enabled;
         self
@@ -192,7 +195,7 @@ impl LenientJsonDecodeOptions {
     /// options.markdown_fence_policy();
     /// ```
     #[inline(always)]
-    #[must_use = "the configured Markdown fence policy should be inspected"]
+    #[must_use]
     pub const fn markdown_fence_policy(&self) -> &MarkdownFencePolicy {
         &self.markdown_fence_policy
     }
@@ -208,6 +211,7 @@ impl LenientJsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
+    #[must_use]
     pub const fn with_markdown_fence_policy(
         mut self,
         markdown_fence_policy: MarkdownFencePolicy,
@@ -240,6 +244,7 @@ impl LenientJsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
+    #[must_use]
     pub const fn with_escape_control_chars_in_strings(
         mut self,
         enabled: bool,
@@ -255,6 +260,7 @@ impl LenientJsonDecodeOptions {
     /// `Some(limit)` when accepted raw input is capped at `limit` bytes, or
     /// `None` when the decoder enforces no input-size limit.
     #[inline(always)]
+    #[must_use]
     pub const fn max_input_bytes(&self) -> Option<usize> {
         self.max_input_bytes
     }
@@ -270,6 +276,7 @@ impl LenientJsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
+    #[must_use]
     pub const fn with_max_input_bytes(
         mut self,
         max_input_bytes: Option<usize>,
@@ -285,6 +292,7 @@ impl LenientJsonDecodeOptions {
     /// `Some(limit)` when normalized JSON is capped at `limit` bytes, or
     /// `None` when the decoder enforces no normalized-size limit.
     #[inline(always)]
+    #[must_use]
     pub const fn max_normalized_bytes(&self) -> Option<usize> {
         self.max_normalized_bytes
     }
@@ -304,6 +312,7 @@ impl LenientJsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
+    #[must_use]
     pub const fn with_max_normalized_bytes(
         mut self,
         max_normalized_bytes: Option<usize>,
@@ -319,6 +328,7 @@ impl LenientJsonDecodeOptions {
     /// `Some(limits)` when convenience decode entry points perform lexical
     /// value admission, or `None` when only input byte limits apply.
     #[inline(always)]
+    #[must_use]
     pub const fn value_limits(&self) -> Option<JsonValueLimits> {
         self.value_limits
     }
@@ -338,6 +348,7 @@ impl LenientJsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
+    #[must_use]
     pub const fn with_value_limits(
         mut self,
         value_limits: Option<JsonValueLimits>,
@@ -352,6 +363,7 @@ impl LenientJsonDecodeOptions {
     ///
     /// The configured error privacy policy.
     #[inline(always)]
+    #[must_use]
     pub const fn error_privacy_policy(&self) -> ErrorPrivacyPolicy {
         self.error_privacy_policy
     }
@@ -370,6 +382,7 @@ impl LenientJsonDecodeOptions {
     ///
     /// The updated option set.
     #[inline(always)]
+    #[must_use]
     pub const fn with_error_privacy_policy(
         mut self,
         error_privacy_policy: ErrorPrivacyPolicy,

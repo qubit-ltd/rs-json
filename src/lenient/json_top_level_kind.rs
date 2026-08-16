@@ -24,13 +24,13 @@ use serde_json::Value;
 /// #![deny(unused_must_use)]
 /// use qubit_json::lenient::JsonTopLevelKind;
 ///
+/// #[must_use]
 /// fn top_level_kind() -> JsonTopLevelKind {
 ///     JsonTopLevelKind::Other
 /// }
 ///
 /// top_level_kind();
 /// ```
-#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonTopLevelKind {

@@ -18,13 +18,13 @@
 /// #![deny(unused_must_use)]
 /// use qubit_json::lenient::ErrorPrivacyPolicy;
 ///
+/// #[must_use]
 /// fn configured_policy() -> ErrorPrivacyPolicy {
 ///     ErrorPrivacyPolicy::Redacted
 /// }
 ///
 /// configured_policy();
 /// ```
-#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ErrorPrivacyPolicy {

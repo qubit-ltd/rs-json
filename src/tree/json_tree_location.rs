@@ -8,7 +8,6 @@
 //! Defines the location of a JSON tree node within its parent.
 
 /// Identifies a materialized JSON node without exposing a domain path model.
-#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonTreeLocation<'a> {
     /// The top-level JSON value.

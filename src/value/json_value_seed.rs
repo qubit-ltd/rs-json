@@ -23,7 +23,6 @@ use super::internal::JsonValueVisitor;
 /// deserializer has decoded them. It is therefore suitable for default budget
 /// enforcement inside a type's ordinary [`serde::Deserialize`]
 /// implementation, where the original input bytes are unavailable.
-#[must_use]
 pub struct JsonValueSeed<'transaction, 'budget, R, Q = usize>
 where
     Q: ResourceQuantity,
@@ -45,6 +44,7 @@ where
     ///
     /// A seed that constructs one accounted [`Value`] tree.
     #[inline(always)]
+    #[must_use]
     pub fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     ) -> Self {

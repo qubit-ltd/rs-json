@@ -18,7 +18,6 @@ use super::JsonSyntaxError;
 use crate::internal::JsonLexicalError;
 
 /// Failure produced while decoding one strict JSON document.
-#[must_use]
 #[derive(Debug, Error)]
 pub enum JsonDecodeError<R, Q = usize>
 where

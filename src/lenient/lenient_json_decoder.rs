@@ -31,7 +31,6 @@ use crate::internal::JsonLexicalScanner;
 ///
 /// `LenientJsonDecoder` applies a small set of predictable normalization rules
 /// before delegating actual parsing and deserialization to `serde_json`.
-#[must_use = "a JSON decoder must be used to decode input"]
 #[derive(Debug, Clone, Default)]
 pub struct LenientJsonDecoder {
     /// Stores the configured normalization pipeline.
@@ -49,6 +48,7 @@ impl LenientJsonDecoder {
     ///
     /// A decoder configured with `options`.
     #[inline(always)]
+    #[must_use]
     pub const fn new(options: LenientJsonDecodeOptions) -> Self {
         Self {
             normalizer: LenientJsonNormalizer::new(options),
@@ -61,7 +61,7 @@ impl LenientJsonDecoder {
     ///
     /// The option set supplied when the decoder was created.
     #[inline(always)]
-    #[must_use = "the decoder options should be inspected or retained"]
+    #[must_use]
     pub const fn options(&self) -> &LenientJsonDecodeOptions {
         self.normalizer.options()
     }
@@ -89,6 +89,7 @@ impl LenientJsonDecoder {
     /// # Panics
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
+    #[must_use]
     pub fn decode<T>(&self, input: &str) -> Result<T, LenientJsonDecodeError>
     where
         T: DeserializeOwned,
@@ -131,6 +132,7 @@ impl LenientJsonDecoder {
     /// # Panics
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
+    #[must_use]
     pub fn decode_with_session<T>(
         &self,
         input: &str,
@@ -188,6 +190,7 @@ impl LenientJsonDecoder {
     /// # Panics
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
+    #[must_use]
     pub fn decode_slice<T>(
         &self,
         input: &[u8],
@@ -264,6 +267,7 @@ impl LenientJsonDecoder {
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     #[inline(always)]
+    #[must_use]
     pub fn decode_object<T>(
         &self,
         input: &str,
@@ -301,6 +305,7 @@ impl LenientJsonDecoder {
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     #[inline(always)]
+    #[must_use]
     pub fn decode_array<T>(
         &self,
         input: &str,
@@ -328,6 +333,7 @@ impl LenientJsonDecoder {
     ///
     /// Returns [`LenientJsonDecodeError`] when input normalization or JSON
     /// parsing fails.
+    #[must_use]
     pub fn decode_value(
         &self,
         input: &str,
