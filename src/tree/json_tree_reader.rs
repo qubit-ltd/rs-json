@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Implements non-recursive, read-only JSON tree processing.
 
@@ -31,7 +33,9 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a reader borrowing the supplied JSON value transaction.
-    pub fn new(transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>) -> Self {
+    pub fn new(
+        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    ) -> Self {
         Self { transaction }
     }
 
@@ -56,19 +60,28 @@ where
                 ReadFrameState::Enter => {
                     let value = frame.value;
                     let context = frame.context;
-                    if let JsonTreeLocation::ObjectValue { key } = context.location {
-                        self.transaction
-                            .try_admit(JsonMeasurement::Key { bytes: key.len() })?;
+                    if let JsonTreeLocation::ObjectValue { key } =
+                        context.location
+                    {
+                        self.transaction.try_admit(JsonMeasurement::Key {
+                            bytes: key.len(),
+                        })?;
                     }
                     self.admit(value, context.depth)?;
                     visitor
                         .enter(value, context)
                         .map_err(JsonTreeProcessError::Visitor)?;
-                    frame.state = ReadFrameState::Children(ChildCursor::new(value, context.depth));
+                    frame.state = ReadFrameState::Children(ChildCursor::new(
+                        value,
+                        context.depth,
+                    ));
                 }
                 ReadFrameState::Children(cursor) => {
                     if let Some((value, location, depth)) = cursor.next() {
-                        pending.push(ReadFrame::enter(value, JsonTreeContext { depth, location }));
+                        pending.push(ReadFrame::enter(
+                            value,
+                            JsonTreeContext { depth, location },
+                        ));
                     } else {
                         frame.state = ReadFrameState::Leave;
                     }
@@ -85,7 +98,11 @@ where
     }
 
     /// Admits one node before any visitor callback.
-    fn admit(&mut self, value: &Value, depth: usize) -> Result<(), MeasuredBudgetError<R, Q>> {
+    fn admit(
+        &mut self,
+        value: &Value,
+        depth: usize,
+    ) -> Result<(), MeasuredBudgetError<R, Q>> {
         let measurement = match value {
             Value::Null => JsonMeasurement::Null { depth },
             Value::Bool(_) => JsonMeasurement::Boolean { depth },
@@ -151,9 +168,9 @@ enum ChildCursor<'value> {
 impl<'value> ChildCursor<'value> {
     /// Creates a cursor for the immediate children of `value`.
     fn new(value: &'value Value, depth: usize) -> Self {
-        let child_depth = depth
-            .checked_add(1)
-            .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
+        let child_depth = depth.checked_add(1).expect(
+            "a materialized JSON tree cannot have usize::MAX nesting depth",
+        );
         match value {
             Value::Array(values) => Self::Array {
                 iter: values.iter().enumerate(),
@@ -163,19 +180,24 @@ impl<'value> ChildCursor<'value> {
                 iter: entries.iter(),
                 depth: child_depth,
             },
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Self::Empty,
+            Value::Null
+            | Value::Bool(_)
+            | Value::Number(_)
+            | Value::String(_) => Self::Empty,
         }
     }
 
     /// Returns the next child, its location, and its root-inclusive depth.
-    fn next(&mut self) -> Option<(&'value Value, JsonTreeLocation<'value>, usize)> {
+    fn next(
+        &mut self,
+    ) -> Option<(&'value Value, JsonTreeLocation<'value>, usize)> {
         match self {
-            Self::Array { iter, depth } => iter
-                .next()
-                .map(|(index, value)| (value, JsonTreeLocation::ArrayElement { index }, *depth)),
-            Self::Object { iter, depth } => iter
-                .next()
-                .map(|(key, value)| (value, JsonTreeLocation::ObjectValue { key }, *depth)),
+            Self::Array { iter, depth } => iter.next().map(|(index, value)| {
+                (value, JsonTreeLocation::ArrayElement { index }, *depth)
+            }),
+            Self::Object { iter, depth } => iter.next().map(|(key, value)| {
+                (value, JsonTreeLocation::ObjectValue { key }, *depth)
+            }),
             Self::Empty => None,
         }
     }
