@@ -9,7 +9,6 @@
 
 mod json_value_seed;
 
-/// Budget-aware Serde seed that reconstructs [`serde_json::Value`].
 pub use json_value_seed::JsonValueSeed;
 
 mod internal;
