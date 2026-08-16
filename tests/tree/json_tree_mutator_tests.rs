@@ -91,6 +91,38 @@ impl JsonTreeMutVisitor<JsonResource, usize> for ReplacingVisitor {
     }
 }
 
+/// Leaves budget-rejected containers in place while requesting subtree
+/// skipping.
+struct RetainingRejectedContainerVisitor {
+    visits: usize,
+    rejections: usize,
+}
+
+impl JsonTreeMutVisitor<JsonResource, usize>
+    for RetainingRejectedContainerVisitor
+{
+    type Error = std::convert::Infallible;
+
+    fn visit(
+        &mut self,
+        _value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
+        self.visits += 1;
+        Ok(JsonTreeControl::Descend)
+    }
+
+    fn reject_budget(
+        &mut self,
+        _value: &mut Value,
+        _context: JsonTreeContext<'_>,
+        _error: &MeasuredBudgetError<JsonResource, usize>,
+    ) -> Result<JsonTreeBudgetRejection, Self::Error> {
+        self.rejections += 1;
+        Ok(JsonTreeBudgetRejection::SkipSubtree)
+    }
+}
+
 /// Panics after mutating a selected node.
 struct PanickingVisitor {
     calls: usize,
@@ -118,9 +150,10 @@ impl JsonTreeMutVisitor<JsonResource, usize> for PanickingVisitor {
 /// Verifies that a rejection can replace exactly the rejected subtree.
 #[test]
 fn test_process_mut_skips_rejected_subtree_after_replacement() {
-    let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::new().with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)),
-    );
+    let limits = JsonValueLimits::empty()
+        .with_structure_limits(StructureLimits::new().with_nodes_limit(
+            ResourceLimit::new(JsonResource::Nodes, 2_usize),
+        ));
     let mut budget = JsonValueBudget::new(limits);
     let mut transaction = budget.transaction();
     let mut value = json!({"first": true, "second": {"nested": false}});
@@ -132,14 +165,45 @@ fn test_process_mut_skips_rejected_subtree_after_replacement() {
     assert_eq!(value, json!({"first": true, "second": "[redacted]"}));
 }
 
+/// Verifies that SkipSubtree also skips a retained container and all
+/// descendants.
+#[test]
+fn test_process_mut_skips_rejected_container_subtree() {
+    let limits = JsonValueLimits::empty()
+        .with_structure_limits(StructureLimits::new().with_nodes_limit(
+            ResourceLimit::new(JsonResource::Nodes, 2_usize),
+        ));
+    let mut budget = JsonValueBudget::new(limits);
+    let mut transaction = budget.transaction();
+    let mut value = json!({
+        "first": true,
+        "second": {"nested": {"leaf": false}},
+    });
+    let mut visitor = RetainingRejectedContainerVisitor {
+        visits: 0,
+        rejections: 0,
+    };
+
+    JsonTreeMutator::new(&mut transaction)
+        .process(&mut value, &mut visitor)
+        .expect("visitor handles the resource rejection");
+
+    assert_eq!(visitor.visits, 2);
+    assert_eq!(visitor.rejections, 1);
+    assert_eq!(value["second"], json!({"nested": {"leaf": false}}));
+}
+
 #[test]
 fn test_process_mut_preserves_mutations_when_visitor_fails() {
-    let limits = JsonValueLimits::empty()
-        .with_structure_limits(
-            StructureLimits::new()
-                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 4_usize)),
-        )
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 32_usize));
+    let limits =
+        JsonValueLimits::empty()
+            .with_structure_limits(StructureLimits::new().with_nodes_limit(
+                ResourceLimit::new(JsonResource::Nodes, 4_usize),
+            ))
+            .with_payload_bytes_limit(ResourceLimit::new(
+                JsonResource::PayloadBytes,
+                32_usize,
+            ));
     let mut budget = JsonValueBudget::new(limits);
     let mut transaction = budget.transaction();
     let mut value = json!({"original": true});
@@ -161,12 +225,15 @@ fn test_process_mut_preserves_mutations_when_visitor_fails() {
 /// Verifies that budget rejection retains earlier mutation and accounting.
 #[test]
 fn test_process_mut_preserves_partial_mutation_and_budget_on_rejection() {
-    let limits = JsonValueLimits::empty()
-        .with_structure_limits(
-            StructureLimits::new()
-                .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)),
-        )
-        .with_payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 8_usize));
+    let limits =
+        JsonValueLimits::empty()
+            .with_structure_limits(StructureLimits::new().with_nodes_limit(
+                ResourceLimit::new(JsonResource::Nodes, 2_usize),
+            ))
+            .with_payload_bytes_limit(ResourceLimit::new(
+                JsonResource::PayloadBytes,
+                8_usize,
+            ));
     let mut budget = JsonValueBudget::new(limits);
     let mut transaction = budget.transaction();
     let mut value = json!([0, 1]);
