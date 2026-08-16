@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use qubit_json::tree::JsonTreeControl;
+use qubit_json::value::traverse::JsonTreeControl;
 
 /// Verifies the two traversal decisions are distinguishable.
 #[test]

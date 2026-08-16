@@ -17,7 +17,7 @@ use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::text::JsonTextDecoder;
+use qubit_json::decode::JsonDecoder;
 use qubit_json::value::JsonValueSeed;
 use serde_json::Value;
 
@@ -71,7 +71,7 @@ fuzz_target!(|data: &[u8]| {
             &mut input_budget,
             &mut value_budget,
         );
-        let _ = JsonTextDecoder::new(&mut session).decode::<Value>(input);
+        let _ = JsonDecoder::new(&mut session).decode::<Value>(input);
         assert_eq!(session.max_input_bytes(), Some(bytes));
         assert!(session.value_budget().used_nodes() <= Some(nodes));
     }

@@ -5,11 +5,11 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for the public `LenientJsonDecodeErrorKind` type.
+//! Tests for the public `NormalizingJsonDecodeErrorKind` type.
 
 use std::str::FromStr;
 
-use qubit_json::lenient::LenientJsonDecodeErrorKind;
+use qubit_json::decode::NormalizingJsonDecodeErrorKind;
 
 /// Verifies that decode error kind display uses snake case names.
 ///
@@ -19,28 +19,28 @@ use qubit_json::lenient::LenientJsonDecodeErrorKind;
 #[test]
 fn test_decode_error_kind_display_uses_snake_case_names() {
     assert_eq!(
-        LenientJsonDecodeErrorKind::InputTooLarge.to_string(),
+        NormalizingJsonDecodeErrorKind::InputTooLarge.to_string(),
         "input_too_large"
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::EmptyInput.to_string(),
+        NormalizingJsonDecodeErrorKind::EmptyInput.to_string(),
         "empty_input"
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::InvalidUtf8.to_string(),
+        NormalizingJsonDecodeErrorKind::InvalidUtf8.to_string(),
         "invalid_utf8"
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::InvalidJson.to_string(),
+        NormalizingJsonDecodeErrorKind::InvalidJson.to_string(),
         "invalid_json"
     );
-    assert_eq!(LenientJsonDecodeErrorKind::Budget.to_string(), "budget");
+    assert_eq!(NormalizingJsonDecodeErrorKind::Budget.to_string(), "budget");
     assert_eq!(
-        LenientJsonDecodeErrorKind::UnexpectedTopLevel.to_string(),
+        NormalizingJsonDecodeErrorKind::UnexpectedTopLevel.to_string(),
         "unexpected_top_level"
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::Deserialize.to_string(),
+        NormalizingJsonDecodeErrorKind::Deserialize.to_string(),
         "deserialize"
     );
 }
@@ -53,42 +53,42 @@ fn test_decode_error_kind_display_uses_snake_case_names() {
 #[test]
 fn test_decode_error_kind_from_str() {
     assert_eq!(
-        LenientJsonDecodeErrorKind::from_str("input_too_large")
+        NormalizingJsonDecodeErrorKind::from_str("input_too_large")
             .expect("input_too_large must parse"),
-        LenientJsonDecodeErrorKind::InputTooLarge
+        NormalizingJsonDecodeErrorKind::InputTooLarge
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::from_str("empty_input")
+        NormalizingJsonDecodeErrorKind::from_str("empty_input")
             .expect("empty_input must parse"),
-        LenientJsonDecodeErrorKind::EmptyInput
+        NormalizingJsonDecodeErrorKind::EmptyInput
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::from_str("INVALID_UTF8")
+        NormalizingJsonDecodeErrorKind::from_str("INVALID_UTF8")
             .expect("INVALID_UTF8 must parse without case sensitivity"),
-        LenientJsonDecodeErrorKind::InvalidUtf8
+        NormalizingJsonDecodeErrorKind::InvalidUtf8
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::from_str("INVALID_JSON")
+        NormalizingJsonDecodeErrorKind::from_str("INVALID_JSON")
             .expect("INVALID_JSON must parse without case sensitivity"),
-        LenientJsonDecodeErrorKind::InvalidJson
+        NormalizingJsonDecodeErrorKind::InvalidJson
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::from_str("BUDGET")
+        NormalizingJsonDecodeErrorKind::from_str("BUDGET")
             .expect("BUDGET must parse without case sensitivity"),
-        LenientJsonDecodeErrorKind::Budget
+        NormalizingJsonDecodeErrorKind::Budget
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::from_str("unexpected_top_level")
+        NormalizingJsonDecodeErrorKind::from_str("unexpected_top_level")
             .expect("unexpected_top_level must parse"),
-        LenientJsonDecodeErrorKind::UnexpectedTopLevel
+        NormalizingJsonDecodeErrorKind::UnexpectedTopLevel
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::from_str("deserialize")
+        NormalizingJsonDecodeErrorKind::from_str("deserialize")
             .expect("deserialize must parse"),
-        LenientJsonDecodeErrorKind::Deserialize
+        NormalizingJsonDecodeErrorKind::Deserialize
     );
     assert_eq!(
-        LenientJsonDecodeErrorKind::from_str("unsupported"),
-        Err("unknown LenientJsonDecodeErrorKind"),
+        NormalizingJsonDecodeErrorKind::from_str("unsupported"),
+        Err("unknown NormalizingJsonDecodeErrorKind"),
     );
 }

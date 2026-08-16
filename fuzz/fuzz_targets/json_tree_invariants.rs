@@ -20,11 +20,11 @@ use qubit_budget::StructureLimits;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::tree::JsonTreeBudgetRejection;
-use qubit_json::tree::JsonTreeContext;
-use qubit_json::tree::JsonTreeControl;
-use qubit_json::tree::JsonTreeMutVisitor;
-use qubit_json::tree::JsonTreeMutator;
+use qubit_json::value::traverse::JsonTreeBudgetRejection;
+use qubit_json::value::traverse::JsonTreeContext;
+use qubit_json::value::traverse::JsonTreeControl;
+use qubit_json::value::traverse::JsonTreeMutVisitor;
+use qubit_json::value::traverse::JsonTreeMutator;
 use serde_json::Value;
 use serde_json::json;
 
@@ -243,7 +243,7 @@ fuzz_target!(|data: &[u8]| {
     assert!(matches!(
         error,
         Ok(())
-            | Err(qubit_json::tree::JsonTreeProcessError::Visitor(
+            | Err(qubit_json::value::traverse::JsonTreeProcessError::Visitor(
                 "fuzz visitor error"
             ))
     ));
@@ -287,7 +287,7 @@ fuzz_target!(|data: &[u8]| {
         };
         assert!(matches!(
             recovery_error,
-            Err(qubit_json::tree::JsonTreeProcessError::Visitor(
+            Err(qubit_json::value::traverse::JsonTreeProcessError::Visitor(
                 "fuzz visitor error"
             ))
         ));

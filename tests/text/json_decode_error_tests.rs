@@ -11,8 +11,8 @@ use std::error::Error;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::text::JsonDecodeError;
-use qubit_json::text::JsonTextDecoder;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecoder;
 use serde_json::error::Category;
 
 /// Verifies that strict text decoding uses the operation-specific error API.
@@ -23,7 +23,7 @@ fn test_decoder_decodes_valid_slice() {
             .max_nodes(4)
             .build(),
     );
-    let value: bool = JsonTextDecoder::new(&mut session)
+    let value: bool = JsonDecoder::new(&mut session)
         .decode(b"true")
         .expect("valid JSON decodes");
     assert!(value);
@@ -35,7 +35,7 @@ fn test_decoder_returns_safe_deserialize_metadata() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<u64>(br#""TOP_SECRET""#)
         .expect_err("a JSON string cannot deserialize into u64");
 
@@ -66,7 +66,7 @@ fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
     );
 
     assert!(matches!(
-        JsonTextDecoder::<JsonResource, usize>::new(&mut session)
+        JsonDecoder::<JsonResource, usize>::new(&mut session)
             .decode::<u64>(rejected),
         Err(JsonDecodeError::Deserialize { .. })
     ));
@@ -80,7 +80,7 @@ fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
     assert_eq!(session.value_budget().used_nodes(), Some(0));
 
     assert_eq!(
-        JsonTextDecoder::<JsonResource, usize>::new(&mut session)
+        JsonDecoder::<JsonResource, usize>::new(&mut session)
             .decode::<u64>(accepted)
             .expect("a new value must fit after typed rollback"),
         0
@@ -97,11 +97,11 @@ fn test_validate_accounts_document() {
             .max_nodes(4)
             .build(),
     );
-    JsonTextDecoder::new(&mut session)
+    JsonDecoder::new(&mut session)
         .validate(br#"{"ok":true}"#)
         .expect("valid JSON should pass lexical inspection");
     assert_eq!(session.value_budget().used_nodes(), Some(2));
-    let _ = JsonTextDecoder::new(&mut session)
+    let _ = JsonDecoder::new(&mut session)
         .validate(b"[")
         .expect_err("malformed JSON must be rejected");
 }

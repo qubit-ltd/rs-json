@@ -23,14 +23,14 @@ Rust 服务需要处理两类 JSON：来自受控协议的严格字节流，以�
 
 ### 宽松输入
 
-用户通过 `LenientJsonDecodeOptions` 配置允许的规范化，再创建 `LenientJsonDecoder`。默认错误
+用户通过 `NormalizingJsonDecodeOptions` 配置允许的规范化，再创建 `NormalizingJsonDecoder`。默认错误
 脱敏；只有明确请求 `Detailed` 才保留可能包含输入的信息。带 session 的调用必须保留原始与
 规范化输入消耗，并仅在完整类型解码后提交 value 消耗。
 
 ### 严格文本
 
-用户必须以对象方式传入调用方持有的 session：`JsonTextDecoder` 负责 `decode`、`decode_seed`
-和 `validate`，`JsonTextEncoder` 负责 `to_vec`、`write_buffered` 和 `write_incremental`。严格
+用户必须以对象方式传入调用方持有的 session：`JsonDecoder` 负责 `decode`、`decode_seed`
+和 `validate`，`JsonEncoder` 负责 `to_vec`、`write_buffered` 和 `write_incremental`。严格
 输入不经过任何修复；每个 document 的记账边界由相应 session transaction 定义。
 
 ### Value 与 tree
@@ -44,7 +44,7 @@ Rust 服务需要处理两类 JSON：来自受控协议的严格字节流，以�
 
 所有公开错误按领域归属，不提供根级聚合或同名兼容层：
 
-1. `LenientJsonDecodeError`：宽松规范化和类型解码。
+1. `NormalizingJsonDecodeError`：宽松规范化和类型解码。
 2. `JsonDecodeError`：严格预算、语法、类型解码。
 3. `JsonEncodeError`：严格预算、原始 JSON、序列化、写入。
 4. `JsonSyntaxError`：稳定的语法原因和位置。

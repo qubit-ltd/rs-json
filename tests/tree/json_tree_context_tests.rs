@@ -5,8 +5,8 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use qubit_json::tree::JsonTreeContext;
-use qubit_json::tree::JsonTreeLocation;
+use qubit_json::value::traverse::JsonTreeContext;
+use qubit_json::value::traverse::JsonTreeLocation;
 
 /// Verifies that context preserves the root-inclusive depth and location.
 #[test]

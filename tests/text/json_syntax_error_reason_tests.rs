@@ -7,7 +7,7 @@
 // =============================================================================
 //! Tests stable strict JSON syntax reason formatting.
 
-use qubit_json::text::JsonSyntaxErrorReason;
+use qubit_json::decode::JsonSyntaxErrorReason;
 
 /// Verifies syntax reasons retain their privacy-safe display text.
 #[test]

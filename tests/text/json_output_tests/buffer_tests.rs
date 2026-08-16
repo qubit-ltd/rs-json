@@ -11,7 +11,7 @@ use qubit_budget::ResourceLimit;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::text::JsonEncodeError;
+use qubit_json::encode::JsonEncodeError;
 
 use crate::text::json_encode_test_support::encode;
 use crate::text::json_encode_test_support::write_incremental;

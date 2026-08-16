@@ -15,8 +15,8 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::text::JsonDecodeError;
-use qubit_json::text::JsonTextDecoder;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecoder;
 use serde_json::Value;
 
 /// Verifies that nested values use root-inclusive lexical depth.
@@ -33,7 +33,7 @@ fn test_json_lexical_preflight_charges_nested_depth() {
             )
             .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<Value>(b"[null]")
         .expect_err("the nested value should exceed the depth budget");
 

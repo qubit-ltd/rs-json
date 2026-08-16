@@ -10,7 +10,7 @@
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::text::JsonTextEncoder;
+use qubit_json::encode::JsonEncoder;
 use serde_json::value::RawValue;
 
 /// Verifies raw JSON values preserve their represented JSON shape.
@@ -21,7 +21,7 @@ fn test_private_struct_kind_recognizes_raw_value() {
     let mut session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let output = JsonTextEncoder::new(&mut session)
+    let output = JsonEncoder::new(&mut session)
         .to_vec(&raw)
         .expect("raw JSON value should encode");
 

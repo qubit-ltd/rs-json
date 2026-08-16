@@ -7,11 +7,11 @@
 // =============================================================================
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::tree::JsonTreeContext;
-use qubit_json::tree::JsonTreeLocation;
-use qubit_json::tree::JsonTreeProcessError;
-use qubit_json::tree::JsonTreeReader;
-use qubit_json::tree::JsonTreeVisitor;
+use qubit_json::value::traverse::JsonTreeContext;
+use qubit_json::value::traverse::JsonTreeLocation;
+use qubit_json::value::traverse::JsonTreeProcessError;
+use qubit_json::value::traverse::JsonTreeReader;
+use qubit_json::value::traverse::JsonTreeVisitor;
 use serde_json::Value;
 use serde_json::json;
 

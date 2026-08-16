@@ -10,9 +10,9 @@
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::text::JsonDecodeError;
-use qubit_json::text::JsonSyntaxErrorReason;
-use qubit_json::text::JsonTextDecoder;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::JsonSyntaxErrorReason;
 
 /// Verifies the lexical cursor skips JSON whitespace before and after a value.
 #[test]
@@ -20,7 +20,7 @@ fn test_cursor_skips_json_whitespace() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let value = JsonTextDecoder::new(&mut session)
+    let value = JsonDecoder::new(&mut session)
         .decode::<u8>(b" \n\t 7\r ")
         .expect("whitespace-wrapped JSON number should decode");
 
@@ -70,7 +70,7 @@ fn test_cursor_reports_scalar_and_container_syntax_errors() {
         let mut session = JsonDecodeSession::owned(
             JsonDecodeLimits::<JsonResource, usize>::builder().build(),
         );
-        let error = JsonTextDecoder::new(&mut session)
+        let error = JsonDecoder::new(&mut session)
             .decode::<serde_json::Value>(input)
             .expect_err("malformed input should be rejected");
         let JsonDecodeError::Syntax(error) = error else {
@@ -86,7 +86,7 @@ fn test_cursor_accepts_unicode_and_reports_coordinates() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let value = JsonTextDecoder::new(&mut session)
+    let value = JsonDecoder::new(&mut session)
         .decode::<String>("\"é\\uD83D\\uDE00\"".as_bytes())
         .expect("valid UTF-8 and surrogate-pair escapes should decode");
     assert_eq!(value, "é😀");
@@ -94,7 +94,7 @@ fn test_cursor_accepts_unicode_and_reports_coordinates() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<serde_json::Value>("1\r\n@".as_bytes())
         .expect_err("invalid byte should be rejected");
     let JsonDecodeError::Syntax(error) = error else {
@@ -110,7 +110,7 @@ fn test_cursor_rejects_invalid_utf8_inside_string() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let error = JsonTextDecoder::new(&mut session)
+    let error = JsonDecoder::new(&mut session)
         .decode::<serde_json::Value>(b"\"\x80\"")
         .expect_err("invalid UTF-8 should be rejected");
     let JsonDecodeError::Syntax(error) = error else {

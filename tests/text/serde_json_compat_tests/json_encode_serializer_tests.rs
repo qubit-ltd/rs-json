@@ -12,7 +12,7 @@ use std::fmt;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::text::JsonEncodeError;
+use qubit_json::encode::JsonEncodeError;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeStruct;

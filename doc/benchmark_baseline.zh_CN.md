@@ -31,7 +31,7 @@ cargo +1.94.0 bench --bench decoder_bench
 | 1 MiB | 184.94 µs | 185.18 µs | 186.52 µs |
 
 “按次构造严格 decoder”在每个 Criterion 迭代内执行
-`LenientJsonDecoder::new(LenientJsonDecodeOptions::strict())` 后再调用 `decode_slice`，与当前
+`NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict())` 后再调用 `decode_slice`，与当前
 `rs-http` 的响应和 SSE 调用方式一致。三种严格路径的数值接近，比较时应以同机多次运行及
 Criterion 的置信区间为准，而非将单次结果视为回归结论。
 
@@ -43,7 +43,7 @@ Criterion 的置信区间为准，而非将单次结果视为回归结论。
 | 64 KiB | 13.337 µs | 13.656 µs | 241.17 µs |
 | 1 MiB | 223.03 µs | 220.23 µs | 2.2784 ms |
 
-该组通过 `LenientJsonDecoder::default().decode_object` 解码类型化记录，覆盖 `rs-http`
+该组通过 `NormalizingJsonDecoder::default().decode_object` 解码类型化记录，覆盖 `rs-http`
 宽松 SSE 消息所依赖的普通、fenced 与控制字符规范化路径。控制字符密度会显著影响结果，
 因此应单独与相同输入形态的历史运行比较。
 
@@ -155,7 +155,7 @@ cargo bench --bench budgeted_serde_json -- --noplot
 
 `owned-session` 在每次迭代构造 `JsonDecodeSession::owned`；`borrowed-session` 在每次
 迭代构造借用 `JsonValueBudget` 的会话；`reused-session` 在迭代之间复用无限制会话。后两项
-`LenientJsonDecoder` 均采用 `LenientJsonDecodeOptions::strict()`，其中带 session 的项复用一个
+`NormalizingJsonDecoder` 均采用 `NormalizingJsonDecodeOptions::strict()`，其中带 session 的项复用一个
 无限制会话。
 
 | 场景 | 约 1 KiB（延迟 / 吞吐 / 倍率） | 约 64 KiB（延迟 / 吞吐 / 倍率） | 约 1 MiB（延迟 / 吞吐 / 倍率） |
@@ -164,8 +164,8 @@ cargo bench --bench budgeted_serde_json -- --noplot
 | `owned-session` | 5.7951 µs / 163.41 MiB/s / 1.89× | 375.03 µs / 166.65 MiB/s / 1.66× | 6.4060 ms / 156.10 MiB/s / 1.62× |
 | `borrowed-session` | 5.5218 µs / 171.50 MiB/s / 1.81× | 372.26 µs / 167.89 MiB/s / 1.64× | 6.4005 ms / 156.23 MiB/s / 1.61× |
 | `reused-session` | 5.5906 µs / 169.39 MiB/s / 1.83× | 378.06 µs / 165.31 MiB/s / 1.67× | 6.4071 ms / 156.07 MiB/s / 1.62× |
-| `LenientJsonDecoder::decode` | 2.6992 µs / 350.84 MiB/s / 0.88× | 186.22 µs / 335.60 MiB/s / 0.82× | 3.3947 ms / 294.57 MiB/s / 0.86× |
-| `LenientJsonDecoder::decode_with_session` | 2.6619 µs / 355.76 MiB/s / 0.87× | 182.60 µs / 342.25 MiB/s / 0.81× | 3.3478 ms / 298.69 MiB/s / 0.84× |
+| `NormalizingJsonDecoder::decode` | 2.6992 µs / 350.84 MiB/s / 0.88× | 186.22 µs / 335.60 MiB/s / 0.82× | 3.3947 ms / 294.57 MiB/s / 0.86× |
+| `NormalizingJsonDecoder::decode_with_session` | 2.6619 µs / 355.76 MiB/s / 0.87× | 182.60 µs / 342.25 MiB/s / 0.81× | 3.3478 ms / 298.69 MiB/s / 0.84× |
 
 ### 严格编码
 
@@ -200,8 +200,8 @@ cargo bench --bench budgeted_serde_json -- --noplot
 | `owned-session` | 5.7484 µs / 164.74 MiB/s / 1.97× / -0.81% | 367.50 µs / 170.06 MiB/s / 1.68× / -2.01% | 6.3164 ms / 158.31 MiB/s / 1.62× / -1.40% |
 | `borrowed-session` | 5.8399 µs / 162.16 MiB/s / 2.00× / +5.76% | 368.75 µs / 169.48 MiB/s / 1.69× / -0.94% | 6.3221 ms / 158.17 MiB/s / 1.62× / -1.22% |
 | `reused-session` | 5.4755 µs / 172.95 MiB/s / 1.88× / -2.06% | 369.54 µs / 169.12 MiB/s / 1.69× / -2.25% | 6.4119 ms / 155.96 MiB/s / 1.65× / +0.07% |
-| `LenientJsonDecoder::decode` | 2.7992 µs / 338.31 MiB/s / 0.96× / +3.70% | 178.91 µs / 349.33 MiB/s / 0.82× / -3.93% | 3.2670 ms / 306.08 MiB/s / 0.84× / -3.76% |
-| `LenientJsonDecoder::decode_with_session` | 5.1220 µs / 184.89 MiB/s / 1.76× / +92.42% | 326.85 µs / 191.21 MiB/s / 1.50× / +79.00% | 5.6367 ms / 177.40 MiB/s / 1.45× / +68.37% |
+| `NormalizingJsonDecoder::decode` | 2.7992 µs / 338.31 MiB/s / 0.96× / +3.70% | 178.91 µs / 349.33 MiB/s / 0.82× / -3.93% | 3.2670 ms / 306.08 MiB/s / 0.84× / -3.76% |
+| `NormalizingJsonDecoder::decode_with_session` | 5.1220 µs / 184.89 MiB/s / 1.76× / +92.42% | 326.85 µs / 191.21 MiB/s / 1.50× / +79.00% | 5.6367 ms / 177.40 MiB/s / 1.45× / +68.37% |
 
 `decode()` 仍是无 value preflight 的快速路径；它与改造前相比在三个尺寸上的变化为
 +3.70%、-3.93% 和 -3.76%，未显示随输入尺寸放大的退化。`decode_with_session()` 现在对

@@ -5,9 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for [`qubit_json::lenient::MarkdownFenceClosing`].
+//! Tests for [`qubit_json::decode::MarkdownFenceClosing`].
 
-use qubit_json::lenient::MarkdownFenceClosing;
+use qubit_json::decode::MarkdownFenceClosing;
 
 /// Verifies that markdown fence closing is copy and equatable.
 ///
