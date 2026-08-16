@@ -25,6 +25,7 @@ use crate::internal::JsonLexicalError;
 use crate::internal::JsonLexicalScanner;
 use crate::text::JsonSyntaxError;
 
+/// Traversal context shared during JSON encoding budget checks.
 pub(in crate::text) struct JsonEncodeContext<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
