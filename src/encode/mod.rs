@@ -5,12 +5,13 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Builds [`serde_json::Value`] values while charging a JSON value budget.
+//! Strict JSON encoding APIs and their budget-aware serializer internals.
 
-mod json_value_seed;
+mod json_encode_error;
+mod json_encoder;
+mod output;
+mod serde_compat;
+mod serializer;
 
-pub use json_value_seed::JsonValueSeed;
-
-pub mod traverse;
-
-mod internal;
+pub use json_encode_error::JsonEncodeError;
+pub use json_encoder::JsonEncoder;

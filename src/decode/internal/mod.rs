@@ -1,16 +1,12 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Builds [`serde_json::Value`] values while charging a JSON value budget.
+//! Private implementation details for lenient JSON normalization.
 
-mod json_value_seed;
-
-pub use json_value_seed::JsonValueSeed;
-
-pub mod traverse;
-
-mod internal;
+mod control_character_escaper;
+pub(super) mod json_normalizer;
+mod markdown_fence;
