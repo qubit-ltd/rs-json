@@ -18,7 +18,9 @@ use qubit_json::lenient::LenientJsonDecoder;
 #[test]
 fn test_raw_size_limit_exposes_only_raw_limit() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_max_input_bytes(Some(7)),
+        LenientJsonDecodeOptions::builder()
+            .max_input_bytes(Some(7))
+            .build(),
     );
     let error = decoder
         .decode_value("{\"a\": 1}")
@@ -40,7 +42,9 @@ fn test_raw_size_limit_exposes_only_raw_limit() {
 #[test]
 fn test_normalized_size_limit_exposes_only_normalized_limit() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_max_normalized_bytes(Some(7)),
+        LenientJsonDecodeOptions::builder()
+            .max_normalized_bytes(Some(7))
+            .build(),
     );
     let error = decoder.decode::<String>("\"\u{0000}\"").expect_err(
         "oversized normalized input should return an input-too-large error",

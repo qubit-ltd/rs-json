@@ -77,8 +77,9 @@ fuzz_target!(|data: &[u8]| {
     }
     if !data.is_empty() {
         let bounded = LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::strict()
-                .with_max_input_bytes(Some(data.len() - 1)),
+            LenientJsonDecodeOptions::builder()
+                .max_input_bytes(Some(data.len() - 1))
+                .build(),
         );
         let error = bounded
             .decode_slice::<serde_json::Value>(data)
@@ -110,22 +111,23 @@ fuzz_target!(|data: &[u8]| {
         default_decoder.clone(),
         LenientJsonDecoder::new(LenientJsonDecodeOptions::strict()),
         LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::lenient().with_markdown_fence_policy(
-                MarkdownFencePolicy::Any {
+            LenientJsonDecodeOptions::builder()
+                .markdown_fence_policy(MarkdownFencePolicy::Any {
                     closing: MarkdownFenceClosing::Optional,
-                },
-            ),
+                })
+                .build(),
         ),
         LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::lenient().with_markdown_fence_policy(
-                MarkdownFencePolicy::JsonOnly {
+            LenientJsonDecodeOptions::builder()
+                .markdown_fence_policy(MarkdownFencePolicy::JsonOnly {
                     closing: MarkdownFenceClosing::Required,
-                },
-            ),
+                })
+                .build(),
         ),
         LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::lenient()
-                .with_max_normalized_bytes(Some(input.len())),
+            LenientJsonDecodeOptions::builder()
+                .max_normalized_bytes(Some(input.len()))
+                .build(),
         ),
     ];
 

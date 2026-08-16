@@ -416,7 +416,7 @@ fn test_encode_known_map_limit_stops_before_source_tail() {
 
     assert_online_rejection(
         &value,
-        JsonTestLimits::new().with_max_map_entries(1),
+        JsonTestLimits::new().max_map_entries(1),
         JsonResource::MapEntries,
         &serialized_tail,
         1,
@@ -435,7 +435,7 @@ fn test_encode_sequence_limit_stops_before_next_serialize() {
 
     assert_online_rejection(
         &value,
-        JsonTestLimits::new().with_max_sequence_items(1),
+        JsonTestLimits::new().max_sequence_items(1),
         JsonResource::SequenceItems,
         &serialized,
         1,
@@ -695,7 +695,7 @@ fn test_encode_node_limit_stops_before_source_tail() {
         serialized: &serialized,
         len: 1_000,
     };
-    let mut session = JsonTestLimits::new().with_max_nodes(3).encode_session();
+    let mut session = JsonTestLimits::new().max_nodes(3).encode_session();
 
     let error = encode(&value, &mut session)
         .expect_err("the node budget must reject the long sequence");
@@ -715,7 +715,7 @@ fn test_encode_depth_limit_checks_complete_source_depth() {
         serialized: &serialized,
         remaining: SOURCE_DEPTH - 1,
     };
-    let mut session = JsonTestLimits::new().with_max_depth(4).encode_session();
+    let mut session = JsonTestLimits::new().max_depth(4).encode_session();
 
     let error = encode(&value, &mut session)
         .expect_err("the depth budget must reject recursive serialization");
@@ -738,8 +738,7 @@ fn test_encode_number_limit_stops_before_source_tail() {
 
     assert_online_rejection(
         &value,
-        JsonTestLimits::new()
-            .with_max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
+        JsonTestLimits::new().max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
         JsonResource::NumberBytes,
         &serialized_tail,
         0,
@@ -759,7 +758,7 @@ fn test_encode_key_limit_stops_before_source_tail() {
 
     assert_online_rejection(
         &value,
-        JsonTestLimits::new().with_max_key_bytes(key.len() - 1),
+        JsonTestLimits::new().max_key_bytes(key.len() - 1),
         JsonResource::KeyBytes,
         &serialized_tail,
         0,
@@ -778,7 +777,7 @@ fn test_encode_string_limit_stops_before_source_tail() {
 
     assert_online_rejection(
         &value,
-        JsonTestLimits::new().with_max_string_bytes(text.len() - 1),
+        JsonTestLimits::new().max_string_bytes(text.len() - 1),
         JsonResource::StringBytes,
         &serialized_tail,
         0,
@@ -797,7 +796,7 @@ fn test_encode_unknown_map_limit_stops_before_source_tail() {
 
     assert_online_rejection(
         &value,
-        JsonTestLimits::new().with_max_map_entries(1),
+        JsonTestLimits::new().max_map_entries(1),
         JsonResource::MapEntries,
         &serialized_tail,
         0,

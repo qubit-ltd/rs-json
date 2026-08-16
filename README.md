@@ -44,7 +44,7 @@ deserialize directly into the requested type.
 use qubit_json::lenient::{LenientJsonDecodeOptions, LenientJsonDecoder};
 
 let decoder = LenientJsonDecoder::new(
-    LenientJsonDecodeOptions::default().with_max_input_bytes(Some(1024)),
+    LenientJsonDecodeOptions::builder().max_input_bytes(Some(1024)).build(),
 );
 let value = decoder.decode_value("```json\n{\"ok\":true}\n```")?;
 assert_eq!(value["ok"], true);
