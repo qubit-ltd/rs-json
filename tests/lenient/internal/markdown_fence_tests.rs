@@ -35,11 +35,11 @@ fn test_decode_value_default_rejects_non_json_markdown_fence() {
 #[test]
 fn test_decode_value_explicit_any_accepts_non_json_markdown_fence() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_markdown_fence_policy(
-            MarkdownFencePolicy::Any {
+        LenientJsonDecodeOptions::builder()
+            .markdown_fence_policy(MarkdownFencePolicy::Any {
                 closing: MarkdownFenceClosing::Optional,
-            },
-        ),
+            })
+            .build(),
     );
     let value = decoder
         .decode_value("~~~python\n{\"ok\":true}\n~~~")
@@ -157,7 +157,9 @@ fn test_decode_value_strips_deeply_indented_opening_fence_after_trimming() {
 #[test]
 fn test_decode_value_strips_indented_code_fence_when_trimming_disabled() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_trim_whitespace(false),
+        LenientJsonDecodeOptions::builder()
+            .trim_whitespace(false)
+            .build(),
     );
     let value = decoder.decode_value("  ```json\n{\"a\":1}\n  ```").expect(
         "decoder should accept up to three leading spaces before a fence",
@@ -175,7 +177,9 @@ fn test_decode_value_strips_indented_code_fence_when_trimming_disabled() {
 fn test_decode_value_rejects_deeply_indented_code_fence_when_trimming_disabled()
 {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_trim_whitespace(false),
+        LenientJsonDecodeOptions::builder()
+            .trim_whitespace(false)
+            .build(),
     );
     let error = decoder
         .decode_value("    ```json\n{\"a\":1}\n    ```")
@@ -254,11 +258,11 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_pol
 fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_policy()
  {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_markdown_fence_policy(
-            MarkdownFencePolicy::Any {
+        LenientJsonDecodeOptions::builder()
+            .markdown_fence_policy(MarkdownFencePolicy::Any {
                 closing: MarkdownFenceClosing::Required,
-            },
-        ),
+            })
+            .build(),
     );
     for closing_line in ["    ```", "\t```", "\u{00a0}```"] {
         let input = format!("```json\n{{\"a\":1}}\n{closing_line}");
@@ -277,11 +281,11 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_pol
 #[test]
 fn test_decode_value_rejects_closing_fence_shorter_than_opening_fence() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_markdown_fence_policy(
-            MarkdownFencePolicy::Any {
+        LenientJsonDecodeOptions::builder()
+            .markdown_fence_policy(MarkdownFencePolicy::Any {
                 closing: MarkdownFenceClosing::Required,
-            },
-        ),
+            })
+            .build(),
     );
     let error = decoder.decode_value("````json\n{\"a\":1}\n```").expect_err(
         "closing fence shorter than the opening fence should not be stripped",
@@ -311,11 +315,11 @@ fn test_decode_value_strips_code_fence_without_closing_fence() {
 #[test]
 fn test_decode_value_can_require_closing_code_fence() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_markdown_fence_policy(
-            MarkdownFencePolicy::Any {
+        LenientJsonDecodeOptions::builder()
+            .markdown_fence_policy(MarkdownFencePolicy::Any {
                 closing: MarkdownFenceClosing::Required,
-            },
-        ),
+            })
+            .build(),
     );
     let error = decoder.decode_value("```json\n{\"a\":1}").expect_err(
         "opening fence without closing fence should be rejected when strict mode is enabled",
@@ -331,11 +335,11 @@ fn test_decode_value_can_require_closing_code_fence() {
 #[test]
 fn test_decode_value_allows_strict_closing_code_fence_when_present() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_markdown_fence_policy(
-            MarkdownFencePolicy::Any {
+        LenientJsonDecodeOptions::builder()
+            .markdown_fence_policy(MarkdownFencePolicy::Any {
                 closing: MarkdownFenceClosing::Required,
-            },
-        ),
+            })
+            .build(),
     );
     let value = decoder.decode_value("```json\n{\"a\":1}\n```").expect(
         "strict closing mode should still strip a properly closed fence",
@@ -456,7 +460,9 @@ fn test_decode_value_does_not_accept_inline_closing_ticks_as_fence_end() {
 #[test]
 fn test_decode_value_reports_invalid_json_for_code_fence_without_newline() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_trim_whitespace(false),
+        LenientJsonDecodeOptions::builder()
+            .trim_whitespace(false)
+            .build(),
     );
     let error = decoder
         .decode_value("```json")
@@ -487,8 +493,9 @@ fn test_decode_value_reports_empty_input_for_empty_code_fence_body() {
 #[test]
 fn test_decode_value_can_disable_code_fence_stripping() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
+        LenientJsonDecodeOptions::builder()
+            .markdown_fence_policy(MarkdownFencePolicy::Disabled)
+            .build(),
     );
     let error = decoder
         .decode_value("```json\n{\"name\":\"alice\"}\n```")

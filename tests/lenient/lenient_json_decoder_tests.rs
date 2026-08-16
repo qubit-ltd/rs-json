@@ -61,8 +61,9 @@ fn value_budget_session(
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_new_exposes_configured_options() {
-    let options = LenientJsonDecodeOptions::default()
-        .with_markdown_fence_policy(MarkdownFencePolicy::Disabled);
+    let options = LenientJsonDecodeOptions::builder()
+        .markdown_fence_policy(MarkdownFencePolicy::Disabled)
+        .build();
     let decoder = LenientJsonDecoder::new(options.clone());
     assert_eq!(decoder.options(), &options);
 }
@@ -83,9 +84,10 @@ fn test_default_uses_default_options() {
 #[test]
 fn test_decode_without_value_limits_ignores_structure() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict()
-            .with_max_input_bytes(Some(256))
-            .with_max_normalized_bytes(Some(256)),
+        LenientJsonDecodeOptions::builder()
+            .max_input_bytes(Some(256))
+            .max_normalized_bytes(Some(256))
+            .build(),
     );
 
     decoder.decode::<Value>("[[[[null]]]]").expect(
@@ -97,11 +99,13 @@ fn test_decode_without_value_limits_ignores_structure() {
 #[test]
 fn test_decode_with_value_limits_rejects_excessive_depth() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict().with_value_limits(Some(
-            JsonValueLimits::<JsonResource, usize>::builder()
-                .max_depth(1)
-                .build(),
-        )),
+        LenientJsonDecodeOptions::builder()
+            .value_limits(Some(
+                JsonValueLimits::<JsonResource, usize>::builder()
+                    .max_depth(1)
+                    .build(),
+            ))
+            .build(),
     );
     let error = decoder.decode::<Value>("[null]").expect_err(
         "depth limit must reject nested values on convenience decode",
@@ -115,11 +119,13 @@ fn test_decode_with_value_limits_rejects_excessive_depth() {
 #[test]
 fn test_decode_value_with_value_limits_rejects_excessive_nodes() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict().with_value_limits(Some(
-            JsonValueLimits::<JsonResource, usize>::builder()
-                .max_nodes(1)
-                .build(),
-        )),
+        LenientJsonDecodeOptions::builder()
+            .value_limits(Some(
+                JsonValueLimits::<JsonResource, usize>::builder()
+                    .max_nodes(1)
+                    .build(),
+            ))
+            .build(),
     );
     let error = decoder
         .decode_value("[null]")
@@ -567,8 +573,9 @@ fn test_decode_with_session_preserves_serde_syntax_position() {
             .build(),
     );
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::builder()
+            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+            .build(),
     );
     let error = decoder
         .decode_with_session::<Value>("{", &mut session)
@@ -612,8 +619,9 @@ fn test_decode_with_session_rejects_unpaired_surrogate_without_panicking() {
     assert_eq!(string_session.value_budget().used_nodes(), Some(0),);
 
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::builder()
+            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+            .build(),
     );
     let mut raw_value_session = value_budget_session(limits);
     let raw_value_error = decoder
@@ -747,9 +755,10 @@ fn test_decode_slice_invokes_target_deserializer_once_on_failure() {
 #[test]
 fn test_decode_slice_accepts_non_rewrite_strict_overrides() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict()
-            .with_max_input_bytes(Some(64))
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::builder()
+            .max_input_bytes(Some(64))
+            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+            .build(),
     );
     let value: Value = decoder
         .decode_slice(b"{\"ok\":true}")
@@ -765,8 +774,9 @@ fn test_decode_slice_accepts_non_rewrite_strict_overrides() {
 #[test]
 fn test_decode_slice_preserves_deserialize_error_mapping() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::builder()
+            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+            .build(),
     );
     let error = decoder.decode_slice::<Message>(b"{\"text\":7}").expect_err(
         "valid JSON with the wrong field type must fail deserialization",
@@ -798,7 +808,9 @@ fn test_decode_slice_preserves_invalid_json_mapping() {
 #[test]
 fn test_decode_slice_checks_raw_size_before_utf8() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict().with_max_input_bytes(Some(1)),
+        LenientJsonDecodeOptions::builder()
+            .max_input_bytes(Some(1))
+            .build(),
     );
     let error = decoder
         .decode_slice::<Value>(&[0xff, 0xfe])
@@ -815,8 +827,9 @@ fn test_decode_slice_checks_raw_size_before_utf8() {
 fn test_decode_slice_accepts_input_at_exact_raw_size_limit() {
     let input = b"null";
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict()
-            .with_max_input_bytes(Some(input.len())),
+        LenientJsonDecodeOptions::builder()
+            .max_input_bytes(Some(input.len()))
+            .build(),
     );
 
     let value = decoder
@@ -1164,9 +1177,10 @@ fn test_decode_array_reports_invalid_json_when_data_error_precedes_syntax_error(
 #[test]
 fn test_decode_object_reports_invalid_json_for_non_token_start() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_trim_whitespace(false)
-            .with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
+        LenientJsonDecodeOptions::builder()
+            .trim_whitespace(false)
+            .markdown_fence_policy(MarkdownFencePolicy::Disabled)
+            .build(),
     );
     let error = decoder
         .decode_object::<User>(" \n\t ")
@@ -1182,8 +1196,9 @@ fn test_decode_object_reports_invalid_json_for_non_token_start() {
 #[test]
 fn test_decoder_reuses_configuration_between_calls() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
+        LenientJsonDecodeOptions::builder()
+            .markdown_fence_policy(MarkdownFencePolicy::Disabled)
+            .build(),
     );
 
     let first = decoder
@@ -1205,8 +1220,9 @@ fn test_decoder_reuses_configuration_between_calls() {
 #[test]
 fn test_decoders_with_different_configs_do_not_share_state() {
     let strict_decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_markdown_fence_policy(MarkdownFencePolicy::Disabled),
+        LenientJsonDecodeOptions::builder()
+            .markdown_fence_policy(MarkdownFencePolicy::Disabled)
+            .build(),
     );
     let permissive_decoder = LenientJsonDecoder::default();
 
@@ -1231,7 +1247,9 @@ fn test_decoders_with_different_configs_do_not_share_state() {
 #[test]
 fn test_decoder_keeps_trim_whitespace_setting_for_empty_text() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default().with_trim_whitespace(false),
+        LenientJsonDecodeOptions::builder()
+            .trim_whitespace(false)
+            .build(),
     );
     let error = decoder
         .decode_value(" \n\t")

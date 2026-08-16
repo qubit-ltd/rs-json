@@ -344,8 +344,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
     let malformed = &plain[..plain.len() - 1];
     let wrong_top_level = format!("[{plain}]");
     let bounded_decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict()
-            .with_max_input_bytes(Some(plain.len() - 1)),
+        LenientJsonDecodeOptions::builder()
+            .max_input_bytes(Some(plain.len() - 1))
+            .build(),
     );
     assert!(
         default_decoder
@@ -460,8 +461,9 @@ fn benchmark_control_character_scaling(c: &mut Criterion) {
                 control_stride,
             );
             let bounded_decoder = LenientJsonDecoder::new(
-                LenientJsonDecodeOptions::default()
-                    .with_max_normalized_bytes(Some(normalized_limit)),
+                LenientJsonDecodeOptions::builder()
+                    .max_normalized_bytes(Some(normalized_limit))
+                    .build(),
             );
             decoder
                 .decode_value(&input)

@@ -63,8 +63,9 @@ fn test_decode_value_preserves_utf8_after_escaped_control_char() {
 #[test]
 fn test_decode_value_can_disable_control_char_escaping() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_escape_control_chars_in_strings(false),
+        LenientJsonDecodeOptions::builder()
+            .escape_control_chars_in_strings(false)
+            .build(),
     );
     let error = decoder
         .decode_value("{\"text\":\"a\nb\"}")
@@ -160,8 +161,9 @@ fn test_decode_value_preserves_state_across_each_chunk_boundary_offset() {
         assert_eq!(decoded, expected);
 
         let bounded = LenientJsonDecoder::new(
-            LenientJsonDecodeOptions::default()
-                .with_max_normalized_bytes(Some(json_input.len() + 1)),
+            LenientJsonDecodeOptions::builder()
+                .max_normalized_bytes(Some(json_input.len() + 1))
+                .build(),
         )
         .decode_value(&json_input)
         .unwrap_or_else(|error| {
@@ -187,16 +189,18 @@ fn test_decode_value_bounds_all_control_character_escapes_by_normalized_size() {
         "{\"text\":\"".len() + (5 * 2) + (27 * 6) + "\"}".len();
 
     let accepted = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_max_normalized_bytes(Some(normalized_bytes)),
+        LenientJsonDecodeOptions::builder()
+            .max_normalized_bytes(Some(normalized_bytes))
+            .build(),
     )
     .decode_value(&json_input)
     .expect("all C0 replacements should fit exactly at their normalized limit");
     assert_eq!(accepted, json!({"text": control_chars}));
 
     let error = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_max_normalized_bytes(Some(normalized_bytes - 1)),
+        LenientJsonDecodeOptions::builder()
+            .max_normalized_bytes(Some(normalized_bytes - 1))
+            .build(),
     )
     .decode_value(&json_input)
     .expect_err("one byte below the C0 replacement size must fail");
@@ -247,8 +251,9 @@ fn test_decode_value_escapes_control_char_after_unmatched_backslash() {
 fn test_decode_value_repairs_equal_length_escape_at_normalized_size_limit() {
     let json_input = "{\"text\":\"\\\n\"}";
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_max_normalized_bytes(Some(json_input.len())),
+        LenientJsonDecodeOptions::builder()
+            .max_normalized_bytes(Some(json_input.len()))
+            .build(),
     );
 
     let value = decoder.decode_value(json_input).expect(

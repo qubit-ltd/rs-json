@@ -134,8 +134,9 @@ fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_locatio
 #[test]
 fn test_error_source_for_invalid_json_preserves_serde_error() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::builder()
+            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+            .build(),
     );
     let error = decoder
         .decode_value("{")
@@ -176,8 +177,9 @@ fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
     const SECRET: &str = "TOP_SECRET_VALUE";
 
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::builder()
+            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+            .build(),
     );
     let error = decoder
         .decode::<PublicChoice>(&format!("\"{SECRET}\""))
@@ -251,8 +253,9 @@ fn test_invalid_utf8_exposes_safe_position_diagnostics() {
 #[test]
 fn test_invalid_utf8_detailed_error_retains_utf8_source() {
     let decoder = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::strict()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::builder()
+            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+            .build(),
     );
     let error = decoder
         .decode_slice::<Value>(&[0xff])
@@ -275,8 +278,9 @@ fn test_normalization_errors_retain_the_configured_privacy_policy() {
         .decode_value("")
         .expect_err("empty input should fail normalization");
     let detailed = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::builder()
+            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+            .build(),
     )
     .decode_value("")
     .expect_err("empty input should fail normalization");
@@ -328,8 +332,9 @@ fn test_error_partial_eq_compares_all_stable_fields() {
     assert_ne!(first, third);
 
     let detailed = LenientJsonDecoder::new(
-        LenientJsonDecodeOptions::default()
-            .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
+        LenientJsonDecodeOptions::builder()
+            .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+            .build(),
     )
     .decode_value("")
     .expect_err("empty input should return normalization error");
