@@ -14,6 +14,7 @@ use criterion::BenchmarkId;
 use criterion::Criterion;
 use criterion::criterion_group;
 use criterion::criterion_main;
+use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::tree::JsonTreeContext;
@@ -117,8 +118,10 @@ fn benchmark_read(c: &mut Criterion) {
             &value,
             |bencher, value| {
                 bencher.iter(|| {
-                    let mut budget =
-                        JsonValueBudget::new(JsonValueLimits::empty());
+                    let mut budget = JsonValueBudget::new(
+                        JsonValueLimits::<JsonResource, usize>::builder()
+                            .build(),
+                    );
                     let mut transaction = budget.transaction();
                     let mut visitor = ReadVisitor;
                     JsonTreeReader::new(&mut transaction)
@@ -138,8 +141,10 @@ fn benchmark_read(c: &mut Criterion) {
             &value,
             |bencher, value| {
                 bencher.iter(|| {
-                    let mut budget =
-                        JsonValueBudget::new(JsonValueLimits::empty());
+                    let mut budget = JsonValueBudget::new(
+                        JsonValueLimits::<JsonResource, usize>::builder()
+                            .build(),
+                    );
                     let mut transaction = budget.transaction();
                     let mut visitor = ReadVisitor;
                     JsonTreeReader::new(&mut transaction)
@@ -155,7 +160,9 @@ fn benchmark_read(c: &mut Criterion) {
     let value = deep_tree(DEEP_TREE_DEPTH);
     group.bench_function("deep-tree", |bencher| {
         bencher.iter(|| {
-            let mut budget = JsonValueBudget::new(JsonValueLimits::empty());
+            let mut budget = JsonValueBudget::new(
+                JsonValueLimits::<JsonResource, usize>::builder().build(),
+            );
             let mut transaction = budget.transaction();
             let mut visitor = ReadVisitor;
             JsonTreeReader::new(&mut transaction)
@@ -184,8 +191,10 @@ fn benchmark_mut(c: &mut Criterion) {
                 bencher.iter_batched(
                     || value.clone(),
                     |mut value| {
-                        let mut budget =
-                            JsonValueBudget::new(JsonValueLimits::empty());
+                        let mut budget = JsonValueBudget::new(
+                            JsonValueLimits::<JsonResource, usize>::builder()
+                                .build(),
+                        );
                         let mut transaction = budget.transaction();
                         let mut visitor = RedactionShapeVisitor;
                         JsonTreeMutator::new(&mut transaction)

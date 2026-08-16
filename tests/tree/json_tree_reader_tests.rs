@@ -5,6 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::tree::JsonTreeContext;
 use qubit_json::tree::JsonTreeLocation;
@@ -74,7 +75,9 @@ impl JsonTreeVisitor for RecordingVisitor {
 #[test]
 fn test_process_visits_depth_first_with_root_and_key_locations() {
     let value = json!({"a": [true]});
-    let mut budget = JsonValueLimits::empty().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut visitor = RecordingVisitor { events: Vec::new() };
 
@@ -98,7 +101,10 @@ fn test_process_visits_depth_first_with_root_and_key_locations() {
 /// Verifies that a processor can outlive each JSON value it processes.
 #[test]
 fn test_process_accepts_value_borrowed_shorter_than_budget() {
-    let mut budget = JsonValueLimits::empty().with_max_nodes(2).budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(2)
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut visitor = RecordingVisitor { events: Vec::new() };
 
@@ -116,7 +122,10 @@ fn test_process_accepts_value_borrowed_shorter_than_budget() {
 /// Verifies a visitor error leaves the caller's committed budget unchanged.
 #[test]
 fn test_process_rolls_back_transaction_when_visitor_returns_error() {
-    let mut budget = JsonValueLimits::empty().with_max_nodes(4).budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(4)
+        .build()
+        .budget();
 
     {
         let mut transaction = budget.transaction();

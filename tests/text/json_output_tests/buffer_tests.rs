@@ -20,10 +20,12 @@ use crate::text::json_encode_test_support::write_incremental;
 /// narrow resource quantity before it is appended to the buffer.
 #[test]
 fn test_json_output_buffer_rejects_quantity_conversion_overflow() {
-    let limits =
-        JsonEncodeLimits::<JsonResource, u8>::new().with_output_bytes_limit(
-            ResourceLimit::new(JsonResource::OutputBytes, u8::MAX),
-        );
+    let limits = JsonEncodeLimits::<JsonResource, u8>::builder()
+        .output_bytes_limit(ResourceLimit::new(
+            JsonResource::OutputBytes,
+            u8::MAX,
+        ))
+        .build();
     let mut session = JsonEncodeSession::owned(limits);
     let value = "x".repeat(300);
     let error = encode(&value, &mut session)
@@ -36,10 +38,12 @@ fn test_json_output_buffer_rejects_quantity_conversion_overflow() {
 /// destination remains untouched.
 #[test]
 fn test_json_output_writer_rejects_quantity_conversion_overflow() {
-    let limits =
-        JsonEncodeLimits::<JsonResource, u8>::new().with_output_bytes_limit(
-            ResourceLimit::new(JsonResource::OutputBytes, u8::MAX),
-        );
+    let limits = JsonEncodeLimits::<JsonResource, u8>::builder()
+        .output_bytes_limit(ResourceLimit::new(
+            JsonResource::OutputBytes,
+            u8::MAX,
+        ))
+        .build();
     let mut session = JsonEncodeSession::owned(limits);
     let value = "x".repeat(300);
     let mut output = Vec::new();
@@ -53,9 +57,9 @@ fn test_json_output_writer_rejects_quantity_conversion_overflow() {
 /// Verifies the output buffer rejects bytes beyond its configured budget.
 #[test]
 fn test_json_output_buffer_rejects_excess_output() {
-    let limits = JsonEncodeLimits::empty().with_output_bytes_limit(
-        ResourceLimit::new(JsonResource::OutputBytes, 3),
-    );
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 3))
+        .build();
     let mut session = JsonEncodeSession::owned(limits);
     let error = encode(&"long", &mut session)
         .expect_err("output should exceed the configured budget");
@@ -66,9 +70,9 @@ fn test_json_output_buffer_rejects_excess_output() {
 /// Verifies successful buffered output records its complete byte count.
 #[test]
 fn test_json_output_buffer_accepts_complete_output() {
-    let limits = JsonEncodeLimits::empty().with_output_bytes_limit(
-        ResourceLimit::new(JsonResource::OutputBytes, 16),
-    );
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 16))
+        .build();
     let mut session = JsonEncodeSession::owned(limits);
     let output = encode(&"ok", &mut session)
         .expect("output within the bound should succeed");

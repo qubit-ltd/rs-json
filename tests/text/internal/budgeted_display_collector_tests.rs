@@ -9,6 +9,7 @@
 
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::text::JsonTextEncoder;
 use serde::Serialize;
 use serde::Serializer;
@@ -29,7 +30,9 @@ impl Serialize for DisplayValue {
 #[test]
 fn test_budgeted_display_collector_rejects_excess_text() {
     let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::empty().with_max_string_bytes(0),
+        JsonEncodeLimits::<JsonResource, usize>::builder()
+            .max_string_bytes(0)
+            .build(),
     );
 
     assert!(

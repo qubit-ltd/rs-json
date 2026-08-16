@@ -19,6 +19,7 @@ use criterion::criterion_main;
 use internal::BenchmarkRecord;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::lenient::LenientJsonDecodeOptions;
 use qubit_json::lenient::LenientJsonDecoder;
 use qubit_json::text::JsonTextDecoder;
@@ -41,8 +42,9 @@ fn benchmark_decoder(c: &mut Criterion) {
         serde_json::from_str::<BenchmarkRecord>(plain_input)
             .expect("strict benchmark input must decode"),
     );
-    let mut strict_session =
-        JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut strict_session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     consume_record(
         JsonTextDecoder::new(&mut strict_session)
             .decode::<BenchmarkRecord>(plain_input.as_bytes())
@@ -63,8 +65,9 @@ fn benchmark_decoder(c: &mut Criterion) {
     });
     comparison.bench_function("strict_decoder", |bencher| {
         bencher.iter(|| {
-            let mut session =
-                JsonDecodeSession::owned(JsonDecodeLimits::empty());
+            let mut session = JsonDecodeSession::owned(
+                JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+            );
             let mut decoder = JsonTextDecoder::new(&mut session);
             black_box(
                 decoder.decode::<BenchmarkRecord>(black_box(
@@ -88,8 +91,9 @@ fn benchmark_decoder(c: &mut Criterion) {
         serde_json::from_slice::<BenchmarkRecord>(plain_bytes)
             .expect("strict benchmark input must decode"),
     );
-    let mut strict_session =
-        JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut strict_session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     consume_record(
         JsonTextDecoder::new(&mut strict_session)
             .decode::<BenchmarkRecord>(plain_bytes)
@@ -110,8 +114,9 @@ fn benchmark_decoder(c: &mut Criterion) {
     });
     bytes_comparison.bench_function("strict_decoder_decode_slice", |bencher| {
         bencher.iter(|| {
-            let mut session =
-                JsonDecodeSession::owned(JsonDecodeLimits::empty());
+            let mut session = JsonDecodeSession::owned(
+                JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+            );
             let mut decoder = JsonTextDecoder::new(&mut session);
             black_box(decoder.decode::<BenchmarkRecord>(black_box(plain_bytes)))
         });
@@ -216,8 +221,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             serde_json::from_slice::<BenchmarkRecord>(input.as_bytes())
                 .expect("strict byte benchmark input must decode"),
         );
-        let mut strict_session =
-            JsonDecodeSession::owned(JsonDecodeLimits::empty());
+        let mut strict_session = JsonDecodeSession::owned(
+            JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+        );
         consume_record(
             JsonTextDecoder::new(&mut strict_session)
                 .decode::<BenchmarkRecord>(input.as_bytes())
@@ -245,8 +251,10 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             &input,
             |bencher, input| {
                 bencher.iter(|| {
-                    let mut session =
-                        JsonDecodeSession::owned(JsonDecodeLimits::empty());
+                    let mut session = JsonDecodeSession::owned(
+                        JsonDecodeLimits::<JsonResource, usize>::builder()
+                            .build(),
+                    );
                     let mut decoder = JsonTextDecoder::new(&mut session);
                     black_box(
                         decoder.decode::<BenchmarkRecord>(black_box(
@@ -264,8 +272,10 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             &input,
             |bencher, input| {
                 bencher.iter(|| {
-                    let mut session =
-                        JsonDecodeSession::owned(JsonDecodeLimits::empty());
+                    let mut session = JsonDecodeSession::owned(
+                        JsonDecodeLimits::<JsonResource, usize>::builder()
+                            .build(),
+                    );
                     let mut decoder = JsonTextDecoder::new(&mut session);
                     black_box(
                         decoder.decode::<BenchmarkRecord>(black_box(
@@ -396,7 +406,7 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
         ] {
             assert!(
                 JsonTextDecoder::new(&mut JsonDecodeSession::owned(
-                    JsonDecodeLimits::empty()
+                    JsonDecodeLimits::<JsonResource, usize>::builder().build()
                 ))
                 .decode::<BenchmarkRecord>(input.as_bytes())
                 .is_err(),
@@ -411,7 +421,7 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
                         black_box(
                             JsonTextDecoder::new(
                                 &mut JsonDecodeSession::owned(
-                                    JsonDecodeLimits::empty(),
+                                    JsonDecodeLimits::<JsonResource, usize>::builder().build(),
                                 ),
                             )
                             .decode::<BenchmarkRecord>(black_box(

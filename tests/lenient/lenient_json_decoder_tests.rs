@@ -48,7 +48,9 @@ fn value_budget_session(
     limits: JsonValueLimits,
 ) -> JsonDecodeSession<'static, JsonResource> {
     JsonDecodeSession::owned(
-        JsonDecodeLimits::empty().with_value_limits(limits),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .value_limits(limits)
+            .build(),
     )
 }
 
@@ -96,7 +98,9 @@ fn test_decode_without_value_limits_ignores_structure() {
 fn test_decode_with_value_limits_rejects_excessive_depth() {
     let decoder = LenientJsonDecoder::new(
         LenientJsonDecodeOptions::strict().with_value_limits(Some(
-            JsonValueLimits::empty().with_max_depth(1),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_depth(1)
+                .build(),
         )),
     );
     let error = decoder.decode::<Value>("[null]").expect_err(
@@ -112,7 +116,9 @@ fn test_decode_with_value_limits_rejects_excessive_depth() {
 fn test_decode_value_with_value_limits_rejects_excessive_nodes() {
     let decoder = LenientJsonDecoder::new(
         LenientJsonDecodeOptions::strict().with_value_limits(Some(
-            JsonValueLimits::empty().with_max_nodes(1),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_nodes(1)
+                .build(),
         )),
     );
     let error = decoder
@@ -131,7 +137,9 @@ fn test_decode_with_session_charges_caller_owned_input_budget() {
         JsonResource::InputBytes,
         16,
     ));
-    let mut value = JsonValueBudget::new(JsonValueLimits::empty());
+    let mut value = JsonValueBudget::new(
+        JsonValueLimits::<JsonResource, usize>::builder().build(),
+    );
     let mut session =
         JsonDecodeSession::borrowing_input(&mut input, &mut value);
 
@@ -153,15 +161,16 @@ fn test_decode_with_session_charges_caller_owned_input_budget() {
 #[test]
 fn test_decode_with_session_charges_exact_value_resources_cumulatively() {
     let decoder = LenientJsonDecoder::default();
-    let limits = JsonValueLimits::empty()
-        .with_max_depth(3)
-        .with_max_nodes(6)
-        .with_max_sequence_items(2)
-        .with_max_map_entries(1)
-        .with_max_key_bytes(5)
-        .with_max_string_bytes(2)
-        .with_max_number_bytes(4)
-        .with_max_payload_bytes(13);
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_depth(3)
+        .max_nodes(6)
+        .max_sequence_items(2)
+        .max_map_entries(1)
+        .max_key_bytes(5)
+        .max_string_bytes(2)
+        .max_number_bytes(4)
+        .max_payload_bytes(13)
+        .build();
     let mut session = value_budget_session(limits);
 
     let first: Value = decoder
@@ -186,7 +195,9 @@ fn test_decode_with_session_charges_exact_value_resources_cumulatively() {
 fn test_strict_decode_exercises_lexical_error_shapes() {
     let decoder = LenientJsonDecoder::new(LenientJsonDecodeOptions::strict());
     for input in ["false", "[]", "{}"] {
-        let mut session = value_budget_session(JsonValueLimits::empty());
+        let mut session = value_budget_session(
+            JsonValueLimits::<JsonResource, usize>::builder().build(),
+        );
         decoder
             .decode_with_session::<Value>(input, &mut session)
             .expect("strict scalar and empty containers are valid JSON");
@@ -205,7 +216,9 @@ fn test_strict_decode_exercises_lexical_error_shapes() {
         "01",
         "1e",
     ] {
-        let mut session = value_budget_session(JsonValueLimits::empty());
+        let mut session = value_budget_session(
+            JsonValueLimits::<JsonResource, usize>::builder().build(),
+        );
         assert!(
             decoder
                 .decode_with_session::<Value>(input, &mut session)
@@ -232,49 +245,65 @@ fn test_decode_with_session_classifies_each_value_budget_rejection() {
     let decoder = LenientJsonDecoder::default();
     let cases = [
         (
-            JsonValueLimits::empty().with_max_map_entries(1),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_map_entries(1)
+                .build(),
             r#"{"a":null,"b":null}"#,
             JsonResource::MapEntries,
             "object entry budget must reject two entries",
         ),
         (
-            JsonValueLimits::empty().with_max_sequence_items(1),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_sequence_items(1)
+                .build(),
             "[null,null]",
             JsonResource::SequenceItems,
             "array item budget must reject two items",
         ),
         (
-            JsonValueLimits::empty().with_max_key_bytes(1),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_key_bytes(1)
+                .build(),
             r#"{"ab":null}"#,
             JsonResource::KeyBytes,
             "key budget must reject the decoded key",
         ),
         (
-            JsonValueLimits::empty().with_max_string_bytes(1),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_string_bytes(1)
+                .build(),
             r#""ab""#,
             JsonResource::StringBytes,
             "string budget must reject the decoded string",
         ),
         (
-            JsonValueLimits::empty().with_max_number_bytes(3),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_number_bytes(3)
+                .build(),
             "1e+3",
             JsonResource::NumberBytes,
             "number budget must reject the lexical representation",
         ),
         (
-            JsonValueLimits::empty().with_max_nodes(1),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_nodes(1)
+                .build(),
             "[null]",
             JsonResource::Nodes,
             "node budget must reject the child value",
         ),
         (
-            JsonValueLimits::empty().with_max_depth(1),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_depth(1)
+                .build(),
             "[null]",
             JsonResource::Depth,
             "depth budget must reject the nested value",
         ),
         (
-            JsonValueLimits::empty().with_max_payload_bytes(2),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_payload_bytes(2)
+                .build(),
             r#"{"a":"bc"}"#,
             JsonResource::PayloadBytes,
             "payload budget must reject cumulative key and string bytes",
@@ -308,9 +337,10 @@ fn test_decode_with_session_classifies_each_value_budget_rejection() {
 #[test]
 fn test_decode_with_session_budget_rejection_preserves_committed_charges() {
     let decoder = LenientJsonDecoder::default();
-    let limits = JsonValueLimits::empty()
-        .with_max_nodes(5)
-        .with_max_payload_bytes(4);
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(5)
+        .max_payload_bytes(4)
+        .build();
     let mut session = value_budget_session(limits);
 
     decoder
@@ -360,14 +390,15 @@ fn test_decode_with_session_accounts_normalized_fenced_value() {
         JsonResource::NormalizedInputBytes,
         NORMALIZED.len(),
     );
-    let limits = JsonValueLimits::empty()
-        .with_max_depth(2)
-        .with_max_nodes(3)
-        .with_max_map_entries(2)
-        .with_max_key_bytes(7)
-        .with_max_string_bytes(3)
-        .with_max_number_bytes(4)
-        .with_max_payload_bytes(20);
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_depth(2)
+        .max_nodes(3)
+        .max_map_entries(2)
+        .max_key_bytes(7)
+        .max_string_bytes(3)
+        .max_number_bytes(4)
+        .max_payload_bytes(20)
+        .build();
     let mut value_budget = JsonValueBudget::new(limits);
     let mut session = JsonDecodeSession::borrowing_all(
         &mut input_budget,
@@ -406,9 +437,10 @@ fn test_decode_with_session_accounts_normalized_fenced_value() {
 #[test]
 fn test_decode_with_session_preserves_non_budget_error_classification() {
     let decoder = LenientJsonDecoder::default();
-    let limits = JsonValueLimits::empty()
-        .with_max_nodes(8)
-        .with_max_payload_bytes(16);
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(8)
+        .max_payload_bytes(16)
+        .build();
 
     let mut syntax_session = value_budget_session(limits);
     let syntax_error = decoder
@@ -436,10 +468,11 @@ fn test_decode_with_session_syntax_failure_retains_input_and_reuses_value_budget
     let rejected = r#"{"value":]}"#;
     let accepted = "null";
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_max_input_bytes(rejected.len() + accepted.len())
-            .with_max_normalized_input_bytes(rejected.len() + accepted.len())
-            .with_max_nodes(1),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(rejected.len() + accepted.len())
+            .max_normalized_input_bytes(rejected.len() + accepted.len())
+            .max_nodes(1)
+            .build(),
     );
     let decoder = LenientJsonDecoder::default();
 
@@ -492,10 +525,11 @@ fn test_decode_with_session_syntax_failure_retains_input_and_reuses_value_budget
 fn test_decode_with_session_budget_rejection_rolls_back_value() {
     let input = "[null]";
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_max_input_bytes(input.len())
-            .with_max_normalized_input_bytes(input.len())
-            .with_max_nodes(1),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(input.len())
+            .max_normalized_input_bytes(input.len())
+            .max_nodes(1)
+            .build(),
     );
 
     let error = LenientJsonDecoder::default()
@@ -527,8 +561,11 @@ fn test_decode_with_session_budget_rejection_rolls_back_value() {
 /// Panics when lexical admission replaces serde's stable syntax position.
 #[test]
 fn test_decode_with_session_preserves_serde_syntax_position() {
-    let mut session =
-        value_budget_session(JsonValueLimits::empty().with_max_nodes(2));
+    let mut session = value_budget_session(
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .max_nodes(2)
+            .build(),
+    );
     let decoder = LenientJsonDecoder::new(
         LenientJsonDecodeOptions::default()
             .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed),
@@ -556,7 +593,9 @@ fn test_decode_with_session_preserves_serde_syntax_position() {
 #[test]
 fn test_decode_with_session_rejects_unpaired_surrogate_without_panicking() {
     const INPUT: &str = r#""\ud800""#;
-    let limits = JsonValueLimits::empty().with_max_nodes(2);
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(2)
+        .build();
 
     let mut string_session = value_budget_session(limits);
     let string_error = LenientJsonDecoder::default()

@@ -9,12 +9,15 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::text::JsonTextDecoder;
 
 /// Verifies lexical scanning accepts one complete JSON document.
 #[test]
 fn test_lexical_scanner_admits_complete_document() {
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
 
     JsonTextDecoder::new(&mut session)
         .validate(br#"{"items":[true,null]}"#)

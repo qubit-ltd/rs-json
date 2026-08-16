@@ -59,34 +59,29 @@ fn make_tree(data: &[u8]) -> Value {
 
 /// Creates a budget with generous limits for visitor-error and panic paths.
 fn generous_budget() -> JsonValueBudget<JsonResource, usize> {
-    let structure = StructureLimits::new()
-        .with_depth_limit(ResourceLimit::new(
-            JsonResource::Depth,
-            GENEROUS_LIMIT,
-        ))
-        .with_nodes_limit(ResourceLimit::new(
-            JsonResource::Nodes,
-            GENEROUS_LIMIT,
-        ))
-        .with_sequence_items_limit(ResourceLimit::new(
+    let structure = StructureLimits::builder()
+        .depth_limit(ResourceLimit::new(JsonResource::Depth, GENEROUS_LIMIT))
+        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, GENEROUS_LIMIT))
+        .sequence_items_limit(ResourceLimit::new(
             JsonResource::SequenceItems,
             GENEROUS_LIMIT,
         ))
-        .with_map_entries_limit(ResourceLimit::new(
+        .map_entries_limit(ResourceLimit::new(
             JsonResource::MapEntries,
             GENEROUS_LIMIT,
         ))
-        .with_key_bytes_limit(ResourceLimit::new(
+        .key_bytes_limit(ResourceLimit::new(
             JsonResource::KeyBytes,
             GENEROUS_LIMIT,
         ));
     JsonValueBudget::new(
-        JsonValueLimits::empty()
-            .with_structure_limits(structure)
-            .with_payload_bytes_limit(ResourceLimit::new(
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .structure_limits(structure)
+            .payload_bytes_limit(ResourceLimit::new(
                 JsonResource::PayloadBytes,
                 GENEROUS_LIMIT,
-            )),
+            ))
+            .build(),
     )
 }
 
@@ -214,11 +209,13 @@ fuzz_target!(|data: &[u8]| {
     assert_serializable(&success_value);
 
     let node_limit = 1 + usize::from(data.first().copied().unwrap_or(0)) % 32;
-    let structure = StructureLimits::new()
-        .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, node_limit));
+    let structure = StructureLimits::builder()
+        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, node_limit));
     let mut rejected_value = original.clone();
     let mut rejected_budget = JsonValueBudget::new(
-        JsonValueLimits::empty().with_structure_limits(structure),
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .structure_limits(structure)
+            .build(),
     );
     {
         let mut transaction = rejected_budget.transaction();

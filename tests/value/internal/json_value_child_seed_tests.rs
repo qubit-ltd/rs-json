@@ -18,12 +18,11 @@ use serde_json::Deserializer;
 /// Verifies an excess array child is rejected before materialization.
 #[test]
 fn test_json_value_child_seed_checks_prospective_array_item() {
-    let limits = JsonValueLimits::empty().with_structure_limits(
-        StructureLimits::new().with_sequence_items_limit(ResourceLimit::new(
-            JsonResource::SequenceItems,
-            1,
-        )),
-    );
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .structure_limits(StructureLimits::builder().sequence_items_limit(
+            ResourceLimit::new(JsonResource::SequenceItems, 1),
+        ))
+        .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"[null,null]"#);

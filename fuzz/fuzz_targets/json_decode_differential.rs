@@ -12,6 +12,7 @@
 use libfuzzer_sys::fuzz_target;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::text::JsonTextDecoder;
 use serde_json::Value;
 
@@ -19,12 +20,15 @@ const MAX_INPUT_LEN: usize = 4 * 1024;
 
 fuzz_target!(|data: &[u8]| {
     let input = &data[..data.len().min(MAX_INPUT_LEN)];
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     let admitted = JsonTextDecoder::new(&mut session)
         .decode::<Value>(input)
         .is_ok();
-    let mut validation_session =
-        JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut validation_session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     let validated = JsonTextDecoder::new(&mut validation_session)
         .validate(input)
         .is_ok();

@@ -37,35 +37,33 @@ fuzz_target!(|data: &[u8]| {
     let number_bytes = internal::fuzz_limit::limit(data, 14);
     let payload_bytes = internal::fuzz_limit::limit(data, 16);
 
-    let structure = StructureLimits::new()
-        .with_depth_limit(ResourceLimit::new(JsonResource::Depth, depth))
-        .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes))
-        .with_sequence_items_limit(ResourceLimit::new(
+    let structure = StructureLimits::builder()
+        .depth_limit(ResourceLimit::new(JsonResource::Depth, depth))
+        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes))
+        .sequence_items_limit(ResourceLimit::new(
             JsonResource::SequenceItems,
             items,
         ))
-        .with_map_entries_limit(ResourceLimit::new(
+        .map_entries_limit(ResourceLimit::new(
             JsonResource::MapEntries,
             entries,
         ))
-        .with_key_bytes_limit(ResourceLimit::new(
-            JsonResource::KeyBytes,
-            key_bytes,
-        ));
-    let value_limits = JsonValueLimits::empty()
-        .with_structure_limits(structure)
-        .with_string_bytes_limit(ResourceLimit::new(
+        .key_bytes_limit(ResourceLimit::new(JsonResource::KeyBytes, key_bytes));
+    let value_limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .structure_limits(structure)
+        .string_bytes_limit(ResourceLimit::new(
             JsonResource::StringBytes,
             string_bytes,
         ))
-        .with_number_bytes_limit(ResourceLimit::new(
+        .number_bytes_limit(ResourceLimit::new(
             JsonResource::NumberBytes,
             number_bytes,
         ))
-        .with_payload_bytes_limit(ResourceLimit::new(
+        .payload_bytes_limit(ResourceLimit::new(
             JsonResource::PayloadBytes,
             payload_bytes,
-        ));
+        ))
+        .build();
     let mut input_budget = ResourceBudget::new(JsonResource::InputBytes, bytes);
     let mut value_budget = JsonValueBudget::new(value_limits);
     {

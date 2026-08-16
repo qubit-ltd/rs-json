@@ -32,20 +32,22 @@ fuzz_target!(|data: &[u8]| {
     let output_bytes = internal::fuzz_limit::limit(data, 0);
     let nodes = internal::fuzz_limit::limit(data, 2);
     let payload_bytes = internal::fuzz_limit::limit(data, 4);
-    let structure = StructureLimits::new()
-        .with_nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes));
-    let value_limits = JsonValueLimits::empty()
-        .with_structure_limits(structure)
-        .with_payload_bytes_limit(ResourceLimit::new(
+    let structure = StructureLimits::builder()
+        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes));
+    let value_limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .structure_limits(structure)
+        .payload_bytes_limit(ResourceLimit::new(
             JsonResource::PayloadBytes,
             payload_bytes,
-        ));
-    let limits = JsonEncodeLimits::empty()
-        .with_output_bytes_limit(ResourceLimit::new(
+        ))
+        .build();
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .output_bytes_limit(ResourceLimit::new(
             JsonResource::OutputBytes,
             output_bytes,
         ))
-        .with_value_limits(value_limits);
+        .value_limits(value_limits)
+        .build();
     let mut vector_session = JsonEncodeSession::owned(limits);
     let encoded = JsonTextEncoder::new(&mut vector_session).to_vec(&value);
     let mut buffered_session = JsonEncodeSession::owned(limits);

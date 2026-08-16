@@ -18,8 +18,11 @@ use serde_json::error::Category;
 /// Verifies that strict text decoding uses the operation-specific error API.
 #[test]
 fn test_decoder_decodes_valid_slice() {
-    let mut session =
-        JsonDecodeSession::owned(JsonDecodeLimits::empty().with_max_nodes(4));
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_nodes(4)
+            .build(),
+    );
     let value: bool = JsonTextDecoder::new(&mut session)
         .decode(b"true")
         .expect("valid JSON decodes");
@@ -29,7 +32,9 @@ fn test_decoder_decodes_valid_slice() {
 /// Verifies that strict typed failures do not expose serde input fragments.
 #[test]
 fn test_decoder_returns_safe_deserialize_metadata() {
-    let mut session = JsonDecodeSession::owned(JsonDecodeLimits::empty());
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+    );
     let error = JsonTextDecoder::new(&mut session)
         .decode::<u64>(br#""TOP_SECRET""#)
         .expect_err("a JSON string cannot deserialize into u64");
@@ -54,9 +59,10 @@ fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
     let rejected = br#""not-a-number""#;
     let accepted = b"0";
     let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::empty()
-            .with_max_input_bytes(rejected.len() + accepted.len())
-            .with_max_nodes(1),
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(rejected.len() + accepted.len())
+            .max_nodes(1)
+            .build(),
     );
 
     assert!(matches!(
@@ -86,8 +92,11 @@ fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
 /// input without constructing a typed value.
 #[test]
 fn test_validate_accounts_document() {
-    let mut session =
-        JsonDecodeSession::owned(JsonDecodeLimits::empty().with_max_nodes(4));
+    let mut session = JsonDecodeSession::owned(
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_nodes(4)
+            .build(),
+    );
     JsonTextDecoder::new(&mut session)
         .validate(br#"{"ok":true}"#)
         .expect("valid JSON should pass lexical inspection");

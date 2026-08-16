@@ -20,11 +20,12 @@ use super::MarkdownFencePolicy;
 /// cover the most common non-fully-trusted text inputs without attempting
 /// aggressive repair.
 ///
-/// Convenience entry points such as [`LenientJsonDecoder::decode`] enforce only
-/// the configured raw and normalized input byte limits. They do not perform
-/// lexical value admission unless [`Self::value_limits`] is configured. For
-/// cumulative multi-value accounting, or when sharing one session across
-/// several decode operations, use [`LenientJsonDecoder::decode_with_session`].
+/// Convenience entry points such as
+/// [`crate::lenient::LenientJsonDecoder::decode`] enforce only the configured
+/// raw and normalized input byte limits. They do not perform lexical value
+/// admission unless [`Self::value_limits`] is configured. For cumulative
+/// multi-value accounting, or when sharing one session across several decode
+/// operations, use [`crate::lenient::LenientJsonDecoder::decode_with_session`].
 ///
 /// # Examples
 ///

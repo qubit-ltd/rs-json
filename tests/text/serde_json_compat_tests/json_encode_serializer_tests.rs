@@ -79,7 +79,9 @@ impl Serialize for CollectedNumberPayload<'_> {
 /// Verifies scalar serialization uses the wrapped JSON serializer.
 #[test]
 fn test_json_encode_serializer_serializes_scalar_values() {
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::empty());
+    let mut session = JsonEncodeSession::owned(
+        JsonEncodeLimits::<JsonResource, usize>::builder().build(),
+    );
 
     assert_eq!(
         encode(&true, &mut session).expect("scalar JSON should serialize"),
@@ -90,7 +92,9 @@ fn test_json_encode_serializer_serializes_scalar_values() {
 /// Verifies a private-looking field key cannot classify a regular struct.
 #[test]
 fn test_json_encode_serializer_rejects_forged_private_key_as_regular_map() {
-    let limits = JsonEncodeLimits::empty().with_max_map_entries(0);
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_map_entries(0)
+        .build();
     let mut session = JsonEncodeSession::owned(limits);
 
     let error = encode(&ForgedPrivateKey, &mut session)
@@ -113,12 +117,13 @@ fn test_json_encode_serializer_rejects_forged_private_key_as_regular_map() {
 fn test_json_encode_serializer_classifies_collected_private_number() {
     const NUMBER_TEXT: &str = "123456789012345678901234567890";
     let number = CollectedArbitraryPrecisionNumber(NUMBER_TEXT);
-    let limits = JsonEncodeLimits::empty()
-        .with_max_nodes(1)
-        .with_max_map_entries(0)
-        .with_max_key_bytes(0)
-        .with_max_string_bytes(0)
-        .with_max_number_bytes(NUMBER_TEXT.len());
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_nodes(1)
+        .max_map_entries(0)
+        .max_key_bytes(0)
+        .max_string_bytes(0)
+        .max_number_bytes(NUMBER_TEXT.len())
+        .build();
     let mut session = JsonEncodeSession::owned(limits);
 
     let output = encode(&number, &mut session).expect(
