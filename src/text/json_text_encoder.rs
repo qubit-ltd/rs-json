@@ -40,6 +40,15 @@ where
     Q: ResourceQuantity,
 {
     /// Creates an encoder borrowing `session` for its lifetime.
+    ///
+    /// # Parameters
+    ///
+    /// * `session` - Caller-owned session that receives committed output
+    ///   accounting.
+    ///
+    /// # Returns
+    ///
+    /// An encoder borrowing `session` for its lifetime.
     pub fn new(
         session: &'session mut JsonEncodeSession<'budget, R, Q>,
     ) -> Self {
@@ -47,6 +56,23 @@ where
     }
 
     /// Encodes `value` into compact JSON and commits only complete success.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Source type serialized into JSON.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Value to serialize.
+    ///
+    /// # Returns
+    ///
+    /// The compact JSON bytes on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonEncodeError::Budget`] when accounting rejects the value
+    /// or output, or a serialization error when Serde rejects `value`.
     pub fn to_vec<T>(
         &mut self,
         value: &T,
@@ -67,6 +93,26 @@ where
     }
 
     /// Buffers a complete document before writing it to `writer`.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `W` - Destination writer type.
+    /// * `T` - Source type serialized into JSON.
+    ///
+    /// # Parameters
+    ///
+    /// * `writer` - Destination receiving the complete JSON document.
+    /// * `value` - Value to serialize.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the complete document is written and accounting is
+    /// committed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonEncodeError::Budget`] when accounting rejects the value
+    /// or output, or a serialization/writer error on failure.
     pub fn write_buffered<W, T>(
         &mut self,
         writer: W,
@@ -87,6 +133,26 @@ where
     }
 
     /// Streams `value` directly to `writer`, retaining accepted prefixes.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `W` - Destination writer type.
+    /// * `T` - Source type serialized into JSON.
+    ///
+    /// # Parameters
+    ///
+    /// * `writer` - Destination receiving streamed JSON bytes.
+    /// * `value` - Value to serialize.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after serialization and output accounting complete.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonEncodeError::Budget`] when accounting rejects output,
+    /// or a serialization/writer error on failure. Accepted output prefixes
+    /// remain written when a later operation fails.
     pub fn write_incremental<W, T>(
         &mut self,
         writer: W,

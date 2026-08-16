@@ -17,6 +17,15 @@ pub trait JsonTreeVisitor {
     type Error;
 
     /// Handles a node after its budget admission and before its descendants.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Admitted node being visited.
+    /// * `context` - Root-relative location and depth of the node.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` to continue traversal, or the visitor's error to stop it.
     fn enter(
         &mut self,
         value: &Value,
@@ -24,6 +33,15 @@ pub trait JsonTreeVisitor {
     ) -> Result<(), Self::Error>;
 
     /// Handles a node after all of its descendants have been handled.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Admitted node whose descendants have been visited.
+    /// * `context` - Root-relative location and depth of the node.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` to continue traversal, or the visitor's error to stop it.
     fn leave(
         &mut self,
         _value: &Value,

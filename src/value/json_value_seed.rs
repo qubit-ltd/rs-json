@@ -36,6 +36,14 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a root seed using the supplied decoded-value transaction.
+    ///
+    /// # Parameters
+    ///
+    /// * `transaction` - Transaction receiving decoded JSON resource charges.
+    ///
+    /// # Returns
+    ///
+    /// A seed that constructs one accounted [`Value`] tree.
     pub fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     ) -> Self {

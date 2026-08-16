@@ -26,6 +26,15 @@ where
 
     /// Handles an admitted node and selects whether its descendants are
     /// visited.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Admitted node available for mutation.
+    /// * `context` - Root-relative location and depth of the node.
+    ///
+    /// # Returns
+    ///
+    /// The traversal control decision for the node.
     fn visit(
         &mut self,
         value: &mut Value,
@@ -34,6 +43,17 @@ where
 
     /// Handles an unadmitted node before its subtree is skipped or processing
     /// aborts.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Node whose admission was rejected.
+    /// * `context` - Root-relative location and depth of the node.
+    /// * `error` - Measured reason why the node was not admitted.
+    ///
+    /// # Returns
+    ///
+    /// A rejection policy indicating whether processing should abort or skip
+    /// the rejected subtree.
     fn reject_budget(
         &mut self,
         _value: &mut Value,
