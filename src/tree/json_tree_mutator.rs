@@ -24,7 +24,6 @@ use super::JsonTreeMutVisitor;
 use super::JsonTreeProcessError;
 
 /// Mutates JSON values while borrowing one staged JSON value transaction.
-#[must_use = "a JSON tree mutator must be used to process a tree"]
 pub struct JsonTreeMutator<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
@@ -47,6 +46,7 @@ where
     ///
     /// A mutator borrowing `transaction` for its lifetime.
     #[inline(always)]
+    #[must_use]
     pub fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     ) -> Self {
@@ -72,6 +72,7 @@ where
     ///
     /// Returns [`JsonTreeProcessError::Budget`] when resource admission fails,
     /// or [`JsonTreeProcessError::Visitor`] when the visitor rejects a node.
+    #[must_use]
     pub fn process<V>(
         &mut self,
         root: &mut Value,

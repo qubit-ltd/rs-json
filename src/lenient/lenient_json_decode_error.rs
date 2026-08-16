@@ -24,7 +24,6 @@ use crate::internal::JsonLexicalFailure;
 ///
 /// Each private failure variant owns exactly the diagnostics that are valid for
 /// that failure, so public accessors cannot expose contradictory state.
-#[must_use]
 #[non_exhaustive]
 #[derive(Clone)]
 pub struct LenientJsonDecodeError {

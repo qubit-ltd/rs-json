@@ -16,13 +16,13 @@
 /// #![deny(unused_must_use)]
 /// use qubit_json::lenient::MarkdownFenceClosing;
 ///
+/// #[must_use]
 /// fn closing_policy() -> MarkdownFenceClosing {
 ///     MarkdownFenceClosing::Optional
 /// }
 ///
 /// closing_policy();
 /// ```
-#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MarkdownFenceClosing {

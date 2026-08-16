@@ -20,7 +20,6 @@ use super::JsonTreeReader;
 use super::JsonTreeVisitor;
 
 /// Fully accounts materialized JSON trees using an internally owned budget.
-#[must_use]
 pub struct JsonTreeBudgetTracker<R = JsonResource, Q = usize>
 where
     Q: ResourceQuantity,
@@ -43,6 +42,7 @@ where
     ///
     /// A tracker initialized with the supplied limits.
     #[inline]
+    #[must_use]
     pub fn new(limits: JsonValueLimits<R, Q>) -> Self {
         Self {
             budget: JsonValueBudget::new(limits),
@@ -63,6 +63,7 @@ where
     ///
     /// Returns the first measured budget rejection encountered while walking
     /// the tree. Charges are committed only when the complete walk succeeds.
+    #[must_use]
     pub fn account(
         &mut self,
         value: &Value,

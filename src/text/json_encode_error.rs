@@ -18,7 +18,6 @@ use thiserror::Error;
 use super::JsonSyntaxError;
 
 /// Failure produced while encoding one JSON document.
-#[must_use]
 #[derive(Debug, Error)]
 pub enum JsonEncodeError<R, Q = usize>
 where

@@ -14,7 +14,6 @@ use thiserror::Error;
 
 /// Identifies whether JSON tree processing failed in infrastructure or domain
 /// code.
-#[must_use]
 #[derive(Debug, Error)]
 pub enum JsonTreeProcessError<R, Q, E>
 where

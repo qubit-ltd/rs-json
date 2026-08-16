@@ -17,13 +17,13 @@ use std::fmt;
 /// #![deny(unused_must_use)]
 /// use qubit_json::lenient::LenientJsonDecodeStage;
 ///
+/// #[must_use]
 /// fn decode_stage() -> LenientJsonDecodeStage {
 ///     LenientJsonDecodeStage::Parse
 /// }
 ///
 /// decode_stage();
 /// ```
-#[must_use]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LenientJsonDecodeStage {

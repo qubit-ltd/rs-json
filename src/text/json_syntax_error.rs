@@ -13,7 +13,6 @@ use super::JsonSyntaxErrorReason;
 use crate::internal::JsonLexicalFailure;
 
 /// A JSON syntax error with byte and human-readable source coordinates.
-#[must_use]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct JsonSyntaxError {
     /// Zero-based byte offset at which the error was observed.
@@ -40,6 +39,7 @@ impl JsonSyntaxError {
     ///
     /// A syntax error containing the supplied location and classification.
     #[inline]
+    #[must_use]
     pub const fn new(
         offset: usize,
         line: usize,
