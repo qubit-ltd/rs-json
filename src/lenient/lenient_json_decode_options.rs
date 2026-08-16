@@ -7,15 +7,24 @@
 // =============================================================================
 //! Defines the options used to configure the lenient JSON decoder.
 
+use qubit_budget::json::JsonValueLimits;
+
 use super::ErrorPrivacyPolicy;
 use super::MarkdownFenceClosing;
 use super::MarkdownFencePolicy;
 
 /// Configuration switches for [`crate::lenient::LenientJsonDecoder`].
 ///
-/// Its fields control text normalization, input limits, and error
-/// diagnostics. Defaults are intentionally conservative and cover the most
-/// common non-fully-trusted text inputs without attempting aggressive repair.
+/// Its fields control text normalization, input limits, optional value-resource
+/// limits, and error diagnostics. Defaults are intentionally conservative and
+/// cover the most common non-fully-trusted text inputs without attempting
+/// aggressive repair.
+///
+/// Convenience entry points such as [`LenientJsonDecoder::decode`] enforce only
+/// the configured raw and normalized input byte limits. They do not perform
+/// lexical value admission unless [`Self::value_limits`] is configured. For
+/// cumulative multi-value accounting, or when sharing one session across
+/// several decode operations, use [`LenientJsonDecoder::decode_with_session`].
 ///
 /// # Examples
 ///
@@ -54,6 +63,13 @@ pub struct LenientJsonDecodeOptions {
     /// `limit` bytes. When set to `None`, no normalized-size limit is
     /// enforced.
     max_normalized_bytes: Option<usize>,
+    /// Optional JSON value-resource limits enforced by lexical admission.
+    ///
+    /// When set, convenience decode entry points perform the same lexical
+    /// admission as [`crate::lenient::LenientJsonDecoder::decode_with_session`]
+    /// before parsing or deserialization. When unset, only raw and normalized
+    /// input byte limits apply on those entry points.
+    value_limits: Option<JsonValueLimits>,
     /// Controls whether decoding errors retain input-derived serde details.
     error_privacy_policy: ErrorPrivacyPolicy,
 }
@@ -76,6 +92,7 @@ impl LenientJsonDecodeOptions {
             escape_control_chars_in_strings: true,
             max_input_bytes: None,
             max_normalized_bytes: None,
+            value_limits: None,
             error_privacy_policy: ErrorPrivacyPolicy::Redacted,
         }
     }
@@ -101,6 +118,7 @@ impl LenientJsonDecodeOptions {
             escape_control_chars_in_strings: false,
             max_input_bytes: None,
             max_normalized_bytes: None,
+            value_limits: None,
             error_privacy_policy: ErrorPrivacyPolicy::Redacted,
         }
     }
@@ -291,6 +309,40 @@ impl LenientJsonDecodeOptions {
         max_normalized_bytes: Option<usize>,
     ) -> Self {
         self.max_normalized_bytes = max_normalized_bytes;
+        self
+    }
+
+    /// Returns the configured JSON value-resource limits.
+    ///
+    /// # Returns
+    ///
+    /// `Some(limits)` when convenience decode entry points perform lexical
+    /// value admission, or `None` when only input byte limits apply.
+    #[inline(always)]
+    pub const fn value_limits(&self) -> Option<JsonValueLimits> {
+        self.value_limits
+    }
+
+    /// Returns these options with JSON value-resource limits.
+    ///
+    /// Configure this when convenience decode entry points must reject
+    /// oversized JSON structure, nodes, or payload before parsing or
+    /// deserialization.
+    ///
+    /// # Parameters
+    ///
+    /// * `value_limits` - `Some(limits)` to enable lexical admission on
+    ///   convenience entry points, or `None` to disable value admission.
+    ///
+    /// # Returns
+    ///
+    /// The updated option set.
+    #[inline(always)]
+    pub const fn with_value_limits(
+        mut self,
+        value_limits: Option<JsonValueLimits>,
+    ) -> Self {
+        self.value_limits = value_limits;
         self
     }
 

@@ -24,6 +24,7 @@ use crate::internal::JsonLexicalFailure;
 ///
 /// Each private failure variant owns exactly the diagnostics that are valid for
 /// that failure, so public accessors cannot expose contradictory state.
+#[must_use]
 #[non_exhaustive]
 #[derive(Clone)]
 pub struct LenientJsonDecodeError {
@@ -389,6 +390,7 @@ impl LenientJsonDecodeError {
     /// # Returns
     ///
     /// The stable category describing the failure.
+    #[must_use]
     #[inline(always)]
     pub const fn kind(&self) -> LenientJsonDecodeErrorKind {
         match self.failure {
@@ -423,6 +425,7 @@ impl LenientJsonDecodeError {
     ///
     /// The normalization, parsing, admission, top-level-check, or
     /// deserialization stage that produced the error.
+    #[must_use]
     #[inline(always)]
     pub const fn stage(&self) -> LenientJsonDecodeStage {
         match self.failure {
@@ -454,6 +457,7 @@ impl LenientJsonDecodeError {
     /// # Returns
     ///
     /// The policy controlling retention of input-derived diagnostics.
+    #[must_use]
     #[inline(always)]
     pub const fn privacy_policy(&self) -> ErrorPrivacyPolicy {
         self.privacy_policy
@@ -465,6 +469,7 @@ impl LenientJsonDecodeError {
     ///
     /// `Some(kind)` for an unexpected-top-level failure, or `None` for other
     /// failure categories.
+    #[must_use]
     #[inline(always)]
     pub const fn expected_top_level(&self) -> Option<JsonTopLevelKind> {
         match self.failure {
@@ -481,6 +486,7 @@ impl LenientJsonDecodeError {
     ///
     /// `Some(kind)` for an unexpected-top-level failure, or `None` for other
     /// failure categories.
+    #[must_use]
     #[inline(always)]
     pub const fn actual_top_level(&self) -> Option<JsonTopLevelKind> {
         match self.failure {
@@ -496,6 +502,7 @@ impl LenientJsonDecodeError {
     /// # Returns
     ///
     /// The raw input length in bytes.
+    #[must_use]
     #[inline(always)]
     pub const fn raw_input_bytes(&self) -> usize {
         match self.failure {
@@ -533,6 +540,7 @@ impl LenientJsonDecodeError {
     /// # Returns
     ///
     /// `Some(bytes)` for an invalid-UTF-8 failure, or `None` otherwise.
+    #[must_use]
     #[inline(always)]
     pub const fn utf8_valid_up_to(&self) -> Option<usize> {
         match self.failure {
@@ -549,6 +557,7 @@ impl LenientJsonDecodeError {
     ///
     /// The invalid sequence length when reported by UTF-8 validation, or
     /// `None` when its length is unknown or the failure is another kind.
+    #[must_use]
     #[inline(always)]
     pub const fn utf8_error_len(&self) -> Option<usize> {
         match self.failure {
@@ -565,6 +574,7 @@ impl LenientJsonDecodeError {
     ///
     /// `Some(bytes)` when normalization produced a measurable length, or
     /// `None` when no normalized text exists.
+    #[must_use]
     #[inline(always)]
     pub const fn normalized_input_bytes(&self) -> Option<usize> {
         match self.failure {
@@ -602,6 +612,7 @@ impl LenientJsonDecodeError {
     /// # Returns
     ///
     /// `Some(limit)` for an input-size failure, or `None` otherwise.
+    #[must_use]
     #[inline(always)]
     pub const fn max_input_bytes(&self) -> Option<usize> {
         match self.failure {
@@ -618,6 +629,7 @@ impl LenientJsonDecodeError {
     /// # Returns
     ///
     /// `Some(limit)` for a normalized-size failure, or `None` otherwise.
+    #[must_use]
     #[inline(always)]
     pub const fn max_normalized_bytes(&self) -> Option<usize> {
         match self.failure {
@@ -635,6 +647,7 @@ impl LenientJsonDecodeError {
     ///
     /// `Some(line)` when the failure includes a positive parser line, or
     /// `None` otherwise.
+    #[must_use]
     #[inline(always)]
     pub const fn normalized_line(&self) -> Option<usize> {
         match self.failure {
@@ -654,6 +667,7 @@ impl LenientJsonDecodeError {
     ///
     /// `Some(column)` when the failure includes a positive parser column, or
     /// `None` otherwise.
+    #[must_use]
     #[inline(always)]
     pub const fn normalized_column(&self) -> Option<usize> {
         match self.failure {
@@ -673,6 +687,7 @@ impl LenientJsonDecodeError {
     ///
     /// `Some(error)` for a decoded-value budget failure, or `None` for other
     /// failure categories.
+    #[must_use]
     #[inline(always)]
     pub const fn measured_budget_error(
         &self,

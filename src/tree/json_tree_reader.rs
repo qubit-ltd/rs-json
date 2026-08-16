@@ -20,6 +20,7 @@ use super::JsonTreeProcessError;
 use super::JsonTreeVisitor;
 
 /// Processes JSON values while borrowing one staged JSON value transaction.
+#[must_use = "a JSON tree reader must be used to process a tree"]
 pub struct JsonTreeReader<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
@@ -41,6 +42,7 @@ where
     /// # Returns
     ///
     /// A reader borrowing `transaction` for its lifetime.
+    #[inline(always)]
     pub fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     ) -> Self {
@@ -162,6 +164,7 @@ struct ReadFrame<'value> {
 
 impl<'value> ReadFrame<'value> {
     /// Creates a frame that will enter `value` before scheduling children.
+    #[inline(always)]
     fn enter(value: &'value Value, context: JsonTreeContext<'value>) -> Self {
         Self {
             value,
@@ -193,6 +196,7 @@ enum ChildCursor<'value> {
 
 impl<'value> ChildCursor<'value> {
     /// Creates a cursor for the immediate children of `value`.
+    #[inline]
     fn new(value: &'value Value, depth: usize) -> Self {
         let child_depth = depth.checked_add(1).expect(
             "a materialized JSON tree cannot have usize::MAX nesting depth",

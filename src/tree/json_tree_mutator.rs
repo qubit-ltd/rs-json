@@ -24,6 +24,7 @@ use super::JsonTreeMutVisitor;
 use super::JsonTreeProcessError;
 
 /// Mutates JSON values while borrowing one staged JSON value transaction.
+#[must_use = "a JSON tree mutator must be used to process a tree"]
 pub struct JsonTreeMutator<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
@@ -45,6 +46,7 @@ where
     /// # Returns
     ///
     /// A mutator borrowing `transaction` for its lifetime.
+    #[inline(always)]
     pub fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     ) -> Self {
@@ -172,6 +174,7 @@ enum OwnedLocation {
 
 impl OwnedLocation {
     /// Borrows this owned location for a visitor context.
+    #[inline(always)]
     fn context(&self, depth: usize) -> JsonTreeContext<'_> {
         let location = match self {
             Self::Root => JsonTreeLocation::Root,
@@ -183,6 +186,8 @@ impl OwnedLocation {
         JsonTreeContext { depth, location }
     }
     /// Returns the object key that must be charged before child admission.
+    #[must_use]
+    #[inline(always)]
     fn key(&self) -> Option<&str> {
         match self {
             Self::ObjectValue(key) => Some(key),
@@ -203,6 +208,7 @@ struct MutFrame {
 
 impl MutFrame {
     /// Creates the root frame from the exclusive mutable root borrow.
+    #[inline(always)]
     fn root(value: &mut Value) -> Self {
         Self {
             location: OwnedLocation::Root,
@@ -214,6 +220,7 @@ impl MutFrame {
         }
     }
     /// Creates one child frame retaining the parent-derived value pointer.
+    #[inline(always)]
     fn child(location: OwnedLocation, depth: usize, value: &mut Value) -> Self {
         Self {
             location,

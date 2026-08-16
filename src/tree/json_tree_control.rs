@@ -8,6 +8,7 @@
 //! Defines ordinary JSON tree traversal control.
 
 /// Selects whether a successfully visited node exposes its descendants.
+#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonTreeControl {
     /// Visit the node's descendants in normal depth-first order.

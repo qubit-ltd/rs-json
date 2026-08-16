@@ -47,6 +47,7 @@ where
     /// # Returns
     ///
     /// A decoder borrowing `session` for its lifetime.
+    #[inline(always)]
     pub const fn new(
         session: &'session mut JsonDecodeSession<'budget, R, Q>,
     ) -> Self {

@@ -10,6 +10,7 @@
 use super::JsonTreeLocation;
 
 /// Describes the root-inclusive depth and parent location of a JSON node.
+#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct JsonTreeContext<'a> {
     /// Root-inclusive depth; the root is always at depth one.

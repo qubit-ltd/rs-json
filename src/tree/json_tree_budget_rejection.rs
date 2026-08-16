@@ -8,6 +8,7 @@
 //! Defines mutable traversal behavior after a budget rejection.
 
 /// Selects whether a rejected JSON node aborts processing or is safely skipped.
+#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonTreeBudgetRejection {
     /// Return the original budget error to the caller.
