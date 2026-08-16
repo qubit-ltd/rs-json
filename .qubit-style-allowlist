@@ -1,0 +1,1 @@
+multiple-public-types | src/lenient/lenient_json_decode_options.rs | Keep lenient decode options and its builder together as one configuration API.

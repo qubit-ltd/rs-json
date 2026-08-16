@@ -49,6 +49,37 @@ fn test_lenient_matches_default_options() {
     );
 }
 
+/// Verifies that the options builder configures every supported field.
+///
+/// # Panics
+///
+/// Panics when the builder does not preserve a configured option.
+#[test]
+fn test_builder_configures_options_and_consumes_itself() {
+    let options = LenientJsonDecodeOptions::builder()
+        .trim_whitespace(false)
+        .strip_utf8_bom(false)
+        .markdown_fence_policy(MarkdownFencePolicy::Disabled)
+        .escape_control_chars_in_strings(false)
+        .max_input_bytes(Some(7))
+        .max_normalized_bytes(Some(11))
+        .value_limits(None)
+        .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+        .build();
+
+    assert!(!options.trim_whitespace());
+    assert!(!options.strip_utf8_bom());
+    assert_eq!(
+        options.markdown_fence_policy(),
+        &MarkdownFencePolicy::Disabled,
+    );
+    assert!(!options.escape_control_chars_in_strings());
+    assert_eq!(options.max_input_bytes(), Some(7));
+    assert_eq!(options.max_normalized_bytes(), Some(11));
+    assert_eq!(options.value_limits(), None);
+    assert_eq!(options.error_privacy_policy(), ErrorPrivacyPolicy::Detailed);
+}
+
 /// Verifies that strict disables all normalization rules.
 ///
 /// # Panics
@@ -79,14 +110,15 @@ fn test_builders_set_requested_policies() {
     let markdown_fence_policy = MarkdownFencePolicy::Any {
         closing: MarkdownFenceClosing::Required,
     };
-    let options = LenientJsonDecodeOptions::strict()
-        .with_trim_whitespace(true)
-        .with_strip_utf8_bom(true)
-        .with_markdown_fence_policy(markdown_fence_policy.clone())
-        .with_escape_control_chars_in_strings(true)
-        .with_max_input_bytes(Some(64))
-        .with_max_normalized_bytes(Some(128))
-        .with_error_privacy_policy(ErrorPrivacyPolicy::Detailed);
+    let options = LenientJsonDecodeOptions::builder()
+        .trim_whitespace(true)
+        .strip_utf8_bom(true)
+        .markdown_fence_policy(markdown_fence_policy.clone())
+        .escape_control_chars_in_strings(true)
+        .max_input_bytes(Some(64))
+        .max_normalized_bytes(Some(128))
+        .error_privacy_policy(ErrorPrivacyPolicy::Detailed)
+        .build();
     assert!(options.trim_whitespace());
     assert!(options.strip_utf8_bom());
     assert_eq!(options.markdown_fence_policy(), &markdown_fence_policy);
@@ -94,16 +126,6 @@ fn test_builders_set_requested_policies() {
     assert_eq!(options.max_input_bytes(), Some(64));
     assert_eq!(options.max_normalized_bytes(), Some(128));
     assert_eq!(options.error_privacy_policy(), ErrorPrivacyPolicy::Detailed,);
-    assert_eq!(
-        options.clone().with_max_input_bytes(None).max_input_bytes(),
-        None,
-    );
-    assert_eq!(
-        options
-            .with_max_normalized_bytes(None)
-            .max_normalized_bytes(),
-        None,
-    );
 }
 
 /// Verifies that options are cloneable and equatable.
