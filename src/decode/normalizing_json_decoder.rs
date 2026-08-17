@@ -31,13 +31,21 @@ use crate::lexical::JsonLexicalScanner;
 ///
 /// `NormalizingJsonDecoder` applies a small set of predictable normalization
 /// rules before delegating actual parsing and deserialization to `serde_json`.
-#[derive(Debug, Clone, Default)]
-pub struct NormalizingJsonDecoder {
+#[derive(Debug)]
+pub struct NormalizingJsonDecoder<'budget> {
     /// Stores the configured normalization pipeline.
     normalizer: JsonNormalizer,
+    /// Session that accumulates all input and value charges.
+    session: JsonDecodeSession<'budget>,
 }
 
-impl NormalizingJsonDecoder {
+impl Default for NormalizingJsonDecoder<'static> {
+    fn default() -> Self {
+        Self::new(NormalizingJsonDecodeOptions::default())
+    }
+}
+
+impl<'budget> NormalizingJsonDecoder<'budget> {
     /// Creates a decoder with the exact normalization rules in `options`.
     ///
     /// # Parameters
@@ -49,10 +57,64 @@ impl NormalizingJsonDecoder {
     /// A decoder configured with `options`.
     #[inline(always)]
     #[must_use]
-    pub const fn new(options: NormalizingJsonDecodeOptions) -> Self {
+    pub fn new(options: NormalizingJsonDecodeOptions) -> Self {
+        let session = Self::session_from_options(&options);
         Self {
             normalizer: JsonNormalizer::new(options),
+            session,
         }
+    }
+
+    /// Creates an owned session from the resource limits in `options`.
+    fn session_from_options(
+        options: &NormalizingJsonDecodeOptions,
+    ) -> JsonDecodeSession<'static> {
+        let mut limits = JsonDecodeLimits::builder();
+        if let Some(maximum) = options.max_input_bytes() {
+            limits = limits.max_input_bytes(maximum);
+        }
+        if let Some(maximum) = options.max_normalized_bytes() {
+            limits = limits.max_normalized_input_bytes(maximum);
+        }
+        if let Some(value_limits) = options.value_limits() {
+            limits = limits.value_limits(value_limits);
+        }
+        JsonDecodeSession::owned(limits.build())
+    }
+}
+
+impl<'budget> NormalizingJsonDecoder<'budget> {
+    /// Creates a decoder with a caller-provided cumulative session.
+    ///
+    /// The supplied session is the only accounting state and limit source;
+    /// resource-limit fields in `options` are not merged into it.
+    #[must_use]
+    pub fn with_session(
+        options: NormalizingJsonDecodeOptions,
+        session: JsonDecodeSession<'budget>,
+    ) -> Self {
+        Self {
+            normalizer: JsonNormalizer::new(options),
+            session,
+        }
+    }
+
+    /// Returns the cumulative session for read-only inspection.
+    #[must_use]
+    pub const fn session(&self) -> &JsonDecodeSession<'budget> {
+        &self.session
+    }
+
+    /// Returns mutable access to the cumulative session.
+    #[must_use]
+    pub const fn session_mut(&mut self) -> &mut JsonDecodeSession<'budget> {
+        &mut self.session
+    }
+
+    /// Returns the cumulative session and consumes the decoder.
+    #[must_use]
+    pub fn into_session(self) -> JsonDecodeSession<'budget> {
+        self.session
     }
 
     /// Returns the immutable options used by this decoder.
@@ -89,8 +151,8 @@ impl NormalizingJsonDecoder {
     /// # Panics
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
-    pub fn decode<T>(
-        &self,
+    pub fn decode_str<T>(
+        &mut self,
         input: &str,
     ) -> Result<T, NormalizingJsonDecodeError>
     where
@@ -99,98 +161,17 @@ impl NormalizingJsonDecoder {
         self.normalize_then_deserialize(input)
     }
 
-    /// Decodes `input` while charging a caller-owned JSON decode session.
-    ///
-    /// Raw bytes are charged before normalization, normalized bytes are charged
-    /// by the normalizer, and decoded value resources are staged by lexical
-    /// admission. Raw and normalized input charges remain in the supplied
-    /// reusable session after failure, while value charges are committed only
-    /// for a successfully deserialized top-level value.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Raw JSON text to normalize, admit, and deserialize.
-    /// * `session` - Reusable caller-owned accounting state. Input charges are
-    ///   retained on both success and failure; value charges are retained only
-    ///   after successful top-level decoding.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Target type deserialized from the admitted JSON text.
-    ///
-    /// # Returns
-    ///
-    /// The directly deserialized target value after all configured resources
-    /// are admitted.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NormalizingJsonDecodeError`] when normalization fails, lexical
-    /// admission rejects syntax or a value resource, or the admitted JSON
-    /// cannot be deserialized into `T`. Value-resource failures use the
-    /// stable `Budget`/`Admission` classification and retain the measured
-    /// rejection.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
-    pub fn decode_with_session<T>(
-        &self,
-        input: &str,
-        session: &mut JsonDecodeSession<'_, JsonResource>,
-    ) -> Result<T, NormalizingJsonDecodeError>
-    where
-        T: DeserializeOwned,
-    {
-        let raw_input_bytes = input.len();
-        let privacy_policy = self.options().diagnostic_policy();
-        let mut attempt = session.begin_value();
-        let normalized = self.normalizer.normalize(input, &mut attempt)?;
-        JsonLexicalScanner::new(attempt.value_transaction_mut())
-            .scan(normalized.as_bytes())
-            .map_err(|error| {
-                Self::map_admission_error(
-                    error,
-                    normalized.as_ref(),
-                    raw_input_bytes,
-                    privacy_policy,
-                )
-            })?;
-        let value = Self::deserialize_normalized(
-            normalized.as_ref(),
-            raw_input_bytes,
-            normalized.len(),
-            privacy_policy,
-        )?;
-        attempt.commit();
-        Ok(value)
-    }
-
-    /// Decodes one complete JSON string with a caller-owned session.
-    #[inline]
-    pub fn decode_str<T>(
-        &self,
-        input: &str,
-        session: &mut JsonDecodeSession<'_, JsonResource>,
-    ) -> Result<T, NormalizingJsonDecodeError>
-    where
-        T: DeserializeOwned,
-    {
-        self.decode_with_session(input, session)
-    }
-
-    /// Decodes one UTF-8 byte slice with a caller-owned session.
+    /// Decodes one UTF-8 byte slice while accumulating charges in this decoder.
     pub fn decode_utf8<T>(
-        &self,
+        &mut self,
         input: &[u8],
-        session: &mut JsonDecodeSession<'_, JsonResource>,
     ) -> Result<T, NormalizingJsonDecodeError>
     where
         T: DeserializeOwned,
     {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().diagnostic_policy();
-        let mut attempt = session.begin_value();
+        let mut attempt = self.session.begin_value();
         attempt
             .try_consume_input_bytes(raw_input_bytes)
             .map_err(|_| {
@@ -213,7 +194,6 @@ impl NormalizingJsonDecoder {
             .normalizer
             .normalize_after_raw_charge(input, &mut attempt)?;
         Self::admit_normalized_if_configured(
-            self,
             &mut attempt,
             normalized.as_ref(),
             raw_input_bytes,
@@ -229,10 +209,7 @@ impl NormalizingJsonDecoder {
         Ok(value)
     }
 
-    /// Decodes UTF-8 input bytes into the target Rust type.
-    ///
     /// The configured raw byte limit is enforced before UTF-8 validation.
-    /// Valid UTF-8 is borrowed and delegated to the string decoder.
     ///
     /// # Parameters
     ///
@@ -254,53 +231,6 @@ impl NormalizingJsonDecoder {
     /// # Panics
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
-    pub fn decode_slice<T>(
-        &self,
-        input: &[u8],
-    ) -> Result<T, NormalizingJsonDecodeError>
-    where
-        T: DeserializeOwned,
-    {
-        let raw_input_bytes = input.len();
-        let privacy_policy = self.options().diagnostic_policy();
-        let mut session = self.decode_session();
-        let mut attempt = session.begin_value();
-        if attempt.try_consume_input_bytes(raw_input_bytes).is_err() {
-            return Err(NormalizingJsonDecodeError::input_too_large(
-                raw_input_bytes,
-                attempt
-                    .input_budget()
-                    .map_or(raw_input_bytes, ResourceBudget::limit),
-                privacy_policy,
-            ));
-        }
-        let input = std::str::from_utf8(input).map_err(|error| {
-            NormalizingJsonDecodeError::invalid_utf8(
-                error,
-                raw_input_bytes,
-                privacy_policy,
-            )
-        })?;
-        let normalized = self
-            .normalizer
-            .normalize_after_raw_charge(input, &mut attempt)?;
-        Self::admit_normalized_if_configured(
-            self,
-            &mut attempt,
-            normalized.as_ref(),
-            raw_input_bytes,
-            privacy_policy,
-        )?;
-        let value = Self::deserialize_normalized(
-            normalized.as_ref(),
-            raw_input_bytes,
-            normalized.len(),
-            privacy_policy,
-        )?;
-        attempt.commit();
-        Ok(value)
-    }
-
     /// Decodes `input` into `T`, requiring a top-level JSON object.
     ///
     /// The target is deserialized directly from normalized text after a
@@ -331,7 +261,7 @@ impl NormalizingJsonDecoder {
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     #[inline(always)]
     pub fn decode_object<T>(
-        &self,
+        &mut self,
         input: &str,
     ) -> Result<T, NormalizingJsonDecodeError>
     where
@@ -368,7 +298,7 @@ impl NormalizingJsonDecoder {
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     #[inline(always)]
     pub fn decode_array<T>(
-        &self,
+        &mut self,
         input: &str,
     ) -> Result<Vec<T>, NormalizingJsonDecodeError>
     where
@@ -395,16 +325,14 @@ impl NormalizingJsonDecoder {
     /// Returns [`NormalizingJsonDecodeError`] when input normalization or JSON
     /// parsing fails.
     pub fn decode_value(
-        &self,
+        &mut self,
         input: &str,
     ) -> Result<Value, NormalizingJsonDecodeError> {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().diagnostic_policy();
-        let mut session = self.decode_session();
-        let mut attempt = session.begin_value();
+        let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
         Self::admit_normalized_if_configured(
-            self,
             &mut attempt,
             normalized.as_ref(),
             raw_input_bytes,
@@ -442,7 +370,7 @@ impl NormalizingJsonDecoder {
     /// Panics from `T`'s `Deserialize` implementation or visitor methods are
     /// not caught and propagate to the caller.
     fn decode_with_top_level<T>(
-        &self,
+        &mut self,
         input: &str,
         expected: JsonRootKind,
     ) -> Result<T, NormalizingJsonDecodeError>
@@ -451,12 +379,10 @@ impl NormalizingJsonDecoder {
     {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().diagnostic_policy();
-        let mut session = self.decode_session();
-        let mut attempt = session.begin_value();
+        let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
         let normalized_input_bytes = normalized.len();
         Self::admit_normalized_if_configured(
-            self,
             &mut attempt,
             normalized.as_ref(),
             raw_input_bytes,
@@ -488,42 +414,23 @@ impl NormalizingJsonDecoder {
         Ok(value)
     }
 
-    /// Creates the budget session for one lenient decode operation.
-    fn decode_session(&self) -> JsonDecodeSession<'static> {
-        let mut limits = JsonDecodeLimits::builder();
-        if let Some(maximum) = self.options().max_input_bytes() {
-            limits = limits.max_input_bytes(maximum);
-        }
-        if let Some(maximum) = self.options().max_normalized_bytes() {
-            limits = limits.max_normalized_input_bytes(maximum);
-        }
-        if let Some(value_limits) = self.options().value_limits() {
-            limits = limits.value_limits(value_limits);
-        }
-        JsonDecodeSession::owned(limits.build())
-    }
-
-    /// Runs lexical admission when value limits are configured.
+    /// Runs lexical admission against this decoder's session.
     fn admit_normalized_if_configured(
-        &self,
         attempt: &mut JsonDecodeAttempt<'_, JsonResource, usize>,
         normalized: &str,
         raw_input_bytes: usize,
         privacy_policy: DiagnosticPolicy,
     ) -> Result<(), NormalizingJsonDecodeError> {
-        if self.options().value_limits().is_some() {
-            JsonLexicalScanner::new(attempt.value_transaction_mut())
-                .scan(normalized.as_bytes())
-                .map_err(|error| {
-                    Self::map_admission_error(
-                        error,
-                        normalized,
-                        raw_input_bytes,
-                        privacy_policy,
-                    )
-                })?;
-        }
-        Ok(())
+        JsonLexicalScanner::new(attempt.value_transaction_mut())
+            .scan(normalized.as_bytes())
+            .map_err(|error| {
+                Self::map_admission_error(
+                    error,
+                    normalized,
+                    raw_input_bytes,
+                    privacy_policy,
+                )
+            })
     }
 
     /// Normalizes and directly deserializes input without value preflight.
@@ -541,7 +448,7 @@ impl NormalizingJsonDecoder {
     /// Returns [`NormalizingJsonDecodeError`] when normalization, JSON parsing,
     /// or target deserialization fails.
     fn normalize_then_deserialize<T>(
-        &self,
+        &mut self,
         input: &str,
     ) -> Result<T, NormalizingJsonDecodeError>
     where
@@ -549,11 +456,9 @@ impl NormalizingJsonDecoder {
     {
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().diagnostic_policy();
-        let mut session = self.decode_session();
-        let mut attempt = session.begin_value();
+        let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
         Self::admit_normalized_if_configured(
-            self,
             &mut attempt,
             normalized.as_ref(),
             raw_input_bytes,
@@ -780,4 +685,29 @@ impl NormalizingJsonDecoder {
             }
         }
     }
+}
+
+#[allow(missing_docs)]
+impl<'budget> NormalizingJsonDecoder<'budget> {
+    #[deprecated(note = "use with_session(...).decode_str(...)")]
+    pub fn decode_with_session<T>(
+        &self,
+        input: &str,
+        session: &mut JsonDecodeSession<'budget>,
+    ) -> Result<T, NormalizingJsonDecodeError>
+    where
+        T: DeserializeOwned,
+    {
+        let mut decoder = Self::with_session(self.options().clone(),
+            std::mem::replace(session, JsonDecodeSession::owned(JsonDecodeLimits::default())));
+        let result = decoder.decode_str(input);
+        *session = decoder.into_session();
+        result
+    }
+
+    #[deprecated(note = "use decode_utf8(...) on a stateful decoder")]
+    pub fn decode_slice<T>(&self, input: &[u8]) -> Result<T, NormalizingJsonDecodeError>
+    where
+        T: DeserializeOwned,
+    { let mut decoder = Self::new(self.options().clone()); decoder.decode_utf8(input) }
 }

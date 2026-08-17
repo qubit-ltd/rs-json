@@ -14,7 +14,9 @@ use std::io::Write;
 
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonEncodeAttempt;
+use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonResource;
 use serde::Serialize;
 use serde_json::Error as JsonError;
 use serde_json::Serializer as JsonSerializer;
@@ -26,36 +28,58 @@ use super::output::JsonOutputWriter;
 use super::serializer::json_encode_context::JsonEncodeContext;
 use super::serializer::json_encode_serializer::JsonEncodeSerializer;
 
-/// Encodes strict JSON text while charging a caller-managed session.
-pub struct JsonEncoder<'session, 'budget, R, Q = usize>
+/// Encodes strict JSON text while owning cumulative accounting state.
+pub struct JsonEncoder<'budget, R = JsonResource, Q = usize>
 where
     Q: ResourceQuantity,
 {
     /// Session charged by each encode operation.
-    session: &'session mut JsonEncodeSession<'budget, R, Q>,
+    session: JsonEncodeSession<'budget, R, Q>,
 }
 
-impl<'session, 'budget, R, Q> JsonEncoder<'session, 'budget, R, Q>
+impl Default for JsonEncoder<'static, JsonResource, usize> {
+    fn default() -> Self {
+        Self::new(JsonEncodeSession::owned(JsonEncodeLimits::default()))
+    }
+}
+
+impl<'budget, R, Q> JsonEncoder<'budget, R, Q>
 where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
-    /// Creates an encoder borrowing `session` for its lifetime.
+    /// Creates an encoder that owns a reusable cumulative session.
     ///
     /// # Parameters
     ///
-    /// * `session` - Caller-owned session that receives committed output
-    ///   accounting.
+    /// * `session` - Session that receives committed output accounting.
     ///
     /// # Returns
     ///
-    /// An encoder borrowing `session` for its lifetime.
+    /// An encoder that retains `session` until [`Self::into_session`] is called
+    /// or the encoder is dropped.
     #[inline(always)]
     #[must_use]
-    pub fn new(
-        session: &'session mut JsonEncodeSession<'budget, R, Q>,
-    ) -> Self {
+    pub fn new(session: JsonEncodeSession<'budget, R, Q>) -> Self {
         Self { session }
+    }
+
+    /// Returns the cumulative session for read-only inspection.
+    #[must_use]
+    pub const fn session(&self) -> &JsonEncodeSession<'budget, R, Q> {
+        &self.session
+    }
+
+    /// Returns mutable access to the cumulative session.
+    #[must_use]
+    pub const fn session_mut(&mut self) -> &mut JsonEncodeSession<'budget, R, Q> {
+        &mut self.session
+    }
+
+    /// Returns the cumulative session and consumes the encoder.
+    #[must_use]
+    pub fn into_session(self) -> JsonEncodeSession<'budget, R, Q> {
+        self.session
     }
 
     /// Encodes `value` into compact JSON and commits only complete success.
