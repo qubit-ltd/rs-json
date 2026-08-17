@@ -39,13 +39,24 @@ pub struct NormalizingJsonDecoder<'budget> {
     session: JsonDecodeSession<'budget>,
 }
 
+trait NormalizingInput { fn bytes(&self) -> &[u8]; }
+impl NormalizingInput for str { fn bytes(&self) -> &[u8] { self.as_bytes() } }
+impl NormalizingInput for [u8] { fn bytes(&self) -> &[u8] { self } }
+impl<const N: usize> NormalizingInput for [u8; N] { fn bytes(&self) -> &[u8] { self } }
+impl NormalizingInput for String { fn bytes(&self) -> &[u8] { self.as_bytes() } }
+impl NormalizingInput for Vec<u8> { fn bytes(&self) -> &[u8] { self } }
+
 impl Default for NormalizingJsonDecoder<'static> {
     fn default() -> Self {
         Self::new(NormalizingJsonDecodeOptions::default())
     }
 }
 
+#[allow(missing_docs)]
 impl<'budget> NormalizingJsonDecoder<'budget> {
+    #[deprecated(note = "use decode_str")]
+    pub fn decode<T>(&mut self, input: &str) -> Result<T, NormalizingJsonDecodeError>
+    where T: DeserializeOwned { self.decode_str(input) }
     /// Creates a decoder with the exact normalization rules in `options`.
     ///
     /// # Parameters
@@ -164,11 +175,12 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     /// Decodes one UTF-8 byte slice while accumulating charges in this decoder.
     pub fn decode_utf8<T>(
         &mut self,
-        input: &[u8],
+        input: &(impl NormalizingInput + ?Sized),
     ) -> Result<T, NormalizingJsonDecodeError>
     where
         T: DeserializeOwned,
     {
+        let input = input.bytes();
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().diagnostic_policy();
         let mut attempt = self.session.begin_value();
