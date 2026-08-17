@@ -43,6 +43,20 @@ fn test_json_decoder_decode_utf8_borrows_input() {
     assert_eq!(value, "borrowed");
 }
 
+/// Verifies that strict validation accepts string and UTF-8 entry points.
+#[test]
+fn test_json_decoder_validation_entry_points() {
+    let decoder = JsonDecoder::default();
+    let mut session = session();
+
+    decoder
+        .validate_str("null", &mut session)
+        .expect("strict string validation should succeed");
+    decoder
+        .validate_utf8(b"true", &mut session)
+        .expect("strict UTF-8 validation should succeed");
+}
+
 /// Verifies that normalizing string decoding returns an owned target.
 #[test]
 fn test_normalizing_decoder_decode_str_returns_owned_value() {
