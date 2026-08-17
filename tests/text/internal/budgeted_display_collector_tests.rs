@@ -36,7 +36,7 @@ fn test_budgeted_display_collector_rejects_excess_text() {
     );
 
     assert!(
-        JsonEncoder::new(&mut session)
+        JsonEncoder::new(session)
             .to_vec(&DisplayValue)
             .is_err()
     );

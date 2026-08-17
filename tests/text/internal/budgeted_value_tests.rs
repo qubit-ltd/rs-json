@@ -18,7 +18,7 @@ fn test_budgeted_value_serializes_nested_values() {
     let mut session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let output = JsonEncoder::new(&mut session)
+    let output = JsonEncoder::new(session)
         .to_vec(&vec![vec![1_u8]])
         .expect("nested values should encode");
 

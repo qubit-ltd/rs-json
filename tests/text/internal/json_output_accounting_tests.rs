@@ -21,7 +21,7 @@ fn test_json_output_accounting_reports_output_budget() {
             .max_output_bytes(1)
             .build(),
     );
-    let error = JsonEncoder::new(&mut session)
+    let error = JsonEncoder::new(session)
         .to_vec(&"ok")
         .expect_err("encoded string exceeds one output byte");
 

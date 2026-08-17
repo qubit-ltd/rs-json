@@ -27,7 +27,7 @@ fn test_lenient_domain_owns_its_public_types() {
             .build(),
     );
     let error = decoder
-        .decode::<u64>(r#""TOP_SECRET""#)
+        .decode_utf8::<u64>(r#""TOP_SECRET""#)
         .expect_err("a string cannot deserialize into u64");
 
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);

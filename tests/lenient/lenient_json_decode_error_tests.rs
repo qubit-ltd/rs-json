@@ -157,7 +157,7 @@ fn test_default_error_privacy_redacts_input_derived_serde_details() {
     const SECRET: &str = "TOP_SECRET_VALUE";
 
     let error = NormalizingJsonDecoder::default()
-        .decode::<PublicChoice>(&format!("\"{SECRET}\""))
+        .decode_utf8::<PublicChoice>(&format!("\"{SECRET}\""))
         .expect_err("an unknown enum variant should fail deserialization");
 
     assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
@@ -183,7 +183,7 @@ fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
             .build(),
     );
     let error = decoder
-        .decode::<PublicChoice>(&format!("\"{SECRET}\""))
+        .decode_utf8::<PublicChoice>(&format!("\"{SECRET}\""))
         .expect_err("an unknown enum variant should fail deserialization");
 
     assert_eq!(error.privacy_policy(), DiagnosticPolicy::Detailed);
@@ -298,7 +298,7 @@ fn test_normalization_errors_retain_the_configured_privacy_policy() {
 #[test]
 fn test_error_display_for_deserialize_error_uses_context_message() {
     let error = NormalizingJsonDecoder::default()
-        .decode::<u64>("\"text\"")
+        .decode_utf8::<u64>("\"text\"")
         .expect_err("string JSON should not deserialize into u64");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
     assert_eq!(error.stage(), NormalizingJsonDecodeStage::Deserialize);

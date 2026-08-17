@@ -54,7 +54,7 @@ fn test_encoder_preserves_private_number_and_raw_value_protocol() {
     let mut session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let bytes = JsonEncoder::new(&mut session)
+    let bytes = JsonEncoder::new(session)
         .to_vec(&(&number, &raw))
         .expect("private serde_json shapes encode");
     assert_eq!(bytes, br#"[123456789012345678901234567890,{"ok":true}]"#,);
@@ -66,7 +66,7 @@ fn test_encoder_reports_invalid_private_raw_value_as_syntax_error() {
     let mut session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let error = JsonEncoder::new(&mut session)
+    let error = JsonEncoder::new(session)
         .to_vec(&InvalidRawValue)
         .expect_err("invalid private raw JSON must fail");
 

@@ -19,7 +19,7 @@ fn test_lexical_scanner_admits_complete_document() {
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
 
-    JsonDecoder::new(&mut session)
-        .validate(br#"{"items":[true,null]}"#)
+    JsonDecoder::new(session)
+        .validate_utf8(br#"{"items":[true,null]}"#)
         .expect("complete JSON document should validate");
 }

@@ -19,8 +19,8 @@ fn test_lexical_failure_reports_source_coordinates() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let error = JsonDecoder::new(&mut session)
-        .validate(b"{\n\"key\" 1}")
+    let error = JsonDecoder::new(session)
+        .validate_utf8(b"{\n\"key\" 1}")
         .expect_err("object member without colon must fail");
 
     let JsonDecodeError::Syntax(error) = error else {

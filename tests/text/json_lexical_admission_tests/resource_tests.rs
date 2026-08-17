@@ -34,8 +34,8 @@ fn test_json_lexical_preflight_consumes_payload_for_keys_strings_and_numbers() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonDecoder::new(&mut session)
-        .decode::<IgnoredAny>(br#"{"a":"bc","n":12}"#)
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<IgnoredAny>(br#"{"a":"bc","n":12}"#)
         .expect_err(
             "one key, string, and number must exceed four payload bytes",
         );
@@ -72,8 +72,8 @@ fn test_json_lexical_preflight_charges_decoded_key_bytes() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonDecoder::new(&mut session)
-        .decode::<IgnoredAny>(br#"{"\u4e2d":null}"#)
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<IgnoredAny>(br#"{"\u4e2d":null}"#)
         .expect_err(
             "the decoded three-byte key must exceed the two-byte limit",
         );
@@ -106,8 +106,8 @@ fn test_json_lexical_preflight_charges_each_value_node() {
             )
             .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonDecoder::new(&mut session)
-        .decode::<IgnoredAny>(br#"{"value":true}"#)
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<IgnoredAny>(br#"{"value":true}"#)
         .expect_err("the object child must exceed the one-node budget");
 
     assert!(matches!(
@@ -139,8 +139,8 @@ fn test_json_lexical_preflight_checks_decoded_string_bytes() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonDecoder::new(&mut session)
-        .decode::<IgnoredAny>(br#""\u4e2d""#)
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<IgnoredAny>(br#""\u4e2d""#)
         .expect_err("the decoded three-byte string must exceed the limit");
 
     assert!(matches!(
@@ -171,8 +171,8 @@ fn test_json_lexical_preflight_checks_number_lexical_bytes() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonDecoder::new(&mut session)
-        .decode::<IgnoredAny>(b"1e+3")
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<IgnoredAny>(b"1e+3")
         .expect_err("all four lexical number bytes must be charged");
 
     assert!(matches!(
@@ -204,8 +204,8 @@ fn test_json_lexical_preflight_checks_sequence_items() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonDecoder::new(&mut session)
-        .decode::<IgnoredAny>(b"[null,null]")
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<IgnoredAny>(b"[null,null]")
         .expect_err("the second array item must exceed the point limit");
 
     assert!(matches!(
@@ -235,8 +235,8 @@ fn test_json_lexical_preflight_counts_duplicate_map_entries() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonDecoder::new(&mut session)
-        .decode::<IgnoredAny>(br#"{"a":1,"a":2}"#)
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<IgnoredAny>(br#"{"a":1,"a":2}"#)
         .expect_err("the duplicate second entry must still exceed the limit");
 
     assert!(matches!(
@@ -273,8 +273,8 @@ fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonDecoder::new(&mut session)
-        .decode::<IgnoredAny>(input.as_bytes())
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<IgnoredAny>(input.as_bytes())
         .expect_err("private token text must consume the ordinary key limit");
 
     assert!(matches!(
@@ -306,8 +306,8 @@ fn test_json_lexical_preflight_charges_duplicate_entry_payloads() {
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonDecoder::new(&mut session)
-        .decode::<IgnoredAny>(br#"{"a":1,"a":2}"#)
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<IgnoredAny>(br#"{"a":1,"a":2}"#)
         .expect_err("both duplicate key-number pairs must consume payload");
 
     assert!(matches!(

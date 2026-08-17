@@ -12,6 +12,7 @@ use std::io::Write;
 
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonEncodeSession;
+use qubit_budget::json::JsonEncodeLimits;
 use qubit_json::encode::JsonEncodeError;
 use qubit_json::encode::JsonEncoder;
 use serde::Serialize;
@@ -26,7 +27,12 @@ where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
-    JsonEncoder::new(session).to_vec(value)
+    let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
+    let owned = std::mem::replace(session, placeholder);
+    let mut encoder = JsonEncoder::new(owned);
+    let result = encoder.to_vec(value);
+    *session = encoder.into_session();
+    result
 }
 
 /// Writes one buffered document through the stateful encoder API.
@@ -41,7 +47,12 @@ where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
-    JsonEncoder::new(session).write_buffered(writer, value)
+    let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
+    let owned = std::mem::replace(session, placeholder);
+    let mut encoder = JsonEncoder::new(owned);
+    let result = encoder.write_buffered(writer, value);
+    *session = encoder.into_session();
+    result
 }
 
 /// Streams one document through the stateful encoder API.
@@ -56,5 +67,10 @@ where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
-    JsonEncoder::new(session).write_incremental(writer, value)
+    let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
+    let owned = std::mem::replace(session, placeholder);
+    let mut encoder = JsonEncoder::new(owned);
+    let result = encoder.write_incremental(writer, value);
+    *session = encoder.into_session();
+    result
 }
