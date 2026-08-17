@@ -134,7 +134,7 @@ fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_locatio
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_source_for_invalid_json_preserves_serde_error() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
@@ -177,7 +177,7 @@ fn test_default_error_privacy_redacts_input_derived_serde_details() {
 fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
     const SECRET: &str = "TOP_SECRET_VALUE";
 
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
@@ -253,7 +253,7 @@ fn test_invalid_utf8_exposes_safe_position_diagnostics() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_invalid_utf8_detailed_error_retains_utf8_source() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
@@ -318,7 +318,7 @@ fn test_error_display_for_deserialize_error_uses_context_message() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_partial_eq_compares_all_stable_fields() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let first = decoder
         .decode_value("{\n")
         .expect_err("invalid JSON should return parse error");

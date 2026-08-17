@@ -64,7 +64,7 @@ fn test_new_exposes_configured_options() {
     let options = NormalizingJsonDecodeOptions::builder()
         .markdown_fence_policy(MarkdownFencePolicy::Disabled)
         .build();
-    let decoder = NormalizingJsonDecoder::new(options.clone());
+    let mut decoder = NormalizingJsonDecoder::new(options.clone());
     assert_eq!(decoder.options(), &options);
 }
 
@@ -75,7 +75,7 @@ fn test_new_exposes_configured_options() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_default_uses_default_options() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     assert_eq!(decoder.options(), &NormalizingJsonDecodeOptions::default());
 }
 
@@ -83,7 +83,7 @@ fn test_default_uses_default_options() {
 /// options.
 #[test]
 fn test_decode_without_value_limits_ignores_structure() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(256))
             .max_normalized_bytes(Some(256))
@@ -98,7 +98,7 @@ fn test_decode_without_value_limits_ignores_structure() {
 /// Verifies convenience decode enforces configured value limits.
 #[test]
 fn test_decode_with_value_limits_rejects_excessive_depth() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .value_limits(Some(
                 JsonValueLimits::<JsonResource, usize>::builder()
@@ -118,7 +118,7 @@ fn test_decode_with_value_limits_rejects_excessive_depth() {
 /// Verifies `decode_value` applies configured value limits.
 #[test]
 fn test_decode_value_with_value_limits_rejects_excessive_nodes() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .value_limits(Some(
                 JsonValueLimits::<JsonResource, usize>::builder()
@@ -138,7 +138,7 @@ fn test_decode_value_with_value_limits_rejects_excessive_nodes() {
 /// Verifies that callers can share one budget session with lenient decoding.
 #[test]
 fn test_decode_with_session_charges_caller_owned_input_budget() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let mut input = ResourceBudget::from_limit(ResourceLimit::new(
         JsonResource::InputBytes,
         16,
@@ -166,7 +166,7 @@ fn test_decode_with_session_charges_caller_owned_input_budget() {
 /// normalized JSON measurements.
 #[test]
 fn test_decode_with_session_charges_exact_value_resources_cumulatively() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .max_depth(3)
         .max_nodes(6)
@@ -199,7 +199,7 @@ fn test_decode_with_session_charges_exact_value_resources_cumulatively() {
 /// numbers, escapes, and malformed UTF-8 boundaries.
 #[test]
 fn test_strict_decode_exercises_lexical_error_shapes() {
-    let decoder =
+    let mut decoder =
         NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict());
     for input in ["false", "[]", "{}"] {
         let mut session = value_budget_session(
@@ -249,7 +249,7 @@ fn test_strict_decode_exercises_lexical_error_shapes() {
 /// classification or resource identity.
 #[test]
 fn test_decode_with_session_classifies_each_value_budget_rejection() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let cases = [
         (
             JsonValueLimits::<JsonResource, usize>::builder()
@@ -343,7 +343,7 @@ fn test_decode_with_session_classifies_each_value_budget_rejection() {
 /// published, or the session cannot use its remaining capacity.
 #[test]
 fn test_decode_with_session_budget_rejection_preserves_committed_charges() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .max_nodes(5)
         .max_payload_bytes(4)
@@ -390,7 +390,7 @@ fn test_decode_with_session_accounts_normalized_fenced_value() {
     const INPUT: &str =
         "```json\n{\"escaped\":\"\\u4e2d\",\"number\":1e+3}\n```";
 
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let mut input_budget =
         ResourceBudget::new(JsonResource::InputBytes, INPUT.len());
     let mut normalized_budget = ResourceBudget::new(
@@ -443,7 +443,7 @@ fn test_decode_with_session_accounts_normalized_fenced_value() {
 /// budget admission failures.
 #[test]
 fn test_decode_with_session_preserves_non_budget_error_classification() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .max_nodes(8)
         .max_payload_bytes(16)
@@ -490,7 +490,7 @@ fn test_decode_with_session_syntax_failure_retains_input_and_reuses_value_budget
             .max_nodes(1)
             .build(),
     );
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
 
     let error = decoder
         .decode_with_session::<Value>(rejected, &mut session)
@@ -582,7 +582,7 @@ fn test_decode_with_session_preserves_serde_syntax_position() {
             .max_nodes(2)
             .build(),
     );
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
@@ -631,7 +631,7 @@ fn test_decode_with_session_rejects_unpaired_surrogate_without_panicking() {
     assert!(std::error::Error::source(&string_error).is_none());
     assert_eq!(string_session.value_budget().used_nodes(), Some(0),);
 
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
@@ -660,7 +660,7 @@ fn test_decode_with_session_rejects_unpaired_surrogate_without_panicking() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_strict_decoder_preserves_serde_json_grammar() {
-    let decoder =
+    let mut decoder =
         NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict());
 
     let canonical: Value = decoder
@@ -688,7 +688,7 @@ fn test_strict_decoder_preserves_serde_json_grammar() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_parses_normalized_json() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let value = decoder
         .decode_value("```json\n{\"name\":\"alice\",\"age\":30}\n```")
         .expect("default decoder should parse JSON wrapped in a Markdown code fence");
@@ -702,7 +702,7 @@ fn test_decode_value_parses_normalized_json() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_typed_value_succeeds() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let person: User = decoder
         .decode("{\"name\":\"alice\",\"age\":30}")
         .expect("valid JSON object should deserialize into User");
@@ -767,7 +767,7 @@ fn test_decode_slice_invokes_target_deserializer_once_on_failure() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_accepts_non_rewrite_strict_overrides() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(64))
             .diagnostic_policy(DiagnosticPolicy::Detailed)
@@ -786,7 +786,7 @@ fn test_decode_slice_accepts_non_rewrite_strict_overrides() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_preserves_deserialize_error_mapping() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .diagnostic_policy(DiagnosticPolicy::Detailed)
             .build(),
@@ -806,7 +806,7 @@ fn test_decode_slice_preserves_deserialize_error_mapping() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_preserves_invalid_json_mapping() {
-    let decoder =
+    let mut decoder =
         NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict());
     let error = decoder
         .decode_slice::<Message>(b"{\"text\":\"broken\"")
@@ -821,7 +821,7 @@ fn test_decode_slice_preserves_invalid_json_mapping() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_slice_checks_raw_size_before_utf8() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(1))
             .build(),
@@ -840,7 +840,7 @@ fn test_decode_slice_checks_raw_size_before_utf8() {
 #[test]
 fn test_decode_slice_accepts_input_at_exact_raw_size_limit() {
     let input = b"null";
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .max_input_bytes(Some(input.len()))
             .build(),
@@ -876,7 +876,7 @@ fn test_decode_slice_classifies_invalid_utf8() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_reports_empty_input_from_normalizer() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_utf8::<User>("")
         .expect_err("empty input should fail during normalization");
@@ -890,7 +890,7 @@ fn test_decode_reports_empty_input_from_normalizer() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_typed_value_applies_normalization_pipeline() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let message: Message = decoder
         .decode("```json\n{\"text\":\"a\nb\"}\n```")
         .expect("typed decode should still normalize fenced JSON and repair string control chars");
@@ -909,7 +909,7 @@ fn test_decode_typed_value_applies_normalization_pipeline() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_requires_object_top_level() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_object::<User>("[{\"name\":\"alice\",\"age\":30}]")
         .expect_err("top-level array should be rejected by decode_object");
@@ -929,7 +929,7 @@ fn test_decode_object_requires_object_top_level() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_reports_empty_input_from_normalizer() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_object::<User>("")
         .expect_err("empty input should fail during normalization");
@@ -943,7 +943,7 @@ fn test_decode_object_reports_empty_input_from_normalizer() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_reports_invalid_json_for_malformed_array() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder.decode_object::<User>("[").expect_err(
         "malformed JSON should be reported before top-level checking",
     );
@@ -957,7 +957,7 @@ fn test_decode_object_reports_invalid_json_for_malformed_array() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_reports_invalid_json_for_malformed_scalar() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder.decode_object::<User>("\"unterminated").expect_err(
         "malformed scalar JSON should not be treated as a top-level mismatch",
     );
@@ -971,7 +971,7 @@ fn test_decode_object_reports_invalid_json_for_malformed_scalar() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_requires_array_top_level() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_array::<User>("{\"name\":\"alice\",\"age\":30}")
         .expect_err("top-level object should be rejected by decode_array");
@@ -990,7 +990,7 @@ fn test_decode_array_requires_array_top_level() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_reports_empty_input_from_normalizer() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_array::<User>("")
         .expect_err("empty input should fail during normalization");
@@ -1004,7 +1004,7 @@ fn test_decode_array_reports_empty_input_from_normalizer() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_reports_invalid_json_for_malformed_object() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder.decode_array::<User>("{").expect_err(
         "malformed JSON should be reported before top-level checking",
     );
@@ -1018,7 +1018,7 @@ fn test_decode_array_reports_invalid_json_for_malformed_object() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_rejects_scalar_top_level() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_object::<User>("42")
         .expect_err("top-level scalar should be rejected by decode_object");
@@ -1037,7 +1037,7 @@ fn test_decode_object_rejects_scalar_top_level() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_rejects_scalar_top_level() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_array::<User>("42")
         .expect_err("top-level scalar should be rejected by decode_array");
@@ -1056,7 +1056,7 @@ fn test_decode_array_rejects_scalar_top_level() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_succeeds() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let people = decoder
         .decode_array::<User>("[{\"name\":\"alice\",\"age\":30}]")
         .expect("top-level array should deserialize into Vec<User>");
@@ -1076,7 +1076,7 @@ fn test_decode_array_succeeds() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_reports_deserialize_error_after_top_level_check() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_object::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
         .expect_err(
@@ -1092,7 +1092,7 @@ fn test_decode_object_reports_deserialize_error_after_top_level_check() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_array_reports_deserialize_error_after_top_level_check() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_array::<User>("[{\"name\":\"alice\",\"age\":\"old\"}]")
         .expect_err(
@@ -1108,7 +1108,7 @@ fn test_decode_array_reports_deserialize_error_after_top_level_check() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_allows_generic_scalar_targets() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let value: i64 = decoder
         .decode("42")
         .expect("scalar JSON should deserialize into i64");
@@ -1122,7 +1122,7 @@ fn test_decode_allows_generic_scalar_targets() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_reports_invalid_json() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_utf8::<User>("{")
         .expect_err("broken JSON should return InvalidJson");
@@ -1136,7 +1136,7 @@ fn test_decode_reports_invalid_json() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_reports_deserialize_error() {
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
     let error = decoder
         .decode_utf8::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
         .expect_err("JSON with a wrong field type should return Deserialize");
@@ -1202,7 +1202,7 @@ fn test_decode_array_reports_invalid_json_when_data_error_precedes_syntax_error(
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_object_reports_invalid_json_for_non_token_start() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .trim_whitespace(false)
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
@@ -1221,7 +1221,7 @@ fn test_decode_object_reports_invalid_json_for_non_token_start() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decoder_reuses_configuration_between_calls() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .build(),
@@ -1245,12 +1245,12 @@ fn test_decoder_reuses_configuration_between_calls() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decoders_with_different_configs_do_not_share_state() {
-    let strict_decoder = NormalizingJsonDecoder::new(
+    let mut strict_decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .build(),
     );
-    let permissive_decoder = NormalizingJsonDecoder::default();
+    let mut permissive_decoder = NormalizingJsonDecoder::default();
 
     assert_eq!(
         strict_decoder
@@ -1272,7 +1272,7 @@ fn test_decoders_with_different_configs_do_not_share_state() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decoder_keeps_trim_whitespace_setting_for_empty_text() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .trim_whitespace(false)
             .build(),

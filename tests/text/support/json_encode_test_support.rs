@@ -24,8 +24,8 @@ pub(crate) fn encode<T, R, Q>(
 ) -> Result<Vec<u8>, JsonEncodeError<R, Q>>
 where
     T: Serialize + ?Sized,
-    R: Clone + Debug,
-    Q: ResourceQuantity,
+    R: Clone + Debug + 'static,
+    Q: ResourceQuantity + 'static,
 {
     let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = std::mem::replace(session, placeholder);
@@ -44,8 +44,8 @@ pub(crate) fn write_buffered<W, T, R, Q>(
 where
     W: Write,
     T: Serialize + ?Sized,
-    R: Clone + Debug,
-    Q: ResourceQuantity,
+    R: Clone + Debug + 'static,
+    Q: ResourceQuantity + 'static,
 {
     let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = std::mem::replace(session, placeholder);
@@ -64,8 +64,8 @@ pub(crate) fn write_incremental<W, T, R, Q>(
 where
     W: Write,
     T: Serialize + ?Sized,
-    R: Clone + Debug,
-    Q: ResourceQuantity,
+    R: Clone + Debug + 'static,
+    Q: ResourceQuantity + 'static,
 {
     let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = std::mem::replace(session, placeholder);

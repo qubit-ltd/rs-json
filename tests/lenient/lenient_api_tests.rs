@@ -21,7 +21,7 @@ use qubit_json::decode::NormalizingJsonDecoder;
 /// Panics when the public API or privacy contract is not satisfied.
 #[test]
 fn test_lenient_domain_owns_its_public_types() {
-    let decoder = NormalizingJsonDecoder::new(
+    let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .diagnostic_policy(DiagnosticPolicy::Redacted)
             .build(),

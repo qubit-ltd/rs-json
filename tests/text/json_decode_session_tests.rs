@@ -218,7 +218,7 @@ fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity
             .max_nodes(1)
             .build(),
     );
-    let decoder = NormalizingJsonDecoder::default();
+    let mut decoder = NormalizingJsonDecoder::default();
 
     assert!(
         decoder
