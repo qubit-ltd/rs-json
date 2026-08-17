@@ -21,7 +21,7 @@ fn test_private_struct_kind_recognizes_raw_value() {
     let mut session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let output = JsonEncoder::new(&mut session)
+    let output = JsonEncoder::new(session)
         .to_vec(&raw)
         .expect("raw JSON value should encode");
 

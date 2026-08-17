@@ -333,7 +333,7 @@ fn test_encode_counts_raw_value_once() {
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
 
-    let output = JsonEncoder::new(&mut session)
+    let output = JsonEncoder::new(session)
         .to_vec(raw.as_ref())
         .expect("the raw JSON value must encode");
 

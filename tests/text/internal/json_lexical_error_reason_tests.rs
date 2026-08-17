@@ -20,8 +20,8 @@ fn test_lexical_error_reason_reports_trailing_characters() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let error = JsonDecoder::new(&mut session)
-        .validate(b"true false")
+    let error = JsonDecoder::new(session)
+        .validate_utf8(b"true false")
         .expect_err("trailing JSON value must be rejected");
 
     let JsonDecodeError::Syntax(error) = error else {

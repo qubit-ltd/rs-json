@@ -90,7 +90,7 @@ fn test_decode_without_value_limits_ignores_structure() {
             .build(),
     );
 
-    decoder.decode::<Value>("[[[[null]]]]").expect(
+    decoder.decode_utf8::<Value>("[[[[null]]]]").expect(
         "without value limits, nested structure is accepted within byte cap",
     );
 }
@@ -107,7 +107,7 @@ fn test_decode_with_value_limits_rejects_excessive_depth() {
             ))
             .build(),
     );
-    let error = decoder.decode::<Value>("[null]").expect_err(
+    let error = decoder.decode_utf8::<Value>("[null]").expect_err(
         "depth limit must reject nested values on convenience decode",
     );
 
@@ -878,7 +878,7 @@ fn test_decode_slice_classifies_invalid_utf8() {
 fn test_decode_reports_empty_input_from_normalizer() {
     let decoder = NormalizingJsonDecoder::default();
     let error = decoder
-        .decode::<User>("")
+        .decode_utf8::<User>("")
         .expect_err("empty input should fail during normalization");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
 }
@@ -1124,7 +1124,7 @@ fn test_decode_allows_generic_scalar_targets() {
 fn test_decode_reports_invalid_json() {
     let decoder = NormalizingJsonDecoder::default();
     let error = decoder
-        .decode::<User>("{")
+        .decode_utf8::<User>("{")
         .expect_err("broken JSON should return InvalidJson");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
@@ -1138,7 +1138,7 @@ fn test_decode_reports_invalid_json() {
 fn test_decode_reports_deserialize_error() {
     let decoder = NormalizingJsonDecoder::default();
     let error = decoder
-        .decode::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
+        .decode_utf8::<User>("{\"name\":\"alice\",\"age\":\"old\"}")
         .expect_err("JSON with a wrong field type should return Deserialize");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
 }
@@ -1152,7 +1152,7 @@ fn test_decode_reports_deserialize_error() {
 #[test]
 fn test_decode_reports_invalid_json_when_data_error_precedes_syntax_error() {
     let error = NormalizingJsonDecoder::default()
-        .decode::<SingleValue>("{\"value\":\"wrong\",")
+        .decode_utf8::<SingleValue>("{\"value\":\"wrong\",")
         .expect_err(
             "incomplete JSON must take precedence over a field type error",
         );

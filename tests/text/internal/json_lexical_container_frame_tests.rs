@@ -18,8 +18,8 @@ fn test_container_frames_resume_nested_arrays() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let value = JsonDecoder::new(&mut session)
-        .decode::<serde_json::Value>(br#"[[1],2]"#)
+    let value = JsonDecoder::new(session)
+        .decode_utf8::<serde_json::Value>(br#"[[1],2]"#)
         .expect("nested array JSON should decode");
 
     assert_eq!(value, serde_json::json!([[1], 2]));

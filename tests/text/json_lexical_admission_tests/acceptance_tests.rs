@@ -18,8 +18,8 @@ fn test_json_lexical_preflight_accepts_complete_value() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let value = JsonDecoder::new(&mut session)
-        .decode::<serde_json::Value>(br#"{"ok":true}"#)
+    let value = JsonDecoder::new(session)
+        .decode_utf8::<serde_json::Value>(br#"{"ok":true}"#)
         .expect("complete JSON should pass lexical admission");
 
     assert_eq!(value["ok"], true);

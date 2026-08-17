@@ -19,8 +19,8 @@ fn test_lexical_error_maps_to_syntax_error() {
     let mut session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let error = JsonDecoder::new(&mut session)
-        .decode::<serde_json::Value>(b"[")
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<serde_json::Value>(b"[")
         .expect_err("unterminated array must fail lexical admission");
 
     assert!(matches!(error, JsonDecodeError::Syntax(_)));

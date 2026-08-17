@@ -18,13 +18,13 @@ use serde_json::error::Category;
 /// Verifies that strict text decoding uses the operation-specific error API.
 #[test]
 fn test_decoder_decodes_valid_slice() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_nodes(4)
             .build(),
     );
-    let value: bool = JsonDecoder::new(&mut session)
-        .decode(b"true")
+    let value: bool = JsonDecoder::new(session)
+        .decode_utf8(b"true")
         .expect("valid JSON decodes");
     assert!(value);
 }
@@ -32,11 +32,11 @@ fn test_decoder_decodes_valid_slice() {
 /// Verifies that strict typed failures do not expose serde input fragments.
 #[test]
 fn test_decoder_returns_safe_deserialize_metadata() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
-    let error = JsonDecoder::new(&mut session)
-        .decode::<u64>(br#""TOP_SECRET""#)
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<u64>(br#""TOP_SECRET""#)
         .expect_err("a JSON string cannot deserialize into u64");
 
     assert!(matches!(
@@ -58,50 +58,50 @@ fn test_decoder_returns_safe_deserialize_metadata() {
 fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
     let rejected = br#""not-a-number""#;
     let accepted = b"0";
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_input_bytes(rejected.len() + accepted.len())
             .max_nodes(1)
             .build(),
     );
 
+    let mut decoder = JsonDecoder::<JsonResource, usize>::new(session);
     assert!(matches!(
-        JsonDecoder::<JsonResource, usize>::new(&mut session)
-            .decode::<u64>(rejected),
+        decoder.decode_utf8::<u64>(rejected),
         Err(JsonDecodeError::Deserialize { .. })
     ));
     assert_eq!(
-        session
+        decoder.session()
             .input_budget()
             .expect("configured input budget")
             .used(),
         rejected.len()
     );
-    assert_eq!(session.value_budget().used_nodes(), Some(0));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 
     assert_eq!(
-        JsonDecoder::<JsonResource, usize>::new(&mut session)
-            .decode::<u64>(accepted)
+        decoder.decode_utf8::<u64>(accepted)
             .expect("a new value must fit after typed rollback"),
         0
     );
-    assert_eq!(session.value_budget().used_nodes(), Some(1));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
 }
 
 /// Verifies strict lexical inspection commits valid input and rejects invalid
 /// input without constructing a typed value.
 #[test]
 fn test_validate_accounts_document() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_nodes(4)
             .build(),
     );
-    JsonDecoder::new(&mut session)
-        .validate(br#"{"ok":true}"#)
+    let mut decoder = JsonDecoder::new(session);
+    decoder
+        .validate_utf8(br#"{"ok":true}"#)
         .expect("valid JSON should pass lexical inspection");
-    assert_eq!(session.value_budget().used_nodes(), Some(2));
-    let _ = JsonDecoder::new(&mut session)
-        .validate(b"[")
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
+    let _ = decoder
+        .validate_utf8(b"[")
         .expect_err("malformed JSON must be rejected");
 }
