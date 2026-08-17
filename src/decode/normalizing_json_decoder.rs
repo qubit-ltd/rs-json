@@ -39,7 +39,7 @@ pub struct NormalizingJsonDecoder<'budget> {
     session: JsonDecodeSession<'budget>,
 }
 
-trait NormalizingInput { fn bytes(&self) -> &[u8]; }
+pub trait NormalizingInput { fn bytes(&self) -> &[u8]; }
 impl NormalizingInput for str { fn bytes(&self) -> &[u8] { self.as_bytes() } }
 impl NormalizingInput for [u8] { fn bytes(&self) -> &[u8] { self } }
 impl<const N: usize> NormalizingInput for [u8; N] { fn bytes(&self) -> &[u8] { self } }

@@ -80,12 +80,13 @@ fn test_decode_session_borrowing_reuses_caller_owned_budgets() {
     {
         let mut session =
             JsonDecodeSession::borrowing_input(&mut input, &mut value);
-        JsonDecoder::new(session)
-            .decode_utf8::<IgnoredAny>(br#"{"a":1}"#)
+        let decoder = JsonDecoder::new(session);
+        let mut decoder = decoder;
+        decoder.decode_utf8::<IgnoredAny>(br#"{"a":1}"#)
             .expect("borrowed session should admit the document");
-        assert_eq!(session.max_input_bytes(), Some(16_usize));
+        assert_eq!(decoder.session().max_input_bytes(), Some(16_usize));
         assert_eq!(
-            session.input_budget().map(|budget| budget.limit()),
+            decoder.session().input_budget().map(|budget| budget.limit()),
             Some(16_usize)
         );
     }
@@ -153,24 +154,22 @@ fn test_failed_second_value_preserves_first_commit_and_accumulates_input() {
             .build(),
     );
 
-    JsonDecoder::new(session)
-        .decode_utf8::<IgnoredAny>(first)
+    let mut decoder = JsonDecoder::new(session);
+    decoder.decode_utf8::<IgnoredAny>(first)
         .expect("first value must fit");
     assert!(
-        JsonDecoder::new(session)
-            .decode_utf8::<IgnoredAny>(second)
+        decoder.decode_utf8::<IgnoredAny>(second)
             .is_err()
     );
-    assert_eq!(session.value_budget().used_nodes(), Some(1));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
     assert_eq!(
-        session.input_budget().expect("input budget").used(),
+        decoder.session().input_budget().expect("input budget").used(),
         first.len() + second.len(),
     );
 
-    JsonDecoder::new(session)
-        .decode_utf8::<IgnoredAny>(third)
+    decoder.decode_utf8::<IgnoredAny>(third)
         .expect("rolled-back second value must leave room for the third");
-    assert_eq!(session.value_budget().used_nodes(), Some(2));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
 }
 
 /// Verifies unwind preserves immediate input charges while rolling back staged
@@ -198,10 +197,10 @@ fn test_decode_attempt_panic_retains_input_and_reuses_value_capacity() {
     assert!(result.is_err());
     assert_eq!(session.input_budget().expect("input budget").used(), 4,);
     assert_eq!(session.value_budget().used_nodes(), Some(0));
-    JsonDecoder::new(session)
-        .decode_utf8::<IgnoredAny>(b"null")
+    let mut decoder = JsonDecoder::new(session);
+    decoder.decode_utf8::<IgnoredAny>(b"null")
         .expect("rolled-back value capacity must remain reusable");
-    assert_eq!(session.value_budget().used_nodes(), Some(1));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
 }
 
 /// Verifies lenient normalization and typed decode failures retain immediate

@@ -30,9 +30,9 @@ where
     let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = std::mem::replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
-    let result = encoder.to_vec(value);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| encoder.to_vec(value)));
     *session = encoder.into_session();
-    result
+    match result { Ok(result) => result, Err(payload) => std::panic::resume_unwind(payload) }
 }
 
 /// Writes one buffered document through the stateful encoder API.
@@ -50,9 +50,9 @@ where
     let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = std::mem::replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
-    let result = encoder.write_buffered(writer, value);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| encoder.write_buffered(writer, value)));
     *session = encoder.into_session();
-    result
+    match result { Ok(result) => result, Err(payload) => std::panic::resume_unwind(payload) }
 }
 
 /// Streams one document through the stateful encoder API.
@@ -70,7 +70,7 @@ where
     let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = std::mem::replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
-    let result = encoder.write_incremental(writer, value);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| encoder.write_incremental(writer, value)));
     *session = encoder.into_session();
-    result
+    match result { Ok(result) => result, Err(payload) => std::panic::resume_unwind(payload) }
 }
