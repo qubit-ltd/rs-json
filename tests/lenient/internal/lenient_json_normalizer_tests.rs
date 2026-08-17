@@ -319,7 +319,7 @@ fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled(
 #[test]
 fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid()
 {
-    let decoders = [
+    let mut decoders = [
         NormalizingJsonDecoder::default(),
         NormalizingJsonDecoder::new(
             NormalizingJsonDecodeOptions::builder()

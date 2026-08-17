@@ -63,7 +63,6 @@ fn deeply_nested_input_fails_by_limit_without_stack_overflow() {
             )
             .build(),
     );
-
     assert!(matches!(
         JsonDecoder::new(session)
             .decode_utf8::<serde_json::Value>(input.as_bytes()),
@@ -166,13 +165,14 @@ fn typed_decode_failure_consumes_input_before_the_next_attempt() {
             .input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 3))
             .build(),
     );
+    let mut decoder = JsonDecoder::new(session);
 
     assert!(matches!(
-        JsonDecoder::new(session).decode_utf8::<u8>(br#""x""#),
+        decoder.decode_utf8::<u8>(br#""x""#),
         Err(JsonDecodeError::Deserialize { .. })
     ));
     assert!(matches!(
-        JsonDecoder::new(session).decode_utf8::<u8>(b"0"),
+        decoder.decode_utf8::<u8>(b"0"),
         Err(JsonDecodeError::Budget(_))
     ));
 }
@@ -188,20 +188,21 @@ fn seed_rejection_keeps_input_and_rolls_back_value() {
             .max_nodes(8)
             .build(),
     );
+    let mut decoder = JsonDecoder::new(session);
 
     assert!(
-        JsonDecoder::new(session)
+        decoder
             .decode_seed(RejectSeed, input)
             .is_err()
     );
     assert_eq!(
-        session
+        decoder.session()
             .input_budget()
             .expect("configured input budget")
             .used(),
         input.len()
     );
-    assert_eq!(session.value_budget().used_nodes(), Some(0));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 }
 
 /// Verifies syntax rejection retains input but rolls back partial lexical
@@ -216,35 +217,36 @@ fn syntax_rejection_rolls_back_value_and_reuses_session() {
             .max_nodes(1)
             .build(),
     );
+    let mut decoder = JsonDecoder::new(session);
 
     assert!(
-        JsonDecoder::new(session)
+        decoder
             .decode_utf8::<serde_json::Value>(rejected)
             .is_err()
     );
     assert_eq!(
-        session
+        decoder.session()
             .input_budget()
             .expect("configured input budget")
             .used(),
         rejected.len()
     );
-    assert_eq!(session.value_budget().used_nodes(), Some(0));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 
     assert_eq!(
-        JsonDecoder::new(session)
+        decoder
             .decode_utf8::<serde_json::Value>(accepted)
             .expect("a fresh value must fit after syntax rollback"),
         serde_json::Value::Null
     );
     assert_eq!(
-        session
+        decoder.session()
             .input_budget()
             .expect("configured input budget")
             .used(),
         rejected.len() + accepted.len()
     );
-    assert_eq!(session.value_budget().used_nodes(), Some(1));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
 }
 
 /// Verifies value budget rejection retains the attempted input but never
@@ -258,19 +260,20 @@ fn budget_rejection_keeps_input_and_rolls_back_value() {
             .max_nodes(1)
             .build(),
     );
+    let mut decoder = JsonDecoder::new(session);
 
     assert!(matches!(
-        JsonDecoder::new(session).decode_utf8::<serde_json::Value>(input),
+        decoder.decode_utf8::<serde_json::Value>(input),
         Err(JsonDecodeError::Budget(_))
     ));
     assert_eq!(
-        session
+        decoder.session()
             .input_budget()
             .expect("configured input budget")
             .used(),
         input.len()
     );
-    assert_eq!(session.value_budget().used_nodes(), Some(0));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 }
 
 /// Verifies seed-first decoding uses the same lexical admission path.
@@ -289,8 +292,9 @@ fn decoder_seed_admits_arbitrary_precision_numbers() {
             )
             .build(),
     );
+    let mut decoder = JsonDecoder::new(session);
 
-    JsonDecoder::new(session)
+    decoder
         .decode_seed(IgnoreSeed, input)
         .expect("the exact arbitrary-precision lexical number limit must fit");
 }
@@ -313,11 +317,12 @@ fn point_limit_fails_before_seed_and_keeps_work_charged() {
             )
             .build();
     let mut session = JsonDecodeSession::owned(limits);
-    let error = JsonDecoder::new(session)
+    let mut decoder = JsonDecoder::new(session);
+    let error = decoder
         .decode_seed(PanicSeed, br#""ab""#)
         .expect_err("string limit must fail");
     assert!(matches!(error, JsonDecodeError::Budget(_)));
-    assert_eq!(session.value_budget().used_nodes(), Some(0));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 }
 
 #[test]
@@ -331,12 +336,13 @@ fn decoder_supports_usize_quantities() {
                 .build(),
         )
         .build();
-    let mut session = JsonDecodeSession::<JsonResource, usize>::owned(limits);
+    let session = JsonDecodeSession::<JsonResource, usize>::owned(limits);
+    let mut decoder = JsonDecoder::new(session);
 
-    let value: serde_json::Value = JsonDecoder::new(session)
+    let value: serde_json::Value = decoder
         .decode(br#"[1,"x"]"#)
         .expect("usize JSON budgets must admit a fitting document");
-    assert_eq!(session.value_budget().used_nodes(), Some(3));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(3));
     assert!(value.is_array());
 }
 
