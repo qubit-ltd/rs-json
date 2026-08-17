@@ -11,6 +11,7 @@ use qubit_json::decode::DiagnosticPolicy;
 use qubit_json::decode::MarkdownFenceClosing;
 use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodeOptionsBuilder;
 
 /// Verifies that default enables all mvp rules.
 ///
@@ -34,6 +35,10 @@ fn test_default_enables_all_mvp_rules() {
     assert_eq!(options.max_input_bytes(), None);
     assert_eq!(options.max_normalized_bytes(), None);
     assert_eq!(options.diagnostic_policy(), DiagnosticPolicy::Redacted,);
+    assert_eq!(
+        NormalizingJsonDecodeOptionsBuilder::default().build(),
+        options,
+    );
 }
 
 /// Verifies that lenient matches default options.
