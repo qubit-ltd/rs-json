@@ -10,6 +10,7 @@
 use std::marker::PhantomData;
 
 use qubit_budget::ResourceQuantity;
+use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use serde::Deserialize;
@@ -20,169 +21,136 @@ use serde_json::Deserializer as JsonDeserializer;
 use super::JsonDecodeError;
 use crate::lexical::JsonLexicalScanner;
 
-/// Strictly decodes complete JSON documents.
-///
-/// A mutable [`JsonDecodeSession`] can be supplied to each operation, so a
-/// default decoder can be reused with multiple sessions and input documents.
-/// [`Self::new`] also remains available for code that prefers a session-bound
-/// decoder and the one-argument legacy-style methods.
+/// Strictly decodes complete JSON documents while owning cumulative accounting
+/// state.
 #[derive(Debug)]
-pub struct JsonDecoder<'session, 'budget, R = JsonResource, Q = usize>
+pub struct JsonDecoder<'budget, R = JsonResource, Q = usize>
 where
     Q: ResourceQuantity,
 {
-    session: Option<&'session mut JsonDecodeSession<'budget, R, Q>>,
+    session: JsonDecodeSession<'budget, R, Q>,
 }
 
-impl<'session, 'budget, R, Q> Default for JsonDecoder<'session, 'budget, R, Q>
-where
-    Q: ResourceQuantity,
-{
+impl Default for JsonDecoder<'static, JsonResource, usize> {
     fn default() -> Self {
-        Self { session: None }
+        Self::new(JsonDecodeSession::owned(JsonDecodeLimits::default()))
     }
 }
 
-impl<'session, 'budget, R, Q> JsonDecoder<'session, 'budget, R, Q>
+impl<'budget, R, Q> JsonDecoder<'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
 {
-    /// Creates a decoder bound to a reusable session.
+    /// Creates a decoder that owns a reusable cumulative session.
+    ///
+    /// # Parameters
+    ///
+    /// * `session` - Session whose budgets receive all input and value charges.
+    ///
+    /// # Returns
+    ///
+    /// A decoder that retains `session` until [`Self::into_session`] is called
+    /// or the decoder is dropped.
     #[must_use]
-    pub const fn new(
-        session: &'session mut JsonDecodeSession<'budget, R, Q>,
-    ) -> Self {
-        Self {
-            session: Some(session),
-        }
+    pub const fn new(session: JsonDecodeSession<'budget, R, Q>) -> Self {
+        Self { session }
     }
 
-    /// Decodes one complete UTF-8 JSON string.
+    /// Returns the cumulative session for read-only inspection.
+    #[must_use]
+    pub const fn session(&self) -> &JsonDecodeSession<'budget, R, Q> {
+        &self.session
+    }
+
+    /// Returns mutable access to the cumulative session.
+    #[must_use]
+    pub const fn session_mut(&mut self) -> &mut JsonDecodeSession<'budget, R, Q> {
+        &mut self.session
+    }
+
+    /// Returns the cumulative session and consumes the decoder.
+    #[must_use]
+    pub fn into_session(self) -> JsonDecodeSession<'budget, R, Q> {
+        self.session
+    }
+
+    /// Decodes one complete UTF-8 JSON string and accumulates its charges.
     pub fn decode_str<'de, T>(
-        &self,
+        &mut self,
         input: &'de str,
-        session: &mut JsonDecodeSession<'_, R, Q>,
     ) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
         R: Clone,
         Q: ResourceQuantity,
     {
-        self.decode_seed_str(TypedSeed::new(), input, session)
+        self.decode_seed_str(TypedSeed::new(), input)
     }
 
-    /// Decodes one complete UTF-8 JSON byte slice.
+    /// Decodes one complete UTF-8 JSON byte slice and accumulates its charges.
     pub fn decode_utf8<'de, T>(
-        &self,
+        &mut self,
         input: &'de [u8],
-        session: &mut JsonDecodeSession<'_, R, Q>,
     ) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
         R: Clone,
         Q: ResourceQuantity,
     {
-        self.decode_seed_utf8(TypedSeed::new(), input, session)
+        self.decode_seed_utf8(TypedSeed::new(), input)
     }
 
     /// Decodes a string through a caller-provided Serde seed.
     pub fn decode_seed_str<'de, S>(
-        &self,
+        &mut self,
         seed: S,
         input: &'de str,
-        session: &mut JsonDecodeSession<'_, R, Q>,
     ) -> Result<S::Value, JsonDecodeError<R, Q>>
     where
         S: DeserializeSeed<'de>,
         R: Clone,
         Q: ResourceQuantity,
     {
-        self.decode_seed_utf8(seed, input.as_bytes(), session)
+        self.decode_seed_utf8(seed, input.as_bytes())
     }
 
     /// Decodes a UTF-8 byte slice through a caller-provided Serde seed.
     pub fn decode_seed_utf8<'de, S>(
-        &self,
+        &mut self,
         seed: S,
         input: &'de [u8],
-        session: &mut JsonDecodeSession<'_, R, Q>,
     ) -> Result<S::Value, JsonDecodeError<R, Q>>
     where
         S: DeserializeSeed<'de>,
         R: Clone,
         Q: ResourceQuantity,
     {
-        decode_seed_impl(seed, input, session)
-    }
-
-    /// Decodes one complete JSON byte slice using the session supplied to
-    /// [`Self::new`].
-    pub fn decode<'de, T>(
-        &mut self,
-        input: &'de [u8],
-    ) -> Result<T, JsonDecodeError<R, Q>>
-    where
-        T: Deserialize<'de>,
-    {
-        let session = self
-            .session
-            .as_deref_mut()
-            .expect("JsonDecoder::decode requires a decoder created with new");
-        decode_seed_impl(TypedSeed::new(), input, session)
-    }
-
-    /// Decodes one complete JSON byte slice through a caller-provided seed.
-    pub fn decode_seed<'de, S>(
-        &mut self,
-        seed: S,
-        input: &'de [u8],
-    ) -> Result<S::Value, JsonDecodeError<R, Q>>
-    where
-        S: DeserializeSeed<'de>,
-    {
-        let session = self.session.as_deref_mut().expect(
-            "JsonDecoder::decode_seed requires a decoder created with new",
-        );
-        decode_seed_impl(seed, input, session)
+        decode_seed_impl(seed, input, &mut self.session)
     }
 
     /// Validates and accounts for one complete UTF-8 JSON string.
     pub fn validate_str(
-        &self,
+        &mut self,
         input: &str,
-        session: &mut JsonDecodeSession<'_, R, Q>,
     ) -> Result<(), JsonDecodeError<R, Q>>
     where
         R: Clone,
         Q: ResourceQuantity,
     {
-        self.validate_utf8(input.as_bytes(), session)
+        self.validate_utf8(input.as_bytes())
     }
 
     /// Validates and accounts for one complete UTF-8 JSON byte slice.
     pub fn validate_utf8(
-        &self,
+        &mut self,
         input: &[u8],
-        session: &mut JsonDecodeSession<'_, R, Q>,
     ) -> Result<(), JsonDecodeError<R, Q>>
     where
         R: Clone,
         Q: ResourceQuantity,
     {
-        validate_impl(input, session)
-    }
-
-    /// Validates one complete JSON byte slice using the session supplied to
-    /// [`Self::new`].
-    pub fn validate(
-        &mut self,
-        input: &[u8],
-    ) -> Result<(), JsonDecodeError<R, Q>> {
-        let session = self.session.as_deref_mut().expect(
-            "JsonDecoder::validate requires a decoder created with new",
-        );
-        validate_impl(input, session)
+        validate_impl(input, &mut self.session)
     }
 }
 
