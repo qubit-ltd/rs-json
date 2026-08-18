@@ -28,6 +28,9 @@ where
 
     /// Accounting shared with the online serializer checks.
     accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
+
+    /// Whether writes must check an output-byte budget.
+    has_output_budget: bool,
 }
 
 impl<'a, R, Q> JsonOutputBuffer<'a, R, Q>
@@ -44,12 +47,13 @@ where
     ///
     /// An empty writer with no recorded violation.
     #[inline]
-    pub(in crate::encode) const fn new(
+    pub(in crate::encode) fn new(
         accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
     ) -> Self {
         Self {
             bytes: Vec::new(),
             accounting,
+            has_output_budget: accounting.borrow().has_output_budget(),
         }
     }
 
@@ -101,14 +105,15 @@ where
                 return Err(io::Error::other("JSON output length overflow"));
             }
         };
-        let accounting = self.accounting.borrow();
-        if let Err(error) = accounting.check_available(next) {
-            drop(accounting);
-            let mut accounting = self.accounting.borrow_mut();
-            accounting.record_violation(error);
-            return Err(io::Error::other("JSON output budget exceeded"));
+        if self.has_output_budget {
+            let accounting = self.accounting.borrow();
+            if let Err(error) = accounting.check_available(next) {
+                drop(accounting);
+                let mut accounting = self.accounting.borrow_mut();
+                accounting.record_violation(error);
+                return Err(io::Error::other("JSON output budget exceeded"));
+            }
         }
-        drop(accounting);
         self.bytes.extend_from_slice(input);
         Ok(input.len())
     }

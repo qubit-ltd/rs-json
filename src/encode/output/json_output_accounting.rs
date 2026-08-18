@@ -44,6 +44,13 @@ where
         }
     }
 
+    /// Reports whether this operation enforces an output-byte limit.
+    #[must_use]
+    #[inline(always)]
+    pub(in crate::encode) const fn has_output_budget(&self) -> bool {
+        self.output.is_some()
+    }
+
     /// Checks an output lower bound without consuming capacity.
     pub(in crate::encode) fn check_available(
         &self,
