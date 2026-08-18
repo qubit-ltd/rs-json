@@ -186,7 +186,6 @@ impl JsonNormalizer {
     /// # Parameters
     ///
     /// * `input` - Text after non-allocating normalization steps.
-    /// * `input` - Text after non-allocating normalization steps.
     ///
     /// # Returns
     ///

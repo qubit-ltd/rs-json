@@ -24,10 +24,10 @@ serde_json = "1.0"
 
 | 领域 | 适用场景 | 明确边界 |
 | --- | --- | --- |
-| `lenient` | Markdown 围栏和少量已定义的文本噪声 | 不猜测缺失的引号、逗号或括号 |
-| `text` | 严格 JSON 字节流 | 使用调用方持有 session 的有状态 decoder/encoder 对象 |
+| `decode` | 规范化文本输入和严格 JSON 字节流 | 不猜测缺失的引号、逗号或括号 |
+| `encode` | 严格 JSON 输出 | 使用调用方持有 session 的有状态 encoder 对象 |
 | `value` | 由 Serde 事件构造 `serde_json::Value` | 对解码后的 value transaction 记账 |
-| `tree` | 迭代读取或修改已物化的 value | 可变处理是增量式的，不提供事务回滚 |
+| `value::traverse` | 迭代读取或修改已物化的 value | 可变处理是增量式的，不提供事务回滚 |
 
 `qubit-budget` 负责限制、资源标识、预算和 session；`qubit-json` 负责 JSON 规范化、词法
 校验、文本编解码、value 构造和遍历。
@@ -95,7 +95,7 @@ assert_eq!(bytes, br#"{"ok":true}"#);
 2. `decode::JsonDecodeError`：严格预算、语法或强类型解码失败。
 3. `encode::JsonEncodeError`：严格预算、原始 JSON、序列化或 I/O 失败。
 4. `decode::JsonSyntaxError`：稳定的语法原因和位置元数据。
-5. `tree::JsonTreeProcessError`：遍历预算或 visitor 失败。
+5. `value::traverse::JsonTreeProcessError`：遍历预算或 visitor 失败。
 
 带预算操作使用 transaction：解码后 value 或输出消耗在文档定义的成功边界提交。decode
 session 中的输入消耗会在失败尝试后刻意保留。
