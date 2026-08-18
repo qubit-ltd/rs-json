@@ -31,14 +31,8 @@ impl Serialize for InvalidRawValue {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(
-            concat!("$", "serde_json", ":", ":private::RawValue"),
-            1,
-        )?;
-        state.serialize_field(
-            concat!("$", "serde_json", ":", ":private::RawValue"),
-            "[",
-        )?;
+        let mut state = serializer.serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
+        state.serialize_field(concat!("$", "serde_json", ":", ":private::RawValue"), "[")?;
         state.end()
     }
 }
@@ -46,14 +40,9 @@ impl Serialize for InvalidRawValue {
 /// Preserves serde_json's private number and raw-value encodings.
 #[test]
 fn test_encoder_preserves_private_number_and_raw_value_protocol() {
-    let number: Number = "123456789012345678901234567890"
-        .parse()
-        .expect("valid number");
-    let raw = RawValue::from_string("{\"ok\":true}".to_owned())
-        .expect("valid raw JSON");
-    let session = JsonEncodeSession::owned(
-        JsonEncodeLimits::<JsonResource, usize>::builder().build(),
-    );
+    let number: Number = "123456789012345678901234567890".parse().expect("valid number");
+    let raw = RawValue::from_string("{\"ok\":true}".to_owned()).expect("valid raw JSON");
+    let session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let bytes = JsonEncoder::new(session)
         .to_vec(&(&number, &raw))
         .expect("private serde_json shapes encode");
@@ -63,9 +52,7 @@ fn test_encoder_preserves_private_number_and_raw_value_protocol() {
 /// Reports invalid private raw text as a syntax-specific encode error.
 #[test]
 fn test_encoder_reports_invalid_private_raw_value_as_syntax_error() {
-    let session = JsonEncodeSession::owned(
-        JsonEncodeLimits::<JsonResource, usize>::builder().build(),
-    );
+    let session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let error = JsonEncoder::new(session)
         .to_vec(&InvalidRawValue)
         .expect_err("invalid private raw JSON must fail");

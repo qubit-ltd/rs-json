@@ -35,14 +35,8 @@ fn run_with_session<'a, T>(
 where
     T: DeserializeOwned,
 {
-    let owned_session = std::mem::replace(
-        session,
-        JsonDecodeSession::owned(JsonDecodeLimits::new()),
-    );
-    let mut stateful = NormalizingJsonDecoder::with_session(
-        decoder.options().clone(),
-        owned_session,
-    );
+    let owned_session = std::mem::replace(session, JsonDecodeSession::owned(JsonDecodeLimits::new()));
+    let mut stateful = NormalizingJsonDecoder::with_session(decoder.options().clone(), owned_session);
     let result = stateful.decode_str(input);
     *session = stateful.into_session();
     result
@@ -59,19 +53,15 @@ fn test_budget_error_exposes_measured_rejection_details() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
-                .string_bytes_limit(ResourceLimit::new(
-                    JsonResource::StringBytes,
-                    0,
-                ))
+                .string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 0))
                 .build(),
         )
         .build();
     let mut session = JsonDecodeSession::owned(limits);
 
     let decoder = NormalizingJsonDecoder::default();
-    let error =
-        run_with_session::<Value>(&decoder, r#"{"k":"v"}"#, &mut session)
-            .expect_err("string budget must reject the normalized value");
+    let error = run_with_session::<Value>(&decoder, r#"{"k":"v"}"#, &mut session)
+        .expect_err("string budget must reject the normalized value");
 
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Budget);
     assert_eq!(error.stage(), NormalizingJsonDecodeStage::Admission);
@@ -132,13 +122,10 @@ fn test_error_exposes_top_level_mismatch_context() {
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_location()
- {
+fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_location() {
     let error = NormalizingJsonDecoder::default()
         .decode_value("  {\n")
-        .expect_err(
-            "incomplete JSON should fail after whitespace normalization",
-        );
+        .expect_err("incomplete JSON should fail after whitespace normalization");
 
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
     assert_eq!(error.stage(), NormalizingJsonDecodeStage::Parse);
@@ -146,10 +133,7 @@ fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_locatio
     assert_eq!(error.normalized_input_bytes(), Some(1));
     assert_eq!(error.normalized_line(), Some(1));
     assert_eq!(error.normalized_column(), Some(1));
-    assert_eq!(
-        error.to_string(),
-        "Failed to parse JSON at normalized line 1 column 1"
-    );
+    assert_eq!(error.to_string(), "Failed to parse JSON at normalized line 1 column 1");
     assert!(std::error::Error::source(&error).is_none());
 }
 
@@ -168,8 +152,7 @@ fn test_error_source_for_invalid_json_preserves_serde_error() {
     let error = decoder
         .decode_value("{")
         .expect_err("invalid JSON should preserve the parser source error");
-    let source = std::error::Error::source(&error)
-        .expect("invalid JSON errors should expose the serde_json source");
+    let source = std::error::Error::source(&error).expect("invalid JSON errors should expose the serde_json source");
     assert!(source.to_string().contains("EOF"));
 }
 
@@ -215,8 +198,7 @@ fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
     assert_eq!(error.privacy_policy(), DiagnosticPolicy::Detailed);
     assert!(error.to_string().contains(SECRET));
     assert!(format!("{error:?}").contains(SECRET));
-    let source = std::error::Error::source(&error)
-        .expect("detailed errors should retain the serde_json source");
+    let source = std::error::Error::source(&error).expect("detailed errors should retain the serde_json source");
     assert!(source.to_string().contains(SECRET));
 }
 
@@ -289,8 +271,7 @@ fn test_invalid_utf8_detailed_error_retains_utf8_source() {
         .expect_err("invalid UTF-8 must fail");
     assert_eq!(error.utf8_valid_up_to(), Some(0));
     assert_eq!(error.utf8_error_len(), Some(1));
-    let source = std::error::Error::source(&error)
-        .expect("detailed errors must retain Utf8Error");
+    let source = std::error::Error::source(&error).expect("detailed errors must retain Utf8Error");
     assert!(source.downcast_ref::<std::str::Utf8Error>().is_some());
 }
 

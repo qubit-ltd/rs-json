@@ -26,19 +26,11 @@ struct FailingVisitor;
 impl JsonTreeVisitor for FailingVisitor {
     type Error = &'static str;
 
-    fn enter(
-        &mut self,
-        _value: &Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn enter(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Err("stop")
     }
 
-    fn leave(
-        &mut self,
-        _value: &Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn leave(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -46,27 +38,15 @@ impl JsonTreeVisitor for FailingVisitor {
 impl JsonTreeVisitor for RecordingVisitor {
     type Error = std::convert::Infallible;
 
-    fn enter(
-        &mut self,
-        value: &Value,
-        context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
-        self.events.push(format!(
-            "enter:{:?}:{}:{value}",
-            context.location, context.depth
-        ));
+    fn enter(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+        self.events
+            .push(format!("enter:{:?}:{}:{value}", context.location, context.depth));
         Ok(())
     }
 
-    fn leave(
-        &mut self,
-        value: &Value,
-        context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
-        self.events.push(format!(
-            "leave:{:?}:{}:{value}",
-            context.location, context.depth
-        ));
+    fn leave(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+        self.events
+            .push(format!("leave:{:?}:{}:{value}", context.location, context.depth));
         Ok(())
     }
 }
@@ -75,9 +55,7 @@ impl JsonTreeVisitor for RecordingVisitor {
 #[test]
 fn test_process_visits_depth_first_with_root_and_key_locations() {
     let value = json!({"a": [true]});
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
-        .build()
-        .budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
     let mut transaction = budget.transaction();
     let mut visitor = RecordingVisitor { events: Vec::new() };
 

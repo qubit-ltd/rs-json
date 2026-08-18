@@ -51,8 +51,7 @@ impl Serialize for ValueThenOutputViolation {
 /// Verifies output-budget errors take precedence over masked Serde errors.
 #[test]
 fn test_json_output_buffer_preserves_output_budget_error_precedence() {
-    let mut session =
-        JsonTestLimits::new().max_output_bytes(2).encode_session();
+    let mut session = JsonTestLimits::new().max_output_bytes(2).encode_session();
 
     let error = encode(&MaskedString("hello"), &mut session)
         .expect_err("the output writer must retain its original budget error");
@@ -72,12 +71,10 @@ fn test_json_output_buffer_preserves_output_budget_error_precedence() {
 /// Verifies value-budget errors take precedence over masked Serde errors.
 #[test]
 fn test_json_encoder_preserves_value_budget_error_precedence() {
-    let mut session =
-        JsonTestLimits::new().max_string_bytes(2).encode_session();
+    let mut session = JsonTestLimits::new().max_string_bytes(2).encode_session();
 
-    let error = encode(&MaskedString("hello"), &mut session).expect_err(
-        "the serializer must retain its original value-budget error",
-    );
+    let error = encode(&MaskedString("hello"), &mut session)
+        .expect_err("the serializer must retain its original value-budget error");
 
     let JsonEncodeError::Budget(error) = error else {
         panic!("expected the original string budget error");

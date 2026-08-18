@@ -20,8 +20,7 @@ use serde::ser::SerializeStruct;
 use crate::text::json_encode_test_support::encode;
 
 /// Private struct name emitted by serde_json arbitrary-precision numbers.
-const JSON_NUMBER_TOKEN: &str =
-    concat!("$", "serde_json", ":", ":private::Number");
+const JSON_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
 
 /// A regular struct whose field name resembles serde_json private metadata.
 struct ForgedPrivateKey;
@@ -55,10 +54,7 @@ impl Serialize for CollectedArbitraryPrecisionNumber {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct(JSON_NUMBER_TOKEN, 1)?;
-        state.serialize_field(
-            JSON_NUMBER_TOKEN,
-            &CollectedNumberPayload(self),
-        )?;
+        state.serialize_field(JSON_NUMBER_TOKEN, &CollectedNumberPayload(self))?;
         state.end()
     }
 }
@@ -79,9 +75,7 @@ impl Serialize for CollectedNumberPayload<'_> {
 /// Verifies scalar serialization uses the wrapped JSON serializer.
 #[test]
 fn test_json_encode_serializer_serializes_scalar_values() {
-    let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::<JsonResource, usize>::builder().build(),
-    );
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
 
     assert_eq!(
         encode(&true, &mut session).expect("scalar JSON should serialize"),
@@ -97,8 +91,8 @@ fn test_json_encode_serializer_rejects_forged_private_key_as_regular_map() {
         .build();
     let mut session = JsonEncodeSession::owned(limits);
 
-    let error = encode(&ForgedPrivateKey, &mut session)
-        .expect_err("the ordinary struct field must consume a map entry");
+    let error =
+        encode(&ForgedPrivateKey, &mut session).expect_err("the ordinary struct field must consume a map entry");
     let JsonEncodeError::Budget(error) = error else {
         panic!("expected a budget error, got {error:?}");
     };
@@ -126,9 +120,7 @@ fn test_json_encode_serializer_classifies_collected_private_number() {
         .build();
     let mut session = JsonEncodeSession::owned(limits);
 
-    let output = encode(&number, &mut session).expect(
-        "private collected number should consume only the number budget",
-    );
+    let output = encode(&number, &mut session).expect("private collected number should consume only the number budget");
 
     assert_eq!(output, NUMBER_TEXT.as_bytes());
 }

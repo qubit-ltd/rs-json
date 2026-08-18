@@ -15,9 +15,7 @@ use qubit_json::decode::JsonDecoder;
 /// Verifies lexical scanning accepts one complete JSON document.
 #[test]
 fn test_lexical_scanner_admits_complete_document() {
-    let session = JsonDecodeSession::owned(
-        JsonDecodeLimits::<JsonResource, usize>::builder().build(),
-    );
+    let session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build());
 
     JsonDecoder::new(session)
         .validate_utf8(br#"{"items":[true,null]}"#)

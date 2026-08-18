@@ -35,9 +35,9 @@ fn test_decode_value_preserves_existing_escapes() {
 #[test]
 fn test_decode_value_escapes_control_chars_in_strings() {
     let mut decoder = NormalizingJsonDecoder::default();
-    let value = decoder.decode_value("{\"text\":\"a\nb\"}").expect(
-        "default decoder should escape control characters inside strings",
-    );
+    let value = decoder
+        .decode_value("{\"text\":\"a\nb\"}")
+        .expect("default decoder should escape control characters inside strings");
     assert_eq!(value, json!({"text": "a\nb"}));
 }
 
@@ -81,20 +81,18 @@ fn test_decode_value_can_disable_control_char_escaping() {
 #[test]
 fn test_decode_value_covers_all_supported_control_char_escapes() {
     let control_chars = [
-        '\u{0000}', '\u{0001}', '\u{0002}', '\u{0003}', '\u{0004}', '\u{0005}',
-        '\u{0006}', '\u{0007}', '\u{0008}', '\u{0009}', '\u{000a}', '\u{000b}',
-        '\u{000c}', '\u{000d}', '\u{000e}', '\u{000f}', '\u{0010}', '\u{0011}',
-        '\u{0012}', '\u{0013}', '\u{0014}', '\u{0015}', '\u{0016}', '\u{0017}',
-        '\u{0018}', '\u{0019}', '\u{001a}', '\u{001b}', '\u{001c}', '\u{001d}',
-        '\u{001e}', '\u{001f}',
+        '\u{0000}', '\u{0001}', '\u{0002}', '\u{0003}', '\u{0004}', '\u{0005}', '\u{0006}', '\u{0007}', '\u{0008}',
+        '\u{0009}', '\u{000a}', '\u{000b}', '\u{000c}', '\u{000d}', '\u{000e}', '\u{000f}', '\u{0010}', '\u{0011}',
+        '\u{0012}', '\u{0013}', '\u{0014}', '\u{0015}', '\u{0016}', '\u{0017}', '\u{0018}', '\u{0019}', '\u{001a}',
+        '\u{001b}', '\u{001c}', '\u{001d}', '\u{001e}', '\u{001f}',
     ];
     let control_text: String = control_chars.into_iter().collect();
     let json_input = format!("{{\"text\":\"{control_text}\"}}");
 
     let mut decoder = NormalizingJsonDecoder::default();
-    let value = decoder.decode_value(&json_input).expect(
-        "all supported ASCII control characters should be escaped successfully",
-    );
+    let value = decoder
+        .decode_value(&json_input)
+        .expect("all supported ASCII control characters should be escaped successfully");
     assert_eq!(value, json!({"text": control_text}));
 }
 
@@ -111,15 +109,13 @@ fn test_decode_value_escapes_each_control_char_at_each_chunk_offset() {
         for control_code in 0_u8..=0x1f {
             let control = char::from(control_code);
             let prefix = "a".repeat(prefix_len);
-            let json_input =
-                format!("{{\"text\":\"{prefix}{control}suffix\"}}");
-            let decoded =
-                decoder.decode_value(&json_input).unwrap_or_else(|error| {
-                    panic!(
-                        "U+{control_code:04X} at payload offset {prefix_len} \
+            let json_input = format!("{{\"text\":\"{prefix}{control}suffix\"}}");
+            let decoded = decoder.decode_value(&json_input).unwrap_or_else(|error| {
+                panic!(
+                    "U+{control_code:04X} at payload offset {prefix_len} \
                      should be repaired: {error}"
-                    )
-                });
+                )
+            });
             assert_eq!(
                 decoded,
                 json!({"text": format!("{prefix}{control}suffix")}),
@@ -139,9 +135,7 @@ fn test_decode_value_escapes_each_control_char_at_each_chunk_offset() {
 fn test_decode_value_preserves_state_across_each_chunk_boundary_offset() {
     for prefix_len in 0..=24 {
         let prefix = "a".repeat(prefix_len);
-        let mut json_input = format!(
-            "\n{{\n  \"text\":\"{prefix}escaped quote: \\\"; escaped slash: \\\\; ",
-        );
+        let mut json_input = format!("\n{{\n  \"text\":\"{prefix}escaped quote: \\\"; escaped slash: \\\\; ",);
         json_input.push('\n');
         json_input.push_str("tail\"\n}\r\n");
         let expected = json!({
@@ -185,8 +179,7 @@ fn test_decode_value_preserves_state_across_each_chunk_boundary_offset() {
 fn test_decode_value_bounds_all_control_character_escapes_by_normalized_size() {
     let control_chars: String = (0_u8..=0x1f).map(char::from).collect();
     let json_input = format!("{{\"text\":\"{control_chars}\"}}");
-    let normalized_bytes =
-        "{\"text\":\"".len() + (5 * 2) + (27 * 6) + "\"}".len();
+    let normalized_bytes = "{\"text\":\"".len() + (5 * 2) + (27 * 6) + "\"}".len();
 
     let accepted = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
@@ -221,17 +214,14 @@ fn test_decode_value_escapes_control_char_after_unmatched_backslash() {
     let mut decoder = NormalizingJsonDecoder::default();
 
     for code_point in 0_u32..=0x1f {
-        let control = char::from_u32(code_point)
-            .expect("ASCII control code points should be valid chars");
+        let control = char::from_u32(code_point).expect("ASCII control code points should be valid chars");
         let mut json_input = String::from("{\"text\":\"");
         json_input.push('\\');
         json_input.push(control);
         json_input.push_str("\"}");
 
         let value = decoder.decode_value(&json_input).unwrap_or_else(|error| {
-            panic!(
-                "control U+{code_point:04X} after an unmatched backslash should be repaired: {error}"
-            )
+            panic!("control U+{code_point:04X} after an unmatched backslash should be repaired: {error}")
         });
         assert_eq!(
             value,
@@ -256,9 +246,9 @@ fn test_decode_value_repairs_equal_length_escape_at_normalized_size_limit() {
             .build(),
     );
 
-    let value = decoder.decode_value(json_input).expect(
-        "equal-length repair should still run with a normalized-size limit",
-    );
+    let value = decoder
+        .decode_value(json_input)
+        .expect("equal-length repair should still run with a normalized-size limit");
     assert_eq!(value, json!({"text": "\n"}));
 }
 
@@ -280,9 +270,7 @@ fn test_decode_value_escapes_control_chars_after_odd_and_even_backslashes() {
             json_input.push_str("\"}");
 
             let value = decoder.decode_value(&json_input).unwrap_or_else(|error| {
-                panic!(
-                    "{backslash_count} backslashes before {control:?} should be repaired: {error}"
-                )
+                panic!("{backslash_count} backslashes before {control:?} should be repaired: {error}")
             });
             let mut expected = "\\".repeat(backslash_count / 2);
             expected.push(control);

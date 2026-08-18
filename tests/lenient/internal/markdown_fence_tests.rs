@@ -142,9 +142,9 @@ fn test_decode_value_strips_tilde_code_fence() {
 #[test]
 fn test_decode_value_strips_deeply_indented_opening_fence_after_trimming() {
     let mut decoder = NormalizingJsonDecoder::default();
-    let value = decoder.decode_value("    ```json\n{\"a\":1}\n```").expect(
-        "default trimming should remove opening-fence indentation first",
-    );
+    let value = decoder
+        .decode_value("    ```json\n{\"a\":1}\n```")
+        .expect("default trimming should remove opening-fence indentation first");
     assert_eq!(value, json!({"a": 1}));
 }
 
@@ -156,14 +156,11 @@ fn test_decode_value_strips_deeply_indented_opening_fence_after_trimming() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_indented_code_fence_when_trimming_disabled() {
-    let mut decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .trim_whitespace(false)
-            .build(),
-    );
-    let value = decoder.decode_value("  ```json\n{\"a\":1}\n  ```").expect(
-        "decoder should accept up to three leading spaces before a fence",
-    );
+    let mut decoder =
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::builder().trim_whitespace(false).build());
+    let value = decoder
+        .decode_value("  ```json\n{\"a\":1}\n  ```")
+        .expect("decoder should accept up to three leading spaces before a fence");
     assert_eq!(value, json!({"a": 1}));
 }
 
@@ -174,13 +171,9 @@ fn test_decode_value_strips_indented_code_fence_when_trimming_disabled() {
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_decode_value_rejects_deeply_indented_code_fence_when_trimming_disabled()
-{
-    let mut decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .trim_whitespace(false)
-            .build(),
-    );
+fn test_decode_value_rejects_deeply_indented_code_fence_when_trimming_disabled() {
+    let mut decoder =
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::builder().trim_whitespace(false).build());
     let error = decoder
         .decode_value("    ```json\n{\"a\":1}\n    ```")
         .expect_err("deeply indented fences should remain ordinary text");
@@ -209,9 +202,9 @@ fn test_decode_value_strips_code_fence_with_more_than_three_backticks() {
 #[test]
 fn test_decode_value_strips_code_fence_with_longer_closing_fence() {
     let mut decoder = NormalizingJsonDecoder::default();
-    let value = decoder.decode_value("```json\n{\"a\":1}\n````").expect(
-        "decoder should accept a closing fence longer than the opening fence",
-    );
+    let value = decoder
+        .decode_value("```json\n{\"a\":1}\n````")
+        .expect("decoder should accept a closing fence longer than the opening fence");
     assert_eq!(value, json!({"a": 1}));
 }
 
@@ -236,14 +229,13 @@ fn test_decode_value_strips_code_fence_with_indented_closing_fence() {
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_policy()
- {
+fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_policy() {
     let mut decoder = NormalizingJsonDecoder::default();
     for closing_line in ["    ```", "\t```", "\u{00a0}```"] {
         let input = format!("```json\n{{\"a\":1}}\n{closing_line}");
-        let error = decoder.decode_value(&input).expect_err(
-            "invalid closing-fence whitespace must remain in the JSON body",
-        );
+        let error = decoder
+            .decode_value(&input)
+            .expect_err("invalid closing-fence whitespace must remain in the JSON body");
         assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
     }
 }
@@ -255,8 +247,7 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_pol
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_policy()
- {
+fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_policy() {
     let mut decoder = NormalizingJsonDecoder::new(
         NormalizingJsonDecodeOptions::builder()
             .markdown_fence_policy(MarkdownFencePolicy::Any {
@@ -266,9 +257,9 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_pol
     );
     for closing_line in ["    ```", "\t```", "\u{00a0}```"] {
         let input = format!("```json\n{{\"a\":1}}\n{closing_line}");
-        let error = decoder.decode_value(&input).expect_err(
-            "required mode must reject invalid closing-fence whitespace",
-        );
+        let error = decoder
+            .decode_value(&input)
+            .expect_err("required mode must reject invalid closing-fence whitespace");
         assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
     }
 }
@@ -287,9 +278,9 @@ fn test_decode_value_rejects_closing_fence_shorter_than_opening_fence() {
             })
             .build(),
     );
-    let error = decoder.decode_value("````json\n{\"a\":1}\n```").expect_err(
-        "closing fence shorter than the opening fence should not be stripped",
-    );
+    let error = decoder
+        .decode_value("````json\n{\"a\":1}\n```")
+        .expect_err("closing fence shorter than the opening fence should not be stripped");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
@@ -321,9 +312,9 @@ fn test_decode_value_can_require_closing_code_fence() {
             })
             .build(),
     );
-    let error = decoder.decode_value("```json\n{\"a\":1}").expect_err(
-        "opening fence without closing fence should be rejected when strict mode is enabled",
-    );
+    let error = decoder
+        .decode_value("```json\n{\"a\":1}")
+        .expect_err("opening fence without closing fence should be rejected when strict mode is enabled");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
@@ -341,9 +332,9 @@ fn test_decode_value_allows_strict_closing_code_fence_when_present() {
             })
             .build(),
     );
-    let value = decoder.decode_value("```json\n{\"a\":1}\n```").expect(
-        "strict closing mode should still strip a properly closed fence",
-    );
+    let value = decoder
+        .decode_value("```json\n{\"a\":1}\n```")
+        .expect("strict closing mode should still strip a properly closed fence");
     assert_eq!(value, json!({"a": 1}));
 }
 
@@ -354,13 +345,10 @@ fn test_decode_value_allows_strict_closing_code_fence_when_present() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_can_restrict_code_fence_to_json_language_tags() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
+    let mut decoder = NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
     let error = decoder
         .decode_value("```python\n{\"a\":1}\n```")
-        .expect_err(
-            "non-JSON code fence should not be stripped in json-only mode",
-        );
+        .expect_err("non-JSON code fence should not be stripped in json-only mode");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
@@ -371,8 +359,7 @@ fn test_decode_value_can_restrict_code_fence_to_json_language_tags() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_json_only_mode_accepts_longer_json_code_fence() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
+    let mut decoder = NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
     let value = decoder
         .decode_value("````JSON\n{\"a\":1}\n````")
         .expect("json-only mode should accept longer JSON fenced blocks");
@@ -386,8 +373,7 @@ fn test_decode_value_json_only_mode_accepts_longer_json_code_fence() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_json_only_mode_accepts_jsonc_code_fence() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
+    let mut decoder = NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
     let value = decoder
         .decode_value("```jsonc\n{\"a\":1}\n```")
         .expect("json-only mode should accept jsonc fenced blocks");
@@ -401,11 +387,10 @@ fn test_decode_value_json_only_mode_accepts_jsonc_code_fence() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_json_only_mode_accepts_empty_code_fence_tag() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
-    let value = decoder.decode_value("```\n{\"a\":1}\n```").expect(
-        "json-only mode should accept fenced blocks without a language tag",
-    );
+    let mut decoder = NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
+    let value = decoder
+        .decode_value("```\n{\"a\":1}\n```")
+        .expect("json-only mode should accept fenced blocks without a language tag");
     assert_eq!(value, json!({"a": 1}));
 }
 
@@ -416,13 +401,10 @@ fn test_decode_value_json_only_mode_accepts_empty_code_fence_tag() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_json_only_mode_accepts_json_info_string() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
+    let mut decoder = NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
     let value = decoder
         .decode_value("```json title=\"sample\"\n{\"a\":1}\n```")
-        .expect(
-            "json-only mode should accept JSON fenced blocks with info strings",
-        );
+        .expect("json-only mode should accept JSON fenced blocks with info strings");
     assert_eq!(value, json!({"a": 1}));
 }
 
@@ -434,8 +416,7 @@ fn test_decode_value_json_only_mode_accepts_json_info_string() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_json_only_mode_rejects_non_json_info_string_first_token() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
+    let mut decoder = NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::lenient());
     let error = decoder
         .decode_value("```python json\n{\"a\":1}\n```")
         .expect_err("json-only mode should use the first info-string token");
@@ -451,9 +432,9 @@ fn test_decode_value_json_only_mode_rejects_non_json_info_string_first_token() {
 #[test]
 fn test_decode_value_does_not_accept_inline_closing_ticks_as_fence_end() {
     let mut decoder = NormalizingJsonDecoder::default();
-    let error = decoder.decode_value("```json\n{\"a\":1}```").expect_err(
-        "inline trailing ticks are not treated as a valid closing fence",
-    );
+    let error = decoder
+        .decode_value("```json\n{\"a\":1}```")
+        .expect_err("inline trailing ticks are not treated as a valid closing fence");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
@@ -465,11 +446,8 @@ fn test_decode_value_does_not_accept_inline_closing_ticks_as_fence_end() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_invalid_json_for_code_fence_without_newline() {
-    let mut decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .trim_whitespace(false)
-            .build(),
-    );
+    let mut decoder =
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::builder().trim_whitespace(false).build());
     let error = decoder
         .decode_value("```json")
         .expect_err("text without a fence body newline should not be stripped");
@@ -484,9 +462,9 @@ fn test_decode_value_reports_invalid_json_for_code_fence_without_newline() {
 #[test]
 fn test_decode_value_reports_empty_input_for_empty_code_fence_body() {
     let mut decoder = NormalizingJsonDecoder::default();
-    let error = decoder.decode_value("```json\n```").expect_err(
-        "empty fenced body should become empty input after normalization",
-    );
+    let error = decoder
+        .decode_value("```json\n```")
+        .expect_err("empty fenced body should become empty input after normalization");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
     assert_eq!(error.normalized_input_bytes(), Some(0));
 }
@@ -517,8 +495,8 @@ fn test_decode_value_can_disable_code_fence_stripping() {
 #[test]
 fn test_decode_value_handles_uppercase_code_fence_language_tag() {
     let mut decoder = NormalizingJsonDecoder::default();
-    let value = decoder.decode_value("```JSON\n{\"a\":1}\n```").expect(
-        "code fence stripping should not depend on the language tag case",
-    );
+    let value = decoder
+        .decode_value("```JSON\n{\"a\":1}\n```")
+        .expect("code fence stripping should not depend on the language tag case");
     assert_eq!(value, json!({"a": 1}));
 }

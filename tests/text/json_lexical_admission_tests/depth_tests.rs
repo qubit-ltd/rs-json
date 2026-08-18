@@ -22,16 +22,13 @@ use serde_json::Value;
 /// Verifies that nested values use root-inclusive lexical depth.
 #[test]
 fn test_json_lexical_preflight_charges_nested_depth() {
-    let limits =
-        JsonDecodeLimits::<JsonResource, usize>::builder()
-            .value_limits(
-                JsonValueLimits::<JsonResource, usize>::builder()
-                    .structure_limits(StructureLimits::builder().depth_limit(
-                        ResourceLimit::new(JsonResource::Depth, 1),
-                    ))
-                    .build(),
-            )
-            .build();
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .value_limits(
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .structure_limits(StructureLimits::builder().depth_limit(ResourceLimit::new(JsonResource::Depth, 1)))
+                .build(),
+        )
+        .build();
     let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<Value>(b"[null]")
