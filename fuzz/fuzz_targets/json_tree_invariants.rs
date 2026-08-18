@@ -45,8 +45,7 @@ fn make_tree(data: &[u8]) -> Value {
             "nested": [number, number % 7],
         }));
     }
-    let mut value =
-        json!({"keep": true, "secret": "TOP_SECRET", "items": items});
+    let mut value = json!({"keep": true, "secret": "TOP_SECRET", "items": items});
     for level in data.iter().take(MAX_TREE_DEPTH).rev() {
         value = json!({
             "level": level,
@@ -62,35 +61,21 @@ fn generous_budget() -> JsonValueBudget<JsonResource, usize> {
     let structure = StructureLimits::builder()
         .depth_limit(ResourceLimit::new(JsonResource::Depth, GENEROUS_LIMIT))
         .nodes_limit(ResourceLimit::new(JsonResource::Nodes, GENEROUS_LIMIT))
-        .sequence_items_limit(ResourceLimit::new(
-            JsonResource::SequenceItems,
-            GENEROUS_LIMIT,
-        ))
-        .map_entries_limit(ResourceLimit::new(
-            JsonResource::MapEntries,
-            GENEROUS_LIMIT,
-        ))
-        .key_bytes_limit(ResourceLimit::new(
-            JsonResource::KeyBytes,
-            GENEROUS_LIMIT,
-        ));
+        .sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, GENEROUS_LIMIT))
+        .map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, GENEROUS_LIMIT))
+        .key_bytes_limit(ResourceLimit::new(JsonResource::KeyBytes, GENEROUS_LIMIT));
     JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
             .structure_limits(structure)
-            .payload_bytes_limit(ResourceLimit::new(
-                JsonResource::PayloadBytes,
-                GENEROUS_LIMIT,
-            ))
+            .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, GENEROUS_LIMIT))
             .build(),
     )
 }
 
 /// Ensures a restored tree remains a valid JSON value after a traversal path.
 fn assert_serializable(value: &Value) {
-    let encoded = serde_json::to_vec(value)
-        .expect("tree restoration must preserve a serializable JSON value");
-    let decoded = serde_json::from_slice::<Value>(&encoded)
-        .expect("restored tree must remain valid JSON");
+    let encoded = serde_json::to_vec(value).expect("tree restoration must preserve a serializable JSON value");
+    let decoded = serde_json::from_slice::<Value>(&encoded).expect("restored tree must remain valid JSON");
     assert_eq!(decoded, *value);
 }
 
@@ -101,11 +86,7 @@ impl JsonTreeMutVisitor<JsonResource, usize> for SuccessVisitor {
     type Error = std::convert::Infallible;
 
     /// Removes secret fields and descends into every admitted container.
-    fn visit(
-        &mut self,
-        value: &mut Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
         if let Value::Object(entries) = value {
             entries.remove("secret");
         }
@@ -120,11 +101,7 @@ impl JsonTreeMutVisitor<JsonResource, usize> for RejectingVisitor {
     type Error = std::convert::Infallible;
 
     /// Descends through admitted nodes.
-    fn visit(
-        &mut self,
-        _value: &mut Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(&mut self, _value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
         Ok(JsonTreeControl::Descend)
     }
 
@@ -150,11 +127,7 @@ impl JsonTreeMutVisitor<JsonResource, usize> for ErrorVisitor {
     type Error = &'static str;
 
     /// Mutates objects and then fails at the selected callback.
-    fn visit(
-        &mut self,
-        value: &mut Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
         self.calls = self.calls.saturating_add(1);
         if let Value::Object(entries) = value {
             entries.remove("secret");
@@ -179,11 +152,7 @@ impl JsonTreeMutVisitor<JsonResource, usize> for PanicVisitor {
     type Error = std::convert::Infallible;
 
     /// Mutates objects and then deliberately panics at the selected callback.
-    fn visit(
-        &mut self,
-        value: &mut Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
         self.calls = self.calls.saturating_add(1);
         if let Value::Object(entries) = value {
             entries.remove("secret");
@@ -209,8 +178,7 @@ fuzz_target!(|data: &[u8]| {
     assert_serializable(&success_value);
 
     let node_limit = 1 + usize::from(data.first().copied().unwrap_or(0)) % 32;
-    let structure = StructureLimits::builder()
-        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, node_limit));
+    let structure = StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, node_limit));
     let mut rejected_value = original.clone();
     let mut rejected_budget = JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
@@ -232,13 +200,7 @@ fuzz_target!(|data: &[u8]| {
     let mut error_budget = generous_budget();
     let error = {
         let mut transaction = error_budget.transaction();
-        JsonTreeMutator::new(&mut transaction).process(
-            &mut error_value,
-            &mut ErrorVisitor {
-                stop_after,
-                calls: 0,
-            },
-        )
+        JsonTreeMutator::new(&mut transaction).process(&mut error_value, &mut ErrorVisitor { stop_after, calls: 0 })
     };
     assert!(matches!(
         error,
@@ -257,13 +219,8 @@ fuzz_target!(|data: &[u8]| {
         let mut panic_budget = generous_budget();
         let mut transaction = panic_budget.transaction();
         let panic_result = catch_unwind(AssertUnwindSafe(|| {
-            let _ = JsonTreeMutator::new(&mut transaction).process(
-                &mut recovery_value,
-                &mut PanicVisitor {
-                    panic_after,
-                    calls: 0,
-                },
-            );
+            let _ = JsonTreeMutator::new(&mut transaction)
+                .process(&mut recovery_value, &mut PanicVisitor { panic_after, calls: 0 });
         }));
         assert!(panic_result.is_err());
     }

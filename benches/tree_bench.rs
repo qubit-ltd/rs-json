@@ -37,20 +37,12 @@ impl JsonTreeVisitor for ReadVisitor {
     type Error = std::convert::Infallible;
 
     /// Accepts one node before the processor visits its descendants.
-    fn enter(
-        &mut self,
-        _value: &Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn enter(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Ok(())
     }
 
     /// Accepts one node after the processor visits its descendants.
-    fn leave(
-        &mut self,
-        _value: &Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn leave(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -58,18 +50,12 @@ impl JsonTreeVisitor for ReadVisitor {
 /// Mirrors the object-key inspection performed by redaction visitors.
 struct RedactionShapeVisitor;
 
-impl JsonTreeMutVisitor<qubit_budget::json::JsonResource, usize>
-    for RedactionShapeVisitor
-{
+impl JsonTreeMutVisitor<qubit_budget::json::JsonResource, usize> for RedactionShapeVisitor {
     type Error = std::convert::Infallible;
 
     /// Removes the synthetic secret field and descends into the remaining
     /// tree.
-    fn visit(
-        &mut self,
-        value: &mut Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
         if let Value::Object(entries) = value {
             entries.remove("secret");
         }
@@ -113,56 +99,40 @@ fn benchmark_read(c: &mut Criterion) {
 
     for size in ARRAY_SIZES {
         let value = large_array(size);
-        group.bench_with_input(
-            BenchmarkId::new("large-array", size),
-            &value,
-            |bencher, value| {
-                bencher.iter(|| {
-                    let mut budget = JsonValueBudget::new(
-                        JsonValueLimits::<JsonResource, usize>::builder()
-                            .build(),
-                    );
-                    let mut transaction = budget.transaction();
-                    let mut visitor = ReadVisitor;
-                    JsonTreeReader::new(&mut transaction)
-                        .process(black_box(value), &mut visitor)
-                        .expect("unlimited read traversal succeeds");
-                    transaction.commit();
-                    let _ = black_box(budget);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("large-array", size), &value, |bencher, value| {
+            bencher.iter(|| {
+                let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
+                let mut transaction = budget.transaction();
+                let mut visitor = ReadVisitor;
+                JsonTreeReader::new(&mut transaction)
+                    .process(black_box(value), &mut visitor)
+                    .expect("unlimited read traversal succeeds");
+                transaction.commit();
+                let _ = black_box(budget);
+            });
+        });
     }
 
     for size in OBJECT_SIZES {
         let value = large_object(size);
-        group.bench_with_input(
-            BenchmarkId::new("large-object", size),
-            &value,
-            |bencher, value| {
-                bencher.iter(|| {
-                    let mut budget = JsonValueBudget::new(
-                        JsonValueLimits::<JsonResource, usize>::builder()
-                            .build(),
-                    );
-                    let mut transaction = budget.transaction();
-                    let mut visitor = ReadVisitor;
-                    JsonTreeReader::new(&mut transaction)
-                        .process(black_box(value), &mut visitor)
-                        .expect("unlimited read traversal succeeds");
-                    transaction.commit();
-                    let _ = black_box(budget);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("large-object", size), &value, |bencher, value| {
+            bencher.iter(|| {
+                let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
+                let mut transaction = budget.transaction();
+                let mut visitor = ReadVisitor;
+                JsonTreeReader::new(&mut transaction)
+                    .process(black_box(value), &mut visitor)
+                    .expect("unlimited read traversal succeeds");
+                transaction.commit();
+                let _ = black_box(budget);
+            });
+        });
     }
 
     let value = deep_tree(DEEP_TREE_DEPTH);
     group.bench_function("deep-tree", |bencher| {
         bencher.iter(|| {
-            let mut budget = JsonValueBudget::new(
-                JsonValueLimits::<JsonResource, usize>::builder().build(),
-            );
+            let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
             let mut transaction = budget.transaction();
             let mut visitor = ReadVisitor;
             JsonTreeReader::new(&mut transaction)
@@ -184,29 +154,22 @@ fn benchmark_mut(c: &mut Criterion) {
         ("large-object", large_object(4_096)),
         ("deep-tree", deep_tree(DEEP_TREE_DEPTH)),
     ] {
-        group.bench_with_input(
-            BenchmarkId::new(name, "redaction-shape"),
-            &value,
-            |bencher, value| {
-                bencher.iter_batched(
-                    || value.clone(),
-                    |mut value| {
-                        let mut budget = JsonValueBudget::new(
-                            JsonValueLimits::<JsonResource, usize>::builder()
-                                .build(),
-                        );
-                        let mut transaction = budget.transaction();
-                        let mut visitor = RedactionShapeVisitor;
-                        JsonTreeMutator::new(&mut transaction)
-                            .process(black_box(&mut value), &mut visitor)
-                            .expect("unlimited mutable traversal succeeds");
-                        transaction.commit();
-                        black_box(value);
-                    },
-                    BatchSize::SmallInput,
-                );
-            },
-        );
+        group.bench_with_input(BenchmarkId::new(name, "redaction-shape"), &value, |bencher, value| {
+            bencher.iter_batched(
+                || value.clone(),
+                |mut value| {
+                    let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
+                    let mut transaction = budget.transaction();
+                    let mut visitor = RedactionShapeVisitor;
+                    JsonTreeMutator::new(&mut transaction)
+                        .process(black_box(&mut value), &mut visitor)
+                        .expect("unlimited mutable traversal succeeds");
+                    transaction.commit();
+                    black_box(value);
+                },
+                BatchSize::SmallInput,
+            );
+        });
     }
     group.finish();
 }

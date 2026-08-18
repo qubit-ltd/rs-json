@@ -39,22 +39,13 @@ fn assert_error_invariants(error: &JsonDecodeError, raw_input_bytes: usize) {
     assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
     assert!(std::error::Error::source(error).is_none());
     let expected_stage = match error.kind() {
-        NormalizingJsonDecodeErrorKind::InputTooLarge
-        | NormalizingJsonDecodeErrorKind::EmptyInput => {
+        NormalizingJsonDecodeErrorKind::InputTooLarge | NormalizingJsonDecodeErrorKind::EmptyInput => {
             NormalizingJsonDecodeStage::Normalize
         }
-        NormalizingJsonDecodeErrorKind::InvalidUtf8 => {
-            NormalizingJsonDecodeStage::DecodeText
-        }
-        NormalizingJsonDecodeErrorKind::InvalidJson => {
-            NormalizingJsonDecodeStage::Parse
-        }
-        NormalizingJsonDecodeErrorKind::UnexpectedTopLevel => {
-            NormalizingJsonDecodeStage::TopLevelCheck
-        }
-        NormalizingJsonDecodeErrorKind::Deserialize => {
-            NormalizingJsonDecodeStage::Deserialize
-        }
+        NormalizingJsonDecodeErrorKind::InvalidUtf8 => NormalizingJsonDecodeStage::DecodeText,
+        NormalizingJsonDecodeErrorKind::InvalidJson => NormalizingJsonDecodeStage::Parse,
+        NormalizingJsonDecodeErrorKind::UnexpectedTopLevel => NormalizingJsonDecodeStage::TopLevelCheck,
+        NormalizingJsonDecodeErrorKind::Deserialize => NormalizingJsonDecodeStage::Deserialize,
         _ => return,
     };
     assert_eq!(error.stage(), expected_stage);
@@ -68,10 +59,9 @@ fuzz_target!(|data: &[u8]| {
     let mut default_decoder = NormalizingJsonDecoder::default();
     match default_decoder.decode_utf8::<serde_json::Value>(data) {
         Ok(value) => {
-            let encoded = serde_json::to_vec(&value)
-                .expect("serde_json::Value must serialize");
-            let _: serde_json::Value = serde_json::from_slice(&encoded)
-                .expect("successful decoder output must be strict JSON");
+            let encoded = serde_json::to_vec(&value).expect("serde_json::Value must serialize");
+            let _: serde_json::Value =
+                serde_json::from_slice(&encoded).expect("successful decoder output must be strict JSON");
         }
         Err(error) => assert_error_invariants(&error, data.len()),
     }
@@ -89,8 +79,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     let strict_result =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict())
-            .decode_utf8::<serde_json::Value>(data);
+        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict()).decode_utf8::<serde_json::Value>(data);
     let serde_result = serde_json::from_slice::<serde_json::Value>(data);
     match (strict_result, serde_result) {
         (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
@@ -141,16 +130,13 @@ fuzz_target!(|data: &[u8]| {
         }
     }
 
-    if let Ok(value) = default_decoder.decode_object::<serde_json::Value>(input)
-    {
+    if let Ok(value) = default_decoder.decode_object::<serde_json::Value>(input) {
         assert!(value.is_object());
     }
-    if let Ok(values) = default_decoder.decode_array::<serde_json::Value>(input)
-    {
-        let encoded = serde_json::to_vec(&values)
-            .expect("decoded array elements must serialize");
-        let reparsed: serde_json::Value = serde_json::from_slice(&encoded)
-            .expect("decoded array must remain strict JSON");
+    if let Ok(values) = default_decoder.decode_array::<serde_json::Value>(input) {
+        let encoded = serde_json::to_vec(&values).expect("decoded array elements must serialize");
+        let reparsed: serde_json::Value =
+            serde_json::from_slice(&encoded).expect("decoded array must remain strict JSON");
         assert!(reparsed.is_array());
     }
     if input.contains("TOP_SECRET")
