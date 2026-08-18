@@ -8,6 +8,15 @@
 //! Defines mutable traversal behavior after a budget rejection.
 
 /// Selects whether a rejected JSON node aborts processing or is safely skipped.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::value::traverse::JsonTreeBudgetRejection;
+///
+/// let policy = JsonTreeBudgetRejection::SkipSubtree;
+/// assert_eq!(policy, JsonTreeBudgetRejection::SkipSubtree);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonTreeBudgetRejection {
     /// Return the original budget error to the caller.

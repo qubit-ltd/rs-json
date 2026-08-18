@@ -23,6 +23,27 @@ use super::internal::JsonValueVisitor;
 /// deserializer has decoded them. It is therefore suitable for default budget
 /// enforcement inside a type's ordinary [`serde::Deserialize`]
 /// implementation, where the original input bytes are unavailable.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity tracked by the value transaction.
+/// * `Q` - Quantity representation used for resource accounting.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_budget::json::{JsonResource, JsonValueBudget, JsonValueLimits};
+/// use qubit_json::value::JsonValueSeed;
+/// use serde::de::DeserializeSeed;
+///
+/// let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::default());
+/// let mut transaction = budget.transaction();
+/// let mut deserializer = serde_json::Deserializer::from_str(r#"{"ok":true}"#);
+/// let value = JsonValueSeed::new(&mut transaction).deserialize(&mut deserializer)?;
+/// assert_eq!(value["ok"], true);
+/// transaction.commit();
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 pub struct JsonValueSeed<'transaction, 'budget, R, Q = usize>
 where
     Q: ResourceQuantity,

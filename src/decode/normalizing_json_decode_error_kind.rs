@@ -17,16 +17,11 @@ use std::str::FromStr;
 ///
 /// # Examples
 ///
-/// ```compile_fail
-/// #![deny(unused_must_use)]
+/// ```
 /// use qubit_json::decode::NormalizingJsonDecodeErrorKind;
 ///
-/// #[must_use]
-/// fn error_kind() -> NormalizingJsonDecodeErrorKind {
-///     NormalizingJsonDecodeErrorKind::InvalidJson
-/// }
-///
-/// error_kind();
+/// let error_kind = NormalizingJsonDecodeErrorKind::InvalidJson;
+/// assert_eq!(error_kind.to_string(), "invalid_json");
 /// ```
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

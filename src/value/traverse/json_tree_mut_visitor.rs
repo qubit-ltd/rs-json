@@ -17,6 +17,31 @@ use super::JsonTreeControl;
 
 /// Mutates admitted JSON nodes and handles optional fail-closed budget
 /// rejection.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity attached to budget rejection callbacks.
+/// * `Q` - Quantity representation attached to budget rejection callbacks.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_budget::json::JsonResource;
+/// use qubit_json::value::traverse::{JsonTreeContext, JsonTreeControl, JsonTreeMutVisitor};
+/// use serde_json::Value;
+///
+/// struct Visitor;
+/// impl JsonTreeMutVisitor<JsonResource, usize> for Visitor {
+///     type Error = std::convert::Infallible;
+///
+///     fn visit(&mut self, value: &mut Value, _: JsonTreeContext<'_>) ->
+/// Result<JsonTreeControl, Self::Error> {         *value = Value::Null;
+///         Ok(JsonTreeControl::SkipSubtree)
+///     }
+/// }
+///
+/// let _visitor = Visitor;
+/// ```
 pub trait JsonTreeMutVisitor<R, Q>
 where
     Q: ResourceQuantity,

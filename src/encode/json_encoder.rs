@@ -29,6 +29,22 @@ use super::serializer::json_encode_context::JsonEncodeContext;
 use super::serializer::json_encode_serializer::JsonEncodeSerializer;
 
 /// Encodes strict JSON text while owning cumulative accounting state.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity tracked by the encode session.
+/// * `Q` - Quantity representation used for resource accounting.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::encode::JsonEncoder;
+///
+/// let mut encoder = JsonEncoder::default();
+/// let bytes = encoder.to_vec(&serde_json::json!({"ok": true}))?;
+/// assert_eq!(bytes, br#"{"ok":true}"#);
+/// # Ok::<(), qubit_json::encode::JsonEncodeError<qubit_budget::json::JsonResource>>(())
+/// ```
 pub struct JsonEncoder<'budget, R = JsonResource, Q = usize>
 where
     Q: ResourceQuantity,

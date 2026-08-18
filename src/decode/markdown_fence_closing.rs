@@ -12,16 +12,11 @@
 ///
 /// # Examples
 ///
-/// ```compile_fail
-/// #![deny(unused_must_use)]
+/// ```
 /// use qubit_json::decode::MarkdownFenceClosing;
 ///
-/// #[must_use]
-/// fn closing_policy() -> MarkdownFenceClosing {
-///     MarkdownFenceClosing::Optional
-/// }
-///
-/// closing_policy();
+/// let closing_policy = MarkdownFenceClosing::Optional;
+/// assert_eq!(closing_policy, MarkdownFenceClosing::Optional);
 /// ```
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -12,6 +12,27 @@ use serde_json::Value;
 use super::JsonTreeContext;
 
 /// Receives enter and leave events for budget-admitted JSON tree nodes.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::value::traverse::{JsonTreeContext, JsonTreeVisitor};
+/// use serde_json::Value;
+///
+/// struct CountingVisitor {
+///     count: usize,
+/// }
+/// impl JsonTreeVisitor for CountingVisitor {
+///     type Error = std::convert::Infallible;
+///
+///     fn enter(&mut self, _: &Value, _: JsonTreeContext<'_>) -> Result<(),
+/// Self::Error> {         self.count += 1;
+///         Ok(())
+///     }
+/// }
+///
+/// let _visitor = CountingVisitor { count: 0 };
+/// ```
 pub trait JsonTreeVisitor {
     /// Domain-specific failure returned by this visitor.
     type Error;

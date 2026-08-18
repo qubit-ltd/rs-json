@@ -25,6 +25,17 @@ use crate::lexical::JsonLexicalFailure;
 ///
 /// Each private failure variant owns exactly the diagnostics that are valid for
 /// that failure, so public accessors cannot expose contradictory state.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::{NormalizingJsonDecodeError, NormalizingJsonDecoder};
+///
+/// let mut decoder = NormalizingJsonDecoder::default();
+/// let error: NormalizingJsonDecodeError =
+/// decoder.decode_value("").unwrap_err(); assert_eq!(error.raw_input_bytes(),
+/// 0);
+/// ```
 #[non_exhaustive]
 #[derive(Clone)]
 pub struct NormalizingJsonDecodeError {

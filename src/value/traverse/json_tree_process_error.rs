@@ -14,6 +14,22 @@ use thiserror::Error;
 
 /// Identifies whether JSON tree processing failed in infrastructure or domain
 /// code.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity attached to budget failures.
+/// * `Q` - Quantity representation attached to budget failures.
+/// * `E` - Error type returned by the visitor.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::value::traverse::JsonTreeProcessError;
+///
+/// let error: JsonTreeProcessError<(), usize, &str> =
+///     JsonTreeProcessError::Visitor("visitor rejected the node");
+/// assert!(matches!(error, JsonTreeProcessError::Visitor(_)));
+/// ```
 #[derive(Debug, Error)]
 pub enum JsonTreeProcessError<R, Q, E>
 where

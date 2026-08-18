@@ -20,6 +20,25 @@ use super::JsonTreeReader;
 use super::JsonTreeVisitor;
 
 /// Fully accounts materialized JSON trees using an internally owned budget.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity tracked by the owned value budget.
+/// * `Q` - Quantity representation used for resource accounting.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_budget::json::{JsonResource, JsonValueLimits};
+/// use qubit_json::value::traverse::JsonTreeBudgetTracker;
+/// use serde_json::json;
+///
+/// let mut tracker = JsonTreeBudgetTracker::<JsonResource, usize>::new(
+///     JsonValueLimits::default(),
+/// );
+/// assert!(tracker.account(&json!({"ok": true})).is_ok());
+/// # Ok::<(), qubit_budget::MeasuredBudgetError<JsonResource, usize>>(())
+/// ```
 pub struct JsonTreeBudgetTracker<R = JsonResource, Q = usize>
 where
     Q: ResourceQuantity,

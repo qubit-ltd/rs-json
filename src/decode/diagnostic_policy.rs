@@ -14,16 +14,11 @@
 ///
 /// # Examples
 ///
-/// ```compile_fail
-/// #![deny(unused_must_use)]
+/// ```
 /// use qubit_json::decode::DiagnosticPolicy;
 ///
-/// #[must_use]
-/// fn configured_policy() -> DiagnosticPolicy {
-///     DiagnosticPolicy::Redacted
-/// }
-///
-/// configured_policy();
+/// let policy = DiagnosticPolicy::Redacted;
+/// assert_ne!(policy, DiagnosticPolicy::Detailed);
 /// ```
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

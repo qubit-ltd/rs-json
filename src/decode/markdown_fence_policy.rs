@@ -16,16 +16,11 @@ use super::MarkdownFenceClosing;
 ///
 /// # Examples
 ///
-/// ```compile_fail
-/// #![deny(unused_must_use)]
+/// ```
 /// use qubit_json::decode::MarkdownFencePolicy;
 ///
-/// #[must_use]
-/// fn fence_policy() -> MarkdownFencePolicy {
-///     MarkdownFencePolicy::Disabled
-/// }
-///
-/// fence_policy();
+/// let fence_policy = MarkdownFencePolicy::Disabled;
+/// assert_eq!(fence_policy, MarkdownFencePolicy::Disabled);
 /// ```
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

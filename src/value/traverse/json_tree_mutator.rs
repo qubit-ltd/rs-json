@@ -24,6 +24,35 @@ use super::JsonTreeMutVisitor;
 use super::JsonTreeProcessError;
 
 /// Mutates JSON values while borrowing one staged JSON value transaction.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity tracked by the borrowed transaction.
+/// * `Q` - Quantity representation used for resource accounting.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_budget::json::{JsonResource, JsonValueBudget, JsonValueLimits};
+/// use qubit_json::value::traverse::{JsonTreeContext, JsonTreeControl, JsonTreeMutVisitor, JsonTreeMutator};
+/// use serde_json::Value;
+///
+/// struct Visitor;
+/// impl JsonTreeMutVisitor<JsonResource, usize> for Visitor {
+///     type Error = std::convert::Infallible;
+///
+///     fn visit(&mut self, _: &mut Value, _: JsonTreeContext<'_>) ->
+/// Result<JsonTreeControl, Self::Error> {
+///         Ok(JsonTreeControl::SkipSubtree)
+///     }
+/// }
+///
+/// let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource,
+/// usize>::default()); let mut transaction = budget.transaction();
+/// let mut mutator = JsonTreeMutator::new(&mut transaction);
+/// let mut value = Value::Null;
+/// assert!(mutator.process(&mut value, &mut Visitor).is_ok());
+/// ```
 pub struct JsonTreeMutator<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,

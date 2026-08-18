@@ -13,6 +13,16 @@ use super::JsonSyntaxErrorReason;
 use crate::lexical::JsonLexicalFailure;
 
 /// A JSON syntax error with byte and human-readable source coordinates.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::{JsonSyntaxError, JsonSyntaxErrorReason};
+///
+/// let error = JsonSyntaxError::new(0, 1, 1,
+/// JsonSyntaxErrorReason::UnexpectedEnd); assert_eq!(error.line(), 1);
+/// assert_eq!(error.reason(), JsonSyntaxErrorReason::UnexpectedEnd);
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct JsonSyntaxError {
     /// Zero-based byte offset at which the error was observed.
