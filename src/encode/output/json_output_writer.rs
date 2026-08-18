@@ -27,6 +27,9 @@ where
     /// Shared output budget and first-failure state.
     accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
 
+    /// Whether accepted writes must charge an output-byte budget.
+    has_output_budget: bool,
+
     /// A copy of the first destination error for typed conversion after
     /// serde_json has erased it.
     io_error: Option<io::Error>,
@@ -37,13 +40,14 @@ where
     Q: ResourceQuantity,
 {
     /// Creates an incremental writer over shared output accounting.
-    pub(in crate::encode) const fn new(
+    pub(in crate::encode) fn new(
         writer: W,
         accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
     ) -> Self {
         Self {
             writer,
             accounting,
+            has_output_budget: accounting.borrow().has_output_budget(),
             io_error: None,
         }
     }
@@ -77,7 +81,7 @@ where
     /// Checks capacity, writes one slice, and charges only bytes accepted by
     /// the destination.
     fn write(&mut self, input: &[u8]) -> io::Result<usize> {
-        {
+        if self.has_output_budget {
             let accounting = self.accounting.borrow();
             if let Err(error) = accounting.check_available(input.len()) {
                 drop(accounting);
@@ -97,12 +101,14 @@ where
                         Some(io::Error::new(error.kind(), error.to_string()));
                     return Err(error);
                 }
-                let mut accounting = self.accounting.borrow_mut();
-                if let Err(error) = accounting.consume(written) {
-                    accounting.record_violation(error);
-                    return Err(io::Error::other(
-                        "JSON output budget exceeded",
-                    ));
+                if self.has_output_budget {
+                    let mut accounting = self.accounting.borrow_mut();
+                    if let Err(error) = accounting.consume(written) {
+                        accounting.record_violation(error);
+                        return Err(io::Error::other(
+                            "JSON output budget exceeded",
+                        ));
+                    }
                 }
                 Ok(written)
             }

@@ -78,6 +78,7 @@ where
     }
 
     /// Decodes one complete UTF-8 JSON string and accumulates its charges.
+    #[inline(always)]
     pub fn decode_str<'de, T>(
         &mut self,
         input: &'de str,
@@ -104,6 +105,7 @@ where
     }
 
     /// Decodes a string through a caller-provided Serde seed.
+    #[inline(always)]
     pub fn decode_seed_str<'de, S>(
         &mut self,
         seed: S,
@@ -132,6 +134,7 @@ where
     }
 
     /// Validates and accounts for one complete UTF-8 JSON string.
+    #[inline(always)]
     pub fn validate_str(
         &mut self,
         input: &str,
