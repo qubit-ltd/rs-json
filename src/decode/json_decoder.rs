@@ -65,9 +65,7 @@ where
 
     /// Returns mutable access to the cumulative session.
     #[must_use]
-    pub const fn session_mut(
-        &mut self,
-    ) -> &mut JsonDecodeSession<'budget, R, Q> {
+    pub const fn session_mut(&mut self) -> &mut JsonDecodeSession<'budget, R, Q> {
         &mut self.session
     }
 
@@ -79,10 +77,7 @@ where
 
     /// Decodes one complete UTF-8 JSON string and accumulates its charges.
     #[inline(always)]
-    pub fn decode_str<'de, T>(
-        &mut self,
-        input: &'de str,
-    ) -> Result<T, JsonDecodeError<R, Q>>
+    pub fn decode_str<'de, T>(&mut self, input: &'de str) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
         R: Clone,
@@ -92,10 +87,7 @@ where
     }
 
     /// Decodes one complete UTF-8 JSON byte slice and accumulates its charges.
-    pub fn decode_utf8<'de, T>(
-        &mut self,
-        input: &'de [u8],
-    ) -> Result<T, JsonDecodeError<R, Q>>
+    pub fn decode_utf8<'de, T>(&mut self, input: &'de [u8]) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
         R: Clone,
@@ -106,11 +98,7 @@ where
 
     /// Decodes a string through a caller-provided Serde seed.
     #[inline(always)]
-    pub fn decode_seed_str<'de, S>(
-        &mut self,
-        seed: S,
-        input: &'de str,
-    ) -> Result<S::Value, JsonDecodeError<R, Q>>
+    pub fn decode_seed_str<'de, S>(&mut self, seed: S, input: &'de str) -> Result<S::Value, JsonDecodeError<R, Q>>
     where
         S: DeserializeSeed<'de>,
         R: Clone,
@@ -120,11 +108,7 @@ where
     }
 
     /// Decodes a UTF-8 byte slice through a caller-provided Serde seed.
-    pub fn decode_seed_utf8<'de, S>(
-        &mut self,
-        seed: S,
-        input: &'de [u8],
-    ) -> Result<S::Value, JsonDecodeError<R, Q>>
+    pub fn decode_seed_utf8<'de, S>(&mut self, seed: S, input: &'de [u8]) -> Result<S::Value, JsonDecodeError<R, Q>>
     where
         S: DeserializeSeed<'de>,
         R: Clone,
@@ -135,10 +119,7 @@ where
 
     /// Validates and accounts for one complete UTF-8 JSON string.
     #[inline(always)]
-    pub fn validate_str(
-        &mut self,
-        input: &str,
-    ) -> Result<(), JsonDecodeError<R, Q>>
+    pub fn validate_str(&mut self, input: &str) -> Result<(), JsonDecodeError<R, Q>>
     where
         R: Clone,
         Q: ResourceQuantity,
@@ -147,10 +128,7 @@ where
     }
 
     /// Validates and accounts for one complete UTF-8 JSON byte slice.
-    pub fn validate_utf8(
-        &mut self,
-        input: &[u8],
-    ) -> Result<(), JsonDecodeError<R, Q>>
+    pub fn validate_utf8(&mut self, input: &[u8]) -> Result<(), JsonDecodeError<R, Q>>
     where
         R: Clone,
         Q: ResourceQuantity,
@@ -187,10 +165,7 @@ where
     Ok(value)
 }
 
-fn validate_impl<R, Q>(
-    input: &[u8],
-    session: &mut JsonDecodeSession<'_, R, Q>,
-) -> Result<(), JsonDecodeError<R, Q>>
+fn validate_impl<R, Q>(input: &[u8], session: &mut JsonDecodeSession<'_, R, Q>) -> Result<(), JsonDecodeError<R, Q>>
 where
     R: Clone,
     Q: ResourceQuantity,
@@ -213,9 +188,7 @@ struct TypedSeed<T> {
 
 impl<T> TypedSeed<T> {
     const fn new() -> Self {
-        Self {
-            marker: PhantomData,
-        }
+        Self { marker: PhantomData }
     }
 }
 

@@ -35,8 +35,7 @@ where
     context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 }
 
-impl<'a, 'transaction, 'budget, 'context, T, R, Q>
-    BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q>
+impl<'a, 'transaction, 'budget, 'context, T, R, Q> BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -44,9 +43,7 @@ where
     /// Creates a key wrapper bound to the shared traversal context.
     pub(super) const fn new(
         value: &'a T,
-        context: &'context RefCell<
-            JsonEncodeContext<'transaction, 'budget, R, Q>,
-        >,
+        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
     ) -> Self {
         Self { value, context }
     }
@@ -91,9 +88,7 @@ where
     /// Checks and consumes one emitted key length, retaining any original
     /// error.
     fn check(&self, bytes: usize) -> Result<(), S::Error> {
-        self.context
-            .borrow_mut()
-            .admit(JsonMeasurement::Key { bytes })
+        self.context.borrow_mut().admit(JsonMeasurement::Key { bytes })
     }
 }
 
@@ -188,10 +183,7 @@ where
         self.inner.serialize_unit()
     }
 
-    fn serialize_unit_struct(
-        self,
-        name: &'static str,
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit_struct(name)
     }
 
@@ -202,15 +194,10 @@ where
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
         self.check(variant.len())?;
-        self.inner
-            .serialize_unit_variant(name, variant_index, variant)
+        self.inner.serialize_unit_variant(name, variant_index, variant)
     }
 
-    fn serialize_newtype_struct<T>(
-        self,
-        _name: &'static str,
-        value: &T,
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -227,33 +214,19 @@ where
     where
         T: Serialize + ?Sized,
     {
-        self.inner.serialize_newtype_variant(
-            name,
-            variant_index,
-            variant,
-            value,
-        )
+        self.inner
+            .serialize_newtype_variant(name, variant_index, variant, value)
     }
 
-    fn serialize_seq(
-        self,
-        len: Option<usize>,
-    ) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         self.inner.serialize_seq(len)
     }
 
-    fn serialize_tuple(
-        self,
-        len: usize,
-    ) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.inner.serialize_tuple(len)
     }
 
-    fn serialize_tuple_struct(
-        self,
-        name: &'static str,
-        len: usize,
-    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.inner.serialize_tuple_struct(name, len)
     }
 
@@ -264,22 +237,14 @@ where
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        self.inner
-            .serialize_tuple_variant(name, variant_index, variant, len)
+        self.inner.serialize_tuple_variant(name, variant_index, variant, len)
     }
 
-    fn serialize_map(
-        self,
-        len: Option<usize>,
-    ) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.inner.serialize_map(len)
     }
 
-    fn serialize_struct(
-        self,
-        name: &'static str,
-        len: usize,
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         self.inner.serialize_struct(name, len)
     }
 
@@ -290,20 +255,14 @@ where
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        self.inner
-            .serialize_struct_variant(name, variant_index, variant, len)
+        self.inner.serialize_struct_variant(name, variant_index, variant, len)
     }
 
     fn collect_str<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Display + ?Sized,
     {
-        let text = JsonEncodeContext::collect_display::<S::Error, _>(
-            self.context,
-            value,
-            DisplayBudgetKind::Key,
-            1,
-        )?;
+        let text = JsonEncodeContext::collect_display::<S::Error, _>(self.context, value, DisplayBudgetKind::Key, 1)?;
         self.inner.serialize_str(&text)
     }
 

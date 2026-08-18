@@ -32,8 +32,7 @@ where
     depth: usize,
 }
 
-impl<'a, 'transaction, 'budget, 'context, T, R, Q>
-    BudgetedValue<'a, 'transaction, 'budget, 'context, T, R, Q>
+impl<'a, 'transaction, 'budget, 'context, T, R, Q> BudgetedValue<'a, 'transaction, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -41,16 +40,10 @@ where
     /// Creates a nested value wrapper bound to a shared budget context.
     pub(super) const fn new(
         value: &'a T,
-        context: &'context RefCell<
-            JsonEncodeContext<'transaction, 'budget, R, Q>,
-        >,
+        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         depth: usize,
     ) -> Self {
-        Self {
-            value,
-            context,
-            depth,
-        }
+        Self { value, context, depth }
     }
 }
 
@@ -65,10 +58,7 @@ where
     where
         S: Serializer,
     {
-        self.value.serialize(JsonEncodeSerializer::with_context(
-            serializer,
-            self.context,
-            self.depth,
-        ))
+        self.value
+            .serialize(JsonEncodeSerializer::with_context(serializer, self.context, self.depth))
     }
 }

@@ -21,11 +21,7 @@ impl JsonLexemeLength {
     /// Returns the decimal byte length of one unsigned JSON integer.
     #[inline(always)]
     pub(super) const fn unsigned_integer(value: u128) -> usize {
-        if value < 10 {
-            1
-        } else {
-            value.ilog10() as usize + 1
-        }
+        if value < 10 { 1 } else { value.ilog10() as usize + 1 }
     }
 
     /// Returns the byte length of one finite `f32` JSON number.

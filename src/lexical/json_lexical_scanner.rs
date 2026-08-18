@@ -26,17 +26,14 @@ where
     root_depth: usize,
 }
 
-impl<'transaction, 'budget, R, Q>
-    JsonLexicalScanner<'transaction, 'budget, R, Q>
+impl<'transaction, 'budget, R, Q> JsonLexicalScanner<'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
 {
     /// Creates a lexical scanner bound to one value transaction.
     #[inline(always)]
-    pub(crate) const fn new(
-        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
-    ) -> Self {
+    pub(crate) const fn new(transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>) -> Self {
         Self {
             transaction,
             root_depth: 1,
@@ -62,10 +59,7 @@ where
     /// Returns [`JsonLexicalError::Budget`] for the first resource violation,
     /// or [`JsonLexicalError::Syntax`] when `input` is not one complete JSON
     /// value. All value measurements remain staged in the caller's transaction.
-    pub(crate) fn scan(
-        &mut self,
-        input: &[u8],
-    ) -> Result<(), JsonLexicalError<R, Q>> {
+    pub(crate) fn scan(&mut self, input: &[u8]) -> Result<(), JsonLexicalError<R, Q>> {
         let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction);
         let mut stack: Vec<JsonLexicalContainerFrame> = Vec::new();
         cursor.skip_whitespace();

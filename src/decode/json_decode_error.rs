@@ -30,9 +30,7 @@ where
     #[error(transparent)]
     Syntax(#[from] JsonSyntaxError),
     /// Serde rejected an otherwise admitted document for the requested type.
-    #[error(
-        "JSON deserialization failed ({category:?}) at line {line}, column {column}"
-    )]
+    #[error("JSON deserialization failed ({category:?}) at line {line}, column {column}")]
     Deserialize {
         /// Broad Serde failure category.
         category: Category,
@@ -52,9 +50,7 @@ where
     pub(crate) fn from_lexical(error: JsonLexicalError<R, Q>) -> Self {
         match error {
             JsonLexicalError::Budget(error) => Self::Budget(error),
-            JsonLexicalError::Syntax(failure) => {
-                Self::Syntax(JsonSyntaxError::from_lexical(failure))
-            }
+            JsonLexicalError::Syntax(failure) => Self::Syntax(JsonSyntaxError::from_lexical(failure)),
         }
     }
 

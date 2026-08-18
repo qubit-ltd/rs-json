@@ -115,22 +115,11 @@ impl JsonNormalizer {
         let input = self.trim_if_enabled(input);
         let input = self.strip_utf8_bom(input);
         let input = self.trim_if_enabled(input);
-        let input = MarkdownFence::strip_outer(
-            input,
-            self.options.markdown_fence_policy(),
-        );
+        let input = MarkdownFence::strip_outer(input, self.options.markdown_fence_policy());
         let input = self.trim_if_enabled(input);
         let (normalized_len, needs_escape) = self.scan_normalized_size(input);
-        self.consume_normalized_input(
-            attempt,
-            raw_input_bytes,
-            normalized_len,
-        )?;
-        let input = ControlCharacterEscaper::escape_with_scan(
-            input,
-            normalized_len,
-            needs_escape,
-        );
+        self.consume_normalized_input(attempt, raw_input_bytes, normalized_len)?;
+        let input = ControlCharacterEscaper::escape_with_scan(input, normalized_len, needs_escape);
 
         if input.is_empty() {
             Err(NormalizingJsonDecodeError::empty_input(
@@ -192,10 +181,7 @@ impl JsonNormalizer {
     /// The normalized byte length and whether control-character escaping is
     /// required.
     fn scan_normalized_size(&self, input: &str) -> (usize, bool) {
-        ControlCharacterEscaper::scan(
-            input,
-            self.options.escape_control_chars_in_strings(),
-        )
+        ControlCharacterEscaper::scan(input, self.options.escape_control_chars_in_strings())
     }
 
     /// Charges raw input bytes and maps a rejected budget to the stable error.
@@ -225,16 +211,14 @@ impl JsonNormalizer {
             .try_consume_normalized_input_bytes(normalized_input_bytes)
             .is_err()
         {
-            return Err(
-                NormalizingJsonDecodeError::normalized_input_too_large(
-                    raw_input_bytes,
-                    normalized_input_bytes,
-                    attempt
-                        .normalized_input_budget()
-                        .map_or(normalized_input_bytes, ResourceBudget::limit),
-                    self.options.diagnostic_policy(),
-                ),
-            );
+            return Err(NormalizingJsonDecodeError::normalized_input_too_large(
+                raw_input_bytes,
+                normalized_input_bytes,
+                attempt
+                    .normalized_input_budget()
+                    .map_or(normalized_input_bytes, ResourceBudget::limit),
+                self.options.diagnostic_policy(),
+            ));
         }
         Ok(())
     }

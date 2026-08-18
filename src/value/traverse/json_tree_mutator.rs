@@ -47,9 +47,7 @@ where
     /// A mutator borrowing `transaction` for its lifetime.
     #[inline(always)]
     #[must_use]
-    pub fn new(
-        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
-    ) -> Self {
+    pub fn new(transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>) -> Self {
         Self { transaction }
     }
 
@@ -72,11 +70,7 @@ where
     ///
     /// Returns [`JsonTreeProcessError::Budget`] when resource admission fails,
     /// or [`JsonTreeProcessError::Visitor`] when the visitor rejects a node.
-    pub fn process<V>(
-        &mut self,
-        root: &mut Value,
-        visitor: &mut V,
-    ) -> Result<(), JsonTreeProcessError<R, Q, V::Error>>
+    pub fn process<V>(&mut self, root: &mut Value, visitor: &mut V) -> Result<(), JsonTreeProcessError<R, Q, V::Error>>
     where
         V: JsonTreeMutVisitor<R, Q>,
     {
@@ -91,9 +85,7 @@ where
                 // changed while a child is live.
                 let value = unsafe { frame.value.as_mut() };
                 if let Some(key) = frame.location.key()
-                    && let Err(error) = self
-                        .transaction
-                        .try_admit(JsonMeasurement::Key { bytes: key.len() })
+                    && let Err(error) = self.transaction.try_admit(JsonMeasurement::Key { bytes: key.len() })
                 {
                     let rejection = visitor
                         .reject_budget(value, context, &error)
@@ -116,9 +108,7 @@ where
                     frame.finished = true;
                     continue;
                 }
-                let control = visitor
-                    .visit(value, context)
-                    .map_err(JsonTreeProcessError::Visitor)?;
+                let control = visitor.visit(value, context).map_err(JsonTreeProcessError::Visitor)?;
                 frame.entered = true;
                 if control != JsonTreeControl::Descend {
                     frame.finished = true;
@@ -135,11 +125,7 @@ where
     }
 
     /// Admits one node before invoking its mutable visitor callback.
-    fn admit(
-        &mut self,
-        value: &Value,
-        depth: usize,
-    ) -> Result<(), MeasuredBudgetError<R, Q>> {
+    fn admit(&mut self, value: &Value, depth: usize) -> Result<(), MeasuredBudgetError<R, Q>> {
         let measurement = match value {
             Value::Null => JsonMeasurement::Null { depth },
             Value::Bool(_) => JsonMeasurement::Boolean { depth },
@@ -178,9 +164,7 @@ impl OwnedLocation {
     fn context(&self, depth: usize) -> JsonTreeContext<'_> {
         let location = match self {
             Self::Root => JsonTreeLocation::Root,
-            Self::ArrayElement(index) => {
-                JsonTreeLocation::ArrayElement { index: *index }
-            }
+            Self::ArrayElement(index) => JsonTreeLocation::ArrayElement { index: *index },
             Self::ObjectValue(key) => JsonTreeLocation::ObjectValue { key },
         };
         JsonTreeContext { depth, location }
@@ -236,22 +220,15 @@ impl MutFrame {
         if self.finished {
             return None;
         }
-        let cursor = self
-            .cursor
-            .get_or_insert_with(|| MutChildCursor::new(self.value));
+        let cursor = self.cursor.get_or_insert_with(|| MutChildCursor::new(self.value));
         cursor.next(self.depth)
     }
 }
 
 /// Lazily yields mutable children without detaching their parent container.
 enum MutChildCursor {
-    Array {
-        values: NonNull<Vec<Value>>,
-        next: usize,
-    },
-    Object {
-        iter: IterMut<'static>,
-    },
+    Array { values: NonNull<Vec<Value>>, next: usize },
+    Object { iter: IterMut<'static> },
     Empty,
 }
 
@@ -269,22 +246,17 @@ impl MutChildCursor {
                 let iter = entries.iter_mut();
                 // SAFETY: no entry is inserted, removed, or replaced while this
                 // iterator is suspended.
-                let iter = unsafe {
-                    std::mem::transmute::<IterMut<'_>, IterMut<'static>>(iter)
-                };
+                let iter = unsafe { std::mem::transmute::<IterMut<'_>, IterMut<'static>>(iter) };
                 Self::Object { iter }
             }
-            Value::Null
-            | Value::Bool(_)
-            | Value::Number(_)
-            | Value::String(_) => Self::Empty,
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Self::Empty,
         }
     }
     /// Returns the next child and its traversal metadata.
     fn next(&mut self, parent_depth: usize) -> Option<MutFrame> {
-        let depth = parent_depth.checked_add(1).expect(
-            "a materialized JSON tree cannot have usize::MAX nesting depth",
-        );
+        let depth = parent_depth
+            .checked_add(1)
+            .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
         match self {
             Self::Array { values, next } => {
                 // SAFETY: the parent vector is structurally unchanged while its
@@ -293,19 +265,11 @@ impl MutChildCursor {
                 let index = *next;
                 let child = values.get_mut(index)?;
                 *next = next.checked_add(1)?;
-                Some(MutFrame::child(
-                    OwnedLocation::ArrayElement(index),
-                    depth,
-                    child,
-                ))
+                Some(MutFrame::child(OwnedLocation::ArrayElement(index), depth, child))
             }
-            Self::Object { iter } => iter.next().map(|(key, child)| {
-                MutFrame::child(
-                    OwnedLocation::ObjectValue(key.clone()),
-                    depth,
-                    child,
-                )
-            }),
+            Self::Object { iter } => iter
+                .next()
+                .map(|(key, child)| MutFrame::child(OwnedLocation::ObjectValue(key.clone()), depth, child)),
             Self::Empty => None,
         }
     }
