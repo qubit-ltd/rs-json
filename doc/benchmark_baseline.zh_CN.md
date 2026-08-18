@@ -31,7 +31,7 @@ cargo +1.94.0 bench --bench decoder_bench
 | 1 MiB | 184.94 µs | 185.18 µs | 186.52 µs |
 
 “按次构造严格 decoder”在每个 Criterion 迭代内执行
-`NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict())` 后再调用 `decode_slice`，与当前
+`NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict())` 后再调用 `decode_utf8`，与当前
 `rs-http` 的响应和 SSE 调用方式一致。三种严格路径的数值接近，比较时应以同机多次运行及
 Criterion 的置信区间为准，而非将单次结果视为回归结论。
 
@@ -164,8 +164,8 @@ cargo bench --bench budgeted_serde_json -- --noplot
 | `owned-session` | 5.7951 µs / 163.41 MiB/s / 1.89× | 375.03 µs / 166.65 MiB/s / 1.66× | 6.4060 ms / 156.10 MiB/s / 1.62× |
 | `borrowed-session` | 5.5218 µs / 171.50 MiB/s / 1.81× | 372.26 µs / 167.89 MiB/s / 1.64× | 6.4005 ms / 156.23 MiB/s / 1.61× |
 | `reused-session` | 5.5906 µs / 169.39 MiB/s / 1.83× | 378.06 µs / 165.31 MiB/s / 1.67× | 6.4071 ms / 156.07 MiB/s / 1.62× |
-| `NormalizingJsonDecoder::decode` | 2.6992 µs / 350.84 MiB/s / 0.88× | 186.22 µs / 335.60 MiB/s / 0.82× | 3.3947 ms / 294.57 MiB/s / 0.86× |
-| `NormalizingJsonDecoder::decode_with_session` | 2.6619 µs / 355.76 MiB/s / 0.87× | 182.60 µs / 342.25 MiB/s / 0.81× | 3.3478 ms / 298.69 MiB/s / 0.84× |
+| `NormalizingJsonDecoder::decode_str` | 2.6992 µs / 350.84 MiB/s / 0.88× | 186.22 µs / 335.60 MiB/s / 0.82× | 3.3947 ms / 294.57 MiB/s / 0.86× |
+| `NormalizingJsonDecoder::with_session(...).decode_str` | 2.6619 µs / 355.76 MiB/s / 0.87× | 182.60 µs / 342.25 MiB/s / 0.81× | 3.3478 ms / 298.69 MiB/s / 0.84× |
 
 ### 严格编码
 
@@ -200,11 +200,11 @@ cargo bench --bench budgeted_serde_json -- --noplot
 | `owned-session` | 5.7484 µs / 164.74 MiB/s / 1.97× / -0.81% | 367.50 µs / 170.06 MiB/s / 1.68× / -2.01% | 6.3164 ms / 158.31 MiB/s / 1.62× / -1.40% |
 | `borrowed-session` | 5.8399 µs / 162.16 MiB/s / 2.00× / +5.76% | 368.75 µs / 169.48 MiB/s / 1.69× / -0.94% | 6.3221 ms / 158.17 MiB/s / 1.62× / -1.22% |
 | `reused-session` | 5.4755 µs / 172.95 MiB/s / 1.88× / -2.06% | 369.54 µs / 169.12 MiB/s / 1.69× / -2.25% | 6.4119 ms / 155.96 MiB/s / 1.65× / +0.07% |
-| `NormalizingJsonDecoder::decode` | 2.7992 µs / 338.31 MiB/s / 0.96× / +3.70% | 178.91 µs / 349.33 MiB/s / 0.82× / -3.93% | 3.2670 ms / 306.08 MiB/s / 0.84× / -3.76% |
-| `NormalizingJsonDecoder::decode_with_session` | 5.1220 µs / 184.89 MiB/s / 1.76× / +92.42% | 326.85 µs / 191.21 MiB/s / 1.50× / +79.00% | 5.6367 ms / 177.40 MiB/s / 1.45× / +68.37% |
+| `NormalizingJsonDecoder::decode_str` | 2.7992 µs / 338.31 MiB/s / 0.96× / +3.70% | 178.91 µs / 349.33 MiB/s / 0.82× / -3.93% | 3.2670 ms / 306.08 MiB/s / 0.84× / -3.76% |
+| `NormalizingJsonDecoder::with_session(...).decode_str` | 5.1220 µs / 184.89 MiB/s / 1.76× / +92.42% | 326.85 µs / 191.21 MiB/s / 1.50× / +79.00% | 5.6367 ms / 177.40 MiB/s / 1.45× / +68.37% |
 
-`decode()` 仍是无 value preflight 的快速路径；它与改造前相比在三个尺寸上的变化为
-+3.70%、-3.93% 和 -3.76%，未显示随输入尺寸放大的退化。`decode_with_session()` 现在对
+`decode_str()` 仍是直接 typed decode 路径；它与改造前相比在三个尺寸上的变化为
++3.70%、-3.93% 和 -3.76%，未显示随输入尺寸放大的退化。`with_session(...).decode_str()` 现在对
 规范化 JSON 做 lexical preflight，再直接反序列化目标类型。两条路径的中位数差为
 2.3228 µs、147.95 µs 和 2.3697 ms，即 2.339、2.258 和 2.260 ns/B。因而双扫描的主体是
 稳定的线性成本；其相对额外延迟随尺寸从 82.98% 降到 72.53%，吞吐相对快速路径下降约
@@ -213,8 +213,8 @@ cargo bench --bench budgeted_serde_json -- --noplot
 
 owned、borrowed 与 reused 三条通用 budgeted decode 路径的差异在 1 KiB 仅约
 0.27—0.36 µs；64 KiB 和 1 MiB 的符号会翻转，且幅度不足各自总耗时的约 2%。这说明固定
-session 构造/借用成本只在小输入上可见，并非中大尺寸优化重点。`decode_with_session()` 的
-本次会话在迭代间复用，因此它与 `decode()` 的差值主要反映新增 preflight，而不是 session
+session 构造/借用成本只在小输入上可见，并非中大尺寸优化重点。`with_session(...).decode_str()` 的
+本次会话在迭代间复用，因此它与 `decode_str()` 的差值主要反映新增 preflight，而不是 session
 构造。
 
 ### 严格编码复测
@@ -234,10 +234,25 @@ session 构造/借用成本只在小输入上可见，并非中大尺寸优化�
 
 1. 优先优化 budgeted encode 的结构、载荷和事务性输出记账。它在三个尺寸均为直接编码的
    3.79×—4.31× 延迟，且中大输入吞吐平台约 217—220 MiB/s；收益范围最大、证据最稳定。
-2. 其次评估 `decode_with_session()` lexical preflight 的扫描成本。它稳定增加约
+2. 其次评估 `with_session(...).decode_str()` lexical preflight 的扫描成本。它稳定增加约
    2.26 ns/B，使 1 KiB、64 KiB、1 MiB 延迟分别达到快速路径的 1.83×、1.83×、1.73×。
    优化必须保留完整 value admission 和直接 Serde 反序列化语义。
 3. 暂不专项优化 session 创建、borrow 或复用。三条路径没有随尺寸保持一致的差距；即便在
    1 KiB，固定差值也只有约 0.27—0.36 µs，显著小于 encode 和 preflight 热点。
-4. 保持 `decode()` 快速路径架构。其三个尺寸相对改造前没有随输入增长的退化，且中大尺寸
+4. 保持 `decode_str()` 快速路径架构。其三个尺寸相对改造前没有随输入增长的退化，且中大尺寸
    吞吐仍高于同次 `serde_json` 对照；当前数据不支持在该路径加入额外 admission 工作。
+
+## 2026-08-18 API 清理后快速复测
+
+本次先恢复并修复 `decoder_bench`，再在当前实现上执行以下聚焦基准：
+
+```bash
+cargo bench --bench decoder_bench -- plain-comparison \
+  --warm-up-time 1 --measurement-time 1 --sample-size 10
+```
+
+同一运行中的结果为：`serde_json` 75.6 ns、严格 `JsonDecoder` 205.6 ns、默认
+`NormalizingJsonDecoder::decode_str` 232.4 ns。规范化 decoder 的词法 admission 预扫描
+会带来约 13% 的相对额外开销，但仍保持与严格 decoder 同一数量级；它同时提供稳定的
+结构准入和预算记账。因此本次选择保留每次解码的 admission，并将实现与文档统一为
+`decode_str`/`decode_utf8` 及 `with_session(...).decode_str`，不恢复任何兼容入口。

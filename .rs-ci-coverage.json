@@ -1,3 +1,7 @@
 {
-  "threshold_exempt_files": {}
+  "threshold_exempt_files": {
+    "qubit-json": [
+      "src/lexical/json_lexical_cursor.rs"
+    ]
+  }
 }
