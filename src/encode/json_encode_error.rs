@@ -18,6 +18,23 @@ use thiserror::Error;
 use crate::decode::JsonSyntaxError;
 
 /// Failure produced while encoding one JSON document.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity attached to budget failures.
+/// * `Q` - Quantity representation attached to budget failures.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_budget::json::JsonResource;
+/// use qubit_json::encode::JsonEncodeError;
+/// use serde::ser::Error;
+///
+/// let error: JsonEncodeError<JsonResource> =
+///     <JsonEncodeError<JsonResource> as Error>::custom("example failure");
+/// assert!(matches!(error, JsonEncodeError::Serialize(_)));
+/// ```
 #[derive(Debug, Error)]
 pub enum JsonEncodeError<R, Q = usize>
 where

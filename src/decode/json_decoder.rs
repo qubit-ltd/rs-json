@@ -23,6 +23,22 @@ use crate::lexical::JsonLexicalScanner;
 
 /// Strictly decodes complete JSON documents while owning cumulative accounting
 /// state.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity tracked by the decode session.
+/// * `Q` - Quantity representation used for resource accounting.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::JsonDecoder;
+///
+/// let mut decoder = JsonDecoder::default();
+/// let value: serde_json::Value = decoder.decode_str(r#"{"ok":true}"#)?;
+/// assert_eq!(value["ok"], true);
+/// # Ok::<(), qubit_json::decode::JsonDecodeError<qubit_budget::json::JsonResource>>(())
+/// ```
 #[derive(Debug)]
 pub struct JsonDecoder<'budget, R = JsonResource, Q = usize>
 where
@@ -137,6 +153,10 @@ where
     }
 }
 
+/// Runs lexical admission and Serde deserialization for one decode attempt.
+///
+/// The attempt commits decoded-value charges only after the input is both a
+/// complete JSON document and successfully deserialized by the supplied seed.
 fn decode_seed_impl<'de, S, R, Q>(
     seed: S,
     input: &'de [u8],
@@ -165,6 +185,8 @@ where
     Ok(value)
 }
 
+/// Runs lexical admission for one complete JSON document without
+/// deserializing a target value.
 fn validate_impl<R, Q>(input: &[u8], session: &mut JsonDecodeSession<'_, R, Q>) -> Result<(), JsonDecodeError<R, Q>>
 where
     R: Clone,
@@ -187,6 +209,7 @@ struct TypedSeed<T> {
 }
 
 impl<T> TypedSeed<T> {
+    /// Creates a zero-sized seed that delegates to `T::deserialize`.
     const fn new() -> Self {
         Self { marker: PhantomData }
     }

@@ -12,6 +12,15 @@ use std::fmt;
 use crate::lexical::JsonLexicalErrorReason;
 
 /// The concrete reason why a JSON document was rejected lexically.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::JsonSyntaxErrorReason;
+///
+/// let reason = JsonSyntaxErrorReason::UnexpectedByte { byte: b'?' };
+/// assert_eq!(reason.to_string(), "unexpected byte 0x3f");
+/// ```
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JsonSyntaxErrorReason {

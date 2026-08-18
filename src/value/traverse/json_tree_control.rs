@@ -8,6 +8,15 @@
 //! Defines ordinary JSON tree traversal control.
 
 /// Selects whether a successfully visited node exposes its descendants.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::value::traverse::JsonTreeControl;
+///
+/// let control = JsonTreeControl::SkipSubtree;
+/// assert_eq!(control, JsonTreeControl::SkipSubtree);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonTreeControl {
     /// Visit the node's descendants in normal depth-first order.

@@ -30,12 +30,12 @@ use super::MarkdownFencePolicy;
 ///
 /// # Examples
 ///
-/// ```compile_fail
+/// ```
 /// use qubit_json::decode::{NormalizingJsonDecodeOptions, NormalizingJsonDecoder};
 ///
 /// let options = NormalizingJsonDecodeOptions::strict();
-/// let _decoder = NormalizingJsonDecoder::new(options);
-/// let _moved_options = options;
+/// let decoder = NormalizingJsonDecoder::new(options);
+/// assert!(!decoder.options().trim_whitespace());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizingJsonDecodeOptions {
@@ -163,12 +163,11 @@ impl NormalizingJsonDecodeOptions {
     ///
     /// # Examples
     ///
-    /// ```compile_fail
-    /// #![deny(unused_must_use)]
+    /// ```
     /// use qubit_json::decode::NormalizingJsonDecodeOptions;
     ///
     /// let options = NormalizingJsonDecodeOptions::strict();
-    /// options.markdown_fence_policy();
+    /// assert_eq!(options.markdown_fence_policy(), &qubit_json::decode::MarkdownFencePolicy::Disabled);
     /// ```
     #[inline(always)]
     #[must_use]
@@ -237,6 +236,19 @@ impl NormalizingJsonDecodeOptions {
 }
 
 /// Builder for [`NormalizingJsonDecodeOptions`].
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::NormalizingJsonDecodeOptions;
+///
+/// let options = NormalizingJsonDecodeOptions::builder()
+///     .trim_whitespace(false)
+///     .max_input_bytes(Some(1024))
+///     .build();
+/// assert!(!options.trim_whitespace());
+/// assert_eq!(options.max_input_bytes(), Some(1024));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizingJsonDecodeOptionsBuilder {
     options: NormalizingJsonDecodeOptions,

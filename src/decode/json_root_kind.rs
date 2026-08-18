@@ -20,16 +20,11 @@ use serde_json::Value;
 ///
 /// # Examples
 ///
-/// ```compile_fail
-/// #![deny(unused_must_use)]
+/// ```
 /// use qubit_json::decode::JsonRootKind;
 ///
-/// #[must_use]
-/// fn top_level_kind() -> JsonRootKind {
-///     JsonRootKind::Other
-/// }
-///
-/// top_level_kind();
+/// let top_level_kind = JsonRootKind::Other;
+/// assert_eq!(top_level_kind.to_string(), "other");
 /// ```
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

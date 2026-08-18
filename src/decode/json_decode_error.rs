@@ -18,6 +18,21 @@ use super::JsonSyntaxError;
 use crate::lexical::JsonLexicalError;
 
 /// Failure produced while decoding one strict JSON document.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity attached to budget failures.
+/// * `Q` - Quantity representation attached to budget failures.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::{JsonDecodeError, JsonDecoder};
+///
+/// let mut decoder = JsonDecoder::default();
+/// let error = decoder.validate_str("{").unwrap_err();
+/// assert!(matches!(error, JsonDecodeError::Syntax(_)));
+/// ```
 #[derive(Debug, Error)]
 pub enum JsonDecodeError<R, Q = usize>
 where

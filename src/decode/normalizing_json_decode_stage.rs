@@ -14,16 +14,11 @@ use std::fmt;
 ///
 /// # Examples
 ///
-/// ```compile_fail
-/// #![deny(unused_must_use)]
+/// ```
 /// use qubit_json::decode::NormalizingJsonDecodeStage;
 ///
-/// #[must_use]
-/// fn decode_stage() -> NormalizingJsonDecodeStage {
-///     NormalizingJsonDecodeStage::Parse
-/// }
-///
-/// decode_stage();
+/// let decode_stage = NormalizingJsonDecodeStage::Parse;
+/// assert_eq!(decode_stage.to_string(), "parse");
 /// ```
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

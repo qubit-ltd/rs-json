@@ -20,6 +20,33 @@ use super::JsonTreeProcessError;
 use super::JsonTreeVisitor;
 
 /// Processes JSON values while borrowing one staged JSON value transaction.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity tracked by the borrowed transaction.
+/// * `Q` - Quantity representation used for resource accounting.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_budget::json::{JsonResource, JsonValueBudget, JsonValueLimits};
+/// use qubit_json::value::traverse::{JsonTreeContext, JsonTreeReader, JsonTreeVisitor};
+/// use serde_json::Value;
+///
+/// struct Visitor;
+/// impl JsonTreeVisitor for Visitor {
+///     type Error = std::convert::Infallible;
+///
+///     fn enter(&mut self, _: &Value, _: JsonTreeContext<'_>) -> Result<(),
+/// Self::Error> {         Ok(())
+///     }
+/// }
+///
+/// let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource,
+/// usize>::default()); let mut transaction = budget.transaction();
+/// let mut reader = JsonTreeReader::new(&mut transaction);
+/// assert!(reader.process(&Value::Null, &mut Visitor).is_ok());
+/// ```
 pub struct JsonTreeReader<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,

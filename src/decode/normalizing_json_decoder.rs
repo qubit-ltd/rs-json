@@ -31,6 +31,19 @@ use crate::lexical::JsonLexicalScanner;
 ///
 /// `NormalizingJsonDecoder` applies a small set of predictable normalization
 /// rules before delegating actual parsing and deserialization to `serde_json`.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::NormalizingJsonDecoder;
+///
+/// let mut decoder = NormalizingJsonDecoder::default();
+/// let value = decoder.decode_value(r#"```json
+/// {"ok":true}
+/// ```"#)?;
+/// assert_eq!(value["ok"], true);
+/// # Ok::<(), qubit_json::decode::NormalizingJsonDecodeError>(())
+/// ```
 #[derive(Debug)]
 pub struct NormalizingJsonDecoder<'budget> {
     /// Stores the configured normalization pipeline.

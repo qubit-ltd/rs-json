@@ -8,6 +8,15 @@
 //! Defines the location of a JSON tree node within its parent.
 
 /// Identifies a materialized JSON node without exposing a domain path model.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::value::traverse::JsonTreeLocation;
+///
+/// let location = JsonTreeLocation::ArrayElement { index: 2 };
+/// assert_eq!(location, JsonTreeLocation::ArrayElement { index: 2 });
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonTreeLocation<'a> {
     /// The top-level JSON value.
