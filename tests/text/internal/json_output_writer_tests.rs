@@ -15,9 +15,7 @@ use qubit_json::encode::JsonEncoder;
 /// Verifies the incremental writer forwards accepted JSON bytes.
 #[test]
 fn test_json_output_writer_writes_incremental_document() {
-    let session = JsonEncodeSession::owned(
-        JsonEncodeLimits::<JsonResource, usize>::builder().build(),
-    );
+    let session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let mut output = Vec::new();
 
     JsonEncoder::new(session)

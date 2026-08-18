@@ -96,33 +96,20 @@ impl Serialize for ScalarKey {
             Self::None => serializer.serialize_none(),
             Self::Unit => serializer.serialize_unit(),
             Self::UnitStruct => serializer.serialize_unit_struct("Key"),
-            Self::UnitVariant => {
-                serializer.serialize_unit_variant("Key", 0, "Unit")
-            }
-            Self::NewtypeStruct => {
-                serializer.serialize_newtype_struct("Key", &"value")
-            }
-            Self::NewtypeVariant => serializer
-                .serialize_newtype_variant("Key", 0, "Variant", &"value"),
+            Self::UnitVariant => serializer.serialize_unit_variant("Key", 0, "Unit"),
+            Self::NewtypeStruct => serializer.serialize_newtype_struct("Key", &"value"),
+            Self::NewtypeVariant => serializer.serialize_newtype_variant("Key", 0, "Variant", &"value"),
             Self::Some => serializer.serialize_some(&"value"),
-            Self::Seq => {
-                serializer.serialize_seq(Some(0)).and_then(|seq| seq.end())
-            }
-            Self::Tuple => {
-                serializer.serialize_tuple(0).and_then(|tuple| tuple.end())
-            }
+            Self::Seq => serializer.serialize_seq(Some(0)).and_then(|seq| seq.end()),
+            Self::Tuple => serializer.serialize_tuple(0).and_then(|tuple| tuple.end()),
             Self::TupleStruct => serializer
                 .serialize_tuple_struct("Key", 0)
                 .and_then(|tuple| tuple.end()),
             Self::TupleVariant => serializer
                 .serialize_tuple_variant("Key", 0, "Tuple", 0)
                 .and_then(|tuple| tuple.end()),
-            Self::Map => {
-                serializer.serialize_map(Some(0)).and_then(|map| map.end())
-            }
-            Self::Struct => serializer
-                .serialize_struct("Key", 0)
-                .and_then(|value| value.end()),
+            Self::Map => serializer.serialize_map(Some(0)).and_then(|map| map.end()),
+            Self::Struct => serializer.serialize_struct("Key", 0).and_then(|value| value.end()),
             Self::StructVariant => serializer
                 .serialize_struct_variant("Key", 0, "Struct", 0)
                 .and_then(|value| value.end()),
@@ -185,9 +172,7 @@ fn test_budgeted_key_checks_each_scalar_serializer_path() {
         ScalarKey::HumanReadable,
     ];
     for key in keys {
-        let mut session = JsonEncodeSession::owned(
-            JsonEncodeLimits::<JsonResource, usize>::builder().build(),
-        );
+        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
         let _ = encode(&OneKey(key), &mut session);
     }
 }

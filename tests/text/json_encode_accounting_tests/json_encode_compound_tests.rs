@@ -38,11 +38,8 @@ impl Serialize for Bytes {
 /// Verifies compound serialization preserves object members.
 #[test]
 fn test_json_encode_compound_serializes_struct_members() {
-    let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::<JsonResource, usize>::builder().build(),
-    );
-    let output = encode(&Pair { left: 1, right: 2 }, &mut session)
-        .expect("compound JSON should serialize");
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let output = encode(&Pair { left: 1, right: 2 }, &mut session).expect("compound JSON should serialize");
 
     assert_eq!(output, br#"{"left":1,"right":2}"#);
 }
@@ -50,11 +47,8 @@ fn test_json_encode_compound_serializes_struct_members() {
 /// Verifies tuple-struct compounds complete through the decorated end path.
 #[test]
 fn test_json_encode_compound_serializes_tuple_struct_fields() {
-    let mut session = JsonEncodeSession::owned(
-        JsonEncodeLimits::<JsonResource, usize>::builder().build(),
-    );
-    let output = encode(&Triple(3, 4), &mut session)
-        .expect("tuple-struct JSON should serialize");
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let output = encode(&Triple(3, 4), &mut session).expect("tuple-struct JSON should serialize");
 
     assert_eq!(output, b"[3,4]");
 }
@@ -64,11 +58,9 @@ fn test_json_encode_compound_serializes_tuple_struct_fields() {
 fn test_json_encode_scalar_paths_support_u8_quantities() {
     macro_rules! assert_scalar {
         ($value:expr) => {{
-            let mut session = JsonEncodeSession::<JsonResource, u8>::owned(
-                JsonEncodeLimits::<JsonResource, u8>::builder().build(),
-            );
-            encode(&$value, &mut session)
-                .expect("scalar should fit an unconfigured budget");
+            let mut session =
+                JsonEncodeSession::<JsonResource, u8>::owned(JsonEncodeLimits::<JsonResource, u8>::builder().build());
+            encode(&$value, &mut session).expect("scalar should fit an unconfigured budget");
         }};
     }
 

@@ -92,10 +92,7 @@ impl Write for PrefixWriter {
 fn test_encode_session_exposes_only_output_resource() {
     let encode = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder()
-            .output_bytes_limit(ResourceLimit::new(
-                JsonResource::OutputBytes,
-                8,
-            ))
+            .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 8))
             .build(),
     );
 
@@ -108,17 +105,12 @@ fn test_encode_session_exposes_only_output_resource() {
 fn test_encode_attempt_consumes_output_bytes_atomically() {
     let mut session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder()
-            .output_bytes_limit(ResourceLimit::new(
-                JsonResource::OutputBytes,
-                3,
-            ))
+            .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 3))
             .build(),
     );
 
     let mut attempt = session.begin_value();
-    attempt
-        .try_consume_output_bytes(3)
-        .expect("exact output fits");
+    attempt.try_consume_output_bytes(3).expect("exact output fits");
     let error = attempt
         .try_consume_output_bytes(1)
         .expect_err("output budget is exhausted");
@@ -131,10 +123,7 @@ fn test_encode_attempt_preserves_embedded_value_limits() {
     let value_limits = JsonValueLimits::<JsonResource, usize>::builder()
         .string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2))
         .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
-        .structure_limits(
-            StructureLimits::builder()
-                .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
-        )
+        .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)))
         .build();
     let mut session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder()
@@ -180,26 +169,17 @@ fn test_encode_session_borrows_output_and_value_budgets() {
     let mut output = ResourceBudget::new(JsonResource::OutputBytes, 32);
     let mut value = JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
-            .structure_limits(
-                StructureLimits::builder()
-                    .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
-            )
+            .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)))
             .build(),
     );
-    let mut session =
-        JsonEncodeSession::borrowing_output(&mut output, &mut value);
+    let mut session = JsonEncodeSession::borrowing_output(&mut output, &mut value);
 
     let encoded = encode(&serde_json::json!({"name": "qubit"}), &mut session)
         .expect("borrowed budgets should support online encoding");
 
     assert_eq!(encoded, br#"{"name":"qubit"}"#);
     assert_eq!(output.used(), encoded.len());
-    assert!(
-        value
-            .used_nodes()
-            .expect("nodes limit should be configured")
-            > 0
-    );
+    assert!(value.used_nodes().expect("nodes limit should be configured") > 0);
 }
 
 /// Verifies buffered vector serialization publishes neither output nor value
@@ -254,15 +234,9 @@ fn test_incremental_stream_failure_keeps_prefix_and_rolls_back_value() {
     );
     let mut writer = Vec::new();
 
-    assert!(
-        write_incremental(&mut writer, &FailsAfterPrefix, &mut session)
-            .is_err()
-    );
+    assert!(write_incremental(&mut writer, &FailsAfterPrefix, &mut session).is_err());
     assert!(!writer.is_empty());
-    assert_eq!(
-        session.output_budget().expect("output budget").used(),
-        writer.len(),
-    );
+    assert_eq!(session.output_budget().expect("output budget").used(), writer.len(),);
     assert_eq!(session.value_budget().used_nodes(), Some(0));
 }
 
@@ -284,12 +258,8 @@ fn test_incremental_panic_keeps_prefix_and_reuses_value_capacity() {
 
     assert!(result.is_err());
     assert!(!writer.is_empty());
-    assert_eq!(
-        session.output_budget().expect("output budget").used(),
-        writer.len(),
-    );
+    assert_eq!(session.output_budget().expect("output budget").used(), writer.len(),);
     assert_eq!(session.value_budget().used_nodes(), Some(0));
-    encode(&true, &mut session)
-        .expect("panic must leave value capacity for the next encode");
+    encode(&true, &mut session).expect("panic must leave value capacity for the next encode");
     assert_eq!(session.value_budget().used_nodes(), Some(1));
 }

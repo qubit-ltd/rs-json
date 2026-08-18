@@ -19,9 +19,9 @@ use serde_json::Deserializer;
 #[test]
 fn test_json_value_child_seed_checks_prospective_array_item() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().sequence_items_limit(
-            ResourceLimit::new(JsonResource::SequenceItems, 1),
-        ))
+        .structure_limits(
+            StructureLimits::builder().sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, 1)),
+        )
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
