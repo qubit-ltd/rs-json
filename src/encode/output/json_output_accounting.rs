@@ -34,9 +34,7 @@ where
 {
     /// Creates live accounting over the caller-owned output budget.
     #[inline]
-    pub(in crate::encode) const fn new(
-        output: Option<&'a mut ResourceBudget<R, Q>>,
-    ) -> Self {
+    pub(in crate::encode) const fn new(output: Option<&'a mut ResourceBudget<R, Q>>) -> Self {
         Self {
             output,
             violation: None,
@@ -52,46 +50,31 @@ where
     }
 
     /// Checks an output lower bound without consuming capacity.
-    pub(in crate::encode) fn check_available(
-        &self,
-        amount: usize,
-    ) -> Result<(), MeasuredBudgetError<R, Q>>
+    pub(in crate::encode) fn check_available(&self, amount: usize) -> Result<(), MeasuredBudgetError<R, Q>>
     where
         R: Clone,
     {
         self.output.as_deref().map_or(Ok(()), |output| {
-            let amount = Q::try_from_usize(amount).map_err(|source| {
-                MeasuredBudgetError::quantity(output.resource().clone(), source)
-            })?;
-            output
-                .check_available(amount)
-                .map_err(MeasuredBudgetError::from)
+            let amount = Q::try_from_usize(amount)
+                .map_err(|source| MeasuredBudgetError::quantity(output.resource().clone(), source))?;
+            output.check_available(amount).map_err(MeasuredBudgetError::from)
         })
     }
 
     /// Consumes bytes accepted by the output destination.
-    pub(in crate::encode) fn consume(
-        &mut self,
-        amount: usize,
-    ) -> Result<(), MeasuredBudgetError<R, Q>>
+    pub(in crate::encode) fn consume(&mut self, amount: usize) -> Result<(), MeasuredBudgetError<R, Q>>
     where
         R: Clone,
     {
         self.output.as_deref_mut().map_or(Ok(()), |output| {
-            let amount = Q::try_from_usize(amount).map_err(|source| {
-                MeasuredBudgetError::quantity(output.resource().clone(), source)
-            })?;
-            output
-                .try_consume(amount)
-                .map_err(MeasuredBudgetError::from)
+            let amount = Q::try_from_usize(amount)
+                .map_err(|source| MeasuredBudgetError::quantity(output.resource().clone(), source))?;
+            output.try_consume(amount).map_err(MeasuredBudgetError::from)
         })
     }
 
     /// Records the first budget violation hidden by a writer error.
-    pub(in crate::encode) fn record_violation(
-        &mut self,
-        error: MeasuredBudgetError<R, Q>,
-    ) {
+    pub(in crate::encode) fn record_violation(&mut self, error: MeasuredBudgetError<R, Q>) {
         if self.violation.is_none() {
             self.violation = Some(error);
         }
@@ -100,17 +83,12 @@ where
     /// Takes the first recorded violation, if one exists.
     #[must_use]
     #[inline(always)]
-    pub(in crate::encode) fn take_violation(
-        &mut self,
-    ) -> Option<MeasuredBudgetError<R, Q>> {
+    pub(in crate::encode) fn take_violation(&mut self) -> Option<MeasuredBudgetError<R, Q>> {
         self.violation.take()
     }
 
     /// Records the first raw JSON syntax failure.
-    pub(in crate::encode) fn record_syntax_error(
-        &mut self,
-        error: JsonSyntaxError,
-    ) {
+    pub(in crate::encode) fn record_syntax_error(&mut self, error: JsonSyntaxError) {
         if self.syntax_error.is_none() {
             self.syntax_error = Some(error);
         }
@@ -119,9 +97,7 @@ where
     /// Takes the first recorded raw JSON syntax failure.
     #[must_use]
     #[inline(always)]
-    pub(in crate::encode) fn take_syntax_error(
-        &mut self,
-    ) -> Option<JsonSyntaxError> {
+    pub(in crate::encode) fn take_syntax_error(&mut self) -> Option<JsonSyntaxError> {
         self.syntax_error.take()
     }
 }

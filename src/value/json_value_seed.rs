@@ -45,9 +45,7 @@ where
     /// A seed that constructs one accounted [`Value`] tree.
     #[inline(always)]
     #[must_use]
-    pub fn new(
-        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
-    ) -> Self {
+    pub fn new(transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>) -> Self {
         Self { transaction }
     }
 }

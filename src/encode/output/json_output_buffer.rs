@@ -47,9 +47,7 @@ where
     ///
     /// An empty writer with no recorded violation.
     #[inline]
-    pub(in crate::encode) fn new(
-        accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
-    ) -> Self {
+    pub(in crate::encode) fn new(accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>) -> Self {
         Self {
             bytes: Vec::new(),
             accounting,

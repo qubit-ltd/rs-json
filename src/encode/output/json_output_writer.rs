@@ -40,10 +40,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates an incremental writer over shared output accounting.
-    pub(in crate::encode) fn new(
-        writer: W,
-        accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
-    ) -> Self {
+    pub(in crate::encode) fn new(writer: W, accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>) -> Self {
         Self {
             writer,
             accounting,
@@ -93,28 +90,21 @@ where
         match self.writer.write(input) {
             Ok(written) => {
                 if written == 0 && !input.is_empty() {
-                    let error = io::Error::new(
-                        io::ErrorKind::WriteZero,
-                        "JSON output writer accepted no bytes",
-                    );
-                    self.io_error =
-                        Some(io::Error::new(error.kind(), error.to_string()));
+                    let error = io::Error::new(io::ErrorKind::WriteZero, "JSON output writer accepted no bytes");
+                    self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
                     return Err(error);
                 }
                 if self.has_output_budget {
                     let mut accounting = self.accounting.borrow_mut();
                     if let Err(error) = accounting.consume(written) {
                         accounting.record_violation(error);
-                        return Err(io::Error::other(
-                            "JSON output budget exceeded",
-                        ));
+                        return Err(io::Error::other("JSON output budget exceeded"));
                     }
                 }
                 Ok(written)
             }
             Err(error) => {
-                self.io_error =
-                    Some(io::Error::new(error.kind(), error.to_string()));
+                self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
                 Err(error)
             }
         }
@@ -125,8 +115,7 @@ where
         match self.writer.flush() {
             Ok(()) => Ok(()),
             Err(error) => {
-                self.io_error =
-                    Some(io::Error::new(error.kind(), error.to_string()));
+                self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
                 Err(error)
             }
         }

@@ -35,11 +35,7 @@ where
     /// # Returns
     ///
     /// The traversal control decision for the node.
-    fn visit(
-        &mut self,
-        value: &mut Value,
-        context: JsonTreeContext<'_>,
-    ) -> Result<JsonTreeControl, Self::Error>;
+    fn visit(&mut self, value: &mut Value, context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error>;
 
     /// Handles an unadmitted node before its subtree is skipped or processing
     /// aborts.

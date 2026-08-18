@@ -63,10 +63,7 @@ where
     ///
     /// Returns the first measured budget rejection encountered while walking
     /// the tree. Charges are committed only when the complete walk succeeds.
-    pub fn account(
-        &mut self,
-        value: &Value,
-    ) -> Result<(), MeasuredBudgetError<R, Q>> {
+    pub fn account(&mut self, value: &Value) -> Result<(), MeasuredBudgetError<R, Q>> {
         let mut transaction = self.budget.transaction();
         let result = JsonTreeReader::new(&mut transaction)
             .process(value, &mut NoopVisitor)
@@ -119,9 +116,7 @@ where
     }
 
     /// Extracts the infrastructure error from a no-op traversal.
-    fn extract_budget(
-        error: JsonTreeProcessError<R, Q, std::convert::Infallible>,
-    ) -> MeasuredBudgetError<R, Q> {
+    fn extract_budget(error: JsonTreeProcessError<R, Q, std::convert::Infallible>) -> MeasuredBudgetError<R, Q> {
         match error {
             JsonTreeProcessError::Budget(error) => error,
             JsonTreeProcessError::Visitor(error) => match error {},
@@ -136,11 +131,7 @@ impl JsonTreeVisitor for NoopVisitor {
     type Error = std::convert::Infallible;
 
     /// Accepts every admitted node.
-    fn enter(
-        &mut self,
-        _value: &Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn enter(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Ok(())
     }
 }

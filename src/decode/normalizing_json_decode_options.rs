@@ -271,10 +271,7 @@ impl NormalizingJsonDecodeOptionsBuilder {
     /// Configures the policy used to remove one outer Markdown code fence.
     #[inline]
     #[must_use]
-    pub const fn markdown_fence_policy(
-        mut self,
-        policy: MarkdownFencePolicy,
-    ) -> Self {
+    pub const fn markdown_fence_policy(mut self, policy: MarkdownFencePolicy) -> Self {
         self.options.markdown_fence_policy = policy;
         self
     }
@@ -282,10 +279,7 @@ impl NormalizingJsonDecodeOptionsBuilder {
     /// Configures whether raw control characters in JSON strings are escaped.
     #[inline]
     #[must_use]
-    pub const fn escape_control_chars_in_strings(
-        mut self,
-        enabled: bool,
-    ) -> Self {
+    pub const fn escape_control_chars_in_strings(mut self, enabled: bool) -> Self {
         self.options.escape_control_chars_in_strings = enabled;
         self
     }
@@ -301,10 +295,7 @@ impl NormalizingJsonDecodeOptionsBuilder {
     /// Configures the normalized JSON byte-size limit.
     #[inline]
     #[must_use]
-    pub const fn max_normalized_bytes(
-        mut self,
-        maximum: Option<usize>,
-    ) -> Self {
+    pub const fn max_normalized_bytes(mut self, maximum: Option<usize>) -> Self {
         self.options.max_normalized_bytes = maximum;
         self
     }
@@ -312,10 +303,7 @@ impl NormalizingJsonDecodeOptionsBuilder {
     /// Configures optional JSON value-resource limits.
     #[inline]
     #[must_use]
-    pub const fn value_limits(
-        mut self,
-        limits: Option<JsonValueLimits>,
-    ) -> Self {
+    pub const fn value_limits(mut self, limits: Option<JsonValueLimits>) -> Self {
         self.options.value_limits = limits;
         self
     }

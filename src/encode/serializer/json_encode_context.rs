@@ -31,12 +31,10 @@ where
     Q: ResourceQuantity,
 {
     /// Caller-owned transaction charged by the traversal.
-    pub(in crate::encode) transaction:
-        &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    pub(in crate::encode) transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 
     /// Live output accounting shared with the byte buffer.
-    pub(in crate::encode) output:
-        &'transaction RefCell<JsonOutputAccounting<'transaction, R, Q>>,
+    pub(in crate::encode) output: &'transaction RefCell<JsonOutputAccounting<'transaction, R, Q>>,
 }
 
 impl<R, Q> JsonEncodeContext<'_, '_, R, Q>
@@ -45,10 +43,7 @@ where
     Q: ResourceQuantity,
 {
     /// Records one failed check before converting it into a Serde error.
-    pub(super) fn record<E>(
-        &mut self,
-        result: Result<(), MeasuredBudgetError<R, Q>>,
-    ) -> Result<(), E>
+    pub(super) fn record<E>(&mut self, result: Result<(), MeasuredBudgetError<R, Q>>) -> Result<(), E>
     where
         E: Error,
     {
@@ -59,10 +54,7 @@ where
     }
 
     /// Stages one complete JSON measurement and maps any violation to Serde.
-    pub(super) fn admit<E>(
-        &mut self,
-        measurement: JsonMeasurement,
-    ) -> Result<(), E>
+    pub(super) fn admit<E>(&mut self, measurement: JsonMeasurement) -> Result<(), E>
     where
         E: Error,
     {
@@ -71,11 +63,7 @@ where
     }
 
     /// Checks and charges a container before requesting its Serde compound.
-    pub(super) fn enter_container<E>(
-        &mut self,
-        kind: JsonContainerKind,
-        depth: usize,
-    ) -> Result<(), E>
+    pub(super) fn enter_container<E>(&mut self, kind: JsonContainerKind, depth: usize) -> Result<(), E>
     where
         E: Error,
     {
@@ -84,11 +72,7 @@ where
     }
 
     /// Checks one prospective container count without charging value usage.
-    pub(super) fn check_container_count<E>(
-        &mut self,
-        kind: JsonContainerKind,
-        prospective: usize,
-    ) -> Result<(), E>
+    pub(super) fn check_container_count<E>(&mut self, kind: JsonContainerKind, prospective: usize) -> Result<(), E>
     where
         E: Error,
     {
@@ -101,11 +85,7 @@ where
     /// The fragment length is a safe lower bound for the complete output size.
     /// Structural traversal starts at `depth`, the fragment's root-inclusive
     /// position in the final document.
-    pub(super) fn preflight_raw<E>(
-        &mut self,
-        value: &str,
-        depth: usize,
-    ) -> Result<(), E>
+    pub(super) fn preflight_raw<E>(&mut self, value: &str, depth: usize) -> Result<(), E>
     where
         E: Error,
         R: Clone,
@@ -113,17 +93,16 @@ where
         let output = self.output.borrow().check_available(value.len());
         self.record(output)?;
         let result = {
-            let mut scanner =
-                JsonLexicalScanner::at_depth(&mut *self.transaction, depth);
+            let mut scanner = JsonLexicalScanner::at_depth(&mut *self.transaction, depth);
             scanner.scan(value.as_bytes())
         };
         match result {
             Ok(()) => Ok(()),
             Err(JsonLexicalError::Budget(error)) => self.record(Err(error)),
             Err(JsonLexicalError::Syntax(failure)) => {
-                self.output.borrow_mut().record_syntax_error(
-                    JsonSyntaxError::from_lexical(failure),
-                );
+                self.output
+                    .borrow_mut()
+                    .record_syntax_error(JsonSyntaxError::from_lexical(failure));
                 Err(E::custom("invalid raw JSON value"))
             }
         }
@@ -141,27 +120,20 @@ where
         T: Display + ?Sized,
     {
         let mut collector = BudgetedDisplayCollector::new(context);
-        write!(&mut collector, "{value}")
-            .map_err(|_| E::custom("JSON display text budget exceeded"))?;
+        write!(&mut collector, "{value}").map_err(|_| E::custom("JSON display text budget exceeded"))?;
         let text = collector.text;
         {
             let mut context = collector.context.borrow_mut();
             match kind {
-                DisplayBudgetKind::String => {
-                    context.admit(JsonMeasurement::String {
-                        depth,
-                        bytes: text.len(),
-                    })
-                }
-                DisplayBudgetKind::Key => {
-                    context.admit(JsonMeasurement::Key { bytes: text.len() })
-                }
-                DisplayBudgetKind::Number => {
-                    context.admit(JsonMeasurement::Number {
-                        depth,
-                        bytes: text.len(),
-                    })
-                }
+                DisplayBudgetKind::String => context.admit(JsonMeasurement::String {
+                    depth,
+                    bytes: text.len(),
+                }),
+                DisplayBudgetKind::Key => context.admit(JsonMeasurement::Key { bytes: text.len() }),
+                DisplayBudgetKind::Number => context.admit(JsonMeasurement::Number {
+                    depth,
+                    bytes: text.len(),
+                }),
                 DisplayBudgetKind::RawOutput => Ok(()),
             }?;
         }

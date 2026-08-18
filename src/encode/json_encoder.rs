@@ -72,9 +72,7 @@ where
 
     /// Returns mutable access to the cumulative session.
     #[must_use]
-    pub const fn session_mut(
-        &mut self,
-    ) -> &mut JsonEncodeSession<'budget, R, Q> {
+    pub const fn session_mut(&mut self) -> &mut JsonEncodeSession<'budget, R, Q> {
         &mut self.session
     }
 
@@ -102,10 +100,7 @@ where
     ///
     /// Returns [`JsonEncodeError::Budget`] when accounting rejects the value
     /// or output, or a serialization error when Serde rejects `value`.
-    pub fn to_vec<T>(
-        &mut self,
-        value: &T,
-    ) -> Result<Vec<u8>, JsonEncodeError<R, Q>>
+    pub fn to_vec<T>(&mut self, value: &T) -> Result<Vec<u8>, JsonEncodeError<R, Q>>
     where
         T: Serialize + ?Sized,
     {
@@ -142,11 +137,7 @@ where
     ///
     /// Returns [`JsonEncodeError::Budget`] when accounting rejects the value
     /// or output, or a serialization/writer error on failure.
-    pub fn write_buffered<W, T>(
-        &mut self,
-        writer: W,
-        value: &T,
-    ) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_buffered<W, T>(&mut self, writer: W, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         W: Write,
         T: Serialize + ?Sized,
@@ -182,11 +173,7 @@ where
     /// Returns [`JsonEncodeError::Budget`] when accounting rejects output,
     /// or a serialization/writer error on failure. Accepted output prefixes
     /// remain written when a later operation fails.
-    pub fn write_incremental<W, T>(
-        &mut self,
-        writer: W,
-        value: &T,
-    ) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_incremental<W, T>(&mut self, writer: W, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         W: Write,
         T: Serialize + ?Sized,
@@ -194,8 +181,7 @@ where
         let mut attempt = self.session.begin_value();
         let result = {
             let (output_budget, transaction) = attempt.split_mut();
-            let accounting =
-                RefCell::new(JsonOutputAccounting::new(output_budget));
+            let accounting = RefCell::new(JsonOutputAccounting::new(output_budget));
             let mut output = JsonOutputWriter::new(writer, &accounting);
             let result = {
                 let mut inner = JsonSerializer::new(&mut output);

@@ -45,10 +45,7 @@ enum NormalizingJsonDecodeFailure {
         source: Option<std::str::Utf8Error>,
     },
     /// Raw input exceeded its configured byte limit.
-    InputTooLarge {
-        raw_input_bytes: usize,
-        maximum: usize,
-    },
+    InputTooLarge { raw_input_bytes: usize, maximum: usize },
     /// Normalized input exceeded its configured byte limit.
     NormalizedInputTooLarge {
         raw_input_bytes: usize,
@@ -154,9 +151,7 @@ impl Clone for NormalizingJsonDecodeFailure {
                     MeasuredBudgetError::Quantity { resource, source } => {
                         MeasuredBudgetError::quantity(*resource, *source)
                     }
-                    MeasuredBudgetError::Budget(error) => {
-                        MeasuredBudgetError::Budget(error.clone())
-                    }
+                    MeasuredBudgetError::Budget(error) => MeasuredBudgetError::Budget(error.clone()),
                 },
             },
             Self::UnexpectedTopLevel {
@@ -200,8 +195,7 @@ impl NormalizingJsonDecodeError {
     ) -> Self {
         let valid_up_to = error.valid_up_to();
         let error_len = error.error_len();
-        let source =
-            (privacy_policy == DiagnosticPolicy::Detailed).then_some(error);
+        let source = (privacy_policy == DiagnosticPolicy::Detailed).then_some(error);
         Self {
             privacy_policy,
             failure: NormalizingJsonDecodeFailure::InvalidUtf8 {
@@ -374,15 +368,11 @@ impl NormalizingJsonDecodeError {
 
     /// Retains an input-derived source only when detailed diagnostics are
     /// enabled.
-    fn retain_input_source<E>(
-        error: E,
-        privacy_policy: DiagnosticPolicy,
-    ) -> Option<Arc<dyn Error + Send + Sync>>
+    fn retain_input_source<E>(error: E, privacy_policy: DiagnosticPolicy) -> Option<Arc<dyn Error + Send + Sync>>
     where
         E: Error + Send + Sync + 'static,
     {
-        (privacy_policy == DiagnosticPolicy::Detailed)
-            .then(|| Arc::new(error) as Arc<dyn Error + Send + Sync>)
+        (privacy_policy == DiagnosticPolicy::Detailed).then(|| Arc::new(error) as Arc<dyn Error + Send + Sync>)
     }
 
     /// Returns the stable category of this decoding failure.
@@ -394,28 +384,18 @@ impl NormalizingJsonDecodeError {
     #[inline(always)]
     pub const fn kind(&self) -> NormalizingJsonDecodeErrorKind {
         match self.failure {
-            NormalizingJsonDecodeFailure::InvalidUtf8 { .. } => {
-                NormalizingJsonDecodeErrorKind::InvalidUtf8
-            }
+            NormalizingJsonDecodeFailure::InvalidUtf8 { .. } => NormalizingJsonDecodeErrorKind::InvalidUtf8,
             NormalizingJsonDecodeFailure::InputTooLarge { .. }
-            | NormalizingJsonDecodeFailure::NormalizedInputTooLarge {
-                ..
-            } => NormalizingJsonDecodeErrorKind::InputTooLarge,
-            NormalizingJsonDecodeFailure::EmptyInput { .. } => {
-                NormalizingJsonDecodeErrorKind::EmptyInput
+            | NormalizingJsonDecodeFailure::NormalizedInputTooLarge { .. } => {
+                NormalizingJsonDecodeErrorKind::InputTooLarge
             }
-            NormalizingJsonDecodeFailure::InvalidJson { .. } => {
-                NormalizingJsonDecodeErrorKind::InvalidJson
-            }
-            NormalizingJsonDecodeFailure::Budget { .. } => {
-                NormalizingJsonDecodeErrorKind::Budget
-            }
+            NormalizingJsonDecodeFailure::EmptyInput { .. } => NormalizingJsonDecodeErrorKind::EmptyInput,
+            NormalizingJsonDecodeFailure::InvalidJson { .. } => NormalizingJsonDecodeErrorKind::InvalidJson,
+            NormalizingJsonDecodeFailure::Budget { .. } => NormalizingJsonDecodeErrorKind::Budget,
             NormalizingJsonDecodeFailure::UnexpectedTopLevel { .. } => {
                 NormalizingJsonDecodeErrorKind::UnexpectedTopLevel
             }
-            NormalizingJsonDecodeFailure::Deserialize { .. } => {
-                NormalizingJsonDecodeErrorKind::Deserialize
-            }
+            NormalizingJsonDecodeFailure::Deserialize { .. } => NormalizingJsonDecodeErrorKind::Deserialize,
         }
     }
 
@@ -429,28 +409,14 @@ impl NormalizingJsonDecodeError {
     #[inline(always)]
     pub const fn stage(&self) -> NormalizingJsonDecodeStage {
         match self.failure {
-            NormalizingJsonDecodeFailure::InvalidUtf8 { .. } => {
-                NormalizingJsonDecodeStage::DecodeText
-            }
+            NormalizingJsonDecodeFailure::InvalidUtf8 { .. } => NormalizingJsonDecodeStage::DecodeText,
             NormalizingJsonDecodeFailure::InputTooLarge { .. }
-            | NormalizingJsonDecodeFailure::NormalizedInputTooLarge {
-                ..
-            }
-            | NormalizingJsonDecodeFailure::EmptyInput { .. } => {
-                NormalizingJsonDecodeStage::Normalize
-            }
-            NormalizingJsonDecodeFailure::InvalidJson { .. } => {
-                NormalizingJsonDecodeStage::Parse
-            }
-            NormalizingJsonDecodeFailure::Budget { .. } => {
-                NormalizingJsonDecodeStage::Admission
-            }
-            NormalizingJsonDecodeFailure::UnexpectedTopLevel { .. } => {
-                NormalizingJsonDecodeStage::TopLevelCheck
-            }
-            NormalizingJsonDecodeFailure::Deserialize { .. } => {
-                NormalizingJsonDecodeStage::Deserialize
-            }
+            | NormalizingJsonDecodeFailure::NormalizedInputTooLarge { .. }
+            | NormalizingJsonDecodeFailure::EmptyInput { .. } => NormalizingJsonDecodeStage::Normalize,
+            NormalizingJsonDecodeFailure::InvalidJson { .. } => NormalizingJsonDecodeStage::Parse,
+            NormalizingJsonDecodeFailure::Budget { .. } => NormalizingJsonDecodeStage::Admission,
+            NormalizingJsonDecodeFailure::UnexpectedTopLevel { .. } => NormalizingJsonDecodeStage::TopLevelCheck,
+            NormalizingJsonDecodeFailure::Deserialize { .. } => NormalizingJsonDecodeStage::Deserialize,
         }
     }
 
@@ -475,10 +441,7 @@ impl NormalizingJsonDecodeError {
     #[inline(always)]
     pub const fn expected_top_level(&self) -> Option<JsonRootKind> {
         match self.failure {
-            NormalizingJsonDecodeFailure::UnexpectedTopLevel {
-                expected,
-                ..
-            } => Some(expected),
+            NormalizingJsonDecodeFailure::UnexpectedTopLevel { expected, .. } => Some(expected),
             _ => None,
         }
     }
@@ -493,9 +456,7 @@ impl NormalizingJsonDecodeError {
     #[inline(always)]
     pub const fn actual_top_level(&self) -> Option<JsonRootKind> {
         match self.failure {
-            NormalizingJsonDecodeFailure::UnexpectedTopLevel {
-                actual, ..
-            } => Some(actual),
+            NormalizingJsonDecodeFailure::UnexpectedTopLevel { actual, .. } => Some(actual),
             _ => None,
         }
     }
@@ -509,37 +470,14 @@ impl NormalizingJsonDecodeError {
     #[inline(always)]
     pub const fn raw_input_bytes(&self) -> usize {
         match self.failure {
-            NormalizingJsonDecodeFailure::InvalidUtf8 {
-                raw_input_bytes,
-                ..
-            }
-            | NormalizingJsonDecodeFailure::InputTooLarge {
-                raw_input_bytes,
-                ..
-            }
-            | NormalizingJsonDecodeFailure::NormalizedInputTooLarge {
-                raw_input_bytes,
-                ..
-            }
-            | NormalizingJsonDecodeFailure::EmptyInput {
-                raw_input_bytes,
-                ..
-            }
-            | NormalizingJsonDecodeFailure::InvalidJson {
-                raw_input_bytes,
-                ..
-            }
-            | NormalizingJsonDecodeFailure::Budget {
-                raw_input_bytes, ..
-            }
-            | NormalizingJsonDecodeFailure::UnexpectedTopLevel {
-                raw_input_bytes,
-                ..
-            }
-            | NormalizingJsonDecodeFailure::Deserialize {
-                raw_input_bytes,
-                ..
-            } => raw_input_bytes,
+            NormalizingJsonDecodeFailure::InvalidUtf8 { raw_input_bytes, .. }
+            | NormalizingJsonDecodeFailure::InputTooLarge { raw_input_bytes, .. }
+            | NormalizingJsonDecodeFailure::NormalizedInputTooLarge { raw_input_bytes, .. }
+            | NormalizingJsonDecodeFailure::EmptyInput { raw_input_bytes, .. }
+            | NormalizingJsonDecodeFailure::InvalidJson { raw_input_bytes, .. }
+            | NormalizingJsonDecodeFailure::Budget { raw_input_bytes, .. }
+            | NormalizingJsonDecodeFailure::UnexpectedTopLevel { raw_input_bytes, .. }
+            | NormalizingJsonDecodeFailure::Deserialize { raw_input_bytes, .. } => raw_input_bytes,
         }
     }
 
@@ -552,9 +490,7 @@ impl NormalizingJsonDecodeError {
     #[inline(always)]
     pub const fn utf8_valid_up_to(&self) -> Option<usize> {
         match self.failure {
-            NormalizingJsonDecodeFailure::InvalidUtf8 {
-                valid_up_to, ..
-            } => Some(valid_up_to),
+            NormalizingJsonDecodeFailure::InvalidUtf8 { valid_up_to, .. } => Some(valid_up_to),
             _ => None,
         }
     }
@@ -569,9 +505,7 @@ impl NormalizingJsonDecodeError {
     #[inline(always)]
     pub const fn utf8_error_len(&self) -> Option<usize> {
         match self.failure {
-            NormalizingJsonDecodeFailure::InvalidUtf8 { error_len, .. } => {
-                error_len
-            }
+            NormalizingJsonDecodeFailure::InvalidUtf8 { error_len, .. } => error_len,
             _ => None,
         }
     }
@@ -586,31 +520,26 @@ impl NormalizingJsonDecodeError {
     #[inline(always)]
     pub const fn normalized_input_bytes(&self) -> Option<usize> {
         match self.failure {
-            NormalizingJsonDecodeFailure::InvalidUtf8 { .. }
-            | NormalizingJsonDecodeFailure::InputTooLarge { .. } => None,
+            NormalizingJsonDecodeFailure::InvalidUtf8 { .. } | NormalizingJsonDecodeFailure::InputTooLarge { .. } => {
+                None
+            }
             NormalizingJsonDecodeFailure::NormalizedInputTooLarge {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             }
             | NormalizingJsonDecodeFailure::InvalidJson {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             }
             | NormalizingJsonDecodeFailure::UnexpectedTopLevel {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             }
             | NormalizingJsonDecodeFailure::Deserialize {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             } => Some(normalized_input_bytes),
             NormalizingJsonDecodeFailure::EmptyInput {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             }
             | NormalizingJsonDecodeFailure::Budget {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             } => normalized_input_bytes,
         }
     }
@@ -624,9 +553,7 @@ impl NormalizingJsonDecodeError {
     #[inline(always)]
     pub const fn max_input_bytes(&self) -> Option<usize> {
         match self.failure {
-            NormalizingJsonDecodeFailure::InputTooLarge { maximum, .. } => {
-                Some(maximum)
-            }
+            NormalizingJsonDecodeFailure::InputTooLarge { maximum, .. } => Some(maximum),
             _ => None,
         }
     }
@@ -641,10 +568,7 @@ impl NormalizingJsonDecodeError {
     #[inline(always)]
     pub const fn max_normalized_bytes(&self) -> Option<usize> {
         match self.failure {
-            NormalizingJsonDecodeFailure::NormalizedInputTooLarge {
-                maximum,
-                ..
-            } => Some(maximum),
+            NormalizingJsonDecodeFailure::NormalizedInputTooLarge { maximum, .. } => Some(maximum),
             _ => None,
         }
     }
@@ -697,9 +621,7 @@ impl NormalizingJsonDecodeError {
     /// failure categories.
     #[must_use]
     #[inline(always)]
-    pub const fn measured_budget_error(
-        &self,
-    ) -> Option<&MeasuredBudgetError<JsonResource, usize>> {
+    pub const fn measured_budget_error(&self) -> Option<&MeasuredBudgetError<JsonResource, usize>> {
         match &self.failure {
             NormalizingJsonDecodeFailure::Budget { source, .. } => Some(source),
             _ => None,
@@ -746,10 +668,7 @@ impl PartialEq for NormalizingJsonDecodeFailure {
                     error_len: right_len,
                     ..
                 },
-            ) => {
-                (left_raw, left_valid, left_len)
-                    == (right_raw, right_valid, right_len)
-            }
+            ) => (left_raw, left_valid, left_len) == (right_raw, right_valid, right_len),
             (
                 Self::InputTooLarge {
                     raw_input_bytes: left_raw,
@@ -771,10 +690,7 @@ impl PartialEq for NormalizingJsonDecodeFailure {
                     normalized_input_bytes: right_normalized,
                     maximum: right_maximum,
                 },
-            ) => {
-                (left_raw, left_normalized, left_maximum)
-                    == (right_raw, right_normalized, right_maximum)
-            }
+            ) => (left_raw, left_normalized, left_maximum) == (right_raw, right_normalized, right_maximum),
             (
                 Self::EmptyInput {
                     raw_input_bytes: left_raw,
@@ -850,12 +766,7 @@ impl PartialEq for NormalizingJsonDecodeFailure {
                 },
             ) => {
                 (left_raw, left_normalized, left_expected, left_actual)
-                    == (
-                        right_raw,
-                        right_normalized,
-                        right_expected,
-                        right_actual,
-                    )
+                    == (right_raw, right_normalized, right_expected, right_actual)
             }
             _ => false,
         }
@@ -867,8 +778,7 @@ impl Eq for NormalizingJsonDecodeFailure {}
 impl PartialEq for NormalizingJsonDecodeError {
     /// Compares the privacy policy and all structured diagnostics.
     fn eq(&self, other: &Self) -> bool {
-        self.privacy_policy == other.privacy_policy
-            && self.failure == other.failure
+        self.privacy_policy == other.privacy_policy && self.failure == other.failure
     }
 }
 
@@ -909,14 +819,9 @@ impl fmt::Display for NormalizingJsonDecodeFailure {
                 f,
                 "Normalized JSON input is too large: {normalized_input_bytes} bytes exceed configured limit {maximum} bytes"
             ),
-            Self::EmptyInput { .. } => {
-                f.write_str("JSON input is empty after normalization")
-            }
+            Self::EmptyInput { .. } => f.write_str("JSON input is empty after normalization"),
             Self::InvalidJson {
-                line,
-                column,
-                source,
-                ..
+                line, column, source, ..
             } => NormalizingJsonDecodeError::fmt_input_failure(
                 f,
                 "Failed to parse JSON",
@@ -927,17 +832,11 @@ impl fmt::Display for NormalizingJsonDecodeFailure {
             Self::Budget { source, .. } => {
                 write!(f, "JSON resource budget rejected input: {source}")
             }
-            Self::UnexpectedTopLevel {
-                expected, actual, ..
-            } => write!(
-                f,
-                "Unexpected JSON top-level type: expected {expected}, got {actual}"
-            ),
+            Self::UnexpectedTopLevel { expected, actual, .. } => {
+                write!(f, "Unexpected JSON top-level type: expected {expected}, got {actual}")
+            }
             Self::Deserialize {
-                line,
-                column,
-                source,
-                ..
+                line, column, source, ..
             } => NormalizingJsonDecodeError::fmt_input_failure(
                 f,
                 "Failed to deserialize JSON value",
@@ -964,16 +863,13 @@ impl Error for NormalizingJsonDecodeError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.failure {
             NormalizingJsonDecodeFailure::InvalidUtf8 {
-                source: Some(source),
-                ..
+                source: Some(source), ..
             } => Some(source),
             NormalizingJsonDecodeFailure::InvalidJson {
-                source: Some(source),
-                ..
+                source: Some(source), ..
             }
             | NormalizingJsonDecodeFailure::Deserialize {
-                source: Some(source),
-                ..
+                source: Some(source), ..
             } => Some(source.as_ref()),
             NormalizingJsonDecodeFailure::Budget { source, .. } => Some(source),
             _ => None,
