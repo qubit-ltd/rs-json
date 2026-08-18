@@ -72,7 +72,9 @@ where
 
     /// Returns mutable access to the cumulative session.
     #[must_use]
-    pub const fn session_mut(&mut self) -> &mut JsonEncodeSession<'budget, R, Q> {
+    pub const fn session_mut(
+        &mut self,
+    ) -> &mut JsonEncodeSession<'budget, R, Q> {
         &mut self.session
     }
 

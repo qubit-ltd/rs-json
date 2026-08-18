@@ -71,7 +71,8 @@ fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
         Err(JsonDecodeError::Deserialize { .. })
     ));
     assert_eq!(
-        decoder.session()
+        decoder
+            .session()
             .input_budget()
             .expect("configured input budget")
             .used(),
@@ -80,7 +81,8 @@ fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 
     assert_eq!(
-        decoder.decode_utf8::<u64>(accepted)
+        decoder
+            .decode_utf8::<u64>(accepted)
             .expect("a new value must fit after typed rollback"),
         0
     );
