@@ -39,37 +39,19 @@ fuzz_target!(|data: &[u8]| {
     let structure = StructureLimits::builder()
         .depth_limit(ResourceLimit::new(JsonResource::Depth, depth))
         .nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes))
-        .sequence_items_limit(ResourceLimit::new(
-            JsonResource::SequenceItems,
-            items,
-        ))
-        .map_entries_limit(ResourceLimit::new(
-            JsonResource::MapEntries,
-            entries,
-        ))
+        .sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, items))
+        .map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, entries))
         .key_bytes_limit(ResourceLimit::new(JsonResource::KeyBytes, key_bytes));
     let value_limits = JsonValueLimits::<JsonResource, usize>::builder()
         .structure_limits(structure)
-        .string_bytes_limit(ResourceLimit::new(
-            JsonResource::StringBytes,
-            string_bytes,
-        ))
-        .number_bytes_limit(ResourceLimit::new(
-            JsonResource::NumberBytes,
-            number_bytes,
-        ))
-        .payload_bytes_limit(ResourceLimit::new(
-            JsonResource::PayloadBytes,
-            payload_bytes,
-        ))
+        .string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, string_bytes))
+        .number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, number_bytes))
+        .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, payload_bytes))
         .build();
     let mut input_budget = ResourceBudget::new(JsonResource::InputBytes, bytes);
     let mut value_budget = JsonValueBudget::new(value_limits);
     {
-        let session = JsonDecodeSession::borrowing_input(
-            &mut input_budget,
-            &mut value_budget,
-        );
+        let session = JsonDecodeSession::borrowing_input(&mut input_budget, &mut value_budget);
         let decoder = JsonDecoder::new(session);
         let session = decoder.into_session();
         assert_eq!(session.max_input_bytes(), Some(bytes));
@@ -82,8 +64,5 @@ fuzz_target!(|data: &[u8]| {
 
     let mut transaction = value_budget.transaction();
     let mut deserializer = serde_json::Deserializer::from_slice(input);
-    let _ = serde::de::DeserializeSeed::deserialize(
-        JsonValueSeed::new(&mut transaction),
-        &mut deserializer,
-    );
+    let _ = serde::de::DeserializeSeed::deserialize(JsonValueSeed::new(&mut transaction), &mut deserializer);
 });

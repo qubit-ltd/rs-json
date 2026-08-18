@@ -32,20 +32,13 @@ fuzz_target!(|data: &[u8]| {
     let output_bytes = internal::fuzz_limit::limit(data, 0);
     let nodes = internal::fuzz_limit::limit(data, 2);
     let payload_bytes = internal::fuzz_limit::limit(data, 4);
-    let structure = StructureLimits::builder()
-        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes));
+    let structure = StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes));
     let value_limits = JsonValueLimits::<JsonResource, usize>::builder()
         .structure_limits(structure)
-        .payload_bytes_limit(ResourceLimit::new(
-            JsonResource::PayloadBytes,
-            payload_bytes,
-        ))
+        .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, payload_bytes))
         .build();
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
-        .output_bytes_limit(ResourceLimit::new(
-            JsonResource::OutputBytes,
-            output_bytes,
-        ))
+        .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, output_bytes))
         .value_limits(value_limits)
         .build();
     let vector_session = JsonEncodeSession::owned(limits.clone());
@@ -65,8 +58,7 @@ fuzz_target!(|data: &[u8]| {
     let mut incremental_output = Vec::new();
     let (incremental, incremental_session) = {
         let mut encoder = JsonEncoder::new(incremental_session);
-        let incremental =
-            encoder.write_incremental(&mut incremental_output, &value);
+        let incremental = encoder.write_incremental(&mut incremental_output, &value);
         (incremental, encoder.into_session())
     };
 
@@ -91,8 +83,8 @@ fuzz_target!(|data: &[u8]| {
     assert_eq!(encoded.is_ok(), buffered.is_ok());
     assert_eq!(encoded.is_ok(), incremental.is_ok());
     if let Ok(encoded) = encoded {
-        let decoded = serde_json::from_slice::<Value>(&encoded)
-            .expect("successful budget-aware encoding must produce JSON");
+        let decoded =
+            serde_json::from_slice::<Value>(&encoded).expect("successful budget-aware encoding must produce JSON");
         assert_eq!(decoded, value);
         assert_eq!(buffered_output, encoded);
         assert_eq!(incremental_output, encoded);
