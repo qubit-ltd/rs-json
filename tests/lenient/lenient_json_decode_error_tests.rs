@@ -15,13 +15,38 @@ use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::DiagnosticPolicy;
 use qubit_json::decode::JsonRootKind;
+use qubit_json::decode::NormalizingJsonDecodeError;
 use qubit_json::decode::NormalizingJsonDecodeErrorKind;
 use qubit_json::decode::NormalizingJsonDecodeOptions;
 use qubit_json::decode::NormalizingJsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecoder;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::fixtures::PublicChoice;
+
+/// Runs one decode with a caller-owned session and restores the session after
+/// the stateful decoder completes.
+fn run_with_session<'a, T>(
+    decoder: &NormalizingJsonDecoder<'_>,
+    input: &str,
+    session: &mut JsonDecodeSession<'a, JsonResource>,
+) -> Result<T, NormalizingJsonDecodeError>
+where
+    T: DeserializeOwned,
+{
+    let owned_session = std::mem::replace(
+        session,
+        JsonDecodeSession::owned(JsonDecodeLimits::new()),
+    );
+    let mut stateful = NormalizingJsonDecoder::with_session(
+        decoder.options().clone(),
+        owned_session,
+    );
+    let result = stateful.decode_str(input);
+    *session = stateful.into_session();
+    result
+}
 
 /// Verifies that budget errors retain their structured rejection details.
 ///
@@ -43,9 +68,10 @@ fn test_budget_error_exposes_measured_rejection_details() {
         .build();
     let mut session = JsonDecodeSession::owned(limits);
 
-    let error = NormalizingJsonDecoder::default()
-        .decode_with_session::<Value>(r#"{"k":"v"}"#, &mut session)
-        .expect_err("string budget must reject the normalized value");
+    let decoder = NormalizingJsonDecoder::default();
+    let error =
+        run_with_session::<Value>(&decoder, r#"{"k":"v"}"#, &mut session)
+            .expect_err("string budget must reject the normalized value");
 
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Budget);
     assert_eq!(error.stage(), NormalizingJsonDecodeStage::Admission);
@@ -157,7 +183,7 @@ fn test_default_error_privacy_redacts_input_derived_serde_details() {
     const SECRET: &str = "TOP_SECRET_VALUE";
 
     let error = NormalizingJsonDecoder::default()
-        .decode_utf8::<PublicChoice>(&format!("\"{SECRET}\""))
+        .decode_str::<PublicChoice>(&format!("\"{SECRET}\""))
         .expect_err("an unknown enum variant should fail deserialization");
 
     assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
@@ -183,7 +209,7 @@ fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
             .build(),
     );
     let error = decoder
-        .decode_utf8::<PublicChoice>(&format!("\"{SECRET}\""))
+        .decode_str::<PublicChoice>(&format!("\"{SECRET}\""))
         .expect_err("an unknown enum variant should fail deserialization");
 
     assert_eq!(error.privacy_policy(), DiagnosticPolicy::Detailed);
@@ -217,7 +243,7 @@ fn test_default_invalid_json_error_does_not_expose_serde_source() {
 #[test]
 fn test_invalid_utf8_redacted_error_does_not_expose_source() {
     let error = NormalizingJsonDecoder::default()
-        .decode_slice::<Value>(&[0xff])
+        .decode_utf8::<Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail");
     assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
     assert_eq!(error.utf8_valid_up_to(), Some(0));
@@ -234,13 +260,13 @@ fn test_invalid_utf8_redacted_error_does_not_expose_source() {
 #[test]
 fn test_invalid_utf8_exposes_safe_position_diagnostics() {
     let definite = NormalizingJsonDecoder::default()
-        .decode_slice::<Value>(&[b'{', 0xff])
+        .decode_utf8::<Value>(&[b'{', 0xff])
         .expect_err("invalid UTF-8 must fail");
     assert_eq!(definite.utf8_valid_up_to(), Some(1));
     assert_eq!(definite.utf8_error_len(), Some(1));
 
     let incomplete = NormalizingJsonDecoder::default()
-        .decode_slice::<Value>(&[0xe2, 0x82])
+        .decode_utf8::<Value>(&[0xe2, 0x82])
         .expect_err("incomplete UTF-8 must fail");
     assert_eq!(incomplete.utf8_valid_up_to(), Some(0));
     assert_eq!(incomplete.utf8_error_len(), None);
@@ -259,7 +285,7 @@ fn test_invalid_utf8_detailed_error_retains_utf8_source() {
             .build(),
     );
     let error = decoder
-        .decode_slice::<Value>(&[0xff])
+        .decode_utf8::<Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail");
     assert_eq!(error.utf8_valid_up_to(), Some(0));
     assert_eq!(error.utf8_error_len(), Some(1));
@@ -298,7 +324,7 @@ fn test_normalization_errors_retain_the_configured_privacy_policy() {
 #[test]
 fn test_error_display_for_deserialize_error_uses_context_message() {
     let error = NormalizingJsonDecoder::default()
-        .decode_utf8::<u64>("\"text\"")
+        .decode_str::<u64>("\"text\"")
         .expect_err("string JSON should not deserialize into u64");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
     assert_eq!(error.stage(), NormalizingJsonDecodeStage::Deserialize);
@@ -342,10 +368,10 @@ fn test_error_partial_eq_compares_all_stable_fields() {
     assert_ne!(third, detailed);
 
     let invalid_utf8_at_start = decoder
-        .decode_slice::<Value>(&[0xff])
+        .decode_utf8::<Value>(&[0xff])
         .expect_err("invalid UTF-8 should return a decode error");
     let invalid_utf8_after_prefix = decoder
-        .decode_slice::<Value>(&[b'a', 0xff])
+        .decode_utf8::<Value>(&[b'a', 0xff])
         .expect_err("invalid UTF-8 should return a decode error");
     assert_ne!(invalid_utf8_at_start, invalid_utf8_after_prefix);
 

@@ -22,8 +22,33 @@ use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::NormalizingJsonDecodeError;
 use qubit_json::decode::NormalizingJsonDecoder;
+use serde::de::DeserializeOwned;
 use serde::de::IgnoredAny;
+
+/// Runs one decode with a caller-owned session and restores the session after
+/// the stateful decoder completes.
+fn run_with_session<'a, T>(
+    decoder: &NormalizingJsonDecoder<'_>,
+    input: &str,
+    session: &mut JsonDecodeSession<'a, JsonResource>,
+) -> Result<T, NormalizingJsonDecodeError>
+where
+    T: DeserializeOwned,
+{
+    let owned_session = std::mem::replace(
+        session,
+        JsonDecodeSession::owned(JsonDecodeLimits::new()),
+    );
+    let mut stateful = NormalizingJsonDecoder::with_session(
+        decoder.options().clone(),
+        owned_session,
+    );
+    let result = stateful.decode_str(input);
+    *session = stateful.into_session();
+    result
+}
 
 /// Verifies decode and encode sessions expose only their directional resources.
 #[test]
@@ -78,15 +103,19 @@ fn test_decode_session_borrowing_reuses_caller_owned_budgets() {
             .build(),
     );
     {
-        let mut session =
+        let session =
             JsonDecodeSession::borrowing_input(&mut input, &mut value);
         let decoder = JsonDecoder::new(session);
         let mut decoder = decoder;
-        decoder.decode_utf8::<IgnoredAny>(br#"{"a":1}"#)
+        decoder
+            .decode_utf8::<IgnoredAny>(br#"{"a":1}"#)
             .expect("borrowed session should admit the document");
         assert_eq!(decoder.session().max_input_bytes(), Some(16_usize));
         assert_eq!(
-            decoder.session().input_budget().map(|budget| budget.limit()),
+            decoder
+                .session()
+                .input_budget()
+                .map(|budget| budget.limit()),
             Some(16_usize)
         );
     }
@@ -147,7 +176,7 @@ fn test_failed_second_value_preserves_first_commit_and_accumulates_input() {
     let first = b"null";
     let second = br#"[null,null]"#;
     let third = b"null";
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_input_bytes(64)
             .max_nodes(3)
@@ -155,19 +184,22 @@ fn test_failed_second_value_preserves_first_commit_and_accumulates_input() {
     );
 
     let mut decoder = JsonDecoder::new(session);
-    decoder.decode_utf8::<IgnoredAny>(first)
+    decoder
+        .decode_utf8::<IgnoredAny>(first)
         .expect("first value must fit");
-    assert!(
-        decoder.decode_utf8::<IgnoredAny>(second)
-            .is_err()
-    );
+    assert!(decoder.decode_utf8::<IgnoredAny>(second).is_err());
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
     assert_eq!(
-        decoder.session().input_budget().expect("input budget").used(),
+        decoder
+            .session()
+            .input_budget()
+            .expect("input budget")
+            .used(),
         first.len() + second.len(),
     );
 
-    decoder.decode_utf8::<IgnoredAny>(third)
+    decoder
+        .decode_utf8::<IgnoredAny>(third)
         .expect("rolled-back second value must leave room for the third");
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
 }
@@ -198,7 +230,8 @@ fn test_decode_attempt_panic_retains_input_and_reuses_value_capacity() {
     assert_eq!(session.input_budget().expect("input budget").used(), 4,);
     assert_eq!(session.value_budget().used_nodes(), Some(0));
     let mut decoder = JsonDecoder::new(session);
-    decoder.decode_utf8::<IgnoredAny>(b"null")
+    decoder
+        .decode_utf8::<IgnoredAny>(b"null")
         .expect("rolled-back value capacity must remain reusable");
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
 }
@@ -217,13 +250,9 @@ fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity
             .max_nodes(1)
             .build(),
     );
-    let mut decoder = NormalizingJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::default();
 
-    assert!(
-        decoder
-            .decode_with_session::<u8>(rejected, &mut session)
-            .is_err()
-    );
+    assert!(run_with_session::<u8>(&decoder, rejected, &mut session).is_err());
     assert_eq!(
         session.input_budget().expect("input budget").used(),
         rejected.len(),
@@ -237,10 +266,8 @@ fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity
     );
     assert_eq!(session.value_budget().used_nodes(), Some(0));
 
-    decoder
-        .decode_with_session::<IgnoredAny>(accepted, &mut session)
-        .expect(
-            "typed failure must leave value capacity for the next document",
-        );
+    run_with_session::<IgnoredAny>(&decoder, accepted, &mut session).expect(
+        "typed failure must leave value capacity for the next document",
+    );
     assert_eq!(session.value_budget().used_nodes(), Some(1));
 }

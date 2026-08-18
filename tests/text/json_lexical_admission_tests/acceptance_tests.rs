@@ -15,7 +15,7 @@ use qubit_json::decode::JsonDecoder;
 /// Verifies lexical admission accepts one complete JSON value.
 #[test]
 fn test_json_lexical_preflight_accepts_complete_value() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     let value = JsonDecoder::new(session)

@@ -17,7 +17,7 @@ use qubit_json::decode::JsonSyntaxErrorReason;
 /// Verifies trailing bytes retain their stable lexical rejection reason.
 #[test]
 fn test_lexical_error_reason_reports_trailing_characters() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     let error = JsonDecoder::new(session)

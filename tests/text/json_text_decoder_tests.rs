@@ -44,7 +44,7 @@ impl<'de> DeserializeSeed<'de> for NonConsumingSeed {
 /// Verifies a decoder returns a typed value for one complete document.
 #[test]
 fn test_json_text_decoder_decodes_typed_value() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     let value = JsonDecoder::new(session)
@@ -57,7 +57,7 @@ fn test_json_text_decoder_decodes_typed_value() {
 /// Verifies validation accounts a complete document without deserializing it.
 #[test]
 fn test_json_text_decoder_validates_complete_document() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     JsonDecoder::new(session)
@@ -68,12 +68,12 @@ fn test_json_text_decoder_validates_complete_document() {
 /// Verifies seed deserialization failures retain safe Serde metadata.
 #[test]
 fn test_json_text_decoder_maps_seed_failure() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     assert!(
         JsonDecoder::new(session)
-            .decode_seed(FailingSeed, b"true")
+            .decode_seed_utf8(FailingSeed, b"true")
             .is_err()
     );
 }
@@ -81,12 +81,12 @@ fn test_json_text_decoder_maps_seed_failure() {
 /// Verifies a seed that leaves input unread is rejected by the final check.
 #[test]
 fn test_json_text_decoder_rejects_unconsumed_seed_input() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     assert!(
         JsonDecoder::new(session)
-            .decode_seed(NonConsumingSeed, b"true")
+            .decode_seed_utf8(NonConsumingSeed, b"true")
             .is_err()
     );
 }

@@ -16,7 +16,7 @@ use qubit_json::encode::JsonEncoder;
 /// Verifies output accounting returns a typed budget violation.
 #[test]
 fn test_json_output_accounting_reports_output_budget() {
-    let mut session = JsonEncodeSession::owned(
+    let session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_output_bytes(1)
             .build(),

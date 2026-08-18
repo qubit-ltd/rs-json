@@ -18,7 +18,7 @@ use serde_json::value::RawValue;
 fn test_private_struct_kind_recognizes_raw_value() {
     let raw = RawValue::from_string(String::from("{\"ok\":true}"))
         .expect("raw JSON should parse");
-    let mut session = JsonEncodeSession::owned(
+    let session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
     let output = JsonEncoder::new(session)

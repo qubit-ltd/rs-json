@@ -16,7 +16,7 @@ use qubit_json::decode::JsonDecoder;
 /// Verifies malformed lexical input becomes a strict syntax error.
 #[test]
 fn test_lexical_error_maps_to_syntax_error() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     let error = JsonDecoder::new(session)

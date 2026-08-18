@@ -32,7 +32,7 @@ fn test_json_lexical_preflight_charges_nested_depth() {
                     .build(),
             )
             .build();
-    let mut session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<Value>(b"[null]")
         .expect_err("the nested value should exceed the depth budget");

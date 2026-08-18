@@ -16,7 +16,7 @@ use qubit_json::decode::JsonDecoder;
 /// Verifies lexical failures retain byte, line, and column coordinates.
 #[test]
 fn test_lexical_failure_reports_source_coordinates() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     let error = JsonDecoder::new(session)
