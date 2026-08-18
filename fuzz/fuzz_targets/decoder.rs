@@ -65,8 +65,8 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    let default_decoder = NormalizingJsonDecoder::default();
-    match default_decoder.decode_slice::<serde_json::Value>(data) {
+    let mut default_decoder = NormalizingJsonDecoder::default();
+    match default_decoder.decode_utf8::<serde_json::Value>(data) {
         Ok(value) => {
             let encoded = serde_json::to_vec(&value)
                 .expect("serde_json::Value must serialize");
@@ -76,13 +76,13 @@ fuzz_target!(|data: &[u8]| {
         Err(error) => assert_error_invariants(&error, data.len()),
     }
     if !data.is_empty() {
-        let bounded = NormalizingJsonDecoder::new(
+        let mut bounded = NormalizingJsonDecoder::new(
             NormalizingJsonDecodeOptions::builder()
                 .max_input_bytes(Some(data.len() - 1))
                 .build(),
         );
         let error = bounded
-            .decode_slice::<serde_json::Value>(data)
+            .decode_utf8::<serde_json::Value>(data)
             .expect_err("an input above its raw byte limit must fail");
         assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
         assert_error_invariants(&error, data.len());
@@ -90,7 +90,7 @@ fuzz_target!(|data: &[u8]| {
 
     let strict_result =
         NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict())
-            .decode_slice::<serde_json::Value>(data);
+            .decode_utf8::<serde_json::Value>(data);
     let serde_result = serde_json::from_slice::<serde_json::Value>(data);
     match (strict_result, serde_result) {
         (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
@@ -107,32 +107,27 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
-    let decoders = [
-        default_decoder.clone(),
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict()),
-        NormalizingJsonDecoder::new(
-            NormalizingJsonDecodeOptions::builder()
-                .markdown_fence_policy(MarkdownFencePolicy::Any {
-                    closing: MarkdownFenceClosing::Optional,
-                })
-                .build(),
-        ),
-        NormalizingJsonDecoder::new(
-            NormalizingJsonDecodeOptions::builder()
-                .markdown_fence_policy(MarkdownFencePolicy::JsonOnly {
-                    closing: MarkdownFenceClosing::Required,
-                })
-                .build(),
-        ),
-        NormalizingJsonDecoder::new(
-            NormalizingJsonDecodeOptions::builder()
-                .max_normalized_bytes(Some(input.len()))
-                .build(),
-        ),
+    let decoder_options = [
+        NormalizingJsonDecodeOptions::default(),
+        NormalizingJsonDecodeOptions::strict(),
+        NormalizingJsonDecodeOptions::builder()
+            .markdown_fence_policy(MarkdownFencePolicy::Any {
+                closing: MarkdownFenceClosing::Optional,
+            })
+            .build(),
+        NormalizingJsonDecodeOptions::builder()
+            .markdown_fence_policy(MarkdownFencePolicy::JsonOnly {
+                closing: MarkdownFenceClosing::Required,
+            })
+            .build(),
+        NormalizingJsonDecodeOptions::builder()
+            .max_normalized_bytes(Some(input.len()))
+            .build(),
     ];
 
-    for decoder in decoders {
-        if let Err(error) = decoder.decode::<FuzzRecord>(input) {
+    for options in decoder_options {
+        let mut decoder = NormalizingJsonDecoder::new(options);
+        if let Err(error) = decoder.decode_str::<FuzzRecord>(input) {
             assert_error_invariants(&error, input.len());
         }
         if let Err(error) = decoder.decode_object::<FuzzRecord>(input) {
@@ -159,7 +154,7 @@ fuzz_target!(|data: &[u8]| {
         assert!(reparsed.is_array());
     }
     if input.contains("TOP_SECRET")
-        && let Err(error) = default_decoder.decode::<FuzzRecord>(input)
+        && let Err(error) = default_decoder.decode_str::<FuzzRecord>(input)
     {
         assert!(!error.to_string().contains("TOP_SECRET"));
         assert!(!format!("{error:?}").contains("TOP_SECRET"));

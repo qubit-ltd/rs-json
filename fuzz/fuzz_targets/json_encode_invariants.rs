@@ -48,16 +48,27 @@ fuzz_target!(|data: &[u8]| {
         ))
         .value_limits(value_limits)
         .build();
-    let mut vector_session = JsonEncodeSession::owned(limits);
-    let encoded = JsonEncoder::new(&mut vector_session).to_vec(&value);
-    let mut buffered_session = JsonEncodeSession::owned(limits);
+    let vector_session = JsonEncodeSession::owned(limits.clone());
+    let (encoded, vector_session) = {
+        let mut encoder = JsonEncoder::new(vector_session);
+        let encoded = encoder.to_vec(&value);
+        (encoded, encoder.into_session())
+    };
+    let buffered_session = JsonEncodeSession::owned(limits.clone());
     let mut buffered_output = Vec::new();
-    let buffered = JsonEncoder::new(&mut buffered_session)
-        .write_buffered(&mut buffered_output, &value);
-    let mut incremental_session = JsonEncodeSession::owned(limits);
+    let (buffered, buffered_session) = {
+        let mut encoder = JsonEncoder::new(buffered_session);
+        let buffered = encoder.write_buffered(&mut buffered_output, &value);
+        (buffered, encoder.into_session())
+    };
+    let incremental_session = JsonEncodeSession::owned(limits);
     let mut incremental_output = Vec::new();
-    let incremental = JsonEncoder::new(&mut incremental_session)
-        .write_incremental(&mut incremental_output, &value);
+    let (incremental, incremental_session) = {
+        let mut encoder = JsonEncoder::new(incremental_session);
+        let incremental =
+            encoder.write_incremental(&mut incremental_output, &value);
+        (incremental, encoder.into_session())
+    };
 
     assert!(
         vector_session
