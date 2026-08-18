@@ -95,7 +95,7 @@ fn benchmark_document(target_bytes: usize) -> Vec<u8> {
 ///
 /// Panics when a generated document cannot be decoded by a benchmark path.
 fn decode(criterion: &mut Criterion) {
-    let decoder =
+    let mut decoder =
         NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict());
     let mut group = criterion.benchmark_group("budgeted-json-decode");
 
@@ -126,13 +126,13 @@ fn decode(criterion: &mut Criterion) {
             &document,
             |bencher, input| {
                 bencher.iter(|| {
-                    let mut session = JsonDecodeSession::owned(
+                    let session = JsonDecodeSession::owned(
                         JsonDecodeLimits::<JsonResource, usize>::builder()
                             .build(),
                     );
                     black_box(
-                        JsonDecoder::new(&mut session)
-                            .decode::<Fixture>(black_box(input))
+                        JsonDecoder::new(session)
+                            .decode_utf8::<Fixture>(black_box(input))
                             .expect("fixture must decode"),
                     )
                 });
@@ -147,27 +147,28 @@ fn decode(criterion: &mut Criterion) {
                         JsonValueLimits::<JsonResource, usize>::builder()
                             .build(),
                     );
-                    let mut session =
+                    let session =
                         JsonDecodeSession::borrowing_value(&mut value);
                     black_box(
-                        JsonDecoder::new(&mut session)
-                            .decode::<Fixture>(black_box(input))
+                        JsonDecoder::new(session)
+                            .decode_utf8::<Fixture>(black_box(input))
                             .expect("fixture must decode"),
                     )
                 });
             },
         );
-        let mut reused_session = JsonDecodeSession::owned(
+        let reused_session = JsonDecodeSession::owned(
             JsonDecodeLimits::<JsonResource, usize>::builder().build(),
         );
+        let mut reused_decoder = JsonDecoder::new(reused_session);
         group.bench_with_input(
             BenchmarkId::new("decode/reused-session", size),
             &document,
             |bencher, input| {
                 bencher.iter(|| {
                     black_box(
-                        JsonDecoder::new(&mut reused_session)
-                            .decode::<Fixture>(black_box(input))
+                        reused_decoder
+                            .decode_utf8::<Fixture>(black_box(input))
                             .expect("fixture must decode"),
                     )
                 });
@@ -180,14 +181,11 @@ fn decode(criterion: &mut Criterion) {
                 bencher.iter(|| {
                     black_box(
                         decoder
-                            .decode::<Fixture>(black_box(input))
+                            .decode_str::<Fixture>(black_box(input))
                             .expect("fixture must decode"),
                     )
                 });
             },
-        );
-        let mut lenient_session = JsonDecodeSession::owned(
-            JsonDecodeLimits::<JsonResource, usize>::builder().build(),
         );
         group.bench_with_input(
             BenchmarkId::new("decode/lenient-json-decoder-with-session", size),
@@ -195,12 +193,14 @@ fn decode(criterion: &mut Criterion) {
             |bencher, input| {
                 bencher.iter(|| {
                     black_box(
-                        decoder
-                            .decode_with_session::<Fixture>(
-                                black_box(input),
-                                &mut lenient_session,
-                            )
-                            .expect("fixture must decode"),
+                        NormalizingJsonDecoder::with_session(
+                            decoder.options().clone(),
+                            JsonDecodeSession::owned(
+                                JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+                            ),
+                        )
+                        .decode_str::<Fixture>(black_box(input))
+                        .expect("fixture must decode"),
                     )
                 });
             },
@@ -246,12 +246,12 @@ fn encode(criterion: &mut Criterion) {
             &fixture,
             |bencher, fixture| {
                 bencher.iter(|| {
-                    let mut session = JsonEncodeSession::owned(
+                    let session = JsonEncodeSession::owned(
                         JsonEncodeLimits::<JsonResource, usize>::builder()
                             .build(),
                     );
                     black_box(
-                        JsonEncoder::new(&mut session)
+                        JsonEncoder::new(session)
                             .to_vec(black_box(fixture))
                             .expect("fixture must encode"),
                     )
@@ -267,26 +267,27 @@ fn encode(criterion: &mut Criterion) {
                         JsonValueLimits::<JsonResource, usize>::builder()
                             .build(),
                     );
-                    let mut session =
+                    let session =
                         JsonEncodeSession::borrowing_value(&mut value);
                     black_box(
-                        JsonEncoder::new(&mut session)
+                        JsonEncoder::new(session)
                             .to_vec(black_box(fixture))
                             .expect("fixture must encode"),
                     )
                 });
             },
         );
-        let mut reused_session = JsonEncodeSession::owned(
+        let reused_session = JsonEncodeSession::owned(
             JsonEncodeLimits::<JsonResource, usize>::builder().build(),
         );
+        let mut reused_encoder = JsonEncoder::new(reused_session);
         group.bench_with_input(
             BenchmarkId::new("encode/reused-session", size),
             &fixture,
             |bencher, fixture| {
                 bencher.iter(|| {
                     black_box(
-                        JsonEncoder::new(&mut reused_session)
+                        reused_encoder
                             .to_vec(black_box(fixture))
                             .expect("fixture must encode"),
                     )
@@ -298,12 +299,12 @@ fn encode(criterion: &mut Criterion) {
             &fixture,
             |bencher, fixture| {
                 bencher.iter(|| {
-                    let mut session = JsonEncodeSession::owned(
+                    let session = JsonEncodeSession::owned(
                         JsonEncodeLimits::<JsonResource, usize>::builder()
                             .build(),
                     );
                     black_box(
-                        JsonEncoder::new(&mut session).write_incremental(
+                        JsonEncoder::new(session).write_incremental(
                             std::io::sink(),
                             black_box(fixture),
                         ),
