@@ -33,7 +33,7 @@ fn test_json_lexical_preflight_consumes_payload_for_keys_strings_and_numbers() {
                 .build(),
         )
         .build();
-    let mut session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#"{"a":"bc","n":12}"#)
         .expect_err(
@@ -71,7 +71,7 @@ fn test_json_lexical_preflight_charges_decoded_key_bytes() {
                 .build(),
         )
         .build();
-    let mut session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#"{"\u4e2d":null}"#)
         .expect_err(
@@ -105,7 +105,7 @@ fn test_json_lexical_preflight_charges_each_value_node() {
                     .build(),
             )
             .build();
-    let mut session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#"{"value":true}"#)
         .expect_err("the object child must exceed the one-node budget");
@@ -138,7 +138,7 @@ fn test_json_lexical_preflight_checks_decoded_string_bytes() {
                 .build(),
         )
         .build();
-    let mut session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#""\u4e2d""#)
         .expect_err("the decoded three-byte string must exceed the limit");
@@ -170,7 +170,7 @@ fn test_json_lexical_preflight_checks_number_lexical_bytes() {
                 .build(),
         )
         .build();
-    let mut session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(b"1e+3")
         .expect_err("all four lexical number bytes must be charged");
@@ -203,7 +203,7 @@ fn test_json_lexical_preflight_checks_sequence_items() {
                 .build(),
         )
         .build();
-    let mut session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(b"[null,null]")
         .expect_err("the second array item must exceed the point limit");
@@ -234,7 +234,7 @@ fn test_json_lexical_preflight_counts_duplicate_map_entries() {
                 .build(),
         )
         .build();
-    let mut session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#"{"a":1,"a":2}"#)
         .expect_err("the duplicate second entry must still exceed the limit");
@@ -272,7 +272,7 @@ fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
                 .build(),
         )
         .build();
-    let mut session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(input.as_bytes())
         .expect_err("private token text must consume the ordinary key limit");
@@ -305,7 +305,7 @@ fn test_json_lexical_preflight_charges_duplicate_entry_payloads() {
                 .build(),
         )
         .build();
-    let mut session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::owned(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#"{"a":1,"a":2}"#)
         .expect_err("both duplicate key-number pairs must consume payload");

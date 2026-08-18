@@ -120,7 +120,7 @@ fn test_decode_value_rejects_control_character_expansion_above_normalized_size_l
             .build(),
     );
 
-    let error = decoder.decode_utf8::<String>(input).expect_err(
+    let error = decoder.decode_str::<String>(input).expect_err(
         "control-character expansion above the normalized limit must fail",
     );
 
@@ -147,7 +147,7 @@ fn test_decode_value_accepts_control_character_expansion_at_normalized_size_limi
             .build(),
     );
 
-    let value = decoder.decode_utf8::<String>("\"\u{0000}\"").expect(
+    let value = decoder.decode_str::<String>("\"\u{0000}\"").expect(
         "control-character expansion at the normalized limit must decode",
     );
 
@@ -170,7 +170,7 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
             .max_normalized_bytes(Some(normalized_bytes))
             .build(),
     )
-    .decode_utf8::<String>(input)
+    .decode_str::<String>(input)
     .expect(
         "fence and whitespace should not count toward the normalized limit",
     );
@@ -181,7 +181,7 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
             .max_normalized_bytes(Some(normalized_bytes - 1))
             .build(),
     )
-    .decode_utf8::<String>(input)
+    .decode_str::<String>(input)
     .expect_err("one byte below the post-fence normalized size must fail");
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
     assert_eq!(error.stage(), NormalizingJsonDecodeStage::Normalize);

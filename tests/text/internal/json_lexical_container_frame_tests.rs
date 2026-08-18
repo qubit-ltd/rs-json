@@ -15,7 +15,7 @@ use qubit_json::decode::JsonDecoder;
 /// Verifies nested arrays resume their enclosing container frames.
 #[test]
 fn test_container_frames_resume_nested_arrays() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     let value = JsonDecoder::new(session)

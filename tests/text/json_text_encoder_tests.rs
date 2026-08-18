@@ -329,7 +329,7 @@ fn test_write_buffered_failure_does_not_touch_external_writer() {
 fn test_encode_counts_raw_value_once() {
     let raw = RawValue::from_string(String::from(r#"{"k":"v"}"#))
         .expect("the fixture must be valid raw JSON");
-    let mut session = JsonEncodeSession::owned(
+    let session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
 

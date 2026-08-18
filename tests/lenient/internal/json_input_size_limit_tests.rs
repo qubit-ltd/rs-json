@@ -46,7 +46,7 @@ fn test_normalized_size_limit_exposes_only_normalized_limit() {
             .max_normalized_bytes(Some(7))
             .build(),
     );
-    let error = decoder.decode_utf8::<String>("\"\u{0000}\"").expect_err(
+    let error = decoder.decode_str::<String>("\"\u{0000}\"").expect_err(
         "oversized normalized input should return an input-too-large error",
     );
     assert_eq!(

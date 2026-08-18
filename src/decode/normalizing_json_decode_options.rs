@@ -21,13 +21,12 @@ use super::MarkdownFencePolicy;
 /// cover the most common non-fully-trusted text inputs without attempting
 /// aggressive repair.
 ///
-/// Convenience entry points such as
-/// [`crate::decode::NormalizingJsonDecoder::decode`] enforce only the
-/// configured raw and normalized input byte limits. They do not perform lexical
-/// value admission unless [`Self::value_limits`] is configured. For cumulative
-/// multi-value accounting, or when sharing one session across several decode
-/// operations, use
-/// [`crate::decode::NormalizingJsonDecoder::decode_with_session`].
+/// Convenience entry points perform lexical value admission on every decoded
+/// document, in addition to enforcing the configured raw and normalized input
+/// byte limits. Configure [`Self::value_limits`] to apply resource limits to
+/// that admission. For cumulative multi-value accounting, or when sharing one
+/// session across several decode operations, use
+/// [`crate::decode::NormalizingJsonDecoder::with_session`].
 ///
 /// # Examples
 ///
@@ -67,11 +66,9 @@ pub struct NormalizingJsonDecodeOptions {
     max_normalized_bytes: Option<usize>,
     /// Optional JSON value-resource limits enforced by lexical admission.
     ///
-    /// When set, convenience decode entry points perform the same lexical
-    /// admission as
-    /// [`crate::decode::NormalizingJsonDecoder::decode_with_session`]
-    /// before parsing or deserialization. When unset, only raw and normalized
-    /// input byte limits apply on those entry points.
+    /// When set, lexical admission also enforces these value-resource limits.
+    /// When unset, admission still validates the normalized JSON structure but
+    /// applies no value-resource caps.
     value_limits: Option<JsonValueLimits>,
     /// Controls whether decoding errors retain input-derived serde details.
     diagnostic_policy: DiagnosticPolicy,

@@ -51,7 +51,7 @@ fn test_encoder_preserves_private_number_and_raw_value_protocol() {
         .expect("valid number");
     let raw = RawValue::from_string("{\"ok\":true}".to_owned())
         .expect("valid raw JSON");
-    let mut session = JsonEncodeSession::owned(
+    let session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
     let bytes = JsonEncoder::new(session)
@@ -63,7 +63,7 @@ fn test_encoder_preserves_private_number_and_raw_value_protocol() {
 /// Reports invalid private raw text as a syntax-specific encode error.
 #[test]
 fn test_encoder_reports_invalid_private_raw_value_as_syntax_error() {
-    let mut session = JsonEncodeSession::owned(
+    let session = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder().build(),
     );
     let error = JsonEncoder::new(session)

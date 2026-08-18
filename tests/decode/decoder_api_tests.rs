@@ -2,11 +2,13 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Verifies the new strict and normalizing decoder entry points.
 
-use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::NormalizingJsonDecoder;
@@ -65,7 +67,9 @@ fn test_normalizing_decoder_decode_str_returns_owned_value() {
 
 #[test]
 fn test_json_decoder_accumulates_owned_session_usage() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder().max_input_bytes(16).build();
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(16)
+        .build();
     let mut decoder = JsonDecoder::new(JsonDecodeSession::owned(limits));
     decoder.decode_utf8::<bool>(b"true").expect("first value");
     decoder.decode_utf8::<bool>(b"false").expect("second value");

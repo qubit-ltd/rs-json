@@ -17,7 +17,7 @@ use qubit_json::decode::JsonSyntaxErrorReason;
 /// Verifies the lexical cursor skips JSON whitespace before and after a value.
 #[test]
 fn test_cursor_skips_json_whitespace() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     let value = JsonDecoder::new(session)
@@ -67,7 +67,7 @@ fn test_cursor_reports_scalar_and_container_syntax_errors() {
     ];
 
     for (input, expected) in cases {
-        let mut session = JsonDecodeSession::owned(
+        let session = JsonDecodeSession::owned(
             JsonDecodeLimits::<JsonResource, usize>::builder().build(),
         );
         let error = JsonDecoder::new(session)
@@ -83,7 +83,7 @@ fn test_cursor_reports_scalar_and_container_syntax_errors() {
 /// Verifies UTF-8 width handling, Unicode escapes, and source coordinates.
 #[test]
 fn test_cursor_accepts_unicode_and_reports_coordinates() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     let value = JsonDecoder::new(session)
@@ -91,7 +91,7 @@ fn test_cursor_accepts_unicode_and_reports_coordinates() {
         .expect("valid UTF-8 and surrogate-pair escapes should decode");
     assert_eq!(value, "é😀");
 
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     let error = JsonDecoder::new(session)
@@ -107,7 +107,7 @@ fn test_cursor_accepts_unicode_and_reports_coordinates() {
 /// Verifies invalid UTF-8 in a JSON string is classified without panicking.
 #[test]
 fn test_cursor_rejects_invalid_utf8_inside_string() {
-    let mut session = JsonDecodeSession::owned(
+    let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder().build(),
     );
     let error = JsonDecoder::new(session)

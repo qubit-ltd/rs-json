@@ -39,24 +39,13 @@ pub struct NormalizingJsonDecoder<'budget> {
     session: JsonDecodeSession<'budget>,
 }
 
-pub trait NormalizingInput { fn bytes(&self) -> &[u8]; }
-impl NormalizingInput for str { fn bytes(&self) -> &[u8] { self.as_bytes() } }
-impl NormalizingInput for [u8] { fn bytes(&self) -> &[u8] { self } }
-impl<const N: usize> NormalizingInput for [u8; N] { fn bytes(&self) -> &[u8] { self } }
-impl NormalizingInput for String { fn bytes(&self) -> &[u8] { self.as_bytes() } }
-impl NormalizingInput for Vec<u8> { fn bytes(&self) -> &[u8] { self } }
-
 impl Default for NormalizingJsonDecoder<'static> {
     fn default() -> Self {
         Self::new(NormalizingJsonDecodeOptions::default())
     }
 }
 
-#[allow(missing_docs)]
 impl<'budget> NormalizingJsonDecoder<'budget> {
-    #[deprecated(note = "use decode_str")]
-    pub fn decode<T>(&mut self, input: &str) -> Result<T, NormalizingJsonDecodeError>
-    where T: DeserializeOwned { self.decode_str(input) }
     /// Creates a decoder with the exact normalization rules in `options`.
     ///
     /// # Parameters
@@ -175,12 +164,11 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     /// Decodes one UTF-8 byte slice while accumulating charges in this decoder.
     pub fn decode_utf8<T>(
         &mut self,
-        input: &(impl NormalizingInput + ?Sized),
+        input: &[u8],
     ) -> Result<T, NormalizingJsonDecodeError>
     where
         T: DeserializeOwned,
     {
-        let input = input.bytes();
         let raw_input_bytes = input.len();
         let privacy_policy = self.options().diagnostic_policy();
         let mut attempt = self.session.begin_value();
@@ -205,7 +193,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         let normalized = self
             .normalizer
             .normalize_after_raw_charge(input, &mut attempt)?;
-        Self::admit_normalized_if_configured(
+        Self::admit_normalized(
             &mut attempt,
             normalized.as_ref(),
             raw_input_bytes,
@@ -344,7 +332,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         let privacy_policy = self.options().diagnostic_policy();
         let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
-        Self::admit_normalized_if_configured(
+        Self::admit_normalized(
             &mut attempt,
             normalized.as_ref(),
             raw_input_bytes,
@@ -394,7 +382,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
         let normalized_input_bytes = normalized.len();
-        Self::admit_normalized_if_configured(
+        Self::admit_normalized(
             &mut attempt,
             normalized.as_ref(),
             raw_input_bytes,
@@ -427,7 +415,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     }
 
     /// Runs lexical admission against this decoder's session.
-    fn admit_normalized_if_configured(
+    fn admit_normalized(
         attempt: &mut JsonDecodeAttempt<'_, JsonResource, usize>,
         normalized: &str,
         raw_input_bytes: usize,
@@ -470,7 +458,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         let privacy_policy = self.options().diagnostic_policy();
         let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
-        Self::admit_normalized_if_configured(
+        Self::admit_normalized(
             &mut attempt,
             normalized.as_ref(),
             raw_input_bytes,
@@ -697,29 +685,4 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
             }
         }
     }
-}
-
-#[allow(missing_docs)]
-impl<'budget> NormalizingJsonDecoder<'budget> {
-    #[deprecated(note = "use with_session(...).decode_str(...)")]
-    pub fn decode_with_session<T>(
-        &self,
-        input: &str,
-        session: &mut JsonDecodeSession<'budget>,
-    ) -> Result<T, NormalizingJsonDecodeError>
-    where
-        T: DeserializeOwned,
-    {
-        let mut decoder = Self::with_session(self.options().clone(),
-            std::mem::replace(session, JsonDecodeSession::owned(JsonDecodeLimits::default())));
-        let result = decoder.decode_str(input);
-        *session = decoder.into_session();
-        result
-    }
-
-    #[deprecated(note = "use decode_utf8(...) on a stateful decoder")]
-    pub fn decode_slice<T>(&self, input: &[u8]) -> Result<T, NormalizingJsonDecodeError>
-    where
-        T: DeserializeOwned,
-    { let mut decoder = Self::new(self.options().clone()); decoder.decode_utf8(input) }
 }

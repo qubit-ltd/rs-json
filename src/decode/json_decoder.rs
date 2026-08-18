@@ -37,7 +37,6 @@ impl Default for JsonDecoder<'static, JsonResource, usize> {
     }
 }
 
-#[allow(missing_docs)]
 impl<'budget, R, Q> JsonDecoder<'budget, R, Q>
 where
     R: Clone,
@@ -66,7 +65,9 @@ where
 
     /// Returns mutable access to the cumulative session.
     #[must_use]
-    pub const fn session_mut(&mut self) -> &mut JsonDecodeSession<'budget, R, Q> {
+    pub const fn session_mut(
+        &mut self,
+    ) -> &mut JsonDecodeSession<'budget, R, Q> {
         &mut self.session
     }
 
@@ -153,13 +154,6 @@ where
     {
         validate_impl(input, &mut self.session)
     }
-
-    #[deprecated(note = "use decode_utf8")]
-    pub fn decode<'de, T>(&mut self, input: &'de [u8]) -> Result<T, JsonDecodeError<R, Q>> where T: Deserialize<'de> { self.decode_utf8(input) }
-    #[deprecated(note = "use decode_seed_utf8")]
-    pub fn decode_seed<'de, S>(&mut self, seed: S, input: &'de [u8]) -> Result<S::Value, JsonDecodeError<R, Q>> where S: DeserializeSeed<'de> { self.decode_seed_utf8(seed, input) }
-    #[deprecated(note = "use validate_utf8")]
-    pub fn validate(&mut self, input: &[u8]) -> Result<(), JsonDecodeError<R, Q>> { self.validate_utf8(input) }
 }
 
 fn decode_seed_impl<'de, S, R, Q>(
