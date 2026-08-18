@@ -40,7 +40,7 @@ serde_json = "1.0"
 ```rust
 use qubit_json::decode::{NormalizingJsonDecodeOptions, NormalizingJsonDecoder};
 
-let decoder = NormalizingJsonDecoder::new(
+let mut decoder = NormalizingJsonDecoder::new(
     NormalizingJsonDecodeOptions::builder().max_input_bytes(Some(1024)).build(),
 );
 let value = decoder.decode_value("```json\n{\"ok\":true}\n```")?;
@@ -48,9 +48,9 @@ assert_eq!(value["ok"], true);
 # Ok::<(), qubit_json::decode::NormalizingJsonDecodeError>(())
 ```
 
-需要累计记账时使用 `decode_with_session`。原始输入和规范化输入的消耗会在一次尝试后保留；
-只有完整的强类型解码成功，解码后 value 的暂存消耗才提交。错误默认脱敏；仅在输入诊断可
-安全暴露的环境中启用 `DiagnosticPolicy::Detailed`。
+需要累计记账时使用 `NormalizingJsonDecoder::with_session` 构造有状态 decoder。原始输入和规范化
+输入的消耗会在一次尝试后保留；只有完整的强类型解码成功，解码后 value 的暂存消耗才提交。
+错误默认脱敏；仅在输入诊断可安全暴露的环境中启用 `DiagnosticPolicy::Detailed`。
 
 ## 严格文本对象
 
@@ -58,12 +58,12 @@ assert_eq!(value["ok"], true);
 多个文档调用其方法。
 
 ```rust
-use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession};
+use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession, JsonResource};
 use qubit_json::decode::JsonDecoder;
 
-let mut decode_session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::new());
-let value: serde_json::Value = JsonDecoder::new(&mut decode_session)
-    .decode(br#"{"ok":true}"#)?;
+let decode_session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::new());
+let mut decoder = JsonDecoder::new(decode_session);
+let value: serde_json::Value = decoder.decode_utf8(br#"{"ok":true}"#)?;
 assert_eq!(value["ok"], true);
 # Ok::<(), qubit_json::decode::JsonDecodeError<
 #     qubit_budget::json::JsonResource,
@@ -71,12 +71,12 @@ assert_eq!(value["ok"], true);
 ```
 
 ```rust
-use qubit_budget::json::{JsonEncodeLimits, JsonEncodeSession};
+use qubit_budget::json::{JsonEncodeLimits, JsonEncodeSession, JsonResource};
 use qubit_json::encode::JsonEncoder;
 
 let value = serde_json::json!({"ok": true});
-let mut encode_session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::new());
-let mut encoder = JsonEncoder::new(&mut encode_session);
+let encode_session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::new());
+let mut encoder = JsonEncoder::new(encode_session);
 let bytes = encoder.to_vec(&value)?;
 assert_eq!(bytes, br#"{"ok":true}"#);
 # Ok::<(), qubit_json::encode::JsonEncodeError<
@@ -93,7 +93,7 @@ assert_eq!(bytes, br#"{"ok":true}"#);
 
 1. `decode::NormalizingJsonDecodeError`：规范化和宽松强类型解码失败。
 2. `decode::JsonDecodeError`：严格预算、语法或强类型解码失败。
-3. `decode::JsonEncodeError`：严格预算、原始 JSON、序列化或 I/O 失败。
+3. `encode::JsonEncodeError`：严格预算、原始 JSON、序列化或 I/O 失败。
 4. `decode::JsonSyntaxError`：稳定的语法原因和位置元数据。
 5. `tree::JsonTreeProcessError`：遍历预算或 visitor 失败。
 
