@@ -6,18 +6,18 @@
 数据模型，也不代替 Serde 的类型反序列化。限制、资源标识、预算和 session 均由
 `qubit-budget` 所有；本 crate 仅实现 JSON 领域行为。
 
-公开目录树固定为：
+当前公开目录树为：
 
 ```text
 src/
-├── internal/   # crate-private scanner 与共享实现
-├── lenient/    # 可配置的文本规范化和宽松解码
-├── text/       # 严格、有状态的文本 decoder/encoder
-├── value/      # 带 transaction 的 Value seed
-└── tree/       # 非递归 reader、mutator 与 tracker
+├── decode/             # 规范化、严格解码和错误模型
+├── encode/             # 严格、有状态的文本 encoder
+├── lexical/            # crate-private scanner 与共享实现
+└── value/
+    └── traverse/       # 非递归 reader、mutator 与 tracker
 ```
 
-`internal` 不是公共接口。四个领域不通过根级错误或选项模块共享公共 API。
+`lexical` 不是公共接口。领域不通过根级错误或选项模块共享公共 API。
 
 ## Lenient
 
@@ -87,6 +87,6 @@ visitor 失败。
 2. `decode::JsonDecodeError`
 3. `encode::JsonEncodeError`
 4. `decode::JsonSyntaxError`
-5. `tree::JsonTreeProcessError`
+5. `value::traverse::JsonTreeProcessError`
 
 每种错误只暴露其领域能稳定提供的上下文；没有根级错误聚合或兼容别名。

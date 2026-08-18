@@ -12,10 +12,10 @@ Rust 服务需要处理两类 JSON：来自受控协议的严格字节流，以�
 
 | 领域 | 交付能力 | 不承担的责任 |
 | --- | --- | --- |
-| `lenient` | 可配置规范化和直接 Serde 解码 | 推测或修复任意损坏 JSON |
-| `text` | 严格对象式 decoder/encoder | 文本修复或隐式 session |
+| `decode` | 可配置规范化、严格解码和 lexical admission | 推测或修复任意损坏 JSON |
+| `encode` | 严格对象式 encoder | 文本修复或隐式 session |
 | `value` | 从 Serde 事件构造并记账 Value | 代替原始文本的语法验证 |
-| `tree` | 非递归访问、修改和完整 tree 记账 | 回滚已执行的可变 visitor 变更 |
+| `value::traverse` | 非递归访问、修改和完整 tree 记账 | 回滚已执行的可变 visitor 变更 |
 
 资源限制、预算和 session 属于 `qubit-budget`；本 crate 不重复定义这些通用概念。
 
@@ -52,7 +52,8 @@ Rust 服务需要处理两类 JSON：来自受控协议的严格字节流，以�
 
 ## 验收标准
 
-- 对外模块只有 `lenient`、`text`、`value`、`tree`；共享实现保持 crate-private。
+- 对外模块为 `decode`、`encode`、`value`；tree 能力位于
+  `value::traverse`，共享实现保持 crate-private。
 - 严格 text API 的所有操作经由 decoder/encoder 对象，而非公开自由函数。
 - session-aware decode 在失败后保留输入消耗，value 暂存消耗只在完整成功后提交。
 - value 和 tree 可独立用于已物化 JSON；tree 遍历不依赖 Rust 调用栈深度。

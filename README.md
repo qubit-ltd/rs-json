@@ -25,10 +25,10 @@ serde_json = "1.0"
 
 | Domain | Use it for | Boundary |
 | --- | --- | --- |
-| `lenient` | Markdown fences and narrowly specified text noise | Never guesses missing quotes, commas, or braces |
-| `text` | Strict JSON bytes | Stateful decoder and encoder objects with caller-owned sessions |
+| `decode` | Normalizing text inputs and strict JSON bytes | Never guesses missing quotes, commas, or braces |
+| `encode` | Strict JSON output | Stateful encoder objects with caller-owned sessions |
 | `value` | Constructing `serde_json::Value` from Serde events | Charges the decoded value transaction |
-| `tree` | Iterative reads or mutations of materialized values | Mutable processing is incremental, not transactional |
+| `value::traverse` | Iterative reads or mutations of materialized values | Mutable processing is incremental, not transactional |
 
 `qubit-budget` owns limits, resource identities, budgets, and sessions.
 `qubit-json` owns JSON normalization, lexical validation, text codecs, value
@@ -101,7 +101,7 @@ The five public error types are domain-owned:
 2. `decode::JsonDecodeError` for strict budget, syntax, or typed decode failure.
 3. `encode::JsonEncodeError` for strict budget, raw JSON, serialization, or I/O failure.
 4. `decode::JsonSyntaxError` for stable syntax reason and location metadata.
-5. `tree::JsonTreeProcessError` for traversal budget or visitor failure.
+5. `value::traverse::JsonTreeProcessError` for traversal budget or visitor failure.
 
 Budgeted operations use transactions: staged decoded-value or output charges
 commit on their documented success boundary. Input charges intentionally remain

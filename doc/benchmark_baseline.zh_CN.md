@@ -203,13 +203,10 @@ cargo bench --bench budgeted_serde_json -- --noplot
 | `NormalizingJsonDecoder::decode_str` | 2.7992 µs / 338.31 MiB/s / 0.96× / +3.70% | 178.91 µs / 349.33 MiB/s / 0.82× / -3.93% | 3.2670 ms / 306.08 MiB/s / 0.84× / -3.76% |
 | `NormalizingJsonDecoder::with_session(...).decode_str` | 5.1220 µs / 184.89 MiB/s / 1.76× / +92.42% | 326.85 µs / 191.21 MiB/s / 1.50× / +79.00% | 5.6367 ms / 177.40 MiB/s / 1.45× / +68.37% |
 
-`decode_str()` 仍是直接 typed decode 路径；它与改造前相比在三个尺寸上的变化为
-+3.70%、-3.93% 和 -3.76%，未显示随输入尺寸放大的退化。`with_session(...).decode_str()` 现在对
-规范化 JSON 做 lexical preflight，再直接反序列化目标类型。两条路径的中位数差为
-2.3228 µs、147.95 µs 和 2.3697 ms，即 2.339、2.258 和 2.260 ns/B。因而双扫描的主体是
-稳定的线性成本；其相对额外延迟随尺寸从 82.98% 降到 72.53%，吞吐相对快速路径下降约
-45.35%、45.26% 和 42.04%。1 KiB 到 64 KiB 已进入约 2.26 ns/B 的稳定区间，没有观察到
-更大尺寸上的新吞吐拐点。
+这一组历史数据记录的是 API 清理前的实现，不能作为当前 `decode_str()` 的性能结论。
+当前实现中，普通 `decode_str()` 与 `with_session(...).decode_str()` 都会先执行 lexical
+admission，再直接反序列化目标类型；参见 2026-08-18 的快速复测。后续性能比较必须使用
+同一命令和同一实现重新采样，不得把本节两个路径的旧差异解释为当前行为。
 
 owned、borrowed 与 reused 三条通用 budgeted decode 路径的差异在 1 KiB 仅约
 0.27—0.36 µs；64 KiB 和 1 MiB 的符号会翻转，且幅度不足各自总耗时的约 2%。这说明固定
@@ -232,27 +229,28 @@ session 构造/借用成本只在小输入上可见，并非中大尺寸优化�
 
 ### 仅基于本次数据的优化优先级
 
-1. 优先优化 budgeted encode 的结构、载荷和事务性输出记账。它在三个尺寸均为直接编码的
-   3.79×—4.31× 延迟，且中大输入吞吐平台约 217—220 MiB/s；收益范围最大、证据最稳定。
-2. 其次评估 `with_session(...).decode_str()` lexical preflight 的扫描成本。它稳定增加约
-   2.26 ns/B，使 1 KiB、64 KiB、1 MiB 延迟分别达到快速路径的 1.83×、1.83×、1.73×。
-   优化必须保留完整 value admission 和直接 Serde 反序列化语义。
-3. 暂不专项优化 session 创建、borrow 或复用。三条路径没有随尺寸保持一致的差距；即便在
-   1 KiB，固定差值也只有约 0.27—0.36 µs，显著小于 encode 和 preflight 热点。
-4. 保持 `decode_str()` 快速路径架构。其三个尺寸相对改造前没有随输入增长的退化，且中大尺寸
-   吞吐仍高于同次 `serde_json` 对照；当前数据不支持在该路径加入额外 admission 工作。
+1. 优先优化 budgeted encode 的结构、载荷和事务性输出记账；该结论需要由当前实现的固定
+   Criterion 命令持续复核。
+2. 评估 strict 与 normalizing decode 共享 lexical admission 的扫描成本，但必须保留完整
+   value admission 和直接 Serde 反序列化语义。
+3. session 创建、borrow 或复用只在固定基准显示稳定收益时优化；不以历史快路径差异为依据。
 
-## 2026-08-18 API 清理后快速复测
+## 2026-08-18 当前实现快速复测
 
-本次先恢复并修复 `decoder_bench`，再在当前实现上执行以下聚焦基准：
+快速筛查使用以下命令；`--quick` 只用于回归方向判断，不能替代固定环境下的完整基准。
 
 ```bash
-cargo bench --bench decoder_bench -- plain-comparison \
-  --warm-up-time 1 --measurement-time 1 --sample-size 10
+cargo bench --bench budgeted_serde_json -- --quick
+cargo bench --bench budgeted_serde_json -- decode --quick
 ```
 
-同一运行中的结果为：`serde_json` 75.6 ns、严格 `JsonDecoder` 205.6 ns、默认
-`NormalizingJsonDecoder::decode_str` 232.4 ns。规范化 decoder 的词法 admission 预扫描
-会带来约 13% 的相对额外开销，但仍保持与严格 decoder 同一数量级；它同时提供稳定的
-结构准入和预算记账。因此本次选择保留每次解码的 admission，并将实现与文档统一为
-`decode_str`/`decode_utf8` 及 `with_session(...).decode_str`，不恢复任何兼容入口。
+无输出字节预算的 encode 路径缓存一次“是否需要记账”的判断，避免每次 serializer
+`Write` 回调借用 accounting。第一条命令中，1 KiB / 64 KiB / 1 MiB 的中位时间分别从
+4.866 / 290.31 / 4412 µs 降至 4.009 / 232.55 / 3721 µs（owned session）；增量写入则从
+2.761 / 180.92 / 2976 µs 降至 2.308 / 155.98 / 2456 µs。带输出预算时仍保留每次写入的
+预检查与已接受字节记账，语义不变。
+
+第二条命令显示 993 B 输入上 strict 和 normalizing 的 session 路径约为 6.10--6.17 µs，
+本轮未检测到统计显著变化。两条路径都会先执行 lexical admission，再直接反序列化目标
+类型；字符串转字节的 forwarding 方法只内联，不改变该成本模型。后续若要建立新的性能
+基线，应在相同硬件与完整 Criterion 参数下重新采样，并同时报告带预算和无预算场景。

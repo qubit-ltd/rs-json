@@ -86,8 +86,11 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
 impl<'budget> NormalizingJsonDecoder<'budget> {
     /// Creates a decoder with a caller-provided cumulative session.
     ///
-    /// The supplied session is the only accounting state and limit source;
-    /// resource-limit fields in `options` are not merged into it.
+    /// Every normalization and diagnostic field in `options` still configures
+    /// the internal normalizer. The supplied session is the only accounting
+    /// state and resource-limit source, so `max_input_bytes`,
+    /// `max_normalized_bytes`, and `value_limits` from `options` are not
+    /// merged into it.
     #[must_use]
     pub fn with_session(
         options: NormalizingJsonDecodeOptions,
@@ -151,6 +154,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     /// # Panics
     ///
     /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
+    #[inline(always)]
     pub fn decode_str<T>(
         &mut self,
         input: &str,
@@ -162,6 +166,30 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     }
 
     /// Decodes one UTF-8 byte slice while accumulating charges in this decoder.
+    ///
+    /// The configured raw byte limit is enforced before UTF-8 validation.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Target type deserialized from the normalized JSON text.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Raw JSON bytes to validate, normalize, and deserialize.
+    ///
+    /// # Returns
+    ///
+    /// The deserialized target value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NormalizingJsonDecodeError`] when the raw byte limit is
+    /// exceeded, the bytes are not valid UTF-8, or normalization, admission,
+    /// JSON parsing, or target deserialization fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     pub fn decode_utf8<T>(
         &mut self,
         input: &[u8],
@@ -209,28 +237,6 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         Ok(value)
     }
 
-    /// The configured raw byte limit is enforced before UTF-8 validation.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Raw JSON bytes to validate, normalize, and deserialize.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Target type deserialized from the normalized JSON text.
-    ///
-    /// # Returns
-    ///
-    /// The deserialized target value.
-    ///
-    /// # Errors
-    ///
-    /// Returns a JSON decode error when the raw byte limit is exceeded, the
-    /// bytes are not valid UTF-8, or subsequent JSON decoding fails.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
     /// Decodes `input` into `T`, requiring a top-level JSON object.
     ///
     /// The target is deserialized directly from normalized text after a
@@ -433,7 +439,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
             })
     }
 
-    /// Normalizes and directly deserializes input without value preflight.
+    /// Normalizes, lexically admits, and directly deserializes input.
     ///
     /// # Parameters
     ///
