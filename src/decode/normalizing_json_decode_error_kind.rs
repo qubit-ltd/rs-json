@@ -23,7 +23,6 @@ use std::str::FromStr;
 /// let error_kind = NormalizingJsonDecodeErrorKind::InvalidJson;
 /// assert_eq!(error_kind.to_string(), "invalid_json");
 /// ```
-#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NormalizingJsonDecodeErrorKind {
     /// Indicates that a decoded JSON value exceeded a configured resource

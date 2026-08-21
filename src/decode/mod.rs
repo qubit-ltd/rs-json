@@ -17,7 +17,8 @@ mod markdown_fence_closing;
 mod markdown_fence_policy;
 mod normalizing_json_decode_error;
 mod normalizing_json_decode_error_kind;
-mod normalizing_json_decode_options;
+mod normalizing_json_decode_policy;
+mod normalizing_json_decode_policy_builder;
 mod normalizing_json_decode_stage;
 mod normalizing_json_decoder;
 
@@ -31,8 +32,8 @@ pub use markdown_fence_closing::MarkdownFenceClosing;
 pub use markdown_fence_policy::MarkdownFencePolicy;
 pub use normalizing_json_decode_error::NormalizingJsonDecodeError;
 pub use normalizing_json_decode_error_kind::NormalizingJsonDecodeErrorKind;
-pub use normalizing_json_decode_options::NormalizingJsonDecodeOptions;
-pub use normalizing_json_decode_options::NormalizingJsonDecodeOptionsBuilder;
+pub use normalizing_json_decode_policy::NormalizingJsonDecodePolicy;
+pub use normalizing_json_decode_policy_builder::NormalizingJsonDecodePolicyBuilder;
 pub use normalizing_json_decode_stage::NormalizingJsonDecodeStage;
 pub use normalizing_json_decoder::NormalizingJsonDecoder;
 

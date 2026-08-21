@@ -22,7 +22,7 @@ use serde_json::value::RawValue;
 use super::DiagnosticPolicy;
 use super::JsonRootKind;
 use super::NormalizingJsonDecodeError;
-use super::NormalizingJsonDecodeOptions;
+use super::NormalizingJsonDecodePolicy;
 use super::internal::json_normalizer::JsonNormalizer;
 use crate::lexical::JsonLexicalError;
 use crate::lexical::JsonLexicalScanner;
@@ -35,9 +35,13 @@ use crate::lexical::JsonLexicalScanner;
 /// # Examples
 ///
 /// ```
-/// use qubit_json::decode::NormalizingJsonDecoder;
+/// use qubit_budget::json::JsonDecodeLimits;
+/// use qubit_json::decode::{NormalizingJsonDecodePolicy, NormalizingJsonDecoder};
 ///
-/// let mut decoder = NormalizingJsonDecoder::default();
+/// let mut decoder = NormalizingJsonDecoder::owned(
+///     NormalizingJsonDecodePolicy::lenient(),
+///     JsonDecodeLimits::default(),
+/// );
 /// let value = decoder.decode_value(r#"```json
 /// {"ok":true}
 /// ```"#)?;
@@ -52,60 +56,36 @@ pub struct NormalizingJsonDecoder<'budget> {
     session: JsonDecodeSession<'budget>,
 }
 
-impl Default for NormalizingJsonDecoder<'static> {
-    fn default() -> Self {
-        Self::new(NormalizingJsonDecodeOptions::default())
-    }
-}
-
-impl<'budget> NormalizingJsonDecoder<'budget> {
-    /// Creates a decoder with the exact normalization rules in `options`.
+impl NormalizingJsonDecoder<'static> {
+    /// Creates a decoder with an owned session built from explicit limits.
     ///
     /// # Parameters
     ///
-    /// * `options` - Immutable normalization and error-diagnostic options.
+    /// * `policy` - Immutable normalization and diagnostic behavior.
+    /// * `limits` - Resource limits used to construct the owned session.
     ///
     /// # Returns
     ///
-    /// A decoder configured with `options`.
+    /// A decoder configured with `policy` and an owned session.
     #[inline(always)]
     #[must_use]
-    pub fn new(options: NormalizingJsonDecodeOptions) -> Self {
-        let session = Self::session_from_options(&options);
+    pub fn owned(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits) -> Self {
         Self {
-            normalizer: JsonNormalizer::new(options),
-            session,
+            normalizer: JsonNormalizer::new(policy),
+            session: JsonDecodeSession::owned(limits),
         }
-    }
-
-    /// Creates an owned session from the resource limits in `options`.
-    fn session_from_options(options: &NormalizingJsonDecodeOptions) -> JsonDecodeSession<'static> {
-        let mut limits = JsonDecodeLimits::builder();
-        if let Some(maximum) = options.max_input_bytes() {
-            limits = limits.max_input_bytes(maximum);
-        }
-        if let Some(maximum) = options.max_normalized_bytes() {
-            limits = limits.max_normalized_input_bytes(maximum);
-        }
-        if let Some(value_limits) = options.value_limits() {
-            limits = limits.value_limits(value_limits);
-        }
-        JsonDecodeSession::owned(limits.build())
     }
 }
 
 impl<'budget> NormalizingJsonDecoder<'budget> {
     /// Creates a decoder with a caller-provided cumulative session.
     ///
-    /// Every normalization and diagnostic field in `options` still configures
-    /// the internal normalizer. The supplied session is the only accounting
-    /// state and resource-limit source, so `max_input_bytes`,
-    /// `max_normalized_bytes`, and `value_limits` from `options` are not
-    /// merged into it.
+    /// The supplied session is the decoder's only accounting state and
+    /// resource-limit source.
     #[must_use]
-    pub fn with_session(options: NormalizingJsonDecodeOptions, session: JsonDecodeSession<'budget>) -> Self {
+    pub fn from_session(policy: NormalizingJsonDecodePolicy, session: JsonDecodeSession<'budget>) -> Self {
         Self {
-            normalizer: JsonNormalizer::new(options),
+            normalizer: JsonNormalizer::new(policy),
             session,
         }
     }
@@ -128,15 +108,15 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         self.session
     }
 
-    /// Returns the immutable options used by this decoder.
+    /// Returns the immutable policy used by this decoder.
     ///
     /// # Returns
     ///
-    /// The option set supplied when the decoder was created.
+    /// The policy supplied when the decoder was created.
     #[inline(always)]
     #[must_use]
-    pub const fn options(&self) -> &NormalizingJsonDecodeOptions {
-        self.normalizer.options()
+    pub const fn policy(&self) -> &NormalizingJsonDecodePolicy {
+        self.normalizer.policy()
     }
 
     /// Decodes `input` into the target Rust type `T` without a top-level
@@ -200,7 +180,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         T: DeserializeOwned,
     {
         let raw_input_bytes = input.len();
-        let privacy_policy = self.options().diagnostic_policy();
+        let privacy_policy = self.policy().diagnostic_policy();
         let mut attempt = self.session.begin_value();
         attempt.try_consume_input_bytes(raw_input_bytes).map_err(|_| {
             NormalizingJsonDecodeError::input_too_large(
@@ -308,7 +288,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     /// parsing fails.
     pub fn decode_value(&mut self, input: &str) -> Result<Value, NormalizingJsonDecodeError> {
         let raw_input_bytes = input.len();
-        let privacy_policy = self.options().diagnostic_policy();
+        let privacy_policy = self.policy().diagnostic_policy();
         let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
         Self::admit_normalized(&mut attempt, normalized.as_ref(), raw_input_bytes, privacy_policy)?;
@@ -343,7 +323,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         T: DeserializeOwned,
     {
         let raw_input_bytes = input.len();
-        let privacy_policy = self.options().diagnostic_policy();
+        let privacy_policy = self.policy().diagnostic_policy();
         let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
         let normalized_input_bytes = normalized.len();
@@ -405,7 +385,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         T: DeserializeOwned,
     {
         let raw_input_bytes = input.len();
-        let privacy_policy = self.options().diagnostic_policy();
+        let privacy_policy = self.policy().diagnostic_policy();
         let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
         Self::admit_normalized(&mut attempt, normalized.as_ref(), raw_input_bytes, privacy_policy)?;

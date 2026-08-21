@@ -22,7 +22,7 @@ use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::JsonDecoder;
-use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use qubit_json::encode::JsonEncoder;
 use serde::Deserialize;
@@ -92,7 +92,7 @@ fn benchmark_document(target_bytes: usize) -> Vec<u8> {
 ///
 /// Panics when a generated document cannot be decoded by a benchmark path.
 fn decode(criterion: &mut Criterion) {
-    let mut decoder = NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict());
+    let mut decoder = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::strict(), JsonDecodeLimits::default());
     let mut group = criterion.benchmark_group("budgeted-json-decode");
 
     for target_bytes in DOCUMENT_SIZES {
@@ -175,8 +175,8 @@ fn decode(criterion: &mut Criterion) {
             |bencher, input| {
                 bencher.iter(|| {
                     black_box(
-                        NormalizingJsonDecoder::with_session(
-                            decoder.options().clone(),
+                        NormalizingJsonDecoder::from_session(
+                            decoder.policy().clone(),
                             JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build()),
                         )
                         .decode_str::<Fixture>(black_box(input))

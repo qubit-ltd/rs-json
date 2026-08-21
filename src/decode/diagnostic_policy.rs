@@ -20,7 +20,6 @@
 /// let policy = DiagnosticPolicy::Redacted;
 /// assert_ne!(policy, DiagnosticPolicy::Detailed);
 /// ```
-#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DiagnosticPolicy {
     /// Removes input-derived serde messages and sources from decoding errors.

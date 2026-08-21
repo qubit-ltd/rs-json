@@ -21,7 +21,6 @@ use crate::lexical::JsonLexicalErrorReason;
 /// let reason = JsonSyntaxErrorReason::UnexpectedByte { byte: b'?' };
 /// assert_eq!(reason.to_string(), "unexpected byte 0x3f");
 /// ```
-#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JsonSyntaxErrorReason {
     /// The document ended before a complete token or container was found.

@@ -9,9 +9,10 @@
 
 use std::error::Error;
 
+use qubit_budget::json::JsonDecodeLimits;
 use qubit_json::decode::DiagnosticPolicy;
 use qubit_json::decode::NormalizingJsonDecodeErrorKind;
-use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecoder;
 
@@ -21,10 +22,11 @@ use qubit_json::decode::NormalizingJsonDecoder;
 /// Panics when the public API or privacy contract is not satisfied.
 #[test]
 fn test_lenient_domain_owns_its_public_types() {
-    let mut decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder()
             .diagnostic_policy(DiagnosticPolicy::Redacted)
             .build(),
+        JsonDecodeLimits::default(),
     );
     let error = decoder
         .decode_str::<u64>(r#""TOP_SECRET""#)

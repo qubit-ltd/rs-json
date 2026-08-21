@@ -7,18 +7,16 @@
 // =============================================================================
 //! Stateful strict JSON text decoding with caller-owned resource accounting.
 
-use std::marker::PhantomData;
-
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use serde::Deserialize;
-use serde::Deserializer;
 use serde::de::DeserializeSeed;
 use serde_json::Deserializer as JsonDeserializer;
 
 use super::JsonDecodeError;
+use super::internal::TypedSeed;
 use crate::lexical::JsonLexicalScanner;
 
 /// Strictly decodes complete JSON documents while owning cumulative accounting
@@ -201,30 +199,4 @@ where
         .map_err(JsonDecodeError::from_lexical)?;
     attempt.commit();
     Ok(())
-}
-
-/// Seed adapter that delegates to [`Deserialize`] without allocating state.
-struct TypedSeed<T> {
-    marker: PhantomData<fn() -> T>,
-}
-
-impl<T> TypedSeed<T> {
-    /// Creates a zero-sized seed that delegates to `T::deserialize`.
-    const fn new() -> Self {
-        Self { marker: PhantomData }
-    }
-}
-
-impl<'de, T> DeserializeSeed<'de> for TypedSeed<T>
-where
-    T: Deserialize<'de>,
-{
-    type Value = T;
-
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        T::deserialize(deserializer)
-    }
 }

@@ -21,7 +21,7 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
-use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 
 /// Runs the public decoder benchmarks over representative input normalization
@@ -36,7 +36,8 @@ use qubit_json::decode::NormalizingJsonDecoder;
 /// Panics when a fixed benchmark fixture no longer satisfies its documented
 /// decoding contract.
 fn benchmark_decoder(c: &mut Criterion) {
-    let mut default_decoder = NormalizingJsonDecoder::default();
+    let mut default_decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let plain_input = r#"{"id":7,"text":"plain"}"#;
     consume_record(serde_json::from_str::<BenchmarkRecord>(plain_input).expect("strict benchmark input must decode"));
     let strict_session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build());
@@ -156,7 +157,8 @@ fn benchmark_decoder(c: &mut Criterion) {
 /// Panics when a generated benchmark payload no longer satisfies its expected
 /// decoding contract.
 fn benchmark_downstream_scaling(c: &mut Criterion) {
-    let mut default_decoder = NormalizingJsonDecoder::default();
+    let mut default_decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let mut plain_group = c.benchmark_group("downstream-plain-bytes");
 
     for payload_bytes in [1_024_usize, 65_536, 1_048_576] {
@@ -247,10 +249,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
     let plain = benchmark_record_input(failure_payload_bytes, None);
     let malformed = &plain[..plain.len() - 1];
     let wrong_top_level = format!("[{plain}]");
-    let mut bounded_decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .max_input_bytes(Some(plain.len() - 1))
-            .build(),
+    let mut bounded_decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder().max_input_bytes(plain.len() - 1).build(),
     );
     assert!(
         default_decoder.decode_object::<BenchmarkRecord>(malformed).is_err(),
@@ -323,16 +324,18 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
 ///
 /// Panics when a generated control-character payload cannot be decoded.
 fn benchmark_control_character_scaling(c: &mut Criterion) {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let mut group = c.benchmark_group("control-characters");
 
     for payload_bytes in [1_024_usize, 65_536, 1_048_576] {
         for (name, control_stride) in [("plain", None), ("sparse", Some(1_024)), ("dense", Some(2))] {
             let input = control_character_input(payload_bytes, control_stride);
             let normalized_limit = normalized_control_character_input_bytes(input.len(), payload_bytes, control_stride);
-            let mut bounded_decoder = NormalizingJsonDecoder::new(
-                NormalizingJsonDecodeOptions::builder()
-                    .max_normalized_bytes(Some(normalized_limit))
+            let mut bounded_decoder = NormalizingJsonDecoder::owned(
+                NormalizingJsonDecodePolicy::builder().build(),
+                JsonDecodeLimits::builder()
+                    .max_normalized_input_bytes(normalized_limit)
                     .build(),
             );
             decoder
