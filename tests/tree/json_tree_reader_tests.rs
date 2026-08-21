@@ -121,3 +121,43 @@ fn test_process_rolls_back_transaction_when_visitor_returns_error() {
 fn test_context_root_location_is_distinct() {
     assert_eq!(JsonTreeLocation::Root, JsonTreeLocation::Root);
 }
+
+/// Verifies account stages a complete tree but leaves commit control with the
+/// caller-owned transaction.
+#[test]
+fn test_account_stages_exact_charges_and_rolls_back_without_commit() {
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(3)
+        .max_payload_bytes(16)
+        .build();
+    let mut budget = limits.budget();
+
+    {
+        let mut transaction = budget.transaction();
+        JsonTreeReader::new(&mut transaction)
+            .account(&json!({"a": ["bc"]}))
+            .expect("tree should fit");
+        assert_eq!(transaction.used_nodes(), Some(3));
+        assert_eq!(transaction.used_payload_bytes(), Some(3));
+    }
+
+    assert_eq!(budget.used_nodes(), Some(0));
+    assert_eq!(budget.used_payload_bytes(), Some(0));
+}
+
+/// Verifies an account rejection returns the raw budget error and leaves the
+/// same transaction reusable for a smaller value.
+#[test]
+fn test_account_returns_budget_error_and_keeps_transaction_reusable() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(1)
+        .max_sequence_items(0)
+        .build()
+        .budget();
+    let mut transaction = budget.transaction();
+    let mut reader = JsonTreeReader::new(&mut transaction);
+
+    assert!(reader.account(&json!([true])).is_err());
+    reader.account(&Value::Null).expect("smaller value should fit");
+    assert_eq!(transaction.used_nodes(), Some(1));
+}

@@ -13,11 +13,24 @@ use serde_json::json;
 /// Verifies that a tracker accounts a materialized JSON tree.
 #[test]
 fn test_budget_tracker_accounts_a_materialized_tree() {
-    let mut tracker =
-        JsonTreeBudgetTracker::new(JsonValueLimits::<JsonResource, usize>::builder().max_nodes(2).build());
+    let mut tracker = JsonTreeBudgetTracker::new(
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .max_depth(3)
+            .max_nodes(4)
+            .max_sequence_items(2)
+            .max_map_entries(1)
+            .max_key_bytes(1)
+            .max_string_bytes(2)
+            .max_number_bytes(1)
+            .max_payload_bytes(4)
+            .build(),
+    );
 
-    tracker.account(&json!({"ok": true})).expect("two nodes fit");
-    assert_eq!(tracker.budget().used_nodes(), Some(2));
+    tracker
+        .account(&json!({"a": [1, "bc"]}))
+        .expect("the complete tree should fit every exact limit");
+    assert_eq!(tracker.budget().used_nodes(), Some(4));
+    assert_eq!(tracker.budget().used_payload_bytes(), Some(4));
 }
 
 /// Verifies that tracker budget accessors expose and transfer state.
