@@ -12,6 +12,7 @@ mod budgeted_key;
 mod budgeted_private_value;
 mod budgeted_value;
 mod display_budget_kind;
+mod internal;
 mod json_encode_compound;
 pub(super) mod json_encode_context;
 pub(super) mod json_encode_serializer;
