@@ -34,23 +34,29 @@ serde_json = "1.0"
 
 ## 宽松输入
 
-`NormalizingJsonDecoder` 是持有不可变 `NormalizingJsonDecodeOptions` 的可复用对象。它只按已配置
+`NormalizingJsonDecoder` 是持有不可变 `NormalizingJsonDecodePolicy` 的可复用对象。它只按已配置
 规则移除噪声，然后直接反序列化为所需类型。
 
 ```rust
-use qubit_json::decode::{NormalizingJsonDecodeOptions, NormalizingJsonDecoder};
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_json::decode::{NormalizingJsonDecodePolicy, NormalizingJsonDecoder};
 
-let mut decoder = NormalizingJsonDecoder::new(
-    NormalizingJsonDecodeOptions::builder().max_input_bytes(Some(1024)).build(),
+let mut decoder = NormalizingJsonDecoder::owned(
+    NormalizingJsonDecodePolicy::builder().build(),
+    JsonDecodeLimits::builder()
+        .max_input_bytes(1024)
+        .build(),
 );
 let value = decoder.decode_value("```json\n{\"ok\":true}\n```")?;
 assert_eq!(value["ok"], true);
 # Ok::<(), qubit_json::decode::NormalizingJsonDecodeError>(())
 ```
 
-需要累计记账时使用 `NormalizingJsonDecoder::with_session` 构造有状态 decoder。原始输入和规范化
+需要累计记账时使用 `NormalizingJsonDecoder::from_session` 构造有状态 decoder。原始输入和规范化
 输入的消耗会在一次尝试后保留；只有完整的强类型解码成功，解码后 value 的暂存消耗才提交。
 错误默认脱敏；仅在输入诊断可安全暴露的环境中启用 `DiagnosticPolicy::Detailed`。
+规范化 policy 不携带资源限制：`owned` 显式接收 `JsonDecodeLimits`，`from_session` 显式接收
+`JsonDecodeSession`。只有确实需要无限预算时才传入 `JsonDecodeLimits::default()`。
 
 ## 严格文本对象
 
@@ -103,7 +109,8 @@ session 中的输入消耗会在失败尝试后刻意保留。
 ## 高级 value 与 tree 用法
 
 `JsonValueSeed` 在调用方 transaction 中构造已物化 value 并记账。`JsonTreeReader` 不使用
-Rust 递归地访问每个已准入节点；`JsonTreeMutator` 原地应用 visitor 的变更，并可通过
+Rust 递归地访问每个已准入节点；其 `account` 方法在调用方已有 transaction 中暂存整棵树的
+消耗，不调用 visitor，也不提交 transaction。`JsonTreeMutator` 原地应用 visitor 的变更，并可通过
 `JsonTreeBudgetRejection` 跳过被拒绝的子树。`JsonTreeBudgetTracker` 适合重复执行完整 tree
 记账。
 

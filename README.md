@@ -37,14 +37,18 @@ construction, and traversal.
 ## Lenient input
 
 `NormalizingJsonDecoder` is a reusable object with immutable
-`NormalizingJsonDecodeOptions`. It can remove only configured noise, then
+`NormalizingJsonDecodePolicy`. It can remove only configured noise, then
 deserialize directly into the requested type.
 
 ```rust
-use qubit_json::decode::{NormalizingJsonDecodeOptions, NormalizingJsonDecoder};
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_json::decode::{NormalizingJsonDecodePolicy, NormalizingJsonDecoder};
 
-let mut decoder = NormalizingJsonDecoder::new(
-    NormalizingJsonDecodeOptions::builder().max_input_bytes(Some(1024)).build(),
+let mut decoder = NormalizingJsonDecoder::owned(
+    NormalizingJsonDecodePolicy::builder().build(),
+    JsonDecodeLimits::builder()
+        .max_input_bytes(1024)
+        .build(),
 );
 let value = decoder.decode_value("```json\n{\"ok\":true}\n```")?;
 assert_eq!(value["ok"], true);
@@ -52,10 +56,13 @@ assert_eq!(value["ok"], true);
 ```
 
 For cumulative accounting, construct a stateful decoder with
-`NormalizingJsonDecoder::with_session`. Raw input and normalized input charges
+`NormalizingJsonDecoder::from_session`. Raw input and normalized input charges
 remain after an attempt; decoded-value charges commit only after the complete
 typed decode succeeds. Errors are redacted by default. Enable
 `DiagnosticPolicy::Detailed` only where input-derived diagnostics are safe.
+Normalization policy never carries resource limits: pass `JsonDecodeLimits`
+to `owned`, or a `JsonDecodeSession` to `from_session`. Explicitly pass
+`JsonDecodeLimits::default()` only when unlimited decoding is intended.
 
 ## Strict text objects
 
@@ -110,7 +117,9 @@ visible in decode sessions after failed attempts.
 ## Advanced values and trees
 
 `JsonValueSeed` builds a materialized value while charging a caller transaction.
-`JsonTreeReader` visits every admitted node without Rust recursion;
+`JsonTreeReader` visits every admitted node without Rust recursion. Its
+`account` method stages whole-tree charges in the caller's existing transaction
+without invoking a visitor or committing it;
 `JsonTreeMutator` applies in-place visitor changes and can skip a rejected
 subtree through `JsonTreeBudgetRejection`. `JsonTreeBudgetTracker` is the
 convenient reusable choice for whole-tree accounting.
