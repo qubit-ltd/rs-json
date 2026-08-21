@@ -21,14 +21,15 @@ src/
 
 ## Lenient
 
-`NormalizingJsonDecoder` 持有不可变 `NormalizingJsonDecodeOptions`，只执行显式配置的规则：空白、
+`NormalizingJsonDecoder` 持有不可变 `NormalizingJsonDecodePolicy`，只执行显式配置的规则：空白、
 BOM、Markdown 围栏及字符串内控制字符处理。它不推测缺失的 JSON 标点或结构。
 
-普通 `decode_str`、`decode_utf8` 等便捷入口会先执行规范化和词法 value 准入，并强制
-raw/normalized 输入字节限制；在 `NormalizingJsonDecodeOptions` 中配置 `value_limits` 可继续
-限制 depth、nodes 或 payload。使用 `NormalizingJsonDecoder::with_session` 构造有状态 decoder
-时，原始输入和规范化输入先累计，解码后 value 的消耗暂存；完整强类型解码成功才提交 value
-消耗。失败后输入消耗仍留在 session 中。
+`NormalizingJsonDecodePolicy` 只定义文本规范化和诊断行为，不拥有预算。调用方通过
+`NormalizingJsonDecoder::owned(policy, limits)` 显式传入 `JsonDecodeLimits`，或通过
+`NormalizingJsonDecoder::from_session(policy, session)` 复用唯一的 `JsonDecodeSession`。
+raw/normalized 输入字节以及 depth、nodes、collection、payload 等限制全部来自该 limits/session；
+只有明确传入 `JsonDecodeLimits::default()` 才表示无限预算。原始输入和规范化输入先累计，解码后
+value 的消耗暂存；完整强类型解码成功才提交 value 消耗，失败后输入消耗仍留在 session 中。
 
 `NormalizingJsonDecodeError` 是该领域唯一公开的解码错误。其 kind、stage、top-level 及安全位置
 元数据表达空输入、UTF-8、大小限制、规范化、语法、准入或类型反序列化失败。默认
@@ -74,7 +75,10 @@ transaction 只在完整成功时提交。
 `Value` 执行 visitor 驱动的非递归遍历。两者均在回调前对节点、容器、字符串、数字和 object
 key 进行准入。
 
-`JsonTreeBudgetTracker` 为整棵 materialized tree 提供自有、可 reset 的 budget。`JsonTreeMutator`
+`JsonTreeReader::account` 复用 reader 的同一非递归遍历，在调用方已有 transaction 中暂存整棵树
+的消耗，不调用 visitor，也不创建或提交 transaction；失败直接返回 `MeasuredBudgetError`。
+`JsonTreeBudgetTracker` 在完整成功后提交该路径，为整棵 materialized tree 提供自有、可 reset
+的 budget。`JsonTreeMutator`
 在预算拒绝时由 visitor 返回 `JsonTreeBudgetRejection` 选择终止或跳过子树。可变处理是增量的：
 已接受的预算和已执行的变更不回滚。`JsonTreeProcessError` 区分基础设施 budget 失败和业务
 visitor 失败。

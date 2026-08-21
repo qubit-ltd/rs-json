@@ -23,9 +23,10 @@ Rust 服务需要处理两类 JSON：来自受控协议的严格字节流，以�
 
 ### 宽松输入
 
-用户通过 `NormalizingJsonDecodeOptions` 配置允许的规范化，再创建 `NormalizingJsonDecoder`。默认错误
-脱敏；只有明确请求 `Detailed` 才保留可能包含输入的信息。带 session 的调用必须保留原始与
-规范化输入消耗，并仅在完整类型解码后提交 value 消耗。
+用户通过 `NormalizingJsonDecodePolicy` 配置允许的规范化，并把预算作为独立的
+`JsonDecodeLimits` 或 `JsonDecodeSession` 显式交给 `NormalizingJsonDecoder`。policy 不得携带预算，
+decoder 不提供隐式默认预算。默认错误脱敏；只有明确请求 `Detailed` 才保留可能包含输入的信息。
+带 session 的调用必须保留原始与规范化输入消耗，并仅在完整类型解码后提交 value 消耗。
 
 ### 严格文本
 
@@ -36,8 +37,9 @@ Rust 服务需要处理两类 JSON：来自受控协议的严格字节流，以�
 ### Value 与 tree
 
 用户可用 `JsonValueSeed` 在 `JsonValueTransaction` 中构造 `serde_json::Value`。用户可用
-`JsonTreeReader` 或 `JsonTreeMutator` 对物化 value 进行无 Rust 递归的遍历；用
-`JsonTreeBudgetTracker` 为完整 tree 反复记账。mutator 可以跳过被预算拒绝的子树，但不承诺
+`JsonTreeReader` 或 `JsonTreeMutator` 对物化 value 进行无 Rust 递归的遍历；reader 可在调用方已有
+transaction 中仅记账而不调用 visitor、不提交 transaction，`JsonTreeBudgetTracker` 复用该路径为
+完整 tree 反复记账。mutator 可以跳过被预算拒绝的子树，但不承诺
 回滚已提交的业务变更。
 
 ## 错误契约
