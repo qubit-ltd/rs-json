@@ -22,7 +22,6 @@ use super::MarkdownFenceClosing;
 /// let fence_policy = MarkdownFencePolicy::Disabled;
 /// assert_eq!(fence_policy, MarkdownFencePolicy::Disabled);
 /// ```
-#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MarkdownFencePolicy {
     /// Leaves Markdown code fences unchanged.

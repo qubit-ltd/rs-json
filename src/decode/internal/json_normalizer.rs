@@ -14,54 +14,54 @@ use qubit_budget::json::JsonDecodeAttempt;
 use qubit_budget::json::JsonResource;
 
 use super::super::NormalizingJsonDecodeError;
-use super::super::NormalizingJsonDecodeOptions;
+use super::super::NormalizingJsonDecodePolicy;
 use super::control_character_escaper::ControlCharacterEscaper;
 use super::markdown_fence::MarkdownFence;
 
 /// Normalizes one raw JSON text input before JSON parsing.
 #[derive(Debug, Clone)]
 pub(crate) struct JsonNormalizer {
-    /// Stores the option set used by the normalizer.
-    options: NormalizingJsonDecodeOptions,
+    /// Stores the policy used by the normalizer.
+    policy: NormalizingJsonDecodePolicy,
 }
 
 impl Default for JsonNormalizer {
-    /// Creates a normalizer using the default lenient option set.
+    /// Creates a normalizer using the default lenient policy.
     ///
     /// # Returns
     ///
-    /// A normalizer configured with [`NormalizingJsonDecodeOptions::default`].
+    /// A normalizer configured with [`NormalizingJsonDecodePolicy::default`].
     #[inline(always)]
     fn default() -> Self {
-        Self::new(NormalizingJsonDecodeOptions::default())
+        Self::new(NormalizingJsonDecodePolicy::default())
     }
 }
 
 impl JsonNormalizer {
-    /// Creates a normalizer with the provided lenient decoding options.
+    /// Creates a normalizer with the provided decoding policy.
     ///
     /// # Parameters
     ///
-    /// * `options` - Immutable normalization and error-diagnostic options.
+    /// * `policy` - Immutable normalization and diagnostic policy.
     ///
     /// # Returns
     ///
-    /// A normalizer configured with `options`.
+    /// A normalizer configured with `policy`.
     #[inline(always)]
     #[must_use]
-    pub(crate) const fn new(options: NormalizingJsonDecodeOptions) -> Self {
-        Self { options }
+    pub(crate) const fn new(policy: NormalizingJsonDecodePolicy) -> Self {
+        Self { policy }
     }
 
     /// Returns the configuration used by this normalizer.
     ///
     /// # Returns
     ///
-    /// The immutable normalization options.
+    /// The immutable normalization policy.
     #[inline(always)]
     #[must_use]
-    pub(crate) const fn options(&self) -> &NormalizingJsonDecodeOptions {
-        &self.options
+    pub(crate) const fn policy(&self) -> &NormalizingJsonDecodePolicy {
+        &self.policy
     }
 
     /// Normalizes one raw JSON text input into text ready for parsing.
@@ -115,7 +115,7 @@ impl JsonNormalizer {
         let input = self.trim_if_enabled(input);
         let input = self.strip_utf8_bom(input);
         let input = self.trim_if_enabled(input);
-        let input = MarkdownFence::strip_outer(input, self.options.markdown_fence_policy());
+        let input = MarkdownFence::strip_outer(input, self.policy.markdown_fence_policy());
         let input = self.trim_if_enabled(input);
         let (normalized_len, needs_escape) = self.scan_normalized_size(input);
         self.consume_normalized_input(attempt, raw_input_bytes, normalized_len)?;
@@ -125,7 +125,7 @@ impl JsonNormalizer {
             Err(NormalizingJsonDecodeError::empty_input(
                 raw_input_bytes,
                 Some(input.len()),
-                self.options.diagnostic_policy(),
+                self.policy.diagnostic_policy(),
             ))
         } else {
             Ok(input)
@@ -152,19 +152,19 @@ impl JsonNormalizer {
         input: &'a str,
         raw_input_bytes: usize,
     ) -> Result<&'a str, NormalizingJsonDecodeError> {
-        if self.options.trim_whitespace() {
+        if self.policy.trim_whitespace() {
             if input.trim().is_empty() {
                 return Err(NormalizingJsonDecodeError::empty_input(
                     raw_input_bytes,
                     None,
-                    self.options.diagnostic_policy(),
+                    self.policy.diagnostic_policy(),
                 ));
             }
         } else if input.is_empty() {
             return Err(NormalizingJsonDecodeError::empty_input(
                 raw_input_bytes,
                 None,
-                self.options.diagnostic_policy(),
+                self.policy.diagnostic_policy(),
             ));
         }
         Ok(input)
@@ -181,7 +181,7 @@ impl JsonNormalizer {
     /// The normalized byte length and whether control-character escaping is
     /// required.
     fn scan_normalized_size(&self, input: &str) -> (usize, bool) {
-        ControlCharacterEscaper::scan(input, self.options.escape_control_chars_in_strings())
+        ControlCharacterEscaper::scan(input, self.policy.escape_control_chars_in_strings())
     }
 
     /// Charges raw input bytes and maps a rejected budget to the stable error.
@@ -194,7 +194,7 @@ impl JsonNormalizer {
             return Err(NormalizingJsonDecodeError::input_too_large(
                 amount,
                 attempt.input_budget().map_or(amount, ResourceBudget::limit),
-                self.options.diagnostic_policy(),
+                self.policy.diagnostic_policy(),
             ));
         }
         Ok(())
@@ -217,7 +217,7 @@ impl JsonNormalizer {
                 attempt
                     .normalized_input_budget()
                     .map_or(normalized_input_bytes, ResourceBudget::limit),
-                self.options.diagnostic_policy(),
+                self.policy.diagnostic_policy(),
             ));
         }
         Ok(())
@@ -235,7 +235,7 @@ impl JsonNormalizer {
     #[inline]
     #[must_use]
     fn trim_if_enabled<'a>(&self, input: &'a str) -> &'a str {
-        if self.options.trim_whitespace() {
+        if self.policy.trim_whitespace() {
             input.trim()
         } else {
             input
@@ -255,7 +255,7 @@ impl JsonNormalizer {
     #[inline]
     #[must_use]
     fn strip_utf8_bom<'a>(&self, input: &'a str) -> &'a str {
-        if self.options.strip_utf8_bom() {
+        if self.policy.strip_utf8_bom() {
             input.strip_prefix('\u{feff}').unwrap_or(input)
         } else {
             input

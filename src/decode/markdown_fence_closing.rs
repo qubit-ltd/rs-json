@@ -18,7 +18,6 @@
 /// let closing_policy = MarkdownFenceClosing::Optional;
 /// assert_eq!(closing_policy, MarkdownFenceClosing::Optional);
 /// ```
-#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MarkdownFenceClosing {
     /// Accepts an opening fence even when no matching closing fence is present.

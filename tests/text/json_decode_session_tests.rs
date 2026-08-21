@@ -23,6 +23,7 @@ use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::NormalizingJsonDecodeError;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde::de::DeserializeOwned;
 use serde::de::IgnoredAny;
@@ -38,7 +39,7 @@ where
     T: DeserializeOwned,
 {
     let owned_session = std::mem::replace(session, JsonDecodeSession::owned(JsonDecodeLimits::new()));
-    let mut stateful = NormalizingJsonDecoder::with_session(decoder.options().clone(), owned_session);
+    let mut stateful = NormalizingJsonDecoder::from_session(decoder.policy().clone(), owned_session);
     let result = stateful.decode_str(input);
     *session = stateful.into_session();
     result
@@ -222,7 +223,7 @@ fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity
             .max_nodes(1)
             .build(),
     );
-    let decoder = NormalizingJsonDecoder::default();
+    let decoder = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
 
     assert!(run_with_session::<u8>(&decoder, rejected, &mut session).is_err());
     assert_eq!(session.input_budget().expect("input budget").used(), rejected.len(),);

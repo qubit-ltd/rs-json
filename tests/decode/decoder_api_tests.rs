@@ -11,6 +11,7 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 
 /// Creates a reusable session with no configured resource limits.
@@ -56,7 +57,8 @@ fn test_json_decoder_validation_entry_points() {
 /// Verifies that normalizing string decoding returns an owned target.
 #[test]
 fn test_normalizing_decoder_decode_str_returns_owned_value() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::lenient(), JsonDecodeLimits::default());
 
     let value: String = decoder
         .decode_str("  \"owned\"  ")
@@ -79,11 +81,88 @@ fn test_json_decoder_accumulates_owned_session_usage() {
 /// Verifies that normalizing UTF-8 byte decoding returns an owned target.
 #[test]
 fn test_normalizing_decoder_decode_utf8_returns_owned_value() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::lenient(), JsonDecodeLimits::default());
 
     let value: String = decoder
         .decode_utf8(br#"  "owned"  "#)
         .expect("normalizing UTF-8 decoding should succeed");
 
     assert_eq!(value, "owned");
+}
+
+/// Verifies that an owned decoder takes raw and normalized limits only from
+/// `JsonDecodeLimits` while retaining an independent normalization policy.
+#[test]
+fn test_normalizing_decoder_owned_separates_policy_and_limits() {
+    let policy = NormalizingJsonDecodePolicy::strict();
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(8)
+        .max_normalized_input_bytes(6)
+        .max_nodes(1)
+        .build();
+    let decoder = NormalizingJsonDecoder::owned(policy.clone(), limits);
+
+    assert_eq!(decoder.policy(), &policy);
+    assert_eq!(decoder.session().max_input_bytes(), Some(8));
+    assert_eq!(decoder.session().max_normalized_input_bytes(), Some(6));
+    assert_eq!(decoder.session().value_budget().limits().max_nodes(), Some(1));
+}
+
+/// Verifies that a caller-provided session remains the decoder's sole source
+/// of limits and can be recovered after use.
+#[test]
+fn test_normalizing_decoder_from_session_preserves_session() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(9)
+        .build();
+    let session = JsonDecodeSession::owned(limits);
+    let decoder = NormalizingJsonDecoder::from_session(NormalizingJsonDecodePolicy::lenient(), session);
+
+    assert_eq!(decoder.session().max_input_bytes(), Some(9));
+    assert_eq!(decoder.into_session().max_input_bytes(), Some(9));
+}
+
+/// Verifies normalization policy selection cannot change caller-owned session
+/// limits.
+#[test]
+fn test_normalizing_decoder_policies_do_not_change_session_limits() {
+    for policy in [
+        NormalizingJsonDecodePolicy::strict(),
+        NormalizingJsonDecodePolicy::lenient(),
+    ] {
+        let session = JsonDecodeSession::owned(
+            JsonDecodeLimits::<JsonResource, usize>::builder()
+                .max_input_bytes(7)
+                .max_normalized_input_bytes(5)
+                .max_nodes(2)
+                .build(),
+        );
+        let decoder = NormalizingJsonDecoder::from_session(policy, session);
+
+        assert_eq!(decoder.session().max_input_bytes(), Some(7));
+        assert_eq!(decoder.session().max_normalized_input_bytes(), Some(5));
+        assert_eq!(decoder.session().value_budget().limits().max_nodes(), Some(2));
+    }
+}
+
+/// Verifies a typed deserialization failure keeps immediate input charges and
+/// rolls back staged value charges.
+#[test]
+fn test_normalizing_decoder_typed_failure_keeps_input_and_rolls_back_value() {
+    let input = r#"{"flag":1}"#;
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(input.len())
+        .max_normalized_input_bytes(input.len())
+        .max_nodes(2)
+        .build();
+    let mut decoder = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::strict(), limits);
+
+    decoder
+        .decode_str::<std::collections::HashMap<String, bool>>(input)
+        .expect_err("number should not deserialize as bool");
+
+    assert_eq!(decoder.session().input_budget().unwrap().used(), input.len());
+    assert_eq!(decoder.session().normalized_input_budget().unwrap().used(), input.len());
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 }

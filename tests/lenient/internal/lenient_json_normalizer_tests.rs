@@ -7,10 +7,11 @@
 // =============================================================================
 //! Tests for lenient normalization behavior through the public decoder.
 
+use qubit_budget::json::JsonDecodeLimits;
 use qubit_json::decode::MarkdownFenceClosing;
 use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodeErrorKind;
-use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde_json::json;
@@ -23,7 +24,8 @@ use serde_json::to_string;
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_empty_input_for_empty_string() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let error = decoder
         .decode_value("")
         .expect_err("empty input should be rejected before JSON parsing");
@@ -38,7 +40,8 @@ fn test_decode_value_reports_empty_input_for_empty_string() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_empty_input_for_whitespace_by_default() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let error = decoder
         .decode_value(" \n\t ")
         .expect_err("whitespace-only input should be empty after default trimming");
@@ -53,8 +56,10 @@ fn test_decode_value_reports_empty_input_for_whitespace_by_default() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_respects_input_size_limit() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::builder().max_input_bytes(Some(6)).build());
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder().max_input_bytes(6).build(),
+    );
     let error = decoder
         .decode_value("{\"a\":1}")
         .expect_err("input above the configured byte limit should be rejected");
@@ -72,8 +77,10 @@ fn test_decode_value_respects_input_size_limit() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_accepts_input_at_size_limit() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::builder().max_input_bytes(Some(7)).build());
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder().max_input_bytes(7).build(),
+    );
     let value = decoder
         .decode_value("[1,2,3]")
         .expect("input whose size matches the limit should be accepted");
@@ -87,8 +94,10 @@ fn test_decode_value_accepts_input_at_size_limit() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::builder().max_input_bytes(Some(0)).build());
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder().max_input_bytes(0).build(),
+    );
     let error = decoder
         .decode_value("{")
         .expect_err("size guard should run before parser handling");
@@ -104,10 +113,9 @@ fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
 #[test]
 fn test_decode_value_rejects_control_character_expansion_above_normalized_size_limit() {
     let input = "\"\u{0000}\"";
-    let mut decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .max_normalized_bytes(Some(7))
-            .build(),
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder().max_normalized_input_bytes(7).build(),
     );
 
     let error = decoder
@@ -130,10 +138,9 @@ fn test_decode_value_rejects_control_character_expansion_above_normalized_size_l
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_accepts_control_character_expansion_at_normalized_size_limit() {
-    let mut decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .max_normalized_bytes(Some(8))
-            .build(),
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder().max_normalized_input_bytes(8).build(),
     );
 
     let value = decoder
@@ -154,18 +161,20 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
     let input = "\n```json\n\"\u{0000}\"\n```\n";
     let normalized_bytes = "\"\\u0000\"".len();
 
-    let accepted = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .max_normalized_bytes(Some(normalized_bytes))
+    let accepted = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder()
+            .max_normalized_input_bytes(normalized_bytes)
             .build(),
     )
     .decode_str::<String>(input)
     .expect("fence and whitespace should not count toward the normalized limit");
     assert_eq!(accepted, "\u{0000}");
 
-    let error = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .max_normalized_bytes(Some(normalized_bytes - 1))
+    let error = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder()
+            .max_normalized_input_bytes(normalized_bytes - 1)
             .build(),
     )
     .decode_str::<String>(input)
@@ -184,7 +193,8 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_strips_utf8_bom_by_default() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let value = decoder
         .decode_value("\u{feff}{\"a\":1}")
         .expect("default decoder should strip a leading UTF-8 BOM");
@@ -198,7 +208,8 @@ fn test_decode_value_strips_utf8_bom_by_default() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let error = decoder
         .decode_value("\u{feff}")
         .expect_err("input containing only BOM should become empty after normalization");
@@ -213,8 +224,10 @@ fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_can_leave_utf8_bom_when_disabled() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::builder().strip_utf8_bom(false).build());
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().strip_utf8_bom(false).build(),
+        JsonDecodeLimits::default(),
+    );
     let error = decoder
         .decode_value("\u{feff}{\"a\":1}")
         .expect_err("BOM should remain and break parsing when BOM stripping is disabled");
@@ -228,7 +241,8 @@ fn test_decode_value_can_leave_utf8_bom_when_disabled() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_trims_surrounding_whitespace_by_default() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let value = decoder
         .decode_value("\n{\"text\":\"abc\"}\n")
         .expect("leading and trailing control characters outside strings should be trimmed by default");
@@ -243,11 +257,12 @@ fn test_decode_value_trims_surrounding_whitespace_by_default() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled() {
-    let mut decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder()
             .trim_whitespace(false)
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .build(),
+        JsonDecodeLimits::default(),
     );
     let error = decoder
         .decode_value("   ")
@@ -263,7 +278,8 @@ fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled(
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_accepts_terminal_unicode_whitespace_when_trimming_enabled() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let value = decoder
         .decode_value("```json\n{\"a\":1}\n```\u{00a0}")
         .expect("default trimming should remove terminal Unicode whitespace");
@@ -278,8 +294,10 @@ fn test_decode_value_accepts_terminal_unicode_whitespace_when_trimming_enabled()
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled() {
-    let mut decoder =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::builder().trim_whitespace(false).build());
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().trim_whitespace(false).build(),
+        JsonDecodeLimits::default(),
+    );
     let error = decoder
         .decode_value("```json\n{\"a\":1}\n```\u{00a0}")
         .expect_err("terminal Unicode whitespace should remain without trimming");
@@ -295,19 +313,21 @@ fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled(
 #[test]
 fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid() {
     let mut decoders = [
-        NormalizingJsonDecoder::default(),
-        NormalizingJsonDecoder::new(
-            NormalizingJsonDecodeOptions::builder()
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default()),
+        NormalizingJsonDecoder::owned(
+            NormalizingJsonDecodePolicy::builder()
                 .trim_whitespace(false)
                 .markdown_fence_policy(MarkdownFencePolicy::Disabled)
                 .build(),
+            JsonDecodeLimits::default(),
         ),
-        NormalizingJsonDecoder::new(
-            NormalizingJsonDecodeOptions::builder()
+        NormalizingJsonDecoder::owned(
+            NormalizingJsonDecodePolicy::builder()
                 .markdown_fence_policy(MarkdownFencePolicy::JsonOnly {
                     closing: MarkdownFenceClosing::Required,
                 })
                 .build(),
+            JsonDecodeLimits::default(),
         ),
     ];
 
@@ -382,12 +402,13 @@ fn next_u64(seed: &mut u64) -> u64 {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_with_trim_disabled_and_escape_enabled_still_decodes_owned_output() {
-    let mut decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder()
             .trim_whitespace(false)
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .escape_control_chars_in_strings(true)
             .build(),
+        JsonDecodeLimits::default(),
     );
     let value = decoder
         .decode_value("{\"text\":\"a\nb\"}")
@@ -402,7 +423,8 @@ fn test_decode_value_with_trim_disabled_and_escape_enabled_still_decodes_owned_o
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_trims_before_control_character_repair() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let value = decoder
         .decode_value("```json\n  {\"text\":\"a\nb\"}  \n```")
         .expect("outer whitespace should be removed before repair allocates an owned string");

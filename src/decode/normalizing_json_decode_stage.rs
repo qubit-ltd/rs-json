@@ -20,7 +20,6 @@ use std::fmt;
 /// let decode_stage = NormalizingJsonDecodeStage::Parse;
 /// assert_eq!(decode_stage.to_string(), "parse");
 /// ```
-#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NormalizingJsonDecodeStage {
     /// The error happened while decoding raw bytes as UTF-8 text.

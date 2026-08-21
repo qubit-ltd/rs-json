@@ -7,8 +7,9 @@
 // =============================================================================
 //! Tests control-character escaping through public lenient decoder behavior.
 
+use qubit_budget::json::JsonDecodeLimits;
 use qubit_json::decode::NormalizingJsonDecodeErrorKind;
-use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde_json::json;
@@ -20,7 +21,8 @@ use serde_json::json;
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_preserves_existing_escapes() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let value = decoder
         .decode_value("{\"text\":\"a\\nb\"}")
         .expect("existing JSON escapes should remain valid");
@@ -34,7 +36,8 @@ fn test_decode_value_preserves_existing_escapes() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_escapes_control_chars_in_strings() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let value = decoder
         .decode_value("{\"text\":\"a\nb\"}")
         .expect("default decoder should escape control characters inside strings");
@@ -48,7 +51,8 @@ fn test_decode_value_escapes_control_chars_in_strings() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_preserves_utf8_after_escaped_control_char() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let value = decoder
         .decode_value("{\"text\":\"first\n你好😀\nlast\\nend\"}")
         .expect("control escaping should preserve following UTF-8 text");
@@ -62,10 +66,11 @@ fn test_decode_value_preserves_utf8_after_escaped_control_char() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_can_disable_control_char_escaping() {
-    let mut decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder()
             .escape_control_chars_in_strings(false)
             .build(),
+        JsonDecodeLimits::default(),
     );
     let error = decoder
         .decode_value("{\"text\":\"a\nb\"}")
@@ -89,7 +94,8 @@ fn test_decode_value_covers_all_supported_control_char_escapes() {
     let control_text: String = control_chars.into_iter().collect();
     let json_input = format!("{{\"text\":\"{control_text}\"}}");
 
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let value = decoder
         .decode_value(&json_input)
         .expect("all supported ASCII control characters should be escaped successfully");
@@ -103,7 +109,8 @@ fn test_decode_value_covers_all_supported_control_char_escapes() {
 /// Panics when a control byte is not repaired at the expected offset.
 #[test]
 fn test_decode_value_escapes_each_control_char_at_each_chunk_offset() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
 
     for prefix_len in 0..=24 {
         for control_code in 0_u8..=0x1f {
@@ -144,19 +151,21 @@ fn test_decode_value_preserves_state_across_each_chunk_boundary_offset() {
             ),
         });
 
-        let decoded = NormalizingJsonDecoder::default()
-            .decode_value(&json_input)
-            .unwrap_or_else(|error| {
-                panic!(
-                    "state transitions at prefix offset {prefix_len} should \
+        let decoded =
+            NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default())
+                .decode_value(&json_input)
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "state transitions at prefix offset {prefix_len} should \
                      decode: {error}"
-                )
-            });
+                    )
+                });
         assert_eq!(decoded, expected);
 
-        let bounded = NormalizingJsonDecoder::new(
-            NormalizingJsonDecodeOptions::builder()
-                .max_normalized_bytes(Some(json_input.len() + 1))
+        let bounded = NormalizingJsonDecoder::owned(
+            NormalizingJsonDecodePolicy::builder().build(),
+            JsonDecodeLimits::builder()
+                .max_normalized_input_bytes(json_input.len() + 1)
                 .build(),
         )
         .decode_value(&json_input)
@@ -181,18 +190,20 @@ fn test_decode_value_bounds_all_control_character_escapes_by_normalized_size() {
     let json_input = format!("{{\"text\":\"{control_chars}\"}}");
     let normalized_bytes = "{\"text\":\"".len() + (5 * 2) + (27 * 6) + "\"}".len();
 
-    let accepted = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .max_normalized_bytes(Some(normalized_bytes))
+    let accepted = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder()
+            .max_normalized_input_bytes(normalized_bytes)
             .build(),
     )
     .decode_value(&json_input)
     .expect("all C0 replacements should fit exactly at their normalized limit");
     assert_eq!(accepted, json!({"text": control_chars}));
 
-    let error = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .max_normalized_bytes(Some(normalized_bytes - 1))
+    let error = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder()
+            .max_normalized_input_bytes(normalized_bytes - 1)
             .build(),
     )
     .decode_value(&json_input)
@@ -211,7 +222,8 @@ fn test_decode_value_bounds_all_control_character_escapes_by_normalized_size() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_escapes_control_char_after_unmatched_backslash() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
 
     for code_point in 0_u32..=0x1f {
         let control = char::from_u32(code_point).expect("ASCII control code points should be valid chars");
@@ -240,9 +252,10 @@ fn test_decode_value_escapes_control_char_after_unmatched_backslash() {
 #[test]
 fn test_decode_value_repairs_equal_length_escape_at_normalized_size_limit() {
     let json_input = "{\"text\":\"\\\n\"}";
-    let mut decoder = NormalizingJsonDecoder::new(
-        NormalizingJsonDecodeOptions::builder()
-            .max_normalized_bytes(Some(json_input.len()))
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::builder().build(),
+        JsonDecodeLimits::builder()
+            .max_normalized_input_bytes(json_input.len())
             .build(),
     );
 
@@ -260,7 +273,8 @@ fn test_decode_value_repairs_equal_length_escape_at_normalized_size_limit() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_escapes_control_chars_after_odd_and_even_backslashes() {
-    let mut decoder = NormalizingJsonDecoder::default();
+    let mut decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
 
     for control in ['\n', '\u{0000}'] {
         for backslash_count in 1..=4 {
@@ -291,7 +305,7 @@ fn test_decode_value_escapes_control_chars_after_odd_and_even_backslashes() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_decode_value_leaves_non_whitespace_controls_outside_strings_invalid() {
-    let error = NormalizingJsonDecoder::default()
+    let error = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default())
         .decode_value("\u{0001}{\"text\":\"value\"}")
         .expect_err("a raw control character outside a JSON string must not be repaired");
 

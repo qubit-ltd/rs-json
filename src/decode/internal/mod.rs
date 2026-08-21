@@ -10,3 +10,8 @@
 mod control_character_escaper;
 pub(super) mod json_normalizer;
 mod markdown_fence;
+mod normalizing_json_decode_failure;
+mod typed_seed;
+
+pub(super) use normalizing_json_decode_failure::NormalizingJsonDecodeFailure;
+pub(super) use typed_seed::TypedSeed;

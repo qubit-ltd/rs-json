@@ -19,6 +19,7 @@ use super::DiagnosticPolicy;
 use super::JsonRootKind;
 use super::NormalizingJsonDecodeErrorKind;
 use super::NormalizingJsonDecodeStage;
+use super::internal::NormalizingJsonDecodeFailure;
 use crate::lexical::JsonLexicalFailure;
 
 /// Error returned when lenient JSON decoding fails.
@@ -29,74 +30,25 @@ use crate::lexical::JsonLexicalFailure;
 /// # Examples
 ///
 /// ```
-/// use qubit_json::decode::{NormalizingJsonDecodeError, NormalizingJsonDecoder};
+/// use qubit_budget::json::JsonDecodeLimits;
+/// use qubit_json::decode::{
+///     NormalizingJsonDecodeError, NormalizingJsonDecodePolicy,
+///     NormalizingJsonDecoder,
+/// };
 ///
-/// let mut decoder = NormalizingJsonDecoder::default();
-/// let error: NormalizingJsonDecodeError =
-/// decoder.decode_value("").unwrap_err(); assert_eq!(error.raw_input_bytes(),
-/// 0);
+/// let mut decoder = NormalizingJsonDecoder::owned(
+///     NormalizingJsonDecodePolicy::default(),
+///     JsonDecodeLimits::default(),
+/// );
+/// let error: NormalizingJsonDecodeError = decoder.decode_value("").unwrap_err();
+/// assert_eq!(error.raw_input_bytes(), 0);
 /// ```
-#[non_exhaustive]
 #[derive(Clone)]
 pub struct NormalizingJsonDecodeError {
     /// Stores the privacy policy applied while constructing diagnostics.
     privacy_policy: DiagnosticPolicy,
     /// Stores the structured failure and its variant-specific diagnostics.
     failure: NormalizingJsonDecodeFailure,
-}
-
-/// Stores the mutually exclusive states of a lenient decoding failure.
-#[derive(Debug)]
-enum NormalizingJsonDecodeFailure {
-    /// Raw input was not valid UTF-8.
-    InvalidUtf8 {
-        raw_input_bytes: usize,
-        valid_up_to: usize,
-        error_len: Option<usize>,
-        source: Option<std::str::Utf8Error>,
-    },
-    /// Raw input exceeded its configured byte limit.
-    InputTooLarge { raw_input_bytes: usize, maximum: usize },
-    /// Normalized input exceeded its configured byte limit.
-    NormalizedInputTooLarge {
-        raw_input_bytes: usize,
-        normalized_input_bytes: usize,
-        maximum: usize,
-    },
-    /// Input was empty at a normalization boundary.
-    EmptyInput {
-        raw_input_bytes: usize,
-        normalized_input_bytes: Option<usize>,
-    },
-    /// Normalized text was not valid JSON.
-    InvalidJson {
-        raw_input_bytes: usize,
-        normalized_input_bytes: usize,
-        line: usize,
-        column: usize,
-        source: Option<Arc<dyn Error + Send + Sync>>,
-    },
-    /// Decoded JSON exceeded a resource budget.
-    Budget {
-        raw_input_bytes: usize,
-        normalized_input_bytes: Option<usize>,
-        source: MeasuredBudgetError<JsonResource, usize>,
-    },
-    /// Valid JSON had an unexpected top-level kind.
-    UnexpectedTopLevel {
-        raw_input_bytes: usize,
-        normalized_input_bytes: usize,
-        expected: JsonRootKind,
-        actual: JsonRootKind,
-    },
-    /// Valid JSON could not deserialize into the requested type.
-    Deserialize {
-        raw_input_bytes: usize,
-        normalized_input_bytes: usize,
-        line: usize,
-        column: usize,
-        source: Option<Arc<dyn Error + Send + Sync>>,
-    },
 }
 
 impl Clone for NormalizingJsonDecodeFailure {

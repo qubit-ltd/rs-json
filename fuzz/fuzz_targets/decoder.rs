@@ -14,12 +14,13 @@ mod internal;
 use internal::fuzz_input_limit::is_fuzz_input_within_limit;
 use internal::fuzz_record::FuzzRecord;
 use libfuzzer_sys::fuzz_target;
+use qubit_budget::json::JsonDecodeLimits;
 use qubit_json::decode::DiagnosticPolicy;
 use qubit_json::decode::MarkdownFenceClosing;
 use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodeError as JsonDecodeError;
 use qubit_json::decode::NormalizingJsonDecodeErrorKind;
-use qubit_json::decode::NormalizingJsonDecodeOptions;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecoder;
 
@@ -56,7 +57,8 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    let mut default_decoder = NormalizingJsonDecoder::default();
+    let mut default_decoder =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     match default_decoder.decode_utf8::<serde_json::Value>(data) {
         Ok(value) => {
             let encoded = serde_json::to_vec(&value).expect("serde_json::Value must serialize");
@@ -66,10 +68,9 @@ fuzz_target!(|data: &[u8]| {
         Err(error) => assert_error_invariants(&error, data.len()),
     }
     if !data.is_empty() {
-        let mut bounded = NormalizingJsonDecoder::new(
-            NormalizingJsonDecodeOptions::builder()
-                .max_input_bytes(Some(data.len() - 1))
-                .build(),
+        let mut bounded = NormalizingJsonDecoder::owned(
+            NormalizingJsonDecodePolicy::builder().build(),
+            JsonDecodeLimits::builder().max_input_bytes(data.len() - 1).build(),
         );
         let error = bounded
             .decode_utf8::<serde_json::Value>(data)
@@ -79,7 +80,8 @@ fuzz_target!(|data: &[u8]| {
     }
 
     let strict_result =
-        NormalizingJsonDecoder::new(NormalizingJsonDecodeOptions::strict()).decode_utf8::<serde_json::Value>(data);
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::strict(), JsonDecodeLimits::default())
+            .decode_utf8::<serde_json::Value>(data);
     let serde_result = serde_json::from_slice::<serde_json::Value>(data);
     match (strict_result, serde_result) {
         (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
@@ -96,26 +98,35 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
-    let decoder_options = [
-        NormalizingJsonDecodeOptions::default(),
-        NormalizingJsonDecodeOptions::strict(),
-        NormalizingJsonDecodeOptions::builder()
-            .markdown_fence_policy(MarkdownFencePolicy::Any {
-                closing: MarkdownFenceClosing::Optional,
-            })
-            .build(),
-        NormalizingJsonDecodeOptions::builder()
-            .markdown_fence_policy(MarkdownFencePolicy::JsonOnly {
-                closing: MarkdownFenceClosing::Required,
-            })
-            .build(),
-        NormalizingJsonDecodeOptions::builder()
-            .max_normalized_bytes(Some(input.len()))
-            .build(),
+    let decoder_configurations = [
+        (NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default()),
+        (NormalizingJsonDecodePolicy::strict(), JsonDecodeLimits::default()),
+        (
+            NormalizingJsonDecodePolicy::builder()
+                .markdown_fence_policy(MarkdownFencePolicy::Any {
+                    closing: MarkdownFenceClosing::Optional,
+                })
+                .build(),
+            JsonDecodeLimits::default(),
+        ),
+        (
+            NormalizingJsonDecodePolicy::builder()
+                .markdown_fence_policy(MarkdownFencePolicy::JsonOnly {
+                    closing: MarkdownFenceClosing::Required,
+                })
+                .build(),
+            JsonDecodeLimits::default(),
+        ),
+        (
+            NormalizingJsonDecodePolicy::default(),
+            JsonDecodeLimits::builder()
+                .max_normalized_input_bytes(input.len())
+                .build(),
+        ),
     ];
 
-    for options in decoder_options {
-        let mut decoder = NormalizingJsonDecoder::new(options);
+    for (policy, limits) in decoder_configurations {
+        let mut decoder = NormalizingJsonDecoder::owned(policy, limits);
         if let Err(error) = decoder.decode_str::<FuzzRecord>(input) {
             assert_error_invariants(&error, input.len());
         }
