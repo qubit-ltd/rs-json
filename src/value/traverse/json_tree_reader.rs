@@ -12,12 +12,15 @@ use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonValueTransaction;
 use serde_json::Value;
-use serde_json::map::Iter;
 
 use super::JsonTreeContext;
 use super::JsonTreeLocation;
 use super::JsonTreeProcessError;
 use super::JsonTreeVisitor;
+use super::internal::ChildCursor;
+use super::internal::NoopVisitor;
+use super::internal::ReadFrame;
+use super::internal::ReadFrameState;
 
 /// Processes JSON values while borrowing one staged JSON value transaction.
 ///
@@ -134,6 +137,27 @@ where
         Ok(())
     }
 
+    /// Accounts every node and payload without invoking a domain visitor.
+    ///
+    /// The charges remain staged in the borrowed transaction. The caller
+    /// decides whether to commit it after any surrounding work succeeds.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Root JSON value whose complete tree is admitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first measured budget rejection encountered during the
+    /// traversal.
+    pub fn account(&mut self, value: &Value) -> Result<(), MeasuredBudgetError<R, Q>> {
+        match self.process(value, &mut NoopVisitor) {
+            Ok(()) => Ok(()),
+            Err(JsonTreeProcessError::Budget(error)) => Err(error),
+            Err(JsonTreeProcessError::Visitor(error)) => match error {},
+        }
+    }
+
     /// Admits one node before any visitor callback.
     fn admit(&mut self, value: &Value, depth: usize) -> Result<(), MeasuredBudgetError<R, Q>> {
         let measurement = match value {
@@ -157,78 +181,5 @@ where
             },
         };
         self.transaction.try_admit(measurement)
-    }
-}
-
-/// Represents one stack-held frame in a read-only depth-first traversal.
-struct ReadFrame<'value> {
-    value: &'value Value,
-    context: JsonTreeContext<'value>,
-    state: ReadFrameState<'value>,
-}
-
-impl<'value> ReadFrame<'value> {
-    /// Creates a frame that will enter `value` before scheduling children.
-    #[inline(always)]
-    fn enter(value: &'value Value, context: JsonTreeContext<'value>) -> Self {
-        Self {
-            value,
-            context,
-            state: ReadFrameState::Enter,
-        }
-    }
-}
-
-/// Current phase of a read-only traversal frame.
-enum ReadFrameState<'value> {
-    Enter,
-    Children(ChildCursor<'value>),
-    Leave,
-}
-
-/// Lazily yields one container's children, keeping pending memory O(depth).
-enum ChildCursor<'value> {
-    Array {
-        iter: std::iter::Enumerate<std::slice::Iter<'value, Value>>,
-        depth: usize,
-    },
-    Object {
-        iter: Iter<'value>,
-        depth: usize,
-    },
-    Empty,
-}
-
-impl<'value> ChildCursor<'value> {
-    /// Creates a cursor for the immediate children of `value`.
-    #[inline]
-    fn new(value: &'value Value, depth: usize) -> Self {
-        let child_depth = depth
-            .checked_add(1)
-            .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
-        match value {
-            Value::Array(values) => Self::Array {
-                iter: values.iter().enumerate(),
-                depth: child_depth,
-            },
-            Value::Object(entries) => Self::Object {
-                iter: entries.iter(),
-                depth: child_depth,
-            },
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Self::Empty,
-        }
-    }
-
-    /// Returns the next child, its location, and its root-inclusive depth.
-    fn next(&mut self) -> Option<(&'value Value, JsonTreeLocation<'value>, usize)> {
-        match self {
-            Self::Array { iter, depth } => iter
-                .next()
-                .map(|(index, value)| (value, JsonTreeLocation::ArrayElement { index }, *depth)),
-            Self::Object { iter, depth } => iter
-                .next()
-                .map(|(key, value)| (value, JsonTreeLocation::ObjectValue { key }, *depth)),
-            Self::Empty => None,
-        }
     }
 }

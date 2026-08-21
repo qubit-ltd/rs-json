@@ -7,21 +7,17 @@
 // =============================================================================
 //! Implements non-recursive, mutable JSON tree processing.
 
-use std::ptr::NonNull;
-
 use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonValueTransaction;
 use serde_json::Value;
-use serde_json::map::IterMut;
 
 use super::JsonTreeBudgetRejection;
-use super::JsonTreeContext;
 use super::JsonTreeControl;
-use super::JsonTreeLocation;
 use super::JsonTreeMutVisitor;
 use super::JsonTreeProcessError;
+use super::internal::MutFrame;
 
 /// Mutates JSON values while borrowing one staged JSON value transaction.
 ///
@@ -176,130 +172,5 @@ where
             },
         };
         self.transaction.try_admit(measurement)
-    }
-}
-
-/// Owns the location information needed while mutable traversal advances.
-#[derive(Clone)]
-enum OwnedLocation {
-    Root,
-    ArrayElement(usize),
-    ObjectValue(String),
-}
-
-impl OwnedLocation {
-    /// Borrows this owned location for a visitor context.
-    #[inline(always)]
-    fn context(&self, depth: usize) -> JsonTreeContext<'_> {
-        let location = match self {
-            Self::Root => JsonTreeLocation::Root,
-            Self::ArrayElement(index) => JsonTreeLocation::ArrayElement { index: *index },
-            Self::ObjectValue(key) => JsonTreeLocation::ObjectValue { key },
-        };
-        JsonTreeContext { depth, location }
-    }
-    /// Returns the object key that must be charged before child admission.
-    #[must_use]
-    #[inline(always)]
-    fn key(&self) -> Option<&str> {
-        match self {
-            Self::ObjectValue(key) => Some(key),
-            Self::Root | Self::ArrayElement(_) => None,
-        }
-    }
-}
-
-/// Tracks one in-place mutable traversal position.
-struct MutFrame {
-    location: OwnedLocation,
-    depth: usize,
-    value: NonNull<Value>,
-    entered: bool,
-    finished: bool,
-    cursor: Option<MutChildCursor>,
-}
-
-impl MutFrame {
-    /// Creates the root frame from the exclusive mutable root borrow.
-    #[inline(always)]
-    fn root(value: &mut Value) -> Self {
-        Self {
-            location: OwnedLocation::Root,
-            depth: 1,
-            value: NonNull::from(value),
-            entered: false,
-            finished: false,
-            cursor: None,
-        }
-    }
-    /// Creates one child frame retaining the parent-derived value pointer.
-    #[inline(always)]
-    fn child(location: OwnedLocation, depth: usize, value: &mut Value) -> Self {
-        Self {
-            location,
-            depth,
-            value: NonNull::from(value),
-            entered: false,
-            finished: false,
-            cursor: None,
-        }
-    }
-    /// Returns the next mutable child while preserving the parent container.
-    fn next_child(&mut self) -> Option<Self> {
-        if self.finished {
-            return None;
-        }
-        let cursor = self.cursor.get_or_insert_with(|| MutChildCursor::new(self.value));
-        cursor.next(self.depth)
-    }
-}
-
-/// Lazily yields mutable children without detaching their parent container.
-enum MutChildCursor {
-    Array { values: NonNull<Vec<Value>>, next: usize },
-    Object { iter: IterMut<'static> },
-    Empty,
-}
-
-impl MutChildCursor {
-    /// Creates a cursor whose references remain inside the borrowed root.
-    fn new(mut value: NonNull<Value>) -> Self {
-        // SAFETY: the pointer originates from the caller's exclusive root
-        // borrow.
-        match unsafe { value.as_mut() } {
-            Value::Array(values) => Self::Array {
-                values: NonNull::from(values),
-                next: 0,
-            },
-            Value::Object(entries) => {
-                let iter = entries.iter_mut();
-                // SAFETY: no entry is inserted, removed, or replaced while this
-                // iterator is suspended.
-                let iter = unsafe { std::mem::transmute::<IterMut<'_>, IterMut<'static>>(iter) };
-                Self::Object { iter }
-            }
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Self::Empty,
-        }
-    }
-    /// Returns the next child and its traversal metadata.
-    fn next(&mut self, parent_depth: usize) -> Option<MutFrame> {
-        let depth = parent_depth
-            .checked_add(1)
-            .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
-        match self {
-            Self::Array { values, next } => {
-                // SAFETY: the parent vector is structurally unchanged while its
-                // cursor is live.
-                let values = unsafe { values.as_mut() };
-                let index = *next;
-                let child = values.get_mut(index)?;
-                *next = next.checked_add(1)?;
-                Some(MutFrame::child(OwnedLocation::ArrayElement(index), depth, child))
-            }
-            Self::Object { iter } => iter
-                .next()
-                .map(|(key, child)| MutFrame::child(OwnedLocation::ObjectValue(key.clone()), depth, child)),
-            Self::Empty => None,
-        }
     }
 }

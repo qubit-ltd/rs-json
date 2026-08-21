@@ -7,6 +7,7 @@
 // =============================================================================
 //! Traverses materialized JSON trees with explicit resource accounting.
 
+mod internal;
 mod json_tree_budget_rejection;
 mod json_tree_budget_tracker;
 mod json_tree_context;

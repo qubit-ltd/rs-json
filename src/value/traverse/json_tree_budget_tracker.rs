@@ -14,10 +14,7 @@ use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use serde_json::Value;
 
-use super::JsonTreeContext;
-use super::JsonTreeProcessError;
 use super::JsonTreeReader;
-use super::JsonTreeVisitor;
 
 /// Fully accounts materialized JSON trees using an internally owned budget.
 ///
@@ -84,9 +81,7 @@ where
     /// the tree. Charges are committed only when the complete walk succeeds.
     pub fn account(&mut self, value: &Value) -> Result<(), MeasuredBudgetError<R, Q>> {
         let mut transaction = self.budget.transaction();
-        let result = JsonTreeReader::new(&mut transaction)
-            .process(value, &mut NoopVisitor)
-            .map_err(Self::extract_budget);
+        let result = JsonTreeReader::new(&mut transaction).account(value);
         if result.is_ok() {
             transaction.commit();
         }
@@ -132,25 +127,5 @@ where
     #[inline(always)]
     pub fn into_budget(self) -> JsonValueBudget<R, Q> {
         self.budget
-    }
-
-    /// Extracts the infrastructure error from a no-op traversal.
-    fn extract_budget(error: JsonTreeProcessError<R, Q, std::convert::Infallible>) -> MeasuredBudgetError<R, Q> {
-        match error {
-            JsonTreeProcessError::Budget(error) => error,
-            JsonTreeProcessError::Visitor(error) => match error {},
-        }
-    }
-}
-
-/// Does not add domain behavior while the reader performs full admission.
-struct NoopVisitor;
-
-impl JsonTreeVisitor for NoopVisitor {
-    type Error = std::convert::Infallible;
-
-    /// Accepts every admitted node.
-    fn enter(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
-        Ok(())
     }
 }
