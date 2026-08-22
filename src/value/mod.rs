@@ -8,8 +8,11 @@
 //! Builds [`serde_json::Value`] values while charging a JSON value budget.
 
 mod json_value_seed;
+mod strict_json_value;
 
 pub use json_value_seed::JsonValueSeed;
+pub use strict_json_value::StrictJsonValue;
+pub use strict_json_value::StrictJsonValueSeed;
 
 pub mod traverse;
 

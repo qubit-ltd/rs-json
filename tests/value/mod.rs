@@ -9,3 +9,4 @@
 
 mod internal;
 mod json_value_seed_tests;
+mod strict_json_value_tests;
