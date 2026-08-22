@@ -13,6 +13,10 @@ use crate::lexical::JsonLexicalErrorReason;
 
 /// The concrete reason why a JSON document was rejected lexically.
 ///
+/// This enum intentionally remains exhaustive so callers can classify every
+/// documented lexical rejection at compile time. New reasons require a
+/// breaking release rather than a `#[non_exhaustive]` change.
+///
 /// # Examples
 ///
 /// ```

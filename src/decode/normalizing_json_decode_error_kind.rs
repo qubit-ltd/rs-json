@@ -14,6 +14,8 @@ use std::str::FromStr;
 ///
 /// This type is intended for callers that need stable, programmatic branching
 /// without depending on full error messages produced by lower-level parsers.
+/// Its enum is intentionally exhaustive: adding a category is a breaking
+/// release so exhaustive caller matches retain their compile-time guarantee.
 ///
 /// # Examples
 ///

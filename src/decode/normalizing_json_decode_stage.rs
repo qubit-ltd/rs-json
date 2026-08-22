@@ -12,6 +12,10 @@ use std::fmt;
 
 /// Identifies the decoding stage where an error was produced.
 ///
+/// This enum intentionally remains exhaustive because stages are stable
+/// observability values. Adding a stage requires a breaking release rather
+/// than weakening caller matches with `#[non_exhaustive]`.
+///
 /// # Examples
 ///
 /// ```

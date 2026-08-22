@@ -739,7 +739,11 @@ impl PartialEq for NormalizingJsonDecodeFailure {
 impl Eq for NormalizingJsonDecodeFailure {}
 
 impl PartialEq for NormalizingJsonDecodeError {
-    /// Compares the privacy policy and all structured diagnostics.
+    /// Compares privacy policy and stable structured diagnostics.
+    ///
+    /// Budget failures compare their raw and normalized lengths plus resource
+    /// identity. The complete `MeasuredBudgetError` is intentionally not
+    /// compared because its source errors do not provide stable equality.
     fn eq(&self, other: &Self) -> bool {
         self.privacy_policy == other.privacy_policy && self.failure == other.failure
     }
