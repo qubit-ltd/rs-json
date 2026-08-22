@@ -29,7 +29,7 @@ use crate::lexical::JsonLexicalError;
 /// ```
 /// use qubit_json::decode::{JsonDecodeError, JsonDecoder};
 ///
-/// let mut decoder = JsonDecoder::default();
+/// let mut decoder = JsonDecoder::unlimited();
 /// let error = decoder.validate_str("{").unwrap_err();
 /// assert!(matches!(error, JsonDecodeError::Syntax(_)));
 /// ```

@@ -67,14 +67,17 @@ to `owned`, or a `JsonDecodeSession` to `from_session`. Explicitly pass
 ## Strict text objects
 
 Strict APIs do not repair text. Construct a decoder or encoder around the
-caller-owned session and use its methods for one or more documents.
+caller-owned session and use its methods for one or more documents. Codecs do
+not implement `Default`; call `owned(limits)` normally, or `unlimited()` only
+when an unbounded standard session is intentional.
 
 ```rust
-use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession, JsonResource};
+use qubit_budget::json::{JsonDecodeLimits, JsonResource};
 use qubit_json::decode::JsonDecoder;
 
-let decode_session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::new());
-let mut decoder = JsonDecoder::new(decode_session);
+let mut decoder = JsonDecoder::owned(
+    JsonDecodeLimits::<JsonResource, usize>::new(),
+);
 let value: serde_json::Value = decoder.decode_utf8(br#"{"ok":true}"#)?;
 assert_eq!(value["ok"], true);
 # Ok::<(), qubit_json::decode::JsonDecodeError<
@@ -83,12 +86,13 @@ assert_eq!(value["ok"], true);
 ```
 
 ```rust
-use qubit_budget::json::{JsonEncodeLimits, JsonEncodeSession, JsonResource};
+use qubit_budget::json::{JsonEncodeLimits, JsonResource};
 use qubit_json::encode::JsonEncoder;
 
 let value = serde_json::json!({"ok": true});
-let encode_session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::new());
-let mut encoder = JsonEncoder::new(encode_session);
+let mut encoder = JsonEncoder::owned(
+    JsonEncodeLimits::<JsonResource, usize>::new(),
+);
 let bytes = encoder.to_vec(&value)?;
 assert_eq!(bytes, br#"{"ok":true}"#);
 # Ok::<(), qubit_json::encode::JsonEncodeError<

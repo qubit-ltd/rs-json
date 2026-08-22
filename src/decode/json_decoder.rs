@@ -32,7 +32,7 @@ use crate::lexical::JsonLexicalScanner;
 /// ```
 /// use qubit_json::decode::JsonDecoder;
 ///
-/// let mut decoder = JsonDecoder::default();
+/// let mut decoder = JsonDecoder::unlimited();
 /// let value: serde_json::Value = decoder.decode_str(r#"{"ok":true}"#)?;
 /// assert_eq!(value["ok"], true);
 /// # Ok::<(), qubit_json::decode::JsonDecodeError<qubit_budget::json::JsonResource>>(())
@@ -45,9 +45,38 @@ where
     session: JsonDecodeSession<'budget, R, Q>,
 }
 
-impl Default for JsonDecoder<'static, JsonResource, usize> {
-    fn default() -> Self {
-        Self::new(JsonDecodeSession::owned(JsonDecodeLimits::default()))
+impl<R, Q> JsonDecoder<'static, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    /// Creates a decoder with an owned session built from explicit limits.
+    ///
+    /// # Parameters
+    ///
+    /// * `limits` - Resource limits used to construct the owned session.
+    ///
+    /// # Returns
+    ///
+    /// A decoder whose cumulative accounting starts empty and is constrained
+    /// by `limits`.
+    #[inline(always)]
+    #[must_use]
+    pub fn owned(limits: JsonDecodeLimits<R, Q>) -> Self {
+        Self::new(JsonDecodeSession::owned(limits))
+    }
+}
+
+impl JsonDecoder<'static, JsonResource, usize> {
+    /// Creates a decoder with an explicitly unlimited standard session.
+    ///
+    /// # Returns
+    ///
+    /// A decoder with no configured input or decoded-value limits.
+    #[inline(always)]
+    #[must_use]
+    pub fn unlimited() -> Self {
+        Self::owned(JsonDecodeLimits::new())
     }
 }
 

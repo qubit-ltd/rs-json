@@ -61,14 +61,16 @@ assert_eq!(value["ok"], true);
 ## 严格文本对象
 
 严格 API 不修复文本。围绕调用方持有的 session 构造 decoder 或 encoder 对象，再对一个或
-多个文档调用其方法。
+多个文档调用其方法。codec 不实现 `Default`；通常应调用 `owned(limits)`，只有明确需要标准
+无限预算 session 时才调用 `unlimited()`。
 
 ```rust
-use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession, JsonResource};
+use qubit_budget::json::{JsonDecodeLimits, JsonResource};
 use qubit_json::decode::JsonDecoder;
 
-let decode_session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::new());
-let mut decoder = JsonDecoder::new(decode_session);
+let mut decoder = JsonDecoder::owned(
+    JsonDecodeLimits::<JsonResource, usize>::new(),
+);
 let value: serde_json::Value = decoder.decode_utf8(br#"{"ok":true}"#)?;
 assert_eq!(value["ok"], true);
 # Ok::<(), qubit_json::decode::JsonDecodeError<
@@ -77,12 +79,13 @@ assert_eq!(value["ok"], true);
 ```
 
 ```rust
-use qubit_budget::json::{JsonEncodeLimits, JsonEncodeSession, JsonResource};
+use qubit_budget::json::{JsonEncodeLimits, JsonResource};
 use qubit_json::encode::JsonEncoder;
 
 let value = serde_json::json!({"ok": true});
-let encode_session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::new());
-let mut encoder = JsonEncoder::new(encode_session);
+let mut encoder = JsonEncoder::owned(
+    JsonEncodeLimits::<JsonResource, usize>::new(),
+);
 let bytes = encoder.to_vec(&value)?;
 assert_eq!(bytes, br#"{"ok":true}"#);
 # Ok::<(), qubit_json::encode::JsonEncodeError<

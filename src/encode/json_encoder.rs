@@ -40,7 +40,7 @@ use super::serializer::json_encode_serializer::JsonEncodeSerializer;
 /// ```
 /// use qubit_json::encode::JsonEncoder;
 ///
-/// let mut encoder = JsonEncoder::default();
+/// let mut encoder = JsonEncoder::unlimited();
 /// let bytes = encoder.to_vec(&serde_json::json!({"ok": true}))?;
 /// assert_eq!(bytes, br#"{"ok":true}"#);
 /// # Ok::<(), qubit_json::encode::JsonEncodeError<qubit_budget::json::JsonResource>>(())
@@ -53,9 +53,38 @@ where
     session: JsonEncodeSession<'budget, R, Q>,
 }
 
-impl Default for JsonEncoder<'static, JsonResource, usize> {
-    fn default() -> Self {
-        Self::new(JsonEncodeSession::owned(JsonEncodeLimits::default()))
+impl<R, Q> JsonEncoder<'static, R, Q>
+where
+    R: Clone + Debug,
+    Q: ResourceQuantity,
+{
+    /// Creates an encoder with an owned session built from explicit limits.
+    ///
+    /// # Parameters
+    ///
+    /// * `limits` - Resource limits used to construct the owned session.
+    ///
+    /// # Returns
+    ///
+    /// An encoder whose cumulative accounting starts empty and is constrained
+    /// by `limits`.
+    #[inline(always)]
+    #[must_use]
+    pub fn owned(limits: JsonEncodeLimits<R, Q>) -> Self {
+        Self::new(JsonEncodeSession::owned(limits))
+    }
+}
+
+impl JsonEncoder<'static, JsonResource, usize> {
+    /// Creates an encoder with an explicitly unlimited standard session.
+    ///
+    /// # Returns
+    ///
+    /// An encoder with no configured output or encoded-value limits.
+    #[inline(always)]
+    #[must_use]
+    pub fn unlimited() -> Self {
+        Self::owned(JsonEncodeLimits::new())
     }
 }
 
