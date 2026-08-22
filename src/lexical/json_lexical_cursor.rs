@@ -137,6 +137,7 @@ where
         }
         let end = self.offset.saturating_add(literal.len());
         if !Self::is_value_delimiter(self.input.get(end).copied()) {
+            self.offset = end;
             return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte {
                 byte: self.peek().unwrap_or_default(),
             }));

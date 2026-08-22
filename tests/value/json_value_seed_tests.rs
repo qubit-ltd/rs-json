@@ -40,6 +40,29 @@ fn budgeted_value_seed_rejects_decoded_nodes_incrementally() {
     assert_eq!(budget.used_nodes(), Some(0));
 }
 
+/// Verifies nested containers are admitted before their contents are decoded.
+#[test]
+fn test_budgeted_value_seed_admits_containers_before_descending() {
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .structure_limits(
+            StructureLimits::builder()
+                .depth_limit(ResourceLimit::new(JsonResource::Depth, 1))
+                .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 3))
+                .build(),
+        )
+        .build();
+    let mut budget = limits.budget();
+    let mut transaction = budget.transaction();
+    let mut deserializer = Deserializer::from_slice(br#"[[true]]"#);
+
+    let error = JsonValueSeed::new(&mut transaction)
+        .deserialize(&mut deserializer)
+        .expect_err("the nested array must exceed the depth limit before decoding its child");
+
+    assert!(error.to_string().contains("Depth"));
+    assert_eq!(transaction.used_nodes(), Some(1));
+}
+
 #[test]
 fn budgeted_value_seed_returns_the_admitted_value() {
     let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();

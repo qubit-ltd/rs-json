@@ -221,6 +221,9 @@ where
     where
         A: SeqAccess<'de>,
     {
+        self.transaction
+            .try_enter_container(JsonContainerKind::Sequence, self.depth)
+            .map_err(A::Error::custom)?;
         let mut values = Vec::new();
         loop {
             let next = values
@@ -233,10 +236,6 @@ where
             };
             values.push(value);
         }
-        self.admit(JsonMeasurement::Array {
-            depth: self.depth,
-            items: values.len(),
-        })?;
         Ok(Value::Array(values))
     }
 
@@ -244,6 +243,9 @@ where
     where
         A: MapAccess<'de>,
     {
+        self.transaction
+            .try_enter_container(JsonContainerKind::Map, self.depth)
+            .map_err(A::Error::custom)?;
         let mut values = Map::new();
         let mut entries = 0_usize;
         loop {
@@ -262,10 +264,6 @@ where
             entries = next;
             values.insert(key, value);
         }
-        self.admit(JsonMeasurement::Object {
-            depth: self.depth,
-            entries,
-        })?;
         Ok(Value::Object(values))
     }
 }
