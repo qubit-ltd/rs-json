@@ -40,18 +40,21 @@ value 的消耗暂存；完整强类型解码成功才提交 value 消耗，失�
 严格文本接口由对象承载，避免无状态自由函数扩散：
 
 ```rust
-use qubit_budget::json::{JsonDecodeLimits, JsonDecodeSession, JsonResource};
+use qubit_budget::json::{JsonDecodeLimits, JsonResource};
 use qubit_json::decode::JsonDecoder;
 
-let session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::new());
-let mut decoder = JsonDecoder::new(session);
+let mut decoder = JsonDecoder::owned(
+    JsonDecodeLimits::<JsonResource, usize>::new(),
+);
 let value: serde_json::Value = decoder.decode_utf8(br#"{"ok":true}"#)?;
 # Ok::<(), qubit_json::decode::JsonDecodeError<
 #     qubit_budget::json::JsonResource,
 # >>(())
 ```
 
-`JsonDecoder` 持有一个 `JsonDecodeSession`，提供 `decode_str`、`decode_utf8`、对应的 seed
+`JsonDecoder` 持有一个 `JsonDecodeSession`。`owned(limits)` 是显式 limits 的常用构造入口，
+`new(session)` 用于复用调用方准备的 session；只有确实需要无限预算时才调用 `unlimited()`。
+codec 不实现 `Default`，避免把无限预算伪装成安全默认值。decoder 提供 `decode_str`、`decode_utf8`、对应的 seed
 入口和 `validate_str`/`validate_utf8`。每次尝试先记录输入，再经共享 scanner 准入；值
 transaction 只在完整成功时提交。
 

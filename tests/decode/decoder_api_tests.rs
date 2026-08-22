@@ -18,7 +18,7 @@ use qubit_json::decode::NormalizingJsonDecoder;
 /// Verifies that strict string decoding can borrow from the input.
 #[test]
 fn test_json_decoder_decode_str_borrows_input() {
-    let mut decoder = JsonDecoder::default();
+    let mut decoder = JsonDecoder::unlimited();
     let input = "\"borrowed\"";
 
     let value: &str = decoder
@@ -31,7 +31,7 @@ fn test_json_decoder_decode_str_borrows_input() {
 /// Verifies that strict UTF-8 byte decoding can borrow from the input.
 #[test]
 fn test_json_decoder_decode_utf8_borrows_input() {
-    let mut decoder = JsonDecoder::default();
+    let mut decoder = JsonDecoder::unlimited();
     let input = br#""borrowed""#;
 
     let value: &str = decoder
@@ -44,7 +44,7 @@ fn test_json_decoder_decode_utf8_borrows_input() {
 /// Verifies that strict validation accepts string and UTF-8 entry points.
 #[test]
 fn test_json_decoder_validation_entry_points() {
-    let mut decoder = JsonDecoder::default();
+    let mut decoder = JsonDecoder::unlimited();
 
     decoder
         .validate_str("null")
@@ -52,6 +52,30 @@ fn test_json_decoder_validation_entry_points() {
     decoder
         .validate_utf8(b"true")
         .expect("strict UTF-8 validation should succeed");
+}
+
+/// Verifies the owned constructor builds a cumulative session from explicit
+/// limits.
+#[test]
+fn test_json_decoder_owned_uses_explicit_limits() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(8)
+        .max_nodes(2)
+        .build();
+    let decoder = JsonDecoder::owned(limits);
+
+    assert_eq!(decoder.session().max_input_bytes(), Some(8));
+    assert_eq!(decoder.session().value_budget().limits().max_nodes(), Some(2));
+}
+
+/// Verifies unlimited construction is explicit and leaves every budget
+/// unconfigured.
+#[test]
+fn test_json_decoder_unlimited_has_no_limits() {
+    let decoder = JsonDecoder::unlimited();
+
+    assert_eq!(decoder.session().max_input_bytes(), None);
+    assert_eq!(decoder.session().value_budget().limits().max_nodes(), None);
 }
 
 /// Verifies that normalizing string decoding returns an owned target.
