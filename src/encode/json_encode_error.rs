@@ -19,6 +19,11 @@ use crate::decode::JsonSyntaxError;
 
 /// Failure produced while encoding one JSON document.
 ///
+/// This enum intentionally remains exhaustive: its variants are a stable
+/// compatibility contract for callers that match encode outcomes. Adding a
+/// variant requires a breaking release rather than silently weakening those
+/// matches with `#[non_exhaustive]`.
+///
 /// # Type Parameters
 ///
 /// * `R` - Resource identity attached to budget failures.

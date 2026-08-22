@@ -15,6 +15,10 @@ use thiserror::Error;
 /// Identifies whether JSON tree processing failed in infrastructure or domain
 /// code.
 ///
+/// This enum intentionally remains exhaustive so callers can distinguish the
+/// complete set of processing failure domains at compile time. Adding a domain
+/// requires a breaking release rather than a `#[non_exhaustive]` change.
+///
 /// # Type Parameters
 ///
 /// * `R` - Resource identity attached to budget failures.

@@ -21,6 +21,12 @@ use super::internal::MutFrame;
 
 /// Mutates JSON values while borrowing one staged JSON value transaction.
 ///
+/// The transaction accounts each input node immediately before its visitor
+/// callback. Mutations made by the visitor, including replacement values and
+/// newly introduced descendants, are not re-accounted; callers needing an
+/// output budget should restrict visitors to structural reductions or account
+/// the completed tree separately.
+///
 /// # Type Parameters
 ///
 /// * `R` - Resource identity tracked by the borrowed transaction.
@@ -76,7 +82,12 @@ where
         Self { transaction }
     }
 
-    /// Mutates every admitted node in depth-first order without Rust recursion.
+    /// Mutates every admitted input node in depth-first order without Rust
+    /// recursion.
+    ///
+    /// A node is charged before `visitor.visit` receives it. Consequently, a
+    /// visitor replacement is not charged again and only descendants present
+    /// after the callback are traversed.
     ///
     /// # Type Parameters
     ///
