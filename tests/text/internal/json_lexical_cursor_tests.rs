@@ -32,7 +32,7 @@ fn test_cursor_reports_scalar_and_container_syntax_errors() {
     let cases: &[(&[u8], JsonSyntaxErrorReason)] = &[
         (b"", JsonSyntaxErrorReason::UnexpectedEnd),
         (b"@", JsonSyntaxErrorReason::UnexpectedByte { byte: b'@' }),
-        (b"truex", JsonSyntaxErrorReason::UnexpectedByte { byte: b't' }),
+        (b"truex", JsonSyntaxErrorReason::UnexpectedByte { byte: b'x' }),
         (b"true false", JsonSyntaxErrorReason::TrailingCharacters),
         (b"[1 2]", JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd),
         (b"[1,]", JsonSyntaxErrorReason::UnexpectedByte { byte: b']' }),
@@ -62,6 +62,22 @@ fn test_cursor_reports_scalar_and_container_syntax_errors() {
         };
         assert_eq!(error.reason(), *expected, "input: {input:?}");
     }
+}
+
+/// Verifies malformed literals identify the first byte after a complete token.
+#[test]
+fn test_cursor_reports_the_invalid_literal_delimiter_location() {
+    let session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<serde_json::Value>(b"truex")
+        .expect_err("a literal must end at a JSON value delimiter");
+    let JsonDecodeError::Syntax(error) = error else {
+        panic!("expected a syntax error");
+    };
+
+    assert_eq!(error.reason(), JsonSyntaxErrorReason::UnexpectedByte { byte: b'x' });
+    assert_eq!(error.line(), 1);
+    assert_eq!(error.column(), 5);
 }
 
 /// Verifies UTF-8 width handling, Unicode escapes, and source coordinates.
