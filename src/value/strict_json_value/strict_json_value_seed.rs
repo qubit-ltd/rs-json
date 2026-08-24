@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Serde seed for duplicate-key-free JSON values.
 
@@ -9,7 +11,7 @@ use serde::Deserializer;
 use serde::de::DeserializeSeed;
 
 use super::StrictJsonValue;
-use super::StrictJsonVisitor;
+use super::internal::StrictJsonVisitor;
 
 /// Serde seed that constructs a [`StrictJsonValue`].
 ///

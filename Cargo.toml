@@ -42,12 +42,10 @@ path = "tests/mod.rs"
 
 [dependencies]
 serde = "1.0"
-# Keep this synchronized with `zmij`: encode/serde_compat relies on the pinned
-# serde_json RawValue protocol and its float lexeme formatting. See
-# doc/dependency_maintenance.zh_CN.md before upgrading either dependency.
+# encode/serde_compat relies on serde_json's private RawValue protocol. See
+# doc/dependency_maintenance.zh_CN.md before upgrading this dependency.
 serde_json = { version = "=1.0.151", features = ["float_roundtrip", "raw_value"] }
 thiserror = "2.0"
-zmij = "=1.0.23"
 
 qubit-budget = { version = "0.3", features = ["json"] }
 

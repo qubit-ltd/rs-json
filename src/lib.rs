@@ -30,5 +30,6 @@
 
 pub mod decode;
 pub mod encode;
+mod internal;
 mod lexical;
 pub mod value;

@@ -17,6 +17,7 @@ use serde_json::Deserializer as JsonDeserializer;
 
 use super::JsonDecodeError;
 use super::internal::TypedSeed;
+use crate::internal::has_json_value_limits;
 use crate::lexical::JsonLexicalScanner;
 
 /// Strictly decodes complete JSON documents while owning cumulative accounting
@@ -200,11 +201,12 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    let has_value_limits = has_json_value_limits(session.value_budget().limits());
     let mut attempt = session.begin_value();
     attempt
         .try_consume_input_bytes(input.len())
         .map_err(JsonDecodeError::Budget)?;
-    JsonLexicalScanner::new(attempt.value_transaction_mut())
+    JsonLexicalScanner::new(attempt.value_transaction_mut(), has_value_limits)
         .scan(input)
         .map_err(JsonDecodeError::from_lexical)?;
     let mut deserializer = JsonDeserializer::from_slice(input);
@@ -225,11 +227,12 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    let has_value_limits = has_json_value_limits(session.value_budget().limits());
     let mut attempt = session.begin_value();
     attempt
         .try_consume_input_bytes(input.len())
         .map_err(JsonDecodeError::Budget)?;
-    JsonLexicalScanner::new(attempt.value_transaction_mut())
+    JsonLexicalScanner::new(attempt.value_transaction_mut(), has_value_limits)
         .scan(input)
         .map_err(JsonDecodeError::from_lexical)?;
     attempt.commit();

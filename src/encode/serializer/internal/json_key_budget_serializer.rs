@@ -19,7 +19,7 @@ use serde::ser::Error;
 
 use super::super::display_budget_kind::DisplayBudgetKind;
 use super::super::json_encode_context::JsonEncodeContext;
-use super::super::json_lexeme_length::JsonLexemeLength;
+use crate::internal::JsonLexemeLength;
 
 /// Decorates serde_json's map-key serializer with key-byte checks.
 pub(in crate::encode::serializer) struct JsonKeyBudgetSerializer<'context, 'transaction, 'budget, S, R, Q>

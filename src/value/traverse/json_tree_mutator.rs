@@ -18,7 +18,7 @@ use super::JsonTreeControl;
 use super::JsonTreeMutVisitor;
 use super::JsonTreeProcessError;
 use super::internal::MutFrame;
-use crate::value::internal::json_number_lexeme_length;
+use crate::value::internal::json_value_measurement;
 
 /// Mutates JSON values while borrowing one staged JSON value transaction.
 ///
@@ -163,26 +163,6 @@ where
 
     /// Admits one node before invoking its mutable visitor callback.
     fn admit(&mut self, value: &Value, depth: usize) -> Result<(), MeasuredBudgetError<R, Q>> {
-        let measurement = match value {
-            Value::Null => JsonMeasurement::Null { depth },
-            Value::Bool(_) => JsonMeasurement::Boolean { depth },
-            Value::Number(number) => JsonMeasurement::Number {
-                depth,
-                bytes: json_number_lexeme_length(number),
-            },
-            Value::String(text) => JsonMeasurement::String {
-                depth,
-                bytes: text.len(),
-            },
-            Value::Array(values) => JsonMeasurement::Array {
-                depth,
-                items: values.len(),
-            },
-            Value::Object(entries) => JsonMeasurement::Object {
-                depth,
-                entries: entries.len(),
-            },
-        };
-        self.transaction.try_admit(measurement)
+        self.transaction.try_admit(json_value_measurement(value, depth))
     }
 }

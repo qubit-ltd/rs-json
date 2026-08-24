@@ -5,15 +5,8 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Builds [`serde_json::Value`] values while charging a JSON value budget.
+//! Private deserialization helpers for duplicate-key-free JSON values.
 
-mod json_value_seed;
-mod strict_json_value;
+mod strict_json_visitor;
 
-pub use json_value_seed::JsonValueSeed;
-pub use strict_json_value::StrictJsonValue;
-pub use strict_json_value::StrictJsonValueSeed;
-
-pub mod traverse;
-
-mod internal;
+pub(super) use strict_json_visitor::StrictJsonVisitor;
