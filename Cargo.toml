@@ -44,9 +44,9 @@ path = "tests/mod.rs"
 
 [dependencies]
 serde = "1.0"
-# encode/serde_compat relies on serde_json's private RawValue protocol. See
-# doc/dependency_maintenance.zh_CN.md before upgrading this dependency.
-serde_json = { version = "=1.0.151", features = ["float_roundtrip", "raw_value"] }
+# 1.0.151 is the minimum version covered by the RawValue compatibility tests.
+# See doc/dependency_maintenance.zh_CN.md before raising this lower bound.
+serde_json = { version = "1.0.151", features = ["float_roundtrip", "raw_value"] }
 thiserror = "2.0"
 
 qubit-budget = { version = "0.3", features = ["json"] }
