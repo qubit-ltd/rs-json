@@ -27,6 +27,7 @@ use qubit_json::decode::NormalizingJsonDecoder;
 use qubit_json::encode::JsonEncoder;
 use serde::Deserialize;
 use serde::Serialize;
+use serde_json::value::RawValue;
 
 mod internal;
 
@@ -157,6 +158,22 @@ fn decode(criterion: &mut Criterion) {
             },
         );
         group.bench_with_input(
+            BenchmarkId::new("decode/value-bounded-session", size),
+            &document,
+            |bencher, input| {
+                bencher.iter(|| {
+                    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+                        .max_nodes(usize::MAX)
+                        .build();
+                    black_box(
+                        JsonDecoder::owned(limits)
+                            .decode_utf8::<Fixture>(black_box(input))
+                            .expect("fixture must fit the value budget"),
+                    )
+                });
+            },
+        );
+        group.bench_with_input(
             BenchmarkId::new("decode/lenient-json-decoder", size),
             &input,
             |bencher, input| {
@@ -206,6 +223,10 @@ fn encode(criterion: &mut Criterion) {
         let document = benchmark_document(target_bytes);
         let size = document.len();
         let fixture = serde_json::from_slice::<Fixture>(&document).expect("benchmark document must decode");
+        let raw_value =
+            RawValue::from_string(String::from_utf8(document.clone()).expect("benchmark document must be valid UTF-8"))
+                .expect("benchmark document must be valid raw JSON");
+        let numeric_fixture = vec![1.234_567_890_123_f64; target_bytes / 18];
         group.throughput(Throughput::Bytes(document.len() as u64));
 
         group.bench_with_input(
@@ -254,12 +275,76 @@ fn encode(criterion: &mut Criterion) {
             },
         );
         group.bench_with_input(
+            BenchmarkId::new("encode/value-bounded-session", size),
+            &fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+                        .max_output_bytes(target_bytes.saturating_add(RECORD.len()))
+                        .max_nodes(usize::MAX)
+                        .build();
+                    black_box(
+                        JsonEncoder::owned(limits)
+                            .to_vec(black_box(fixture))
+                            .expect("fixture must fit the output budget"),
+                    )
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("encode/output-bounded-session", size),
+            &fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+                        .max_output_bytes(target_bytes.saturating_add(RECORD.len()))
+                        .build();
+                    black_box(
+                        JsonEncoder::owned(limits)
+                            .to_vec(black_box(fixture))
+                            .expect("fixture must fit the output budget"),
+                    )
+                });
+            },
+        );
+        group.bench_with_input(
             BenchmarkId::new("encode/incremental-writer", size),
             &fixture,
             |bencher, fixture| {
                 bencher.iter(|| {
                     let session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
                     black_box(JsonEncoder::new(session).write_incremental(std::io::sink(), black_box(fixture)))
+                });
+            },
+        );
+        let numeric_size = serde_json::to_vec(&numeric_fixture)
+            .expect("numeric fixture must encode")
+            .len();
+        group.throughput(Throughput::Bytes(numeric_size as u64));
+        group.bench_with_input(
+            BenchmarkId::new("encode/numeric", numeric_size),
+            &numeric_fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    black_box(
+                        JsonEncoder::unlimited()
+                            .to_vec(black_box(fixture))
+                            .expect("numeric fixture must encode"),
+                    )
+                });
+            },
+        );
+        group.throughput(Throughput::Bytes(document.len() as u64));
+        group.bench_with_input(
+            BenchmarkId::new("encode/raw-value", size),
+            &raw_value,
+            |bencher, raw| {
+                bencher.iter(|| {
+                    black_box(
+                        JsonEncoder::unlimited()
+                            .to_vec(black_box(raw))
+                            .expect("raw fixture must encode"),
+                    )
                 });
             },
         );

@@ -17,6 +17,7 @@ use qubit_json::value::traverse::JsonTreeControl;
 use qubit_json::value::traverse::JsonTreeMutVisitor;
 use qubit_json::value::traverse::JsonTreeMutator;
 use qubit_json::value::traverse::JsonTreeProcessError;
+use qubit_json::value::traverse::JsonTreeReader;
 use serde_json::Value;
 use serde_json::json;
 use serde_json::to_string;
@@ -220,6 +221,35 @@ fn test_process_mut_preserves_partial_mutation_and_budget_on_rejection() {
     );
     assert_eq!(transaction.used_nodes(), Some(2));
     assert_eq!(transaction.used_payload_bytes(), Some(1));
+}
+
+/// Verifies read-only and mutable traversal stage identical resource usage.
+#[test]
+fn test_reader_and_mutator_measure_the_same_json_tree() {
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(8)
+        .max_payload_bytes(128)
+        .build();
+    let value = json!({"name": "qubit", "values": [1.25, true, null]});
+
+    let mut read_budget = limits.budget();
+    let mut read_transaction = read_budget.transaction();
+    JsonTreeReader::new(&mut read_transaction)
+        .account(&value)
+        .expect("reader should admit the fixture");
+
+    let mut mutable_value = value.clone();
+    let mut mut_budget = limits.budget();
+    let mut mut_transaction = mut_budget.transaction();
+    JsonTreeMutator::new(&mut mut_transaction)
+        .process(&mut mutable_value, &mut ReplacingVisitor)
+        .expect("mutator should admit the fixture");
+
+    assert_eq!(mut_transaction.used_nodes(), read_transaction.used_nodes());
+    assert_eq!(
+        mut_transaction.used_payload_bytes(),
+        read_transaction.used_payload_bytes(),
+    );
 }
 
 /// Verifies that a panic leaves the mutable root reassembled and serializable.
