@@ -147,7 +147,10 @@ fuzz_target!(|data: &[u8]| {
     }
 
     if let Ok(value) = default_decoder.decode_object::<serde_json::Value>(input) {
-        assert!(value.is_object());
+        let decoded = default_decoder
+            .decode_value(input)
+            .expect("typed object decoding must agree with dynamic decoding");
+        assert_eq!(value, decoded);
     }
     if let Ok(values) = default_decoder.decode_array::<serde_json::Value>(input) {
         let encoded = serde_json::to_vec(&values).expect("decoded array elements must serialize");
