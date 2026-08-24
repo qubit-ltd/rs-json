@@ -224,7 +224,8 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     /// # Returns
     ///
     /// The deserialized target value when the normalized input is a JSON
-    /// object.
+    /// object. The object requirement applies to the normalized input; the
+    /// representation produced by `T` is not required to remain object-shaped.
     ///
     /// # Errors
     ///
