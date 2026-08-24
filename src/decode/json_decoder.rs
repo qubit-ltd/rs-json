@@ -167,7 +167,12 @@ where
         decode_seed_impl(seed, input, &mut self.session)
     }
 
-    /// Validates and accounts for one complete UTF-8 JSON string.
+    /// Lexically validates and accounts for one complete UTF-8 JSON string.
+    ///
+    /// Success confirms JSON syntax, numeric range, and configured admission
+    /// limits. It does not guarantee that every Serde target can materialize
+    /// the document; target-specific failures are reported by `decode_*` as
+    /// [`JsonDecodeError::Deserialize`].
     #[inline(always)]
     pub fn validate_str(&mut self, input: &str) -> Result<(), JsonDecodeError<R, Q>>
     where
@@ -177,7 +182,12 @@ where
         self.validate_utf8(input.as_bytes())
     }
 
-    /// Validates and accounts for one complete UTF-8 JSON byte slice.
+    /// Lexically validates and accounts for one complete UTF-8 JSON byte slice.
+    ///
+    /// Success confirms JSON syntax, numeric range, and configured admission
+    /// limits. It does not guarantee that every Serde target can materialize
+    /// the document; target-specific failures are reported by `decode_*` as
+    /// [`JsonDecodeError::Deserialize`].
     pub fn validate_utf8(&mut self, input: &[u8]) -> Result<(), JsonDecodeError<R, Q>>
     where
         R: Clone,

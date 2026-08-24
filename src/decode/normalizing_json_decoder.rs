@@ -15,7 +15,6 @@ use qubit_budget::json::JsonResource;
 use serde::de::DeserializeOwned;
 use serde_json::Error;
 use serde_json::Value;
-use serde_json::error::Category;
 use serde_json::from_str;
 use serde_json::value::RawValue;
 
@@ -353,12 +352,6 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         )?;
         let actual = JsonRootKind::of_normalized_json(normalized.as_ref());
         if actual != expected {
-            Self::validate_json(
-                normalized.as_ref(),
-                raw_input_bytes,
-                normalized_input_bytes,
-                privacy_policy,
-            )?;
             return Err(NormalizingJsonDecodeError::unexpected_top_level(
                 expected,
                 actual,
@@ -469,7 +462,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         }
     }
 
-    /// Parses normalized JSON text into a dynamic value.
+    /// Materializes normalized JSON text into a dynamic value.
     ///
     /// # Parameters
     ///
@@ -484,8 +477,8 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     ///
     /// # Errors
     ///
-    /// Returns [`NormalizingJsonDecodeErrorKind::InvalidJson`](crate::decode::NormalizingJsonDecodeErrorKind::InvalidJson)
-    /// when `normalized` is not valid JSON.
+    /// Returns a deserialization error when Serde cannot materialize the
+    /// lexically admitted document as a dynamic value.
     #[inline]
     fn parse_value(
         normalized: &str,
@@ -493,39 +486,8 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         normalized_input_bytes: usize,
         privacy_policy: DiagnosticPolicy,
     ) -> Result<Value, NormalizingJsonDecodeError> {
-        from_str(normalized).map_err(|error| {
-            NormalizingJsonDecodeError::invalid_json(error, raw_input_bytes, normalized_input_bytes, privacy_policy)
-        })
-    }
-
-    /// Validates normalized JSON syntax without constructing a value tree.
-    ///
-    /// # Parameters
-    ///
-    /// * `normalized` - Normalized JSON text.
-    /// * `raw_input_bytes` - Input length before normalization.
-    /// * `normalized_input_bytes` - Normalized text length.
-    /// * `privacy_policy` - Policy applied to parse diagnostics.
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` when the complete normalized text is valid JSON.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NormalizingJsonDecodeErrorKind::InvalidJson`](crate::decode::NormalizingJsonDecodeErrorKind::InvalidJson)
-    /// when validation fails.
-    #[inline]
-    fn validate_json(
-        normalized: &str,
-        raw_input_bytes: usize,
-        normalized_input_bytes: usize,
-        privacy_policy: DiagnosticPolicy,
-    ) -> Result<(), NormalizingJsonDecodeError> {
-        let _: &RawValue = from_str(normalized).map_err(|error| {
-            NormalizingJsonDecodeError::invalid_json(error, raw_input_bytes, normalized_input_bytes, privacy_policy)
-        })?;
-        Ok(())
+        from_str(normalized)
+            .map_err(|error| Self::map_decode_error(error, raw_input_bytes, normalized_input_bytes, privacy_policy))
     }
 
     /// Deserializes normalized JSON text into `T`.
@@ -562,22 +524,14 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     where
         T: DeserializeOwned,
     {
-        from_str(normalized).map_err(|error| {
-            Self::map_decode_error(
-                normalized,
-                error,
-                raw_input_bytes,
-                normalized_input_bytes,
-                privacy_policy,
-            )
-        })
+        from_str(normalized)
+            .map_err(|error| Self::map_decode_error(error, raw_input_bytes, normalized_input_bytes, privacy_policy))
     }
 
     /// Maps a serde error to the stable public decoder error model.
     ///
     /// # Parameters
     ///
-    /// * `normalized` - Complete normalized JSON text.
     /// * `error` - Serde JSON error to classify.
     /// * `raw_input_bytes` - Input length before normalization.
     /// * `normalized_input_bytes` - Normalized text length.
@@ -585,31 +539,15 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     ///
     /// # Returns
     ///
-    /// A deserialization error for data failures in otherwise valid JSON, or
-    /// an invalid-JSON error when complete syntax validation fails.
+    /// A deserialization error for a document that already passed lexical
+    /// admission but could not be materialized as the requested target.
     #[must_use]
     fn map_decode_error(
-        normalized: &str,
         error: Error,
         raw_input_bytes: usize,
         normalized_input_bytes: usize,
         privacy_policy: DiagnosticPolicy,
     ) -> NormalizingJsonDecodeError {
-        match error.classify() {
-            Category::Data => {
-                match Self::validate_json(normalized, raw_input_bytes, normalized_input_bytes, privacy_policy) {
-                    Ok(()) => NormalizingJsonDecodeError::deserialize(
-                        error,
-                        raw_input_bytes,
-                        normalized_input_bytes,
-                        privacy_policy,
-                    ),
-                    Err(error) => error,
-                }
-            }
-            Category::Io | Category::Syntax | Category::Eof => {
-                NormalizingJsonDecodeError::invalid_json(error, raw_input_bytes, normalized_input_bytes, privacy_policy)
-            }
-        }
+        NormalizingJsonDecodeError::deserialize(error, raw_input_bytes, normalized_input_bytes, privacy_policy)
     }
 }
