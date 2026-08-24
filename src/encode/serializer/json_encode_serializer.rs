@@ -41,6 +41,9 @@ where
 
     /// Root-inclusive depth assigned to the current value.
     depth: usize,
+
+    /// Whether value accounting can reject any emitted event.
+    has_value_limits: bool,
 }
 
 impl<'transaction, 'budget, 'context, S, R, Q> JsonEncodeSerializer<'transaction, 'budget, 'context, S, R, Q>
@@ -61,11 +64,13 @@ where
     pub(in crate::encode) fn new(
         inner: S,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+        has_value_limits: bool,
     ) -> Self {
         Self {
             inner,
             context,
             depth: 1,
+            has_value_limits,
         }
     }
 
@@ -74,8 +79,14 @@ where
         inner: S,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         depth: usize,
+        has_value_limits: bool,
     ) -> Self {
-        Self { inner, context, depth }
+        Self {
+            inner,
+            context,
+            depth,
+            has_value_limits,
+        }
     }
 
     /// Stages one complete JSON measurement.
@@ -83,7 +94,21 @@ where
     where
         E: Error,
     {
+        if !self.has_value_limits {
+            return Ok(());
+        }
         self.context.borrow_mut().admit(measurement)
+    }
+
+    /// Enters one container only when value accounting is active.
+    fn enter_container<E>(&self, kind: JsonContainerKind, depth: usize) -> Result<(), E>
+    where
+        E: Error,
+    {
+        if !self.has_value_limits {
+            return Ok(());
+        }
+        self.context.borrow_mut().enter_container(kind, depth)
     }
 
     /// Charges one string node and its UTF-8 payload length.
@@ -136,13 +161,17 @@ where
 macro_rules! serialize_integer {
     ($name:ident, signed $type:ty) => {
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            self.number(JsonLexemeLength::signed_integer(value.into()))?;
+            if self.has_value_limits {
+                self.number(JsonLexemeLength::signed_integer(value.into()))?;
+            }
             self.inner.$name(value)
         }
     };
     ($name:ident, unsigned $type:ty) => {
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            self.number(JsonLexemeLength::unsigned_integer(value.into()))?;
+            if self.has_value_limits {
+                self.number(JsonLexemeLength::unsigned_integer(value.into()))?;
+            }
             self.inner.$name(value)
         }
     };
@@ -191,7 +220,9 @@ where
                 "JSON integer is outside the supported 64-bit range",
             ));
         };
-        self.number(bytes)?;
+        if self.has_value_limits {
+            self.number(bytes)?;
+        }
         self.inner.serialize_i128(value)
     }
 
@@ -199,26 +230,32 @@ where
     fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
         let value64 = u64::try_from(value)
             .map_err(|_| Self::Error::custom("JSON integer is outside the supported 64-bit range"))?;
-        self.number(JsonLexemeLength::unsigned_integer(value64.into()))?;
+        if self.has_value_limits {
+            self.number(JsonLexemeLength::unsigned_integer(value64.into()))?;
+        }
         self.inner.serialize_u128(value)
     }
 
     /// Charges and delegates one floating-point number or JSON null.
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
-        if value.is_finite() {
-            self.number(JsonLexemeLength::finite_f32(value))?;
-        } else {
-            self.admit(JsonMeasurement::Null { depth: self.depth })?;
+        if self.has_value_limits {
+            if value.is_finite() {
+                self.number(JsonLexemeLength::finite_f32(value))?;
+            } else {
+                self.admit(JsonMeasurement::Null { depth: self.depth })?;
+            }
         }
         self.inner.serialize_f32(value)
     }
 
     /// Charges and delegates one floating-point number or JSON null.
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
-        if value.is_finite() {
-            self.number(JsonLexemeLength::finite_f64(value))?;
-        } else {
-            self.admit(JsonMeasurement::Null { depth: self.depth })?;
+        if self.has_value_limits {
+            if value.is_finite() {
+                self.number(JsonLexemeLength::finite_f64(value))?;
+            } else {
+                self.admit(JsonMeasurement::Null { depth: self.depth })?;
+            }
         }
         self.inner.serialize_f64(value)
     }
@@ -237,6 +274,9 @@ where
 
     /// Charges the JSON byte-array structure before delegating it.
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
+        if !self.has_value_limits {
+            return self.inner.serialize_bytes(value);
+        }
         self.array(self.depth, value.len())?;
         let child_depth = self.depth.saturating_add(1);
         for byte in value {
@@ -259,7 +299,7 @@ where
     where
         T: Serialize + ?Sized,
     {
-        let value = BudgetedValue::new(value, self.context, self.depth);
+        let value = BudgetedValue::new(value, self.context, self.depth, self.has_value_limits);
         self.inner.serialize_some(&value)
     }
 
@@ -291,7 +331,7 @@ where
     where
         T: Serialize + ?Sized,
     {
-        let value = BudgetedValue::new(value, self.context, self.depth);
+        let value = BudgetedValue::new(value, self.context, self.depth, self.has_value_limits);
         self.inner.serialize_newtype_struct(name, &value)
     }
 
@@ -308,7 +348,7 @@ where
     {
         self.object(self.depth, 1)?;
         self.key(variant)?;
-        let value = BudgetedValue::new(value, self.context, self.depth.saturating_add(1));
+        let value = BudgetedValue::new(value, self.context, self.depth.saturating_add(1), self.has_value_limits);
         self.inner
             .serialize_newtype_variant(name, variant_index, variant, &value)
     }
@@ -316,34 +356,43 @@ where
     /// Charges an array before asking the inner serializer to create it.
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         let context = self.context;
-        context
-            .borrow_mut()
-            .enter_container(JsonContainerKind::Sequence, self.depth)?;
+        self.enter_container(JsonContainerKind::Sequence, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_seq(len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(
+            inner,
+            context,
+            child_depth,
+            self.has_value_limits,
+        ))
     }
 
     /// Charges a fixed-length JSON tuple array.
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         let context = self.context;
-        context
-            .borrow_mut()
-            .enter_container(JsonContainerKind::Sequence, self.depth)?;
+        self.enter_container(JsonContainerKind::Sequence, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_tuple(len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(
+            inner,
+            context,
+            child_depth,
+            self.has_value_limits,
+        ))
     }
 
     /// Charges a fixed-length JSON tuple-struct array.
     fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         let context = self.context;
-        context
-            .borrow_mut()
-            .enter_container(JsonContainerKind::Sequence, self.depth)?;
+        self.enter_container(JsonContainerKind::Sequence, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_tuple_struct(name, len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(
+            inner,
+            context,
+            child_depth,
+            self.has_value_limits,
+        ))
     }
 
     /// Charges a tuple variant's outer object and nested array.
@@ -357,24 +406,30 @@ where
         self.object(self.depth, 1)?;
         self.key(variant)?;
         let array_depth = self.depth.saturating_add(1);
-        self.context
-            .borrow_mut()
-            .enter_container(JsonContainerKind::Sequence, array_depth)?;
+        self.enter_container(JsonContainerKind::Sequence, array_depth)?;
         let context = self.context;
         let child_depth = array_depth.saturating_add(1);
         let inner = self.inner.serialize_tuple_variant(name, variant_index, variant, len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(
+            inner,
+            context,
+            child_depth,
+            self.has_value_limits,
+        ))
     }
 
     /// Charges an object before asking the inner serializer to create it.
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         let context = self.context;
-        context
-            .borrow_mut()
-            .enter_container(JsonContainerKind::Map, self.depth)?;
+        self.enter_container(JsonContainerKind::Map, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_map(len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(
+            inner,
+            context,
+            child_depth,
+            self.has_value_limits,
+        ))
     }
 
     /// Charges a JSON object or recognizes serde_json's RawValue shape.
@@ -388,12 +443,15 @@ where
             }
             None => {
                 let context = self.context;
-                context
-                    .borrow_mut()
-                    .enter_container(JsonContainerKind::Map, self.depth)?;
+                self.enter_container(JsonContainerKind::Map, self.depth)?;
                 let child_depth = self.depth.saturating_add(1);
                 let inner = self.inner.serialize_struct(name, len)?;
-                Ok(JsonEncodeCompound::new(inner, context, child_depth))
+                Ok(JsonEncodeCompound::new(
+                    inner,
+                    context,
+                    child_depth,
+                    self.has_value_limits,
+                ))
             }
         }
     }
@@ -409,13 +467,16 @@ where
         self.object(self.depth, 1)?;
         self.key(variant)?;
         let object_depth = self.depth.saturating_add(1);
-        self.context
-            .borrow_mut()
-            .enter_container(JsonContainerKind::Map, object_depth)?;
+        self.enter_container(JsonContainerKind::Map, object_depth)?;
         let context = self.context;
         let child_depth = object_depth.saturating_add(1);
         let inner = self.inner.serialize_struct_variant(name, variant_index, variant, len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(
+            inner,
+            context,
+            child_depth,
+            self.has_value_limits,
+        ))
     }
 
     /// Formats one display value once, checks it as a string, and emits it.
@@ -423,6 +484,9 @@ where
     where
         T: Display + ?Sized,
     {
+        if !self.has_value_limits {
+            return self.inner.collect_str(value);
+        }
         let text = JsonEncodeContext::collect_display::<S::Error, _>(
             self.context,
             value,

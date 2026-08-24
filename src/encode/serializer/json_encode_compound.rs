@@ -49,6 +49,9 @@ where
     /// Number of sequence items or map entries observed so far.
     observed: usize,
 
+    /// Whether value accounting can reject any emitted event.
+    has_value_limits: bool,
+
     /// Private serde_json encoding represented by this compound.
     private_kind: Option<PrivateStructKind>,
 }
@@ -63,12 +66,14 @@ where
         inner: C,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         child_depth: usize,
+        has_value_limits: bool,
     ) -> Self {
         Self {
             inner,
             context,
             child_depth,
             observed: 0,
+            has_value_limits,
             private_kind: None,
         }
     }
@@ -84,6 +89,7 @@ where
             context,
             child_depth: depth,
             observed: 0,
+            has_value_limits: false,
             private_kind: Some(PrivateStructKind::RawValue),
         }
     }
@@ -93,6 +99,9 @@ where
     where
         E: Error,
     {
+        if !self.has_value_limits {
+            return Ok(());
+        }
         let next = self
             .observed
             .checked_add(1)
@@ -109,6 +118,9 @@ where
     where
         E: Error,
     {
+        if !self.has_value_limits {
+            return Ok(());
+        }
         let next = self
             .observed
             .checked_add(1)
@@ -152,7 +164,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::new(value, self.context, self.child_depth, self.has_value_limits);
         self.inner.serialize_element(&value)
     }
 
@@ -179,7 +191,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::new(value, self.context, self.child_depth, self.has_value_limits);
         self.inner.serialize_element(&value)
     }
 
@@ -206,7 +218,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::new(value, self.context, self.child_depth, self.has_value_limits);
         self.inner.serialize_field(&value)
     }
 
@@ -233,7 +245,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::new(value, self.context, self.child_depth, self.has_value_limits);
         self.inner.serialize_field(&value)
     }
 
@@ -260,7 +272,7 @@ where
         T: Serialize + ?Sized,
     {
         self.next_map_entry()?;
-        let key = BudgetedKey::new(key, self.context);
+        let key = BudgetedKey::new(key, self.context, self.has_value_limits);
         self.inner.serialize_key(&key)
     }
 
@@ -269,7 +281,7 @@ where
     where
         T: Serialize + ?Sized,
     {
-        let value = BudgetedValue::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::new(value, self.context, self.child_depth, self.has_value_limits);
         self.inner.serialize_value(&value)
     }
 
@@ -312,10 +324,12 @@ where
             }
             None => self.next_map_entry()?,
         }
-        self.context
-            .borrow_mut()
-            .admit(JsonMeasurement::Key { bytes: key.len() })?;
-        let value = BudgetedValue::new(value, self.context, self.child_depth);
+        if self.has_value_limits {
+            self.context
+                .borrow_mut()
+                .admit(JsonMeasurement::Key { bytes: key.len() })?;
+        }
+        let value = BudgetedValue::new(value, self.context, self.child_depth, self.has_value_limits);
         self.inner.serialize_field(key, &value)
     }
 
@@ -350,10 +364,12 @@ where
         T: Serialize + ?Sized,
     {
         self.next_map_entry()?;
-        self.context
-            .borrow_mut()
-            .admit(JsonMeasurement::Key { bytes: key.len() })?;
-        let value = BudgetedValue::new(value, self.context, self.child_depth);
+        if self.has_value_limits {
+            self.context
+                .borrow_mut()
+                .admit(JsonMeasurement::Key { bytes: key.len() })?;
+        }
+        let value = BudgetedValue::new(value, self.context, self.child_depth, self.has_value_limits);
         self.inner.serialize_field(key, &value)
     }
 

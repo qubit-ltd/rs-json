@@ -245,7 +245,7 @@ where
                     output: &accounting,
                     has_value_limits,
                 });
-                value.serialize(JsonEncodeSerializer::new(&mut inner, &context))
+                value.serialize(JsonEncodeSerializer::new(&mut inner, &context, has_value_limits))
             };
             if result.is_ok() {
                 let _ = output.flush();
@@ -276,7 +276,7 @@ where
                 output: &accounting,
                 has_value_limits,
             });
-            value.serialize(JsonEncodeSerializer::new(&mut inner, &context))
+            value.serialize(JsonEncodeSerializer::new(&mut inner, &context, has_value_limits))
         };
         if result.is_ok() {
             let _ = output.flush();

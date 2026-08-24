@@ -30,6 +30,9 @@ where
 
     /// Shared traversal context.
     context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+
+    /// Whether key accounting can reject the emitted key.
+    has_value_limits: bool,
 }
 
 impl<'a, 'transaction, 'budget, 'context, T, R, Q> BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q>
@@ -41,8 +44,13 @@ where
     pub(super) const fn new(
         value: &'a T,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+        has_value_limits: bool,
     ) -> Self {
-        Self { value, context }
+        Self {
+            value,
+            context,
+            has_value_limits,
+        }
     }
 }
 
@@ -60,6 +68,7 @@ where
         self.value.serialize(JsonKeyBudgetSerializer {
             inner: serializer,
             context: self.context,
+            has_value_limits: self.has_value_limits,
         })
     }
 }

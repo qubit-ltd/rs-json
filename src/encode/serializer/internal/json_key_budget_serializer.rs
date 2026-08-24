@@ -31,6 +31,9 @@ where
 
     /// Shared traversal context.
     pub(in crate::encode::serializer) context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+
+    /// Whether key accounting can reject the emitted key.
+    pub(in crate::encode::serializer) has_value_limits: bool,
 }
 
 impl<S, R, Q> JsonKeyBudgetSerializer<'_, '_, '_, S, R, Q>
@@ -42,6 +45,9 @@ where
     /// Checks and consumes one emitted key length, retaining any original
     /// error.
     fn check(&self, bytes: usize) -> Result<(), S::Error> {
+        if !self.has_value_limits {
+            return Ok(());
+        }
         self.context.borrow_mut().admit(JsonMeasurement::Key { bytes })
     }
 }
@@ -49,13 +55,17 @@ where
 macro_rules! serialize_key_number {
     ($name:ident, signed $type:ty) => {
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            self.check(JsonLexemeLength::signed_integer(value.into()))?;
+            if self.has_value_limits {
+                self.check(JsonLexemeLength::signed_integer(value.into()))?;
+            }
             self.inner.$name(value)
         }
     };
     ($name:ident, unsigned $type:ty) => {
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            self.check(JsonLexemeLength::unsigned_integer(value.into()))?;
+            if self.has_value_limits {
+                self.check(JsonLexemeLength::unsigned_integer(value.into()))?;
+            }
             self.inner.$name(value)
         }
     };
@@ -103,7 +113,9 @@ where
                 "JSON integer is outside the supported 64-bit range",
             ));
         };
-        self.check(bytes)?;
+        if self.has_value_limits {
+            self.check(bytes)?;
+        }
         self.inner.serialize_i128(value)
     }
 
@@ -111,31 +123,37 @@ where
     fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
         let value64 = u64::try_from(value)
             .map_err(|_| Self::Error::custom("JSON integer is outside the supported 64-bit range"))?;
-        self.check(JsonLexemeLength::unsigned_integer(value64.into()))?;
+        if self.has_value_limits {
+            self.check(JsonLexemeLength::unsigned_integer(value64.into()))?;
+        }
         self.inner.serialize_u128(value)
     }
 
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
-        if value.is_finite() {
+        if self.has_value_limits && value.is_finite() {
             self.check(JsonLexemeLength::finite_f32(value))?;
         }
         self.inner.serialize_f32(value)
     }
 
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
-        if value.is_finite() {
+        if self.has_value_limits && value.is_finite() {
             self.check(JsonLexemeLength::finite_f64(value))?;
         }
         self.inner.serialize_f64(value)
     }
 
     fn serialize_char(self, value: char) -> Result<Self::Ok, Self::Error> {
-        self.check(value.len_utf8())?;
+        if self.has_value_limits {
+            self.check(value.len_utf8())?;
+        }
         self.inner.serialize_char(value)
     }
 
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
-        self.check(value.len())?;
+        if self.has_value_limits {
+            self.check(value.len())?;
+        }
         self.inner.serialize_str(value)
     }
 
@@ -168,7 +186,9 @@ where
         variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        self.check(variant.len())?;
+        if self.has_value_limits {
+            self.check(variant.len())?;
+        }
         self.inner.serialize_unit_variant(name, variant_index, variant)
     }
 
@@ -237,6 +257,9 @@ where
     where
         T: Display + ?Sized,
     {
+        if !self.has_value_limits {
+            return self.inner.collect_str(value);
+        }
         let text = JsonEncodeContext::collect_display::<S::Error, _>(self.context, value, DisplayBudgetKind::Key, 1)?;
         self.inner.serialize_str(&text)
     }
