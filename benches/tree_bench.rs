@@ -50,7 +50,7 @@ impl JsonTreeVisitor for ReadVisitor {
 /// Mirrors the object-key inspection performed by redaction visitors.
 struct RedactionShapeVisitor;
 
-impl JsonTreeMutVisitor<qubit_budget::json::JsonResource, usize> for RedactionShapeVisitor {
+impl JsonTreeMutVisitor for RedactionShapeVisitor {
     type Error = std::convert::Infallible;
 
     /// Removes the synthetic secret field and descends into the remaining
@@ -158,13 +158,17 @@ fn benchmark_mut(c: &mut Criterion) {
             bencher.iter_batched(
                 || value.clone(),
                 |mut value| {
-                    let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
-                    let mut transaction = budget.transaction();
+                    let limits = JsonValueLimits::<JsonResource, usize>::builder().build();
+                    let mut input_budget = JsonValueBudget::new(limits);
+                    let mut output_budget = JsonValueBudget::new(limits);
+                    let mut input = input_budget.transaction();
+                    let mut output = output_budget.transaction();
                     let mut visitor = RedactionShapeVisitor;
-                    JsonTreeMutator::new(&mut transaction)
+                    JsonTreeMutator::new(&mut input, &mut output)
                         .process(black_box(&mut value), &mut visitor)
                         .expect("unlimited mutable traversal succeeds");
-                    transaction.commit();
+                    input.commit();
+                    output.commit();
                     black_box(value);
                 },
                 BatchSize::SmallInput,
