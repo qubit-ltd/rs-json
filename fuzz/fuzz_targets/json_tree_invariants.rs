@@ -20,10 +20,10 @@ use qubit_budget::StructureLimits;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::value::traverse::JsonTreeBudgetRejection;
 use qubit_json::value::traverse::JsonTreeContext;
 use qubit_json::value::traverse::JsonTreeControl;
 use qubit_json::value::traverse::JsonTreeMutVisitor;
+use qubit_json::value::traverse::JsonTreeMutateError;
 use qubit_json::value::traverse::JsonTreeMutator;
 use serde_json::Value;
 use serde_json::json;
@@ -82,7 +82,7 @@ fn assert_serializable(value: &Value) {
 /// Mutates object nodes in the same shape as a redaction visitor.
 struct SuccessVisitor;
 
-impl JsonTreeMutVisitor<JsonResource, usize> for SuccessVisitor {
+impl JsonTreeMutVisitor for SuccessVisitor {
     type Error = std::convert::Infallible;
 
     /// Removes secret fields and descends into every admitted container.
@@ -94,36 +94,13 @@ impl JsonTreeMutVisitor<JsonResource, usize> for SuccessVisitor {
     }
 }
 
-/// Replaces budget-rejected nodes and continues with the rest of the tree.
-struct RejectingVisitor;
-
-impl JsonTreeMutVisitor<JsonResource, usize> for RejectingVisitor {
-    type Error = std::convert::Infallible;
-
-    /// Descends through admitted nodes.
-    fn visit(&mut self, _value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
-        Ok(JsonTreeControl::Descend)
-    }
-
-    /// Replaces a rejected subtree so restoration must retain a valid root.
-    fn reject_budget(
-        &mut self,
-        value: &mut Value,
-        _context: JsonTreeContext<'_>,
-        _error: &qubit_budget::MeasuredBudgetError<JsonResource, usize>,
-    ) -> Result<JsonTreeBudgetRejection, Self::Error> {
-        *value = Value::String("[redacted]".to_owned());
-        Ok(JsonTreeBudgetRejection::SkipSubtree)
-    }
-}
-
 /// Returns a visitor error after a byte-selected number of callbacks.
 struct ErrorVisitor {
     stop_after: usize,
     calls: usize,
 }
 
-impl JsonTreeMutVisitor<JsonResource, usize> for ErrorVisitor {
+impl JsonTreeMutVisitor for ErrorVisitor {
     type Error = &'static str;
 
     /// Mutates objects and then fails at the selected callback.
@@ -148,7 +125,7 @@ struct PanicVisitor {
 }
 
 #[cfg(all(not(fuzzing), panic = "unwind"))]
-impl JsonTreeMutVisitor<JsonResource, usize> for PanicVisitor {
+impl JsonTreeMutVisitor for PanicVisitor {
     type Error = std::convert::Infallible;
 
     /// Mutates objects and then deliberately panics at the selected callback.
@@ -167,47 +144,53 @@ fuzz_target!(|data: &[u8]| {
     let original = make_tree(input);
 
     let mut success_value = original.clone();
-    let mut success_budget = generous_budget();
+    let mut success_input_budget = generous_budget();
+    let mut success_output_budget = generous_budget();
     {
-        let mut transaction = success_budget.transaction();
-        JsonTreeMutator::new(&mut transaction)
+        let mut input_transaction = success_input_budget.transaction();
+        let mut output_transaction = success_output_budget.transaction();
+        JsonTreeMutator::new(&mut input_transaction, &mut output_transaction)
             .process(&mut success_value, &mut SuccessVisitor)
             .expect("generous success traversal must complete");
-        transaction.commit();
+        input_transaction.commit();
+        output_transaction.commit();
     }
     assert_serializable(&success_value);
 
-    let node_limit = 1 + usize::from(data.first().copied().unwrap_or(0)) % 32;
+    // Even an empty fuzz input produces the root object, two scalar fields,
+    // and the items array, so a maximum of three nodes always rejects input.
+    let node_limit = 1 + usize::from(data.first().copied().unwrap_or(0)) % 3;
     let structure = StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, node_limit));
     let mut rejected_value = original.clone();
-    let mut rejected_budget = JsonValueBudget::new(
+    let mut rejected_input_budget = JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
             .structure_limits(structure)
             .build(),
     );
+    let mut rejected_output_budget = generous_budget();
     {
-        let mut transaction = rejected_budget.transaction();
-        JsonTreeMutator::new(&mut transaction)
-            .process(&mut rejected_value, &mut RejectingVisitor)
-            .expect("rejecting visitor must handle every budget rejection");
-        transaction.commit();
+        let mut input_transaction = rejected_input_budget.transaction();
+        let mut output_transaction = rejected_output_budget.transaction();
+        let result = JsonTreeMutator::new(&mut input_transaction, &mut output_transaction)
+            .process(&mut rejected_value, &mut SuccessVisitor);
+        assert!(matches!(result, Err(JsonTreeMutateError::InputBudget(_))));
     }
+    assert_eq!(rejected_value, original);
     assert_serializable(&rejected_value);
-    assert!(rejected_budget.used_nodes() <= Some(node_limit));
 
     let stop_after = 1 + usize::from(data.get(1).copied().unwrap_or(0)) % 16;
     let mut error_value = original.clone();
-    let mut error_budget = generous_budget();
+    let mut error_input_budget = generous_budget();
+    let mut error_output_budget = generous_budget();
     let error = {
-        let mut transaction = error_budget.transaction();
-        JsonTreeMutator::new(&mut transaction).process(&mut error_value, &mut ErrorVisitor { stop_after, calls: 0 })
+        let mut input_transaction = error_input_budget.transaction();
+        let mut output_transaction = error_output_budget.transaction();
+        JsonTreeMutator::new(&mut input_transaction, &mut output_transaction)
+            .process(&mut error_value, &mut ErrorVisitor { stop_after, calls: 0 })
     };
     assert!(matches!(
         error,
-        Ok(())
-            | Err(qubit_json::value::traverse::JsonTreeProcessError::Visitor(
-                "fuzz visitor error"
-            ))
+        Ok(()) | Err(JsonTreeMutateError::Visitor("fuzz visitor error"))
     ));
     assert_serializable(&error_value);
 
@@ -216,10 +199,12 @@ fuzz_target!(|data: &[u8]| {
     let mut recovery_value = original;
     #[cfg(all(not(fuzzing), panic = "unwind"))]
     {
-        let mut panic_budget = generous_budget();
-        let mut transaction = panic_budget.transaction();
+        let mut panic_input_budget = generous_budget();
+        let mut panic_output_budget = generous_budget();
+        let mut input_transaction = panic_input_budget.transaction();
+        let mut output_transaction = panic_output_budget.transaction();
         let panic_result = catch_unwind(AssertUnwindSafe(|| {
-            let _ = JsonTreeMutator::new(&mut transaction)
+            let _ = JsonTreeMutator::new(&mut input_transaction, &mut output_transaction)
                 .process(&mut recovery_value, &mut PanicVisitor { panic_after, calls: 0 });
         }));
         assert!(panic_result.is_err());
@@ -228,10 +213,12 @@ fuzz_target!(|data: &[u8]| {
     {
         // cargo-fuzz uses panic=abort, so exercise the same restoration
         // boundary through a visitor error instead of terminating the fuzzer.
-        let mut recovery_budget = generous_budget();
+        let mut recovery_input_budget = generous_budget();
+        let mut recovery_output_budget = generous_budget();
         let recovery_error = {
-            let mut transaction = recovery_budget.transaction();
-            JsonTreeMutator::new(&mut transaction).process(
+            let mut input_transaction = recovery_input_budget.transaction();
+            let mut output_transaction = recovery_output_budget.transaction();
+            JsonTreeMutator::new(&mut input_transaction, &mut output_transaction).process(
                 &mut recovery_value,
                 &mut ErrorVisitor {
                     // A fixed first callback guarantees that the abort-safe
@@ -244,9 +231,7 @@ fuzz_target!(|data: &[u8]| {
         };
         assert!(matches!(
             recovery_error,
-            Err(qubit_json::value::traverse::JsonTreeProcessError::Visitor(
-                "fuzz visitor error"
-            ))
+            Err(JsonTreeMutateError::Visitor("fuzz visitor error"))
         ));
     }
     assert_serializable(&recovery_value);

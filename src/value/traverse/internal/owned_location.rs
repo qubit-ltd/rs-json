@@ -29,13 +29,4 @@ impl OwnedLocation {
         };
         JsonTreeContext { depth, location }
     }
-    /// Returns the object key that must be charged before child admission.
-    #[must_use]
-    #[inline(always)]
-    pub(in crate::value::traverse) fn key(&self) -> Option<&str> {
-        match self {
-            Self::ObjectValue(key) => Some(key),
-            Self::Root | Self::ArrayElement(_) => None,
-        }
-    }
 }

@@ -7,31 +7,25 @@
 // =============================================================================
 //! Defines callbacks for mutable JSON tree processing.
 
-use qubit_budget::MeasuredBudgetError;
-use qubit_budget::ResourceQuantity;
 use serde_json::Value;
 
-use super::JsonTreeBudgetRejection;
 use super::JsonTreeContext;
 use super::JsonTreeControl;
 
-/// Mutates admitted JSON nodes and handles optional fail-closed budget
-/// rejection.
+/// Mutates JSON nodes after the complete input tree has passed admission.
 ///
-/// # Type Parameters
-///
-/// * `R` - Resource identity attached to budget rejection callbacks.
-/// * `Q` - Quantity representation attached to budget rejection callbacks.
+/// Output admission runs only after every visitor callback succeeds. Returning
+/// [`JsonTreeControl::SkipSubtree`] skips descendant callbacks but does not
+/// skip final output accounting.
 ///
 /// # Examples
 ///
 /// ```
-/// use qubit_budget::json::JsonResource;
 /// use qubit_json::value::traverse::{JsonTreeContext, JsonTreeControl, JsonTreeMutVisitor};
 /// use serde_json::Value;
 ///
 /// struct Visitor;
-/// impl JsonTreeMutVisitor<JsonResource, usize> for Visitor {
+/// impl JsonTreeMutVisitor for Visitor {
 ///     type Error = std::convert::Infallible;
 ///
 ///     fn visit(&mut self, value: &mut Value, _: JsonTreeContext<'_>) ->
@@ -42,45 +36,19 @@ use super::JsonTreeControl;
 ///
 /// let _visitor = Visitor;
 /// ```
-pub trait JsonTreeMutVisitor<R, Q>
-where
-    Q: ResourceQuantity,
-{
+pub trait JsonTreeMutVisitor {
     /// Domain-specific failure returned by this visitor.
     type Error;
 
-    /// Handles an admitted node and selects whether its descendants are
-    /// visited.
+    /// Mutates one node and selects whether descendant callbacks run.
     ///
     /// # Parameters
     ///
-    /// * `value` - Admitted node available for mutation.
+    /// * `value` - Current node available for mutation.
     /// * `context` - Root-relative location and depth of the node.
     ///
     /// # Returns
     ///
-    /// The traversal control decision for the node.
+    /// The traversal control decision for descendant callbacks.
     fn visit(&mut self, value: &mut Value, context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error>;
-
-    /// Handles an unadmitted node before its subtree is skipped or processing
-    /// aborts.
-    ///
-    /// # Parameters
-    ///
-    /// * `value` - Node whose admission was rejected.
-    /// * `context` - Root-relative location and depth of the node.
-    /// * `error` - Measured reason why the node was not admitted.
-    ///
-    /// # Returns
-    ///
-    /// A rejection policy indicating whether processing should abort or skip
-    /// the rejected subtree.
-    fn reject_budget(
-        &mut self,
-        _value: &mut Value,
-        _context: JsonTreeContext<'_>,
-        _error: &MeasuredBudgetError<R, Q>,
-    ) -> Result<JsonTreeBudgetRejection, Self::Error> {
-        Ok(JsonTreeBudgetRejection::Abort)
-    }
 }

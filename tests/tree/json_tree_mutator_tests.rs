@@ -5,28 +5,71 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use qubit_budget::MeasuredBudgetError;
-use qubit_budget::ResourceLimit;
-use qubit_budget::StructureLimits;
+use std::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
+
 use qubit_budget::json::JsonResource;
-use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::value::traverse::JsonTreeBudgetRejection;
 use qubit_json::value::traverse::JsonTreeContext;
 use qubit_json::value::traverse::JsonTreeControl;
 use qubit_json::value::traverse::JsonTreeMutVisitor;
+use qubit_json::value::traverse::JsonTreeMutateError;
 use qubit_json::value::traverse::JsonTreeMutator;
-use qubit_json::value::traverse::JsonTreeProcessError;
 use qubit_json::value::traverse::JsonTreeReader;
 use serde_json::Value;
 use serde_json::json;
 use serde_json::to_string;
 
+/// Builds limits that expose exact cumulative accounting in tests.
+fn measured_limits() -> JsonValueLimits<JsonResource, usize> {
+    JsonValueLimits::builder()
+        .max_nodes(128)
+        .max_payload_bytes(1_024)
+        .build()
+}
+
+struct CountingVisitor {
+    calls: usize,
+}
+
+impl JsonTreeMutVisitor for CountingVisitor {
+    type Error = std::convert::Infallible;
+
+    fn visit(&mut self, _value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+        self.calls += 1;
+        Ok(JsonTreeControl::Descend)
+    }
+}
+
+struct ShrinkingVisitor;
+
+impl JsonTreeMutVisitor for ShrinkingVisitor {
+    type Error = std::convert::Infallible;
+
+    fn visit(&mut self, value: &mut Value, context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+        if context.depth == 1 {
+            *value = Value::Null;
+        }
+        Ok(JsonTreeControl::SkipSubtree)
+    }
+}
+
+struct SkipWithExpandedReplacement;
+
+impl JsonTreeMutVisitor for SkipWithExpandedReplacement {
+    type Error = std::convert::Infallible;
+
+    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+        *value = json!({"added": [null]});
+        Ok(JsonTreeControl::SkipSubtree)
+    }
+}
+
 struct FailingVisitor {
     calls: usize,
 }
 
-impl JsonTreeMutVisitor<JsonResource, usize> for FailingVisitor {
+impl JsonTreeMutVisitor for FailingVisitor {
     type Error = &'static str;
 
     fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
@@ -41,81 +84,14 @@ impl JsonTreeMutVisitor<JsonResource, usize> for FailingVisitor {
     }
 }
 
-/// Replaces the first admitted array element before a later node is rejected.
-struct FirstChildReplacingVisitor;
-
-impl JsonTreeMutVisitor<JsonResource, usize> for FirstChildReplacingVisitor {
-    type Error = std::convert::Infallible;
-
-    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
-        match value {
-            Value::Array(_) => Ok(JsonTreeControl::Descend),
-            Value::Number(number) if number.as_i64() == Some(0) => {
-                *value = json!("changed");
-                Ok(JsonTreeControl::SkipSubtree)
-            }
-            _ => Ok(JsonTreeControl::SkipSubtree),
-        }
-    }
-}
-
-/// Replaces budget-rejected values and descends into all admitted values.
-struct ReplacingVisitor;
-
-impl JsonTreeMutVisitor<JsonResource, usize> for ReplacingVisitor {
-    type Error = std::convert::Infallible;
-
-    fn visit(&mut self, _value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
-        Ok(JsonTreeControl::Descend)
-    }
-
-    fn reject_budget(
-        &mut self,
-        value: &mut Value,
-        _context: JsonTreeContext<'_>,
-        _error: &MeasuredBudgetError<JsonResource, usize>,
-    ) -> Result<JsonTreeBudgetRejection, Self::Error> {
-        *value = json!("[redacted]");
-        Ok(JsonTreeBudgetRejection::SkipSubtree)
-    }
-}
-
-/// Leaves budget-rejected containers in place while requesting subtree
-/// skipping.
-struct RetainingRejectedContainerVisitor {
-    visits: usize,
-    rejections: usize,
-}
-
-impl JsonTreeMutVisitor<JsonResource, usize> for RetainingRejectedContainerVisitor {
-    type Error = std::convert::Infallible;
-
-    fn visit(&mut self, _value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
-        self.visits += 1;
-        Ok(JsonTreeControl::Descend)
-    }
-
-    fn reject_budget(
-        &mut self,
-        _value: &mut Value,
-        _context: JsonTreeContext<'_>,
-        _error: &MeasuredBudgetError<JsonResource, usize>,
-    ) -> Result<JsonTreeBudgetRejection, Self::Error> {
-        self.rejections += 1;
-        Ok(JsonTreeBudgetRejection::SkipSubtree)
-    }
-}
-
-/// Panics after mutating a selected node.
 struct PanickingVisitor {
     calls: usize,
     panic_after: usize,
 }
 
-impl JsonTreeMutVisitor<JsonResource, usize> for PanickingVisitor {
+impl JsonTreeMutVisitor for PanickingVisitor {
     type Error = std::convert::Infallible;
 
-    /// Mutates the current object before deliberately panicking.
     fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
         self.calls += 1;
         if let Value::Object(entries) = value {
@@ -126,141 +102,135 @@ impl JsonTreeMutVisitor<JsonResource, usize> for PanickingVisitor {
     }
 }
 
-/// Verifies that a rejection can replace exactly the rejected subtree.
+/// Verifies an input rejection happens before the first visitor mutation.
 #[test]
-fn test_process_mut_skips_rejected_subtree_after_replacement() {
-    let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)))
-        .build();
-    let mut budget = JsonValueBudget::new(limits);
-    let mut transaction = budget.transaction();
-    let mut value = json!({"first": true, "second": {"nested": false}});
+fn test_process_rejects_input_before_mutation() {
+    let input_limits = JsonValueLimits::<JsonResource, usize>::builder().max_nodes(1).build();
+    let mut input_budget = input_limits.budget();
+    let mut output_budget = measured_limits().budget();
+    let mut input = input_budget.transaction();
+    let mut output = output_budget.transaction();
+    let mut visitor = CountingVisitor { calls: 0 };
+    let mut value = json!([null]);
+    let original = value.clone();
 
-    JsonTreeMutator::new(&mut transaction)
-        .process(&mut value, &mut ReplacingVisitor)
-        .expect("visitor handles the resource rejection");
-
-    assert_eq!(value, json!({"first": true, "second": "[redacted]"}));
-}
-
-/// Verifies that SkipSubtree also skips a retained container and all
-/// descendants.
-#[test]
-fn test_process_mut_skips_rejected_container_subtree() {
-    let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)))
-        .build();
-    let mut budget = JsonValueBudget::new(limits);
-    let mut transaction = budget.transaction();
-    let mut value = json!({
-        "first": true,
-        "second": {"nested": {"leaf": false}},
-    });
-    let mut visitor = RetainingRejectedContainerVisitor {
-        visits: 0,
-        rejections: 0,
-    };
-
-    JsonTreeMutator::new(&mut transaction)
+    let error = JsonTreeMutator::new(&mut input, &mut output)
         .process(&mut value, &mut visitor)
-        .expect("visitor handles the resource rejection");
+        .expect_err("the complete input tree must exceed one node");
 
-    assert_eq!(visitor.visits, 2);
-    assert_eq!(visitor.rejections, 1);
-    assert_eq!(value["second"], json!({"nested": {"leaf": false}}));
+    assert!(matches!(
+        error,
+        JsonTreeMutateError::InputBudget(error)
+            if error.resource() == &JsonResource::Nodes
+    ));
+    assert_eq!(visitor.calls, 0);
+    assert_eq!(value, original);
+    assert_eq!(output.used_nodes(), Some(0));
 }
 
+/// Verifies shrinking transformations account the complete original and the
+/// smaller final tree independently.
 #[test]
-fn test_process_mut_preserves_mutations_when_visitor_fails() {
-    let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 4_usize)))
-        .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 32_usize))
-        .build();
-    let mut budget = JsonValueBudget::new(limits);
-    let mut transaction = budget.transaction();
+fn test_process_accounts_input_and_shrunken_output_separately() {
+    let mut input_budget = measured_limits().budget();
+    let mut output_budget = measured_limits().budget();
+    let mut input = input_budget.transaction();
+    let mut output = output_budget.transaction();
+    let mut value = json!(["long", null]);
+
+    JsonTreeMutator::new(&mut input, &mut output)
+        .process(&mut value, &mut ShrinkingVisitor)
+        .expect("both complete trees must fit their independent budgets");
+
+    assert_eq!(value, Value::Null);
+    assert_eq!(input.used_nodes(), Some(3));
+    assert_eq!(output.used_nodes(), Some(1));
+    assert_eq!(input.used_payload_bytes(), Some(4));
+    assert_eq!(output.used_payload_bytes(), Some(0));
+}
+
+/// Verifies output accounting traverses replacement descendants even when the
+/// visitor skips their callbacks.
+#[test]
+fn test_process_accounts_skipped_replacement_subtree() {
+    let mut input_budget = measured_limits().budget();
+    let mut output_budget = measured_limits().budget();
+    let mut input = input_budget.transaction();
+    let mut output = output_budget.transaction();
+    let mut value = Value::Null;
+
+    JsonTreeMutator::new(&mut input, &mut output)
+        .process(&mut value, &mut SkipWithExpandedReplacement)
+        .expect("the expanded replacement must fit generous output limits");
+
+    assert_eq!(value, json!({"added": [null]}));
+    assert_eq!(input.used_nodes(), Some(1));
+    assert_eq!(output.used_nodes(), Some(3));
+    assert_eq!(output.used_payload_bytes(), Some(5));
+}
+
+/// Verifies visitor failure retains partial mutation without starting output
+/// accounting.
+#[test]
+fn test_process_preserves_mutation_when_visitor_fails() {
+    let mut input_budget = measured_limits().budget();
+    let mut output_budget = measured_limits().budget();
+    let mut input = input_budget.transaction();
+    let mut output = output_budget.transaction();
     let mut value = json!({"original": true});
 
-    let error = JsonTreeMutator::new(&mut transaction)
+    let error = JsonTreeMutator::new(&mut input, &mut output)
         .process(&mut value, &mut FailingVisitor { calls: 0 })
         .expect_err("the visitor deliberately fails");
 
-    assert!(matches!(error, JsonTreeProcessError::Visitor("stop")));
+    assert!(matches!(error, JsonTreeMutateError::Visitor("stop")));
     assert_eq!(value, json!({"changed": "partially changed"}));
     assert_eq!(
         to_string(&value).expect("partially mutated value serializes"),
         r#"{"changed":"partially changed"}"#,
     );
-    assert_eq!(transaction.used_nodes(), Some(2));
-    assert_eq!(transaction.used_payload_bytes(), Some(7));
+    assert_eq!(input.used_nodes(), Some(2));
+    assert_eq!(output.used_nodes(), Some(0));
 }
 
-/// Verifies that budget rejection retains earlier mutation and accounting.
+/// Verifies reader, mutation input, and mutation output use identical static
+/// tree measurements.
 #[test]
-fn test_process_mut_preserves_partial_mutation_and_budget_on_rejection() {
-    let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2_usize)))
-        .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 8_usize))
-        .build();
-    let mut budget = JsonValueBudget::new(limits);
-    let mut transaction = budget.transaction();
-    let mut value = json!([0, 1]);
-
-    let error = JsonTreeMutator::new(&mut transaction)
-        .process(&mut value, &mut FirstChildReplacingVisitor)
-        .expect_err("the second child exceeds the node budget");
-
-    assert!(matches!(
-        &error,
-        JsonTreeProcessError::Budget(error)
-            if error.resource() == &JsonResource::Nodes
-    ));
-    assert_eq!(value, json!(["changed", 1]));
-    assert_eq!(
-        to_string(&value).expect("partially mutated value serializes"),
-        r#"["changed",1]"#,
-    );
-    assert_eq!(transaction.used_nodes(), Some(2));
-    assert_eq!(transaction.used_payload_bytes(), Some(1));
-}
-
-/// Verifies read-only and mutable traversal stage identical resource usage.
-#[test]
-fn test_reader_and_mutator_measure_the_same_json_tree() {
-    let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .max_nodes(8)
-        .max_payload_bytes(128)
-        .build();
+fn test_reader_and_mutator_measure_the_same_static_tree() {
+    let limits = measured_limits();
     let value = json!({"name": "qubit", "values": [1.25, true, null]});
-
     let mut read_budget = limits.budget();
-    let mut read_transaction = read_budget.transaction();
-    JsonTreeReader::new(&mut read_transaction)
+    let mut read = read_budget.transaction();
+    JsonTreeReader::new(&mut read)
         .account(&value)
         .expect("reader should admit the fixture");
 
+    let mut input_budget = limits.budget();
+    let mut output_budget = limits.budget();
+    let mut input = input_budget.transaction();
+    let mut output = output_budget.transaction();
     let mut mutable_value = value.clone();
-    let mut mut_budget = limits.budget();
-    let mut mut_transaction = mut_budget.transaction();
-    JsonTreeMutator::new(&mut mut_transaction)
-        .process(&mut mutable_value, &mut ReplacingVisitor)
-        .expect("mutator should admit the fixture");
+    JsonTreeMutator::new(&mut input, &mut output)
+        .process(&mut mutable_value, &mut CountingVisitor { calls: 0 })
+        .expect("mutator should admit the unchanged fixture");
 
-    assert_eq!(mut_transaction.used_nodes(), read_transaction.used_nodes());
-    assert_eq!(
-        mut_transaction.used_payload_bytes(),
-        read_transaction.used_payload_bytes(),
-    );
+    assert_eq!(input.used_nodes(), read.used_nodes());
+    assert_eq!(output.used_nodes(), read.used_nodes());
+    assert_eq!(input.used_payload_bytes(), read.used_payload_bytes());
+    assert_eq!(output.used_payload_bytes(), read.used_payload_bytes());
 }
 
-/// Verifies that a panic leaves the mutable root reassembled and serializable.
+/// Verifies a panic leaves the mutable root reassembled and serializable.
 #[test]
-fn test_process_mut_restores_root_after_visitor_panic() {
-    let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
-    let mut transaction = budget.transaction();
+fn test_process_restores_root_after_visitor_panic() {
+    let mut input_budget = measured_limits().budget();
+    let mut output_budget = measured_limits().budget();
+    let mut input = input_budget.transaction();
+    let mut output = output_budget.transaction();
     let mut value = json!({"first": [1, 2], "second": true});
 
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let _ = JsonTreeMutator::new(&mut transaction).process(
+        let _ = JsonTreeMutator::new(&mut input, &mut output).process(
             &mut value,
             &mut PanickingVisitor {
                 calls: 0,
@@ -272,10 +242,45 @@ fn test_process_mut_restores_root_after_visitor_panic() {
     assert!(result.is_err());
     assert_eq!(value["visited"], Value::Bool(true));
     assert!(value["first"].is_array());
+    assert_eq!(output.used_nodes(), Some(0));
     assert_eq!(
         to_string(&value).expect("panic-restored value serializes"),
         r#"{"first":[1,2],"second":true,"visited":true}"#,
     );
 }
-use std::panic::AssertUnwindSafe;
-use std::panic::catch_unwind;
+
+/// Verifies both accounting passes and mutable callbacks avoid Rust recursion.
+#[test]
+fn test_process_handles_deep_tree_without_rust_recursion() {
+    const CONTAINER_DEPTH: usize = 512;
+
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_depth(CONTAINER_DEPTH + 1)
+        .max_nodes(CONTAINER_DEPTH + 1)
+        .build();
+    let mut value = Value::Null;
+    for _ in 0..CONTAINER_DEPTH {
+        value = Value::Array(vec![value]);
+    }
+    let mut input_budget = limits.budget();
+    let mut output_budget = limits.budget();
+    let mut input = input_budget.transaction();
+    let mut output = output_budget.transaction();
+    let mut visitor = CountingVisitor { calls: 0 };
+
+    JsonTreeMutator::new(&mut input, &mut output)
+        .process(&mut value, &mut visitor)
+        .expect("deep input and output trees must use explicit traversal stacks");
+
+    assert_eq!(visitor.calls, CONTAINER_DEPTH + 1);
+    assert_eq!(input.used_nodes(), Some(CONTAINER_DEPTH + 1));
+    assert_eq!(output.used_nodes(), Some(CONTAINER_DEPTH + 1));
+
+    for _ in 0..CONTAINER_DEPTH {
+        let Value::Array(mut items) = value else {
+            panic!("the deep fixture must retain one array at every level");
+        };
+        value = items.pop().expect("each fixture array contains one child");
+    }
+    assert_eq!(value, Value::Null);
+}

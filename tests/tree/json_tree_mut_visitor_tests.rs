@@ -5,7 +5,6 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use qubit_budget::json::JsonResource;
 use qubit_json::value::traverse::JsonTreeContext;
 use qubit_json::value::traverse::JsonTreeControl;
 use qubit_json::value::traverse::JsonTreeLocation;
@@ -14,7 +13,7 @@ use serde_json::Value;
 
 struct Visitor;
 
-impl JsonTreeMutVisitor<JsonResource, usize> for Visitor {
+impl JsonTreeMutVisitor for Visitor {
     type Error = ();
 
     fn visit(&mut self, _value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
