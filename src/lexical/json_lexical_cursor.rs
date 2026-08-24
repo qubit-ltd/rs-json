@@ -114,10 +114,12 @@ where
                     .map_err(JsonLexicalError::from)
             }
             Some(b'-' | b'0'..=b'9') => {
+                let start = self.offset;
                 let bytes = self.number_bytes()?;
                 self.transaction
                     .try_admit(JsonMeasurement::Number { depth, bytes })
-                    .map_err(JsonLexicalError::from)
+                    .map_err(JsonLexicalError::from)?;
+                self.validate_number_range(start, self.offset)
             }
             Some(b't') => self.literal(b"true", JsonMeasurement::Boolean { depth }),
             Some(b'f') => self.literal(b"false", JsonMeasurement::Boolean { depth }),
@@ -418,6 +420,30 @@ where
         Ok(self.offset - start)
     }
 
+    /// Validates one syntactically complete number against the supported
+    /// integer and floating-point representation ranges.
+    fn validate_number_range(&self, start: usize, end: usize) -> Result<(), JsonLexicalError<R, Q>> {
+        let token = std::str::from_utf8(&self.input[start..end])
+            .map_err(|_| self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber))?;
+        if token.contains(['.', 'e', 'E']) {
+            let value = token
+                .parse::<f64>()
+                .map_err(|_| self.syntax_at(start, JsonLexicalErrorReason::FloatOutOfRange))?;
+            if !value.is_finite() {
+                return Err(self.syntax_at(start, JsonLexicalErrorReason::FloatOutOfRange));
+            }
+        } else if token.starts_with('-') {
+            token
+                .parse::<i64>()
+                .map_err(|_| self.syntax_at(start, JsonLexicalErrorReason::IntegerOutOfRange))?;
+        } else {
+            token
+                .parse::<u64>()
+                .map_err(|_| self.syntax_at(start, JsonLexicalErrorReason::IntegerOutOfRange))?;
+        }
+        Ok(())
+    }
+
     /// Consumes the required digits following a decimal point or exponent.
     fn consume_digits(&mut self) -> Result<(), JsonLexicalError<R, Q>> {
         if !matches!(self.peek(), Some(b'0'..=b'9')) {
@@ -446,7 +472,23 @@ where
 
     /// Computes one-based line and UTF-8 character column at the cursor.
     fn line_column(&self) -> (usize, usize) {
-        let end = self.offset.min(self.input.len());
+        self.line_column_at(self.offset)
+    }
+
+    /// Builds a structured syntax error at an explicit input byte offset.
+    fn syntax_at(&self, offset: usize, reason: JsonLexicalErrorReason) -> JsonLexicalError<R, Q> {
+        let (line, column) = self.line_column_at(offset);
+        JsonLexicalError::Syntax(JsonLexicalFailure {
+            offset,
+            line,
+            column,
+            reason,
+        })
+    }
+
+    /// Computes one-based line and UTF-8 character column at `offset`.
+    fn line_column_at(&self, offset: usize) -> (usize, usize) {
+        let end = offset.min(self.input.len());
         let mut line = 1;
         let mut column = 1;
         let mut index = 0;

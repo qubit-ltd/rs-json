@@ -26,8 +26,10 @@ pub use strict_json_value_seed::StrictJsonValueSeed;
 ///
 /// This wrapper is useful for document formats where accepting the usual
 /// last-key-wins object behavior would make the input ambiguous. It preserves
-/// serde_json's arbitrary-precision number representation while recursively
-/// validating every object.
+/// serde_json's standard `i64`, `u64`, and finite `f64` number representation
+/// while recursively validating every object. For raw JSON text, use
+/// [`crate::decode::JsonDecoder`] when the crate's explicit numeric range
+/// contract must be enforced before deserialization.
 ///
 /// # Examples
 ///
@@ -169,18 +171,6 @@ impl<'de> Visitor<'de> for StrictJsonVisitor {
             return Ok(StrictJsonValue(Value::Object(Map::new())));
         };
 
-        // serde_json uses this private wrapper to preserve arbitrary-precision
-        // number text during `deserialize_any`. The exact serde_json version
-        // is deliberately locked by this crate's dependency contract.
-        if first_key == concat!("$serde_json", "::private::Number") {
-            let number_text = map.next_value::<String>()?;
-            if map.next_key::<String>()?.is_some() {
-                return Err(de::Error::custom("arbitrary-precision number contains extra fields"));
-            }
-            let number = number_text.parse::<Number>().map_err(de::Error::custom)?;
-            return Ok(StrictJsonValue(Value::Number(number)));
-        }
-
         let mut values = Map::new();
         let first_value = map.next_value::<StrictJsonValue>()?;
         values.insert(first_key.clone(), first_value.into_inner());
@@ -190,5 +180,92 @@ impl<'de> Visitor<'de> for StrictJsonVisitor {
             }
         }
         Ok(StrictJsonValue(Value::Object(values)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::de::Visitor;
+    use serde::de::value::BoolDeserializer;
+    use serde::de::value::Error;
+    use serde_json::Value;
+    use serde_json::from_str;
+
+    use super::StrictJsonValue;
+    use super::StrictJsonVisitor;
+
+    #[test]
+    fn strict_json_visitor_covers_scalar_shapes() {
+        assert_eq!(
+            StrictJsonVisitor.visit_bool::<Error>(true).unwrap().into_inner(),
+            Value::Bool(true)
+        );
+        assert_eq!(
+            StrictJsonVisitor.visit_i64::<Error>(-1).unwrap().into_inner(),
+            Value::from(-1)
+        );
+        assert_eq!(
+            StrictJsonVisitor.visit_u64::<Error>(1).unwrap().into_inner(),
+            Value::from(1_u64)
+        );
+        assert_eq!(
+            StrictJsonVisitor.visit_f64::<Error>(1.5).unwrap().into_inner(),
+            Value::from(1.5)
+        );
+        assert!(StrictJsonVisitor.visit_f64::<Error>(f64::INFINITY).is_err());
+        assert_eq!(
+            StrictJsonVisitor.visit_str::<Error>("text").unwrap().into_inner(),
+            Value::from("text")
+        );
+        assert_eq!(
+            StrictJsonVisitor
+                .visit_string::<Error>(String::from("owned"))
+                .unwrap()
+                .into_inner(),
+            Value::from("owned")
+        );
+        assert_eq!(
+            StrictJsonVisitor.visit_unit::<Error>().unwrap().into_inner(),
+            Value::Null
+        );
+        assert_eq!(
+            StrictJsonVisitor.visit_none::<Error>().unwrap().into_inner(),
+            Value::Null
+        );
+        assert_eq!(
+            StrictJsonVisitor
+                .visit_some(BoolDeserializer::<Error>::new(true))
+                .unwrap()
+                .into_inner(),
+            Value::Bool(true)
+        );
+    }
+
+    #[test]
+    fn strict_json_visitor_enforces_wide_integer_range() {
+        assert_eq!(
+            StrictJsonVisitor
+                .visit_i128::<Error>(i64::MIN.into())
+                .unwrap()
+                .into_inner(),
+            Value::from(i64::MIN)
+        );
+        assert!(StrictJsonVisitor.visit_i128::<Error>(i128::MIN).is_err());
+        assert_eq!(
+            StrictJsonVisitor
+                .visit_u128::<Error>(u64::MAX.into())
+                .unwrap()
+                .into_inner(),
+            Value::from(u64::MAX)
+        );
+        assert!(StrictJsonVisitor.visit_u128::<Error>(u128::MAX).is_err());
+    }
+
+    #[test]
+    fn strict_json_visitor_describes_expected_value() {
+        assert_eq!(
+            from_str::<StrictJsonValue>("invalid").unwrap_err().to_string(),
+            "expected value at line 1 column 1"
+        );
     }
 }

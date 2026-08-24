@@ -17,9 +17,6 @@ pub(super) enum DisplayBudgetKind {
     /// JSON object key text.
     Key,
 
-    /// Arbitrary-precision JSON number text.
-    Number,
-
     /// Raw JSON source, bounded by the complete output limit while collected.
     RawOutput,
 }

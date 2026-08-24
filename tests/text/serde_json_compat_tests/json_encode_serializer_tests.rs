@@ -7,8 +7,6 @@
 // =============================================================================
 //! Tests serde_json compatibility in the budget-aware JSON serializer.
 
-use std::fmt;
-
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
@@ -19,7 +17,8 @@ use serde::ser::SerializeStruct;
 
 use crate::text::json_encode_test_support::encode;
 
-/// Private struct name emitted by serde_json arbitrary-precision numbers.
+/// Former private struct name emitted by serde_json arbitrary-precision
+/// numbers.
 const JSON_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
 
 /// A regular struct whose field name resembles serde_json private metadata.
@@ -34,41 +33,6 @@ impl Serialize for ForgedPrivateKey {
         let mut state = serializer.serialize_struct("ForgedPrivateKey", 1)?;
         state.serialize_field(JSON_NUMBER_TOKEN, &true)?;
         state.end()
-    }
-}
-
-/// Arbitrary-precision number text emitted through `collect_str`.
-struct CollectedArbitraryPrecisionNumber(&'static str);
-
-impl fmt::Display for CollectedArbitraryPrecisionNumber {
-    /// Writes the configured number text to the formatter.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0)
-    }
-}
-
-impl Serialize for CollectedArbitraryPrecisionNumber {
-    /// Emits serde_json's private Number shape with a collected payload.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct(JSON_NUMBER_TOKEN, 1)?;
-        state.serialize_field(JSON_NUMBER_TOKEN, &CollectedNumberPayload(self))?;
-        state.end()
-    }
-}
-
-/// Private Number field payload that delegates through `collect_str`.
-struct CollectedNumberPayload<'a>(&'a CollectedArbitraryPrecisionNumber);
-
-impl Serialize for CollectedNumberPayload<'_> {
-    /// Collects the wrapped arbitrary-precision number display text.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.collect_str(self.0)
     }
 }
 
@@ -104,23 +68,4 @@ fn test_json_encode_serializer_rejects_forged_private_key_as_regular_map() {
             .resource(),
         &JsonResource::MapEntries,
     );
-}
-
-/// Verifies private arbitrary-precision collect_str payload classification.
-#[test]
-fn test_json_encode_serializer_classifies_collected_private_number() {
-    const NUMBER_TEXT: &str = "123456789012345678901234567890";
-    let number = CollectedArbitraryPrecisionNumber(NUMBER_TEXT);
-    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
-        .max_nodes(1)
-        .max_map_entries(0)
-        .max_key_bytes(0)
-        .max_string_bytes(0)
-        .max_number_bytes(NUMBER_TEXT.len())
-        .build();
-    let mut session = JsonEncodeSession::owned(limits);
-
-    let output = encode(&number, &mut session).expect("private collected number should consume only the number budget");
-
-    assert_eq!(output, NUMBER_TEXT.as_bytes());
 }

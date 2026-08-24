@@ -1212,34 +1212,30 @@ fn test_decoder_keeps_trim_whitespace_setting_for_empty_text() {
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
-/// Verifies that decode object preserves u128 without value round trip.
+/// Verifies that decode object rejects integers above the public range.
 ///
 /// # Panics
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_decode_object_preserves_u128_without_value_round_trip() {
-    let decoded: ExactInteger =
-        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default())
-            .decode_object(r#"{"value":340282366920938463463374607431768211455}"#)
-            .expect("direct object decoding should preserve u128::MAX");
-
-    assert_eq!(decoded.value, u128::MAX);
+fn test_decode_object_rejects_u128_outside_64_bit_range() {
+    let error = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default())
+        .decode_object::<ExactInteger>(r#"{"value":340282366920938463463374607431768211455}"#)
+        .expect_err("direct object decoding must enforce the public integer range");
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
-/// Verifies that decode array preserves u128 without value round trip.
+/// Verifies that decode array rejects integers above the public range.
 ///
 /// # Panics
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_decode_array_preserves_u128_without_value_round_trip() {
-    let decoded: Vec<ExactInteger> =
-        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default())
-            .decode_array(r#"[{"value":340282366920938463463374607431768211455}]"#)
-            .expect("direct array decoding should preserve u128::MAX");
-
-    assert_eq!(decoded, vec![ExactInteger { value: u128::MAX }]);
+fn test_decode_array_rejects_u128_outside_64_bit_range() {
+    let error = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default())
+        .decode_array::<ExactInteger>(r#"[{"value":340282366920938463463374607431768211455}]"#)
+        .expect_err("direct array decoding must enforce the public integer range");
+    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode object preserves duplicate field rejection.

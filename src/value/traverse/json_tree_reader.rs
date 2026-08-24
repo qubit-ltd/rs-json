@@ -21,6 +21,7 @@ use super::internal::ChildCursor;
 use super::internal::NoopVisitor;
 use super::internal::ReadFrame;
 use super::internal::ReadFrameState;
+use crate::value::internal::json_number_lexeme_length;
 
 /// Processes JSON values while borrowing one staged JSON value transaction.
 ///
@@ -165,7 +166,7 @@ where
             Value::Bool(_) => JsonMeasurement::Boolean { depth },
             Value::Number(number) => JsonMeasurement::Number {
                 depth,
-                bytes: number.as_str().len(),
+                bytes: json_number_lexeme_length(number),
             },
             Value::String(text) => JsonMeasurement::String {
                 depth,

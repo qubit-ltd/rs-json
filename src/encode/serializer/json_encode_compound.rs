@@ -73,21 +73,6 @@ where
         }
     }
 
-    /// Creates a wrapper for serde_json's private number compound.
-    pub(super) const fn number(
-        inner: C,
-        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
-        depth: usize,
-    ) -> Self {
-        Self {
-            inner,
-            context,
-            child_depth: depth,
-            observed: 0,
-            private_kind: Some(PrivateStructKind::Number),
-        }
-    }
-
     /// Creates a wrapper for serde_json's private raw-value compound.
     pub(super) const fn raw_value(
         inner: C,
@@ -321,10 +306,6 @@ where
         T: Serialize + ?Sized,
     {
         match self.private_kind {
-            Some(PrivateStructKind::Number) => {
-                let value = BudgetedPrivateValue::number(value, self.context, self.child_depth);
-                return self.inner.serialize_field(key, &value);
-            }
             Some(PrivateStructKind::RawValue) => {
                 let value = BudgetedPrivateValue::raw_value(value, self.context, self.child_depth);
                 return self.inner.serialize_field(key, &value);

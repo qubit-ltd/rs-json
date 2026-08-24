@@ -19,22 +19,8 @@ use serde::ser::SerializeStructVariant;
 use serde::ser::SerializeTuple;
 use serde::ser::SerializeTupleStruct;
 use serde::ser::SerializeTupleVariant;
-use serde_json::Number;
-use serde_json::from_str;
 
 use crate::text::json_encode_test_support::encode;
-
-/// Verifies arbitrary-precision numbers use the number-byte budget.
-#[test]
-fn test_budgeted_private_value_checks_number_bytes() {
-    let number: Number = from_str("123456789").expect("number should parse");
-    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
-        .max_number_bytes(8)
-        .build();
-    let mut session = JsonEncodeSession::owned(limits);
-
-    assert!(encode(&number, &mut session).is_err());
-}
 
 #[derive(Clone, Copy)]
 enum PrivateScalar {
@@ -120,7 +106,6 @@ impl Serialize for PrivateScalar {
 }
 
 struct PrivateShape {
-    raw: bool,
     value: PrivateScalar,
 }
 
@@ -129,11 +114,7 @@ impl Serialize for PrivateShape {
     where
         S: Serializer,
     {
-        let name = if self.raw {
-            concat!("$", "serde_json", ":", ":private::RawValue")
-        } else {
-            concat!("$", "serde_json", ":", ":private::Number")
-        };
+        let name = concat!("$", "serde_json", ":", ":private::RawValue");
         let mut value = serializer.serialize_struct(name, 1)?;
         value.serialize_field(name, &self.value)?;
         value.end()
@@ -177,9 +158,7 @@ fn test_budgeted_private_value_delegates_scalar_serializer_paths() {
         PrivateScalar::HumanReadable,
     ];
     for value in values {
-        for raw in [false, true] {
-            let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
-            let _ = encode(&PrivateShape { raw, value }, &mut session);
-        }
+        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+        let _ = encode(&PrivateShape { value }, &mut session);
     }
 }

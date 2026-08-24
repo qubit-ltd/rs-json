@@ -22,6 +22,12 @@ use crate::lexical::JsonLexicalScanner;
 /// Strictly decodes complete JSON documents while owning cumulative accounting
 /// state.
 ///
+/// Integer tokens are accepted from `i64::MIN` through `u64::MAX`, using the
+/// signed range for negative values and the unsigned range otherwise.
+/// Fractional and exponential tokens must produce finite `f64` values. Numeric
+/// range validation happens after the token's `NumberBytes` admission, so a
+/// tighter resource limit is reported first.
+///
 /// # Type Parameters
 ///
 /// * `R` - Resource identity tracked by the decode session.

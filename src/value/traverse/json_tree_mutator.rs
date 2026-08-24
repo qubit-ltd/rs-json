@@ -18,6 +18,7 @@ use super::JsonTreeControl;
 use super::JsonTreeMutVisitor;
 use super::JsonTreeProcessError;
 use super::internal::MutFrame;
+use crate::value::internal::json_number_lexeme_length;
 
 /// Mutates JSON values while borrowing one staged JSON value transaction.
 ///
@@ -167,7 +168,7 @@ where
             Value::Bool(_) => JsonMeasurement::Boolean { depth },
             Value::Number(number) => JsonMeasurement::Number {
                 depth,
-                bytes: number.as_str().len(),
+                bytes: json_number_lexeme_length(number),
             },
             Value::String(text) => JsonMeasurement::String {
                 depth,

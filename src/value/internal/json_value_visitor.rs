@@ -26,6 +26,7 @@ use serde_json::Value;
 
 use super::JsonKeySeed;
 use super::JsonValueChildSeed;
+use super::json_number_lexeme_length;
 
 /// Visitor used to construct and account one JSON value.
 pub(in crate::value) struct JsonValueVisitor<'transaction, 'budget, R, Q>
@@ -65,7 +66,7 @@ where
     {
         self.admit(JsonMeasurement::Number {
             depth: self.depth,
-            bytes: number.as_str().len(),
+            bytes: json_number_lexeme_length(&number),
         })?;
         Ok(Value::Number(number))
     }
@@ -136,7 +137,8 @@ where
     where
         E: Error,
     {
-        let number = Number::from_i128(value).expect("serde_json arbitrary-precision support must represent i128");
+        let number =
+            Number::from_i128(value).ok_or_else(|| E::custom("JSON integer is outside the supported 64-bit range"))?;
         self.enter_number(number)
     }
 
@@ -152,7 +154,8 @@ where
     where
         E: Error,
     {
-        let number = Number::from_u128(value).expect("serde_json arbitrary-precision support must represent u128");
+        let number =
+            Number::from_u128(value).ok_or_else(|| E::custom("JSON integer is outside the supported 64-bit range"))?;
         self.enter_number(number)
     }
 

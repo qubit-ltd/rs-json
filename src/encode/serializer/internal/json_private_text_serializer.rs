@@ -12,7 +12,6 @@ use std::cell::RefCell;
 use std::fmt::Display;
 
 use qubit_budget::ResourceQuantity;
-use qubit_budget::json::JsonMeasurement;
 use serde::Serialize;
 use serde::Serializer;
 
@@ -76,17 +75,8 @@ where
     delegate_number_method!(serialize_char, char);
 
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
-        match self.kind {
-            PrivateTextKind::Number { depth } => {
-                self.context.borrow_mut().admit(JsonMeasurement::Number {
-                    depth,
-                    bytes: value.len(),
-                })?;
-            }
-            PrivateTextKind::RawValue { depth } => {
-                self.context.borrow_mut().preflight_raw(value, depth)?;
-            }
-        }
+        let PrivateTextKind::RawValue { depth } = self.kind;
+        self.context.borrow_mut().preflight_raw(value, depth)?;
         self.inner.serialize_str(value)
     }
 
@@ -187,20 +177,14 @@ where
     where
         T: Display + ?Sized,
     {
-        let budget_kind = match self.kind {
-            PrivateTextKind::Number { .. } => DisplayBudgetKind::Number,
-            PrivateTextKind::RawValue { .. } => DisplayBudgetKind::RawOutput,
-        };
-        let depth = match self.kind {
-            PrivateTextKind::Number { depth } | PrivateTextKind::RawValue { depth } => depth,
-        };
-        let text = JsonEncodeContext::collect_display::<S::Error, _>(self.context, value, budget_kind, depth)?;
-        match self.kind {
-            PrivateTextKind::Number { .. } => {}
-            PrivateTextKind::RawValue { depth } => {
-                self.context.borrow_mut().preflight_raw(&text, depth)?;
-            }
-        }
+        let PrivateTextKind::RawValue { depth } = self.kind;
+        let text = JsonEncodeContext::collect_display::<S::Error, _>(
+            self.context,
+            value,
+            DisplayBudgetKind::RawOutput,
+            depth,
+        )?;
+        self.context.borrow_mut().preflight_raw(&text, depth)?;
         self.inner.serialize_str(&text)
     }
 

@@ -16,4 +16,12 @@ fn syntax_reasons_have_stable_display_text() {
         JsonSyntaxErrorReason::UnexpectedByte { byte: b'x' }.to_string(),
         "unexpected byte 0x78",
     );
+    assert_eq!(
+        JsonSyntaxErrorReason::IntegerOutOfRange.to_string(),
+        "JSON integer is outside the supported 64-bit range",
+    );
+    assert_eq!(
+        JsonSyntaxErrorReason::FloatOutOfRange.to_string(),
+        "JSON number is outside the finite f64 range",
+    );
 }
