@@ -34,6 +34,11 @@ decoder 不提供隐式默认预算。默认错误脱敏；只有明确请求 `D
 和 `validate`，`JsonEncoder` 负责 `to_vec`、`write_buffered` 和 `write_incremental`。严格
 输入不经过任何修复；每个 document 的记账边界由相应 session transaction 定义。
 
+JSON 数字的产品边界为：负整数 `i64`、非负整数 `u64`、小数/指数有限 `f64`。超过
+JavaScript 安全整数但仍在 64 位范围内的标识符允许作为 number 传输，前端必须使用保持整数
+精度并映射 BigInt 的 parser；`n` 后缀不属于 JSON。更宽整数和精确十进制使用字符串或显式
+领域 wire。`NumberBytes` 只限制 token 资源，不改变数值范围。
+
 ### Value 与 tree
 
 用户可用 `JsonValueSeed` 在 `JsonValueTransaction` 中构造 `serde_json::Value`。用户可用
@@ -60,3 +65,4 @@ transaction 中仅记账而不调用 visitor、不提交 transaction，`JsonTree
 - session-aware decode 在失败后保留输入消耗，value 暂存消耗只在完整成功后提交。
 - value 和 tree 可独立用于已物化 JSON；tree 遍历不依赖 Rust 调用栈深度。
 - 文档与示例只描述当前四领域、五个 error 和 `0.8` 安装方式。
+- 依赖图不启用 serde_json arbitrary precision，旧私有 Number marker 始终是普通 object key。
