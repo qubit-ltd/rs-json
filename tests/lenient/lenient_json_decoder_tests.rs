@@ -1251,3 +1251,39 @@ fn test_decode_object_preserves_duplicate_field_rejection() {
 
     assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
 }
+
+/// Verifies Serde's depth guard is classified as target materialization after
+/// normalized JSON passes lexical admission.
+///
+/// # Panics
+///
+/// Panics when the decoder reports a target-materialization limit as invalid
+/// JSON syntax.
+#[test]
+fn test_decoder_classifies_serde_depth_as_deserialization() {
+    let input = format!("{}0{}", "[".repeat(128), "]".repeat(128));
+    let object = format!(r#"{{"value":{input}}}"#);
+    let mut decoder = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::strict(), JsonDecodeLimits::default());
+    let errors = [
+        decoder
+            .decode_str::<Value>(&input)
+            .expect_err("decode_str must expose target materialization depth"),
+        decoder
+            .decode_utf8::<Value>(input.as_bytes())
+            .expect_err("decode_utf8 must expose target materialization depth"),
+        decoder
+            .decode_value(&input)
+            .expect_err("decode_value must expose target materialization depth"),
+        decoder
+            .decode_array::<Value>(&input)
+            .expect_err("decode_array must expose target materialization depth"),
+        decoder
+            .decode_object::<Value>(&object)
+            .expect_err("decode_object must expose target materialization depth"),
+    ];
+
+    for error in errors {
+        assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
+        assert_eq!(error.stage(), NormalizingJsonDecodeStage::Deserialize);
+    }
+}

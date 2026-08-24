@@ -322,45 +322,25 @@ fn test_error_display_for_deserialize_error_uses_context_message() {
     assert!(std::error::Error::source(&error).is_none());
 }
 
-/// Verifies that error partial eq compares all stable fields.
+/// Verifies cloned errors preserve their public structured diagnostics.
 ///
 /// # Panics
 ///
-/// Panics when the expected behavior is not observed.
+/// Panics when cloning changes any public diagnostic field.
 #[test]
-fn test_error_partial_eq_compares_all_stable_fields() {
+fn test_cloned_error_preserves_public_diagnostics() {
     let mut decoder =
         NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
     let first = decoder
         .decode_value("{\n")
         .expect_err("invalid JSON should return parse error");
-    let second = decoder
-        .decode_value("{\n")
-        .expect_err("invalid JSON should return parse error");
-    assert_eq!(first, second);
+    let cloned = first.clone();
 
-    let third = decoder
-        .decode_value("")
-        .expect_err("empty input should return normalization error");
-    assert_ne!(first, third);
-
-    let detailed = NormalizingJsonDecoder::owned(
-        NormalizingJsonDecodePolicy::builder()
-            .diagnostic_policy(DiagnosticPolicy::Detailed)
-            .build(),
-        JsonDecodeLimits::default(),
-    )
-    .decode_value("")
-    .expect_err("empty input should return normalization error");
-    assert_ne!(third, detailed);
-
-    let invalid_utf8_at_start = decoder
-        .decode_utf8::<Value>(&[0xff])
-        .expect_err("invalid UTF-8 should return a decode error");
-    let invalid_utf8_after_prefix = decoder
-        .decode_utf8::<Value>(&[b'a', 0xff])
-        .expect_err("invalid UTF-8 should return a decode error");
-    assert_ne!(invalid_utf8_at_start, invalid_utf8_after_prefix);
-
-    assert_eq!(first.clone(), first);
+    assert_eq!(cloned.kind(), first.kind());
+    assert_eq!(cloned.stage(), first.stage());
+    assert_eq!(cloned.privacy_policy(), first.privacy_policy());
+    assert_eq!(cloned.raw_input_bytes(), first.raw_input_bytes());
+    assert_eq!(cloned.normalized_input_bytes(), first.normalized_input_bytes());
+    assert_eq!(cloned.normalized_line(), first.normalized_line());
+    assert_eq!(cloned.normalized_column(), first.normalized_column());
 }

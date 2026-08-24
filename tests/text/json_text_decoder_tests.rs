@@ -47,6 +47,11 @@ impl<'de> DeserializeSeed<'de> for NonConsumingSeed {
     }
 }
 
+/// Builds one scalar nested inside `container_depth` JSON arrays.
+fn nested_array(container_depth: usize) -> String {
+    format!("{}0{}", "[".repeat(container_depth), "]".repeat(container_depth))
+}
+
 /// Verifies a decoder returns a typed value for one complete document.
 #[test]
 fn test_json_text_decoder_decodes_typed_value() {
@@ -171,4 +176,39 @@ fn test_json_text_decoder_prioritizes_number_budget_over_range() {
         .decode_utf8::<Value>(input)
         .expect_err("the tighter number-byte budget must reject first");
     assert!(matches!(error, JsonDecodeError::Budget(_)));
+}
+
+/// Verifies lexical validation and target materialization expose separate
+/// depth contracts.
+///
+/// # Panics
+///
+/// Panics when lexical validation inherits Serde's target-materialization
+/// recursion guard, or when the guard is misclassified as lexical syntax.
+#[test]
+fn test_json_text_decoder_classifies_serde_depth_as_deserialization() {
+    let shallow = nested_array(127);
+    let deep = nested_array(128);
+    let mut decoder = JsonDecoder::unlimited();
+
+    decoder
+        .validate_str(&shallow)
+        .expect("the shallow document must pass lexical admission");
+    decoder
+        .decode_str::<Value>(&shallow)
+        .expect("the shallow document must materialize as a JSON value");
+    decoder
+        .validate_str(&deep)
+        .expect("the deep document remains valid lexical JSON");
+    assert!(matches!(
+        decoder.decode_str::<Value>(&deep),
+        Err(JsonDecodeError::Deserialize { .. })
+    ));
+    decoder
+        .validate_utf8(deep.as_bytes())
+        .expect("UTF-8 lexical admission must use the same depth contract");
+    assert!(matches!(
+        decoder.decode_utf8::<Value>(deep.as_bytes()),
+        Err(JsonDecodeError::Deserialize { .. })
+    ));
 }
