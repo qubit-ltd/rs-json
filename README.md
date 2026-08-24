@@ -21,6 +21,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```
 
+For the complete API path, see the [English user guide](doc/user_guide.md).
+The normative numeric rules are in the [number contract](doc/number_contract.md).
+
 ## Choose a domain
 
 | Domain | Use it for | Boundary |
@@ -104,6 +107,23 @@ assert_eq!(bytes, br#"{"ok":true}"#);
 for its writer. `write_incremental` retains accepted output prefixes when a
 streaming write fails.
 
+## Number contract and browser interoperability
+
+Strict decoding and encoding support negative integers through `i64::MIN`,
+non-negative integers through `u64::MAX`, and fractional or exponential JSON
+numbers that are finite `f64` values. This is deliberately wider than
+JavaScript's safe-integer range (`2^53 - 1`) so Java `long` identifiers can
+remain numeric on the wire. Browser clients must use a parser that preserves
+these integers and maps them to `BigInt` where necessary. The JavaScript `n`
+suffix is source-code syntax and is never valid JSON.
+
+Integers below `i64::MIN` or above `u64::MAX`, and exact decimal values that
+must not undergo binary floating-point rounding, need a string or explicit
+domain representation. `NumberBytes` is an independent resource limit on the
+original token; it does not change the representable range. This crate does
+not enable serde_json's arbitrary-precision mode and treats its former private
+number-marker key as an ordinary object key.
+
 ## Errors and budget semantics
 
 The five public error types are domain-owned:
@@ -121,6 +141,9 @@ visible in decode sessions after failed attempts.
 ## Advanced values and trees
 
 `JsonValueSeed` builds a materialized value while charging a caller transaction.
+Because a seed sees decoded Serde events rather than the original token, it
+cannot enforce text lexeme or numeric-range rules; route JSON text through
+`JsonDecoder` for those guarantees.
 `JsonTreeReader` visits every admitted node without Rust recursion. Its
 `account` method stages whole-tree charges in the caller's existing transaction
 without invoking a visitor or committing it;

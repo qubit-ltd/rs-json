@@ -20,6 +20,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```
 
+完整 API 路径见[中文用户手册](doc/user_guide.zh_CN.md)，规范性的数字规则见
+[JSON 数字契约](doc/number_contract.zh_CN.md)。
+
 ## 按领域选择能力
 
 | 领域 | 适用场景 | 明确边界 |
@@ -96,6 +99,18 @@ assert_eq!(bytes, br#"{"ok":true}"#);
 `JsonEncoder::write_buffered` 只在完整输出已准备好写入时提交；`write_incremental`
 在流式写入失败时保留已经接受的输出前缀。
 
+## 数字契约与浏览器互操作
+
+严格编解码支持小至 `i64::MIN` 的负整数、大至 `u64::MAX` 的非负整数，以及可表示为有限
+`f64` 的小数或指数 JSON number。该范围有意大于 JavaScript 的安全整数上限（`2^53 - 1`），
+从而允许 Java `long` 标识符继续以数字形式传输。浏览器端必须使用能保留这些整数的 parser，
+并在需要时映射为 `BigInt`。JavaScript 的 `n` 后缀属于源码语法，绝不是合法 JSON。
+
+小于 `i64::MIN`、大于 `u64::MAX` 的整数，以及不能接受二进制浮点舍入的精确十进制值，
+必须使用字符串或显式领域表示。`NumberBytes` 是原始 token 的独立资源限制，不会扩大或缩小
+可表示范围。本 crate 不启用 serde_json 任意精度模式，其旧私有 number marker 键按普通
+object key 处理。
+
 ## 错误与预算语义
 
 五个公开 error 各自归属业务领域：
@@ -111,7 +126,9 @@ session 中的输入消耗会在失败尝试后刻意保留。
 
 ## 高级 value 与 tree 用法
 
-`JsonValueSeed` 在调用方 transaction 中构造已物化 value 并记账。`JsonTreeReader` 不使用
+`JsonValueSeed` 在调用方 transaction 中构造已物化 value 并记账。由于 seed 只能看到解码后的
+Serde 事件，不能验证原始 token 或数字范围；需要这些保证的 JSON 文本必须经过
+`JsonDecoder`。`JsonTreeReader` 不使用
 Rust 递归地访问每个已准入节点；其 `account` 方法在调用方已有 transaction 中暂存整棵树的
 消耗，不调用 visitor，也不提交 transaction。`JsonTreeMutator` 原地应用 visitor 的变更，并可通过
 `JsonTreeBudgetRejection` 跳过被拒绝的子树。`JsonTreeBudgetTracker` 适合重复执行完整 tree

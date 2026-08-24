@@ -66,11 +66,20 @@ transaction 只在完整成功时提交。
 `Deserialize`。严格 encode 只返回 `JsonEncodeError`：`Budget`、`InvalidRawJson`、
 `Serialize` 或 `Write`。`JsonSyntaxError` 单独持有稳定的语法原因、偏移、行和列。
 
+### 数字表示
+
+strict 与 normalizing 文本路径共享同一数字契约：负整数装入 `i64`，非负整数装入 `u64`，
+小数或指数装入有限 `f64`。lexical scanner 先完成 `NumberBytes` 预算准入，再执行范围校验；
+因此资源限制与表示限制职责独立，且预算失败优先。实现不启用 serde_json arbitrary precision，
+也不识别其旧 Number marker。完整规则见 [JSON 数字契约](number_contract.zh_CN.md)，决策背景见
+[64 位数字收敛设计](number_contract_design.zh_CN.md)。
+
 ## Value
 
 `JsonValueSeed` 是从 Serde 解码事件构造 `serde_json::Value` 的公开 seed。调用方将其绑定到
 `JsonValueTransaction`；它适用于原始 JSON 字节不可用而仍需对物化 value 记账的场景。词法
 准入与该 seed 的职责不同：前者验证 JSON 文本，后者观察已解码值。
+seed 无法检查原始数字 lexeme；需要数字范围和 `NumberBytes` 保证时必须使用 `JsonDecoder`。
 
 ## Tree
 
