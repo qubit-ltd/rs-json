@@ -236,51 +236,21 @@ fn encode(criterion: &mut Criterion) {
                 bencher.iter(|| black_box(serde_json::to_vec(black_box(fixture)).expect("fixture must encode")));
             },
         );
-        group.bench_with_input(
-            BenchmarkId::new("encode/owned-session", size),
-            &fixture,
-            |bencher, fixture| {
-                bencher.iter(|| {
-                    let session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
-                    black_box(
-                        JsonEncoder::new(session)
-                            .to_vec(black_box(fixture))
-                            .expect("fixture must encode"),
-                    )
-                });
-            },
-        );
-        group.bench_with_input(
-            BenchmarkId::new("encode/borrowed-session", size),
-            &fixture,
-            |bencher, fixture| {
-                bencher.iter(|| {
-                    let mut value = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
-                    let session = JsonEncodeSession::borrowing_value(&mut value);
-                    black_box(
-                        JsonEncoder::new(session)
-                            .to_vec(black_box(fixture))
-                            .expect("fixture must encode"),
-                    )
-                });
-            },
-        );
         let reused_session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
         let mut reused_encoder = JsonEncoder::new(reused_session);
         group.bench_with_input(
-            BenchmarkId::new("encode/reused-session", size),
+            BenchmarkId::new("encode/strict-only", size),
             &fixture,
             |bencher, fixture| {
                 bencher.iter(|| black_box(reused_encoder.to_vec(black_box(fixture)).expect("fixture must encode")));
             },
         );
         group.bench_with_input(
-            BenchmarkId::new("encode/value-bounded-session", size),
+            BenchmarkId::new("encode/value-only", size),
             &fixture,
             |bencher, fixture| {
                 bencher.iter(|| {
                     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
-                        .max_output_bytes(target_bytes.saturating_add(RECORD.len()))
                         .max_nodes(usize::MAX)
                         .build();
                     black_box(
@@ -292,7 +262,7 @@ fn encode(criterion: &mut Criterion) {
             },
         );
         group.bench_with_input(
-            BenchmarkId::new("encode/output-bounded-session", size),
+            BenchmarkId::new("encode/output-only", size),
             &fixture,
             |bencher, fixture| {
                 bencher.iter(|| {
@@ -307,6 +277,19 @@ fn encode(criterion: &mut Criterion) {
                 });
             },
         );
+        group.bench_with_input(BenchmarkId::new("encode/full", size), &fixture, |bencher, fixture| {
+            bencher.iter(|| {
+                let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+                    .max_output_bytes(target_bytes.saturating_add(RECORD.len()))
+                    .max_nodes(usize::MAX)
+                    .build();
+                black_box(
+                    JsonEncoder::owned(limits)
+                        .to_vec(black_box(fixture))
+                        .expect("fixture must fit the complete budget"),
+                )
+            });
+        });
         group.bench_with_input(
             BenchmarkId::new("encode/incremental-writer", size),
             &fixture,

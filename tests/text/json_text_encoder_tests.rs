@@ -28,6 +28,7 @@ use serde::ser::Error as _;
 use serde::ser::SerializeMap;
 use serde::ser::SerializeSeq;
 use serde_json::json;
+use serde_json::to_vec;
 use serde_json::value::RawValue;
 
 use crate::fixtures::JsonTestLimits;
@@ -357,6 +358,29 @@ fn test_encode_counts_raw_value_once() {
         .expect("the raw JSON value must encode");
 
     assert_eq!(output, br#"{"k":"v"}"#);
+}
+
+/// Verifies every budget capability combination preserves the exact JSON
+/// representation when no configured limit is exceeded.
+#[test]
+fn test_encode_budget_modes_emit_identical_output() {
+    let value = json!({
+        "array": [null, true, -42, 3.5, "text"],
+        "object": {"key": u64::MAX},
+    });
+    let expected = to_vec(&value).expect("the fixture must serialize");
+    let modes = [
+        JsonTestLimits::new(),
+        JsonTestLimits::new().max_output_bytes(expected.len()),
+        JsonTestLimits::new().max_nodes(16),
+        JsonTestLimits::new().max_output_bytes(expected.len()).max_nodes(16),
+    ];
+
+    for limits in modes {
+        let mut session = limits.encode_session();
+        let actual = encode(&value, &mut session).expect("the configured mode must accept the fixture");
+        assert_eq!(actual, expected);
+    }
 }
 
 /// Verifies a custom Serde failure does not commit its buffered prefix.

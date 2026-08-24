@@ -30,6 +30,9 @@ where
 
     /// Root-inclusive depth assigned to the nested value.
     depth: usize,
+
+    /// Whether value accounting can reject any emitted event.
+    has_value_limits: bool,
 }
 
 impl<'a, 'transaction, 'budget, 'context, T, R, Q> BudgetedValue<'a, 'transaction, 'budget, 'context, T, R, Q>
@@ -42,8 +45,14 @@ where
         value: &'a T,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         depth: usize,
+        has_value_limits: bool,
     ) -> Self {
-        Self { value, context, depth }
+        Self {
+            value,
+            context,
+            depth,
+            has_value_limits,
+        }
     }
 }
 
@@ -58,7 +67,11 @@ where
     where
         S: Serializer,
     {
-        self.value
-            .serialize(JsonEncodeSerializer::with_context(serializer, self.context, self.depth))
+        self.value.serialize(JsonEncodeSerializer::with_context(
+            serializer,
+            self.context,
+            self.depth,
+            self.has_value_limits,
+        ))
     }
 }
