@@ -27,6 +27,7 @@ use super::output::JsonOutputBuffer;
 use super::output::JsonOutputWriter;
 use super::serializer::json_encode_context::JsonEncodeContext;
 use super::serializer::json_encode_serializer::JsonEncodeSerializer;
+use crate::internal::has_json_value_limits;
 
 /// Encodes strict JSON text while owning cumulative accounting state.
 ///
@@ -155,8 +156,9 @@ where
     where
         T: Serialize + ?Sized,
     {
+        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
         let mut attempt = self.session.begin_value();
-        let bytes = Self::serialize_buffer(value, &mut attempt)?;
+        let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits)?;
         attempt
             .check_output_bytes(bytes.len())
             .map_err(JsonEncodeError::Budget)?;
@@ -193,8 +195,9 @@ where
         W: Write,
         T: Serialize + ?Sized,
     {
+        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
         let mut attempt = self.session.begin_value();
-        let bytes = Self::serialize_buffer(value, &mut attempt)?;
+        let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits)?;
         attempt
             .check_output_bytes(bytes.len())
             .map_err(JsonEncodeError::Budget)?;
@@ -229,6 +232,7 @@ where
         W: Write,
         T: Serialize + ?Sized,
     {
+        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
         let mut attempt = self.session.begin_value();
         let result = {
             let (output_budget, transaction) = attempt.split_mut();
@@ -239,6 +243,7 @@ where
                 let context = RefCell::new(JsonEncodeContext {
                     transaction,
                     output: &accounting,
+                    has_value_limits,
                 });
                 value.serialize(JsonEncodeSerializer::new(&mut inner, &context))
             };
@@ -256,6 +261,7 @@ where
     fn serialize_buffer<T>(
         value: &T,
         attempt: &mut JsonEncodeAttempt<'_, R, Q>,
+        has_value_limits: bool,
     ) -> Result<Vec<u8>, JsonEncodeError<R, Q>>
     where
         T: Serialize + ?Sized,
@@ -268,6 +274,7 @@ where
             let context = RefCell::new(JsonEncodeContext {
                 transaction,
                 output: &accounting,
+                has_value_limits,
             });
             value.serialize(JsonEncodeSerializer::new(&mut inner, &context))
         };

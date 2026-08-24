@@ -26,7 +26,7 @@ use super::budgeted_value::BudgetedValue;
 use super::display_budget_kind::DisplayBudgetKind;
 use super::json_encode_compound::JsonEncodeCompound;
 use super::json_encode_context::JsonEncodeContext;
-use super::json_lexeme_length::JsonLexemeLength;
+use crate::internal::JsonLexemeLength;
 
 /// Decorates one Serde serializer with eager JSON budget checks.
 pub(in crate::encode) struct JsonEncodeSerializer<'transaction, 'budget, 'context, S, R, Q>

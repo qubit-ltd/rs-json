@@ -10,9 +10,11 @@
 mod json_key_seed;
 mod json_number_lexeme_length;
 mod json_value_child_seed;
+mod json_value_measurement;
 mod json_value_visitor;
 
 pub(super) use json_key_seed::JsonKeySeed;
-pub use json_number_lexeme_length::json_number_lexeme_length;
+pub(crate) use json_number_lexeme_length::json_number_lexeme_length;
 pub(super) use json_value_child_seed::JsonValueChildSeed;
+pub(crate) use json_value_measurement::json_value_measurement;
 pub(super) use json_value_visitor::JsonValueVisitor;

@@ -28,6 +28,8 @@ where
     offset: usize,
     /// Value transaction charged by lexical admission.
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    /// Whether native measurements must be staged in the transaction.
+    has_value_limits: bool,
 }
 
 impl<'input, 'transaction, 'budget, R, Q> JsonLexicalCursor<'input, 'transaction, 'budget, R, Q>
@@ -40,12 +42,42 @@ where
     pub(super) const fn new(
         input: &'input [u8],
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+        has_value_limits: bool,
     ) -> Self {
         Self {
             input,
             offset: 0,
             transaction,
+            has_value_limits,
         }
+    }
+
+    /// Stages one native measurement when value limits are configured.
+    fn admit(&mut self, measurement: JsonMeasurement) -> Result<(), JsonLexicalError<R, Q>> {
+        if !self.has_value_limits {
+            return Ok(());
+        }
+        self.transaction.try_admit(measurement).map_err(JsonLexicalError::from)
+    }
+
+    /// Enters one container when value limits are configured.
+    fn enter_container(&mut self, kind: JsonContainerKind, depth: usize) -> Result<(), JsonLexicalError<R, Q>> {
+        if !self.has_value_limits {
+            return Ok(());
+        }
+        self.transaction
+            .try_enter_container(kind, depth)
+            .map_err(JsonLexicalError::from)
+    }
+
+    /// Checks one observed container count when value limits are configured.
+    fn check_container_count(&mut self, kind: JsonContainerKind, count: usize) -> Result<(), JsonLexicalError<R, Q>> {
+        if !self.has_value_limits {
+            return Ok(());
+        }
+        self.transaction
+            .check_container_count(kind, count)
+            .map_err(JsonLexicalError::from)
     }
 
     /// Returns whether the cursor has consumed the complete input.
@@ -93,32 +125,24 @@ where
         match self.peek() {
             Some(b'{') => {
                 self.offset += 1;
-                self.transaction
-                    .try_enter_container(JsonContainerKind::Map, depth)
-                    .map_err(JsonLexicalError::from)?;
+                self.enter_container(JsonContainerKind::Map, depth)?;
                 stack.push(JsonLexicalContainerFrame::ObjectKey { depth, entries: 0 });
                 Ok(())
             }
             Some(b'[') => {
                 self.offset += 1;
-                self.transaction
-                    .try_enter_container(JsonContainerKind::Sequence, depth)
-                    .map_err(JsonLexicalError::from)?;
+                self.enter_container(JsonContainerKind::Sequence, depth)?;
                 stack.push(JsonLexicalContainerFrame::ArrayValue { depth, items: 0 });
                 Ok(())
             }
             Some(b'"') => {
                 let bytes = self.string_bytes()?;
-                self.transaction
-                    .try_admit(JsonMeasurement::String { depth, bytes })
-                    .map_err(JsonLexicalError::from)
+                self.admit(JsonMeasurement::String { depth, bytes })
             }
             Some(b'-' | b'0'..=b'9') => {
                 let start = self.offset;
                 let bytes = self.number_bytes()?;
-                self.transaction
-                    .try_admit(JsonMeasurement::Number { depth, bytes })
-                    .map_err(JsonLexicalError::from)?;
+                self.admit(JsonMeasurement::Number { depth, bytes })?;
                 self.validate_number_range(start, self.offset)
             }
             Some(b't') => self.literal(b"true", JsonMeasurement::Boolean { depth }),
@@ -144,9 +168,7 @@ where
                 byte: self.peek().unwrap_or_default(),
             }));
         }
-        self.transaction
-            .try_admit(measurement)
-            .map_err(JsonLexicalError::from)?;
+        self.admit(measurement)?;
         self.offset = end;
         Ok(())
     }
@@ -172,9 +194,7 @@ where
                 let items = items
                     .checked_add(1)
                     .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
-                self.transaction
-                    .check_container_count(JsonContainerKind::Sequence, items)
-                    .map_err(JsonLexicalError::from)?;
+                self.check_container_count(JsonContainerKind::Sequence, items)?;
                 stack.push(JsonLexicalContainerFrame::ArrayDelimiter { depth, items });
                 self.value(
                     depth
@@ -216,13 +236,9 @@ where
                 let entries = entries
                     .checked_add(1)
                     .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
-                self.transaction
-                    .check_container_count(JsonContainerKind::Map, entries)
-                    .map_err(JsonLexicalError::from)?;
+                self.check_container_count(JsonContainerKind::Map, entries)?;
                 let bytes = self.string_bytes()?;
-                self.transaction
-                    .try_admit(JsonMeasurement::Key { bytes })
-                    .map_err(JsonLexicalError::from)?;
+                self.admit(JsonMeasurement::Key { bytes })?;
                 self.skip_whitespace();
                 if self.peek() != Some(b':') {
                     return Err(match self.peek() {

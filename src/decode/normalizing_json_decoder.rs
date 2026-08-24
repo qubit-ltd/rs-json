@@ -24,6 +24,7 @@ use super::JsonRootKind;
 use super::NormalizingJsonDecodeError;
 use super::NormalizingJsonDecodePolicy;
 use super::internal::json_normalizer::JsonNormalizer;
+use crate::internal::has_json_value_limits;
 use crate::lexical::JsonLexicalError;
 use crate::lexical::JsonLexicalScanner;
 
@@ -181,6 +182,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     {
         let raw_input_bytes = input.len();
         let privacy_policy = self.policy().diagnostic_policy();
+        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
         let mut attempt = self.session.begin_value();
         attempt.try_consume_input_bytes(raw_input_bytes).map_err(|_| {
             NormalizingJsonDecodeError::input_too_large(
@@ -192,7 +194,13 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         let input = std::str::from_utf8(input)
             .map_err(|error| NormalizingJsonDecodeError::invalid_utf8(error, raw_input_bytes, privacy_policy))?;
         let normalized = self.normalizer.normalize_after_raw_charge(input, &mut attempt)?;
-        Self::admit_normalized(&mut attempt, normalized.as_ref(), raw_input_bytes, privacy_policy)?;
+        Self::admit_normalized(
+            &mut attempt,
+            normalized.as_ref(),
+            raw_input_bytes,
+            privacy_policy,
+            has_value_limits,
+        )?;
         let value =
             Self::deserialize_normalized(normalized.as_ref(), raw_input_bytes, normalized.len(), privacy_policy)?;
         attempt.commit();
@@ -289,9 +297,16 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     pub fn decode_value(&mut self, input: &str) -> Result<Value, NormalizingJsonDecodeError> {
         let raw_input_bytes = input.len();
         let privacy_policy = self.policy().diagnostic_policy();
+        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
         let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
-        Self::admit_normalized(&mut attempt, normalized.as_ref(), raw_input_bytes, privacy_policy)?;
+        Self::admit_normalized(
+            &mut attempt,
+            normalized.as_ref(),
+            raw_input_bytes,
+            privacy_policy,
+            has_value_limits,
+        )?;
         let value = Self::parse_value(normalized.as_ref(), raw_input_bytes, normalized.len(), privacy_policy)?;
         attempt.commit();
         Ok(value)
@@ -324,10 +339,17 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     {
         let raw_input_bytes = input.len();
         let privacy_policy = self.policy().diagnostic_policy();
+        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
         let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
         let normalized_input_bytes = normalized.len();
-        Self::admit_normalized(&mut attempt, normalized.as_ref(), raw_input_bytes, privacy_policy)?;
+        Self::admit_normalized(
+            &mut attempt,
+            normalized.as_ref(),
+            raw_input_bytes,
+            privacy_policy,
+            has_value_limits,
+        )?;
         let actual = JsonRootKind::of_normalized_json(normalized.as_ref());
         if actual != expected {
             Self::validate_json(
@@ -360,8 +382,9 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         normalized: &str,
         raw_input_bytes: usize,
         privacy_policy: DiagnosticPolicy,
+        has_value_limits: bool,
     ) -> Result<(), NormalizingJsonDecodeError> {
-        JsonLexicalScanner::new(attempt.value_transaction_mut())
+        JsonLexicalScanner::new(attempt.value_transaction_mut(), has_value_limits)
             .scan(normalized.as_bytes())
             .map_err(|error| Self::map_admission_error(error, normalized, raw_input_bytes, privacy_policy))
     }
@@ -386,9 +409,16 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     {
         let raw_input_bytes = input.len();
         let privacy_policy = self.policy().diagnostic_policy();
+        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
         let mut attempt = self.session.begin_value();
         let normalized = self.normalizer.normalize(input, &mut attempt)?;
-        Self::admit_normalized(&mut attempt, normalized.as_ref(), raw_input_bytes, privacy_policy)?;
+        Self::admit_normalized(
+            &mut attempt,
+            normalized.as_ref(),
+            raw_input_bytes,
+            privacy_policy,
+            has_value_limits,
+        )?;
         let value =
             Self::deserialize_normalized(normalized.as_ref(), raw_input_bytes, normalized.len(), privacy_policy)?;
         attempt.commit();

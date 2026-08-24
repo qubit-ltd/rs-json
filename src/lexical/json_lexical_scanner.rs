@@ -24,6 +24,8 @@ where
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     /// Root-inclusive depth assigned to the scanned value.
     root_depth: usize,
+    /// Whether scanning must stage JSON value measurements.
+    has_value_limits: bool,
 }
 
 impl<'transaction, 'budget, R, Q> JsonLexicalScanner<'transaction, 'budget, R, Q>
@@ -33,10 +35,14 @@ where
 {
     /// Creates a lexical scanner bound to one value transaction.
     #[inline(always)]
-    pub(crate) const fn new(transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>) -> Self {
+    pub(crate) const fn new(
+        transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+        has_value_limits: bool,
+    ) -> Self {
         Self {
             transaction,
             root_depth: 1,
+            has_value_limits,
         }
     }
 
@@ -45,10 +51,12 @@ where
     pub(crate) const fn at_depth(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
         root_depth: usize,
+        has_value_limits: bool,
     ) -> Self {
         Self {
             transaction,
             root_depth,
+            has_value_limits,
         }
     }
 
@@ -60,7 +68,7 @@ where
     /// or [`JsonLexicalError::Syntax`] when `input` is not one complete JSON
     /// value. All value measurements remain staged in the caller's transaction.
     pub(crate) fn scan(&mut self, input: &[u8]) -> Result<(), JsonLexicalError<R, Q>> {
-        let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction);
+        let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         let mut stack: Vec<JsonLexicalContainerFrame> = Vec::new();
         cursor.skip_whitespace();
         cursor.value(self.root_depth, &mut stack)?;

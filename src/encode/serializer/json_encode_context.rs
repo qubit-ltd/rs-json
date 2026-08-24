@@ -35,6 +35,9 @@ where
 
     /// Live output accounting shared with the byte buffer.
     pub(in crate::encode) output: &'transaction RefCell<JsonOutputAccounting<'transaction, R, Q>>,
+
+    /// Whether any decoded-value resource dimension is configured.
+    pub(in crate::encode) has_value_limits: bool,
 }
 
 impl<R, Q> JsonEncodeContext<'_, '_, R, Q>
@@ -58,6 +61,9 @@ where
     where
         E: Error,
     {
+        if !self.has_value_limits {
+            return Ok(());
+        }
         let result = self.transaction.try_admit(measurement);
         self.record(result)
     }
@@ -67,6 +73,9 @@ where
     where
         E: Error,
     {
+        if !self.has_value_limits {
+            return Ok(());
+        }
         let result = self.transaction.try_enter_container(kind, depth);
         self.record(result)
     }
@@ -76,6 +85,9 @@ where
     where
         E: Error,
     {
+        if !self.has_value_limits {
+            return Ok(());
+        }
         let result = self.transaction.check_container_count(kind, prospective);
         self.record(result)
     }
@@ -93,7 +105,7 @@ where
         let output = self.output.borrow().check_available(value.len());
         self.record(output)?;
         let result = {
-            let mut scanner = JsonLexicalScanner::at_depth(&mut *self.transaction, depth);
+            let mut scanner = JsonLexicalScanner::at_depth(&mut *self.transaction, depth, self.has_value_limits);
             scanner.scan(value.as_bytes())
         };
         match result {

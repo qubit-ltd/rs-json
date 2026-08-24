@@ -34,8 +34,8 @@ input bytes
 ## 私有协议边界
 
 生产代码不识别 `$serde_json::private::Number`，该键永远是普通 object key。RawValue 是独立、
-仍有公开用途的 serde_json 集成，继续保留并单独测试。`zmij` 继续用于无分配计算有限 f64 的
-紧凑 JSON lexeme 长度，不再承担任意精度 Number 兼容。
+仍有公开用途的 serde_json 集成，继续保留并单独测试。有限浮点的紧凑 JSON lexeme 长度通过
+serde_json 的公开 `CompactFormatter` 接口计算，不直接耦合其底层浮点格式化依赖。
 
 ## Seed 与物化 value
 

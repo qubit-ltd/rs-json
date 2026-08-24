@@ -16,4 +16,3 @@ mod internal;
 mod json_encode_compound;
 pub(super) mod json_encode_context;
 pub(super) mod json_encode_serializer;
-mod json_lexeme_length;
