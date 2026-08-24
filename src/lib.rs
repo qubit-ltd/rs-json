@@ -16,6 +16,15 @@
 //! `qubit-budget` owns limits, resource identities, and sessions. This crate
 //! owns JSON-specific normalization, syntax validation, value construction,
 //! and traversal.
+//!
+//! # Number contract
+//!
+//! Strict text codecs accept negative integers in `i64`, non-negative
+//! integers in `u64`, and fractional or exponential tokens representable as
+//! finite `f64`. This intentionally includes integers above JavaScript's safe
+//! integer limit. Wider exact integers and exact decimals must use strings or
+//! an explicit domain wire format. `NumberBytes` limits lexical size; it does
+//! not expand the supported numeric range.
 
 #![deny(missing_docs)]
 

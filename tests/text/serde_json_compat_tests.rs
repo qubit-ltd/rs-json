@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Public compatibility tests for serde_json's private protocols.
+//! Public compatibility tests for serde_json's RawValue protocol.
 
 mod budgeted_private_value_tests;
 mod json_encode_serializer_tests;
@@ -19,7 +19,6 @@ use qubit_json::encode::JsonEncoder;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeStruct;
-use serde_json::Number;
 use serde_json::value::RawValue;
 
 /// Simulates serde_json's private raw-value protocol with invalid text.
@@ -37,16 +36,15 @@ impl Serialize for InvalidRawValue {
     }
 }
 
-/// Preserves serde_json's private number and raw-value encodings.
+/// Preserves serde_json's private raw-value encoding.
 #[test]
-fn test_encoder_preserves_private_number_and_raw_value_protocol() {
-    let number: Number = "123456789012345678901234567890".parse().expect("valid number");
+fn test_encoder_preserves_private_raw_value_protocol() {
     let raw = RawValue::from_string("{\"ok\":true}".to_owned()).expect("valid raw JSON");
     let session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let bytes = JsonEncoder::new(session)
-        .to_vec(&(&number, &raw))
-        .expect("private serde_json shapes encode");
-    assert_eq!(bytes, br#"[123456789012345678901234567890,{"ok":true}]"#,);
+        .to_vec(&raw)
+        .expect("serde_json RawValue should encode");
+    assert_eq!(bytes, br#"{"ok":true}"#);
 }
 
 /// Reports invalid private raw text as a syntax-specific encode error.

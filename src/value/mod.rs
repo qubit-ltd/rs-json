@@ -10,6 +10,7 @@
 mod json_value_seed;
 mod strict_json_value;
 
+pub use internal::json_number_lexeme_length;
 pub use json_value_seed::JsonValueSeed;
 pub use strict_json_value::StrictJsonValue;
 pub use strict_json_value::StrictJsonValueSeed;

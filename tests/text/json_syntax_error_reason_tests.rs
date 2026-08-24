@@ -33,6 +33,8 @@ fn test_json_syntax_error_reason_formats_every_variant() {
         JsonSyntaxErrorReason::UnpairedSurrogate,
         JsonSyntaxErrorReason::InvalidUtf8,
         JsonSyntaxErrorReason::InvalidNumber,
+        JsonSyntaxErrorReason::IntegerOutOfRange,
+        JsonSyntaxErrorReason::FloatOutOfRange,
         JsonSyntaxErrorReason::TrailingCharacters,
         JsonSyntaxErrorReason::NestingOverflow,
     ];

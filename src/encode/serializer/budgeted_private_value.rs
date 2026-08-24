@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Strict serde_json private Number and RawValue serializer adapters.
+//! Strict serde_json RawValue serializer adapter.
 // qubit-style: allow source-test-pair
 // qubit-style: allow multiple-public-types
 // qubit-style: allow explicit-imports
@@ -41,19 +41,6 @@ where
     T: ?Sized,
     Q: ResourceQuantity,
 {
-    /// Creates a private arbitrary-precision number payload wrapper.
-    pub(super) const fn number(
-        value: &'a T,
-        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
-        depth: usize,
-    ) -> Self {
-        Self {
-            value,
-            context,
-            kind: PrivateTextKind::Number { depth },
-        }
-    }
-
     /// Creates a private raw JSON payload wrapper at its final depth.
     pub(super) const fn raw_value(
         value: &'a T,

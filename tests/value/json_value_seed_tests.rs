@@ -229,29 +229,37 @@ impl<'de> SerdeDeserializer<'de> for SomeDeserializer {
 fn test_budgeted_value_seed_handles_option_newtype_and_numeric_errors() {
     let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
     let mut transaction = budget.transaction();
-    assert_eq!(
+    assert!(
         JsonValueSeed::new(&mut transaction)
             .deserialize(value::I128Deserializer::<value::Error>::new(i128::MAX))
-            .expect("arbitrary precision supports i128"),
-        json!(i128::MAX),
+            .is_err()
     );
-    assert_eq!(
+    assert!(
         JsonValueSeed::new(&mut transaction)
             .deserialize(value::U128Deserializer::<value::Error>::new(u128::MAX))
-            .expect("arbitrary precision supports u128"),
-        json!(u128::MAX),
+            .is_err()
     );
-    assert_eq!(
+    assert!(
         JsonValueSeed::new(&mut transaction)
             .deserialize(I128DispatchDeserializer)
-            .expect("explicit i128 visitor dispatch is supported"),
-        json!(i128::MAX),
+            .is_err()
+    );
+    assert!(
+        JsonValueSeed::new(&mut transaction)
+            .deserialize(U128DispatchDeserializer)
+            .is_err()
     );
     assert_eq!(
         JsonValueSeed::new(&mut transaction)
-            .deserialize(U128DispatchDeserializer)
-            .expect("explicit u128 visitor dispatch is supported"),
-        json!(u128::MAX),
+            .deserialize(value::I128Deserializer::<value::Error>::new(i64::MIN.into()))
+            .expect("i64 minimum must remain representable"),
+        json!(i64::MIN),
+    );
+    assert_eq!(
+        JsonValueSeed::new(&mut transaction)
+            .deserialize(value::U128Deserializer::<value::Error>::new(u64::MAX.into()))
+            .expect("u64 maximum must remain representable"),
+        json!(u64::MAX),
     );
     assert!(
         JsonValueSeed::new(&mut transaction)

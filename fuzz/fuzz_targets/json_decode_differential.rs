@@ -28,6 +28,7 @@ fuzz_target!(|data: &[u8]| {
         .is_ok();
     let reference = serde_json::from_slice::<Value>(input).is_ok();
 
-    assert_eq!(admitted, reference, "lexical admission differs from serde_json");
-    assert_eq!(validated, reference, "validation differs from serde_json");
+    assert_eq!(admitted, validated, "decode and validation must agree");
+    assert!(!admitted || reference, "strict admission must be a serde_json subset");
+    assert!(!validated || reference, "strict validation must be a serde_json subset");
 });

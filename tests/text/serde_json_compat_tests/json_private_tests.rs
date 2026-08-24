@@ -10,29 +10,27 @@
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use serde_json::Number;
-use serde_json::from_str;
 use serde_json::value::RawValue;
 
 use crate::text::json_encode_test_support::encode;
 
-/// Ensures arbitrary-precision numbers and raw fragments stay budget-aware.
+/// Ensures supported integers and raw fragments stay budget-aware.
 #[test]
 fn test_private_serde_json_shapes_encode_through_budget() {
-    let number: Number = from_str("12345678901234567890").expect("arbitrary-precision number should parse");
+    let number = u64::MAX;
     let raw = RawValue::from_string(String::from("{\"ok\":true}")).expect("raw JSON should parse");
     let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
 
     let output = encode(&(&number, &raw), &mut session).expect("private serde_json shapes should encode");
 
-    assert_eq!(output, br#"[12345678901234567890,{"ok":true}]"#);
+    assert_eq!(output, br#"[18446744073709551615,{"ok":true}]"#);
 }
 
-/// Ensures a real arbitrary-precision Number bypasses private map metadata.
+/// Ensures a real Number is budgeted as a scalar.
 #[test]
-fn test_real_number_uses_private_number_classification() {
-    const NUMBER_TEXT: &str = "12345678901234567890";
-    let number: Number = from_str(NUMBER_TEXT).expect("arbitrary-precision number should parse");
+fn test_real_number_uses_scalar_classification() {
+    const NUMBER_TEXT: &str = "18446744073709551615";
+    let number = u64::MAX;
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_nodes(1)
         .max_map_entries(0)
@@ -42,7 +40,7 @@ fn test_real_number_uses_private_number_classification() {
         .build();
     let mut session = JsonEncodeSession::owned(limits);
 
-    let output = encode(&number, &mut session).expect("private Number metadata should not consume object limits");
+    let output = encode(&number, &mut session).expect("integer scalar must not consume map limits");
 
     assert_eq!(output, NUMBER_TEXT.as_bytes());
 }

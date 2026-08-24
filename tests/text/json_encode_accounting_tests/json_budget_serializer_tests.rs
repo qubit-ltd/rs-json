@@ -24,14 +24,13 @@ use serde::ser::SerializeStruct;
 use serde::ser::SerializeStructVariant;
 use serde::ser::SerializeTupleStruct;
 use serde::ser::SerializeTupleVariant;
-use serde_json::Number;
 use serde_json::to_vec;
 use serde_json::value::RawValue;
 
 use crate::fixtures::JsonTestLimits;
 use crate::text::json_encode_test_support::encode;
 
-/// Private token used by serde_json for arbitrary-precision numbers.
+/// Former private token used by serde_json for arbitrary-precision numbers.
 const JSON_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
 
 /// Private token used by serde_json for raw JSON fragments.
@@ -81,8 +80,8 @@ fn test_json_encode_compound_forwards_struct_variant_skip_field() {
     assert_eq!(output, br#"{"V":{}}"#);
 }
 
-/// Number text that serde_json deserializes through its private map token.
-const LARGE_NUMBER_TEXT: &str = "123456789012345678901234567890";
+/// Largest integer text supported by the public JSON number contract.
+const LARGE_NUMBER_TEXT: &str = "18446744073709551615";
 
 /// Display value that exposes how many chunks formatting reached.
 struct CountedDisplay<'a> {
@@ -391,46 +390,6 @@ struct CountedUnknownMap<'a> {
     len: usize,
 }
 
-/// Simulates serde_json's private number shape with an observable payload.
-struct CountedPrivateNumber<'a> {
-    /// Number of times the private string payload was entered.
-    serialized: &'a Cell<usize>,
-}
-
-impl Serialize for CountedPrivateNumber<'_> {
-    /// Emits the private number token and one observable string payload.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct(JSON_NUMBER_TOKEN, 1)?;
-        state.serialize_field(
-            JSON_NUMBER_TOKEN,
-            &CountedPrivateNumberPayload {
-                serialized: self.serialized,
-            },
-        )?;
-        state.end()
-    }
-}
-
-/// Observable private number string payload.
-struct CountedPrivateNumberPayload<'a> {
-    /// Number of times this payload was asked to serialize.
-    serialized: &'a Cell<usize>,
-}
-
-impl Serialize for CountedPrivateNumberPayload<'_> {
-    /// Records entry before emitting a valid arbitrary-precision number text.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        self.serialized.set(self.serialized.get() + 1);
-        serializer.serialize_str("1")
-    }
-}
-
 /// Simulates serde_json's private raw-value shape with an observable payload.
 struct CountedPrivateRawValue<'a> {
     /// Raw JSON fragment emitted by the private string payload.
@@ -677,12 +636,10 @@ fn test_json_encode_serializer_checks_number_bytes() {
     );
 }
 
-/// Verifies serde_json's private number token is counted as one number node.
+/// Verifies the largest supported unsigned integer is counted as one node.
 #[test]
-fn test_json_encode_serializer_charges_arbitrary_precision_number_once() {
-    let number = LARGE_NUMBER_TEXT
-        .parse::<Number>()
-        .expect("the arbitrary-precision number should parse");
+fn test_json_encode_serializer_charges_u64_number_once() {
+    let number = u64::MAX;
     assert_resource(
         &number,
         JsonTestLimits::new().max_number_bytes(LARGE_NUMBER_TEXT.len() - 1),
@@ -691,12 +648,10 @@ fn test_json_encode_serializer_charges_arbitrary_precision_number_once() {
     assert_node_count(&number, 1);
 }
 
-/// Verifies private Number map metadata does not consume object limits.
+/// Verifies ordinary integer serialization does not consume object limits.
 #[test]
-fn test_json_preflight_ignores_private_number_map_metadata() {
-    let number = LARGE_NUMBER_TEXT
-        .parse::<Number>()
-        .expect("the arbitrary-precision number should parse");
+fn test_json_preflight_treats_u64_as_scalar() {
+    let number = u64::MAX;
     let mut budget = JsonTestLimits::new()
         .max_nodes(1)
         .max_map_entries(0)
@@ -704,14 +659,14 @@ fn test_json_preflight_ignores_private_number_map_metadata() {
         .max_number_bytes(LARGE_NUMBER_TEXT.len())
         .encode_session();
 
-    let output = encode(&number, &mut budget).expect("private Number metadata must not consume JSON object limits");
+    let output = encode(&number, &mut budget).expect("an integer is a scalar JSON node");
 
     assert_eq!(output, LARGE_NUMBER_TEXT.as_bytes());
 }
 
-/// Verifies private Number metadata inside RawValue is not charged as a map.
+/// Verifies a supported integer inside RawValue is not charged as a map.
 #[test]
-fn test_json_preflight_ignores_private_number_map_metadata_inside_raw_value() {
+fn test_json_preflight_treats_raw_u64_as_scalar() {
     let raw = RawValue::from_string(String::from(LARGE_NUMBER_TEXT)).expect("fixture must contain valid raw JSON");
     let mut budget = JsonTestLimits::new()
         .max_nodes(1)
@@ -721,7 +676,7 @@ fn test_json_preflight_ignores_private_number_map_metadata_inside_raw_value() {
         .max_number_bytes(LARGE_NUMBER_TEXT.len())
         .encode_session();
 
-    let output = encode(&raw, &mut budget).expect("raw private Number metadata must not consume object limits");
+    let output = encode(&raw, &mut budget).expect("raw integer text is a scalar JSON node");
 
     assert_eq!(output, LARGE_NUMBER_TEXT.as_bytes());
     assert_resource(
@@ -788,28 +743,6 @@ fn test_collect_str_map_key_rejects_after_complete_formatting() {
     assert_eq!(formatted.get(), 1_000);
 }
 
-/// Verifies private Number collect_str payloads retain number budgeting after
-/// complete formatting.
-#[test]
-fn test_private_number_collect_str_rejects_after_complete_formatting() {
-    let formatted = Cell::new(0);
-    let value = CollectedPrivateText {
-        token: JSON_NUMBER_TOKEN,
-        payload: CountedDisplay {
-            formatted: &formatted,
-            chunk: "12",
-            chunks: 1_000,
-        },
-    };
-
-    assert_resource(
-        &value,
-        JsonTestLimits::new().max_number_bytes(3),
-        JsonResource::NumberBytes,
-    );
-    assert_eq!(formatted.get(), 1_000);
-}
-
 /// Verifies private RawValue collect_str payloads retain output budgeting.
 #[test]
 fn test_private_raw_value_collect_str_rejects_during_formatting() {
@@ -867,27 +800,6 @@ fn test_output_only_limit_stops_map_key_collect_str_formatting() {
     assert!(formatted.get() < 1_000);
 }
 
-/// Verifies output-only limits bound private Number collect_str allocation.
-#[test]
-fn test_output_only_limit_stops_private_number_collect_str_formatting() {
-    let formatted = Cell::new(0);
-    let value = CollectedPrivateText {
-        token: JSON_NUMBER_TOKEN,
-        payload: CountedDisplay {
-            formatted: &formatted,
-            chunk: "12",
-            chunks: 1_000,
-        },
-    };
-
-    assert_resource(
-        &value,
-        JsonTestLimits::new().max_output_bytes(3),
-        JsonResource::OutputBytes,
-    );
-    assert!(formatted.get() < 1_000);
-}
-
 /// Verifies conservative collect_str output checks preserve exact boundaries.
 #[test]
 fn test_collect_str_output_lower_bound_preserves_valid_boundaries() {
@@ -913,21 +825,6 @@ fn test_collect_str_output_lower_bound_preserves_valid_boundaries() {
     assert_eq!(
         encode(&map, &mut budget).expect("collected map key must fit its exact output limit"),
         br#"{"a":null}"#,
-    );
-
-    let formatted = Cell::new(0);
-    let number = CollectedPrivateText {
-        token: JSON_NUMBER_TOKEN,
-        payload: CountedDisplay {
-            formatted: &formatted,
-            chunk: "123",
-            chunks: 1,
-        },
-    };
-    let mut budget = JsonTestLimits::new().max_output_bytes(3).encode_session();
-    assert_eq!(
-        encode(&number, &mut budget).expect("collected Number must fit its exact output limit"),
-        b"123",
     );
 }
 
@@ -1023,24 +920,6 @@ fn test_underreported_struct_variant_is_rejected_after_third_value() {
         JsonResource::MapEntries,
     );
     assert_eq!(observed.get(), 2);
-}
-
-/// Verifies private number node and depth limits reject after their payload is
-/// collected into one complete measurement.
-#[test]
-fn test_json_encode_serializer_checks_private_number_after_payload_collection() {
-    let serialized = Cell::new(0);
-    let value = CountedPrivateNumber {
-        serialized: &serialized,
-    };
-
-    assert_resource(&value, JsonTestLimits::new().max_nodes(0), JsonResource::Nodes);
-    assert_eq!(serialized.get(), 1);
-
-    serialized.set(0);
-
-    assert_resource(&value, JsonTestLimits::new().max_depth(0), JsonResource::Depth);
-    assert_eq!(serialized.get(), 1);
 }
 
 /// Verifies simulated raw values ignore their private key and string shape.

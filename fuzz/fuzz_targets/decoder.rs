@@ -16,6 +16,7 @@ use internal::fuzz_record::FuzzRecord;
 use libfuzzer_sys::fuzz_target;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_json::decode::DiagnosticPolicy;
+use qubit_json::decode::JsonDecoder as StrictJsonDecoder;
 use qubit_json::decode::MarkdownFenceClosing;
 use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodeError as JsonDecodeError;
@@ -89,8 +90,12 @@ fuzz_target!(|data: &[u8]| {
         (Ok(_), Err(_)) => {
             panic!("strict decoder accepted input rejected by serde_json");
         }
-        (Err(_), Ok(_)) => {
-            panic!("strict decoder rejected input accepted by serde_json");
+        (Err(error), Ok(_)) => {
+            assert_error_invariants(&error, data.len());
+            assert!(
+                StrictJsonDecoder::unlimited().validate_utf8(data).is_err(),
+                "normalizing strict decode and strict lexical validation must agree",
+            );
         }
     }
 

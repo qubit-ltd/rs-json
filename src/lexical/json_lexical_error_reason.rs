@@ -37,6 +37,10 @@ pub(crate) enum JsonLexicalErrorReason {
     InvalidUtf8,
     /// A number does not follow JSON number grammar.
     InvalidNumber,
+    /// An integer is outside the supported `i64`/`u64` range.
+    IntegerOutOfRange,
+    /// A fractional or exponential number is outside finite `f64` range.
+    FloatOutOfRange,
     /// Non-whitespace bytes follow the complete root value.
     TrailingCharacters,
     /// A nesting or position counter overflowed.
@@ -60,6 +64,8 @@ impl fmt::Display for JsonLexicalErrorReason {
             Self::UnpairedSurrogate => formatter.write_str("unpaired Unicode surrogate"),
             Self::InvalidUtf8 => formatter.write_str("invalid UTF-8"),
             Self::InvalidNumber => formatter.write_str("invalid JSON number"),
+            Self::IntegerOutOfRange => formatter.write_str("JSON integer is outside the supported 64-bit range"),
+            Self::FloatOutOfRange => formatter.write_str("JSON number is outside the finite f64 range"),
             Self::TrailingCharacters => formatter.write_str("trailing characters"),
             Self::NestingOverflow => formatter.write_str("JSON nesting overflow"),
         }

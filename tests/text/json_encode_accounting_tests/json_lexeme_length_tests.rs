@@ -18,10 +18,10 @@ use crate::text::json_encode_test_support::encode;
 fn test_scalar_lexeme_limits_match_json_output() {
     let mut integers = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder()
-            .max_number_bytes(40)
+            .max_number_bytes(20)
             .build(),
     );
-    assert!(encode(&i128::MIN, &mut integers).is_ok());
+    assert!(encode(&u64::MAX, &mut integers).is_ok());
 
     let mut floats = JsonEncodeSession::owned(
         JsonEncodeLimits::<JsonResource, usize>::builder()

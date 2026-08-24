@@ -27,7 +27,6 @@ use serde::Serializer;
 use serde::ser::Error as _;
 use serde::ser::SerializeMap;
 use serde::ser::SerializeSeq;
-use serde_json::Number;
 use serde_json::json;
 use serde_json::value::RawValue;
 
@@ -36,8 +35,37 @@ use crate::text::json_encode_test_support::encode;
 use crate::text::json_encode_test_support::write_buffered;
 use crate::text::json_encode_test_support::write_incremental;
 
-/// Arbitrary-precision number text used by online accounting tests.
-const LARGE_NUMBER_TEXT: &str = "123456789012345678901234567890";
+/// Largest supported unsigned integer text used by online accounting tests.
+const LARGE_NUMBER_TEXT: &str = "18446744073709551615";
+
+/// Verifies the encoder accepts the complete signed and unsigned 64-bit
+/// integer range but rejects wider Serde integers.
+#[test]
+fn test_json_text_encoder_enforces_64_bit_integer_range() {
+    let mut encoder = JsonEncoder::unlimited();
+    assert_eq!(
+        encoder.to_vec(&i64::MIN).expect("i64 minimum must encode"),
+        i64::MIN.to_string().as_bytes(),
+    );
+    assert_eq!(
+        encoder.to_vec(&u64::MAX).expect("u64 maximum must encode"),
+        u64::MAX.to_string().as_bytes(),
+    );
+    assert_eq!(
+        encoder
+            .to_vec(&(u64::MAX as u128))
+            .expect("a u128 value inside u64 range must encode"),
+        u64::MAX.to_string().as_bytes(),
+    );
+    assert_eq!(
+        encoder
+            .to_vec(&(i64::MIN as i128))
+            .expect("an i128 value inside i64 range must encode"),
+        i64::MIN.to_string().as_bytes(),
+    );
+    assert!(encoder.to_vec(&i128::MAX).is_err());
+    assert!(encoder.to_vec(&u128::MAX).is_err());
+}
 
 /// Value that emits a prefix before returning a custom Serde error.
 struct FailsAfterPrefix;
@@ -670,12 +698,10 @@ fn test_encode_depth_limit_checks_complete_source_depth() {
     assert!(serialized.get() < SOURCE_DEPTH);
 }
 
-/// Verifies arbitrary-precision number rejection occurs before a later value.
+/// Verifies number-byte rejection occurs before a later value.
 #[test]
 fn test_encode_number_limit_stops_before_source_tail() {
-    let number = LARGE_NUMBER_TEXT
-        .parse::<Number>()
-        .expect("the number fixture must parse");
+    let number = u64::MAX;
     let serialized_tail = Cell::new(0);
     let value = SequenceThenTail {
         first: &number,

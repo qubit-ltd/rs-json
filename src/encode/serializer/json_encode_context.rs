@@ -130,10 +130,6 @@ where
                     bytes: text.len(),
                 }),
                 DisplayBudgetKind::Key => context.admit(JsonMeasurement::Key { bytes: text.len() }),
-                DisplayBudgetKind::Number => context.admit(JsonMeasurement::Number {
-                    depth,
-                    bytes: text.len(),
-                }),
                 DisplayBudgetKind::RawOutput => Ok(()),
             }?;
         }

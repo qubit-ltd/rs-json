@@ -10,9 +10,6 @@
 /// Budget semantics for a serde_json private string payload.
 #[derive(Clone, Copy)]
 pub(in crate::encode::serializer) enum PrivateTextKind {
-    /// Arbitrary-precision number text.
-    Number { depth: usize },
-
     /// Raw JSON fragment rooted at the specified final depth.
     RawValue { depth: usize },
 }

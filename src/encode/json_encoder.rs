@@ -30,6 +30,12 @@ use super::serializer::json_encode_serializer::JsonEncodeSerializer;
 
 /// Encodes strict JSON text while owning cumulative accounting state.
 ///
+/// Signed and unsigned 64-bit integers are supported in full. Serde `i128`
+/// values are accepted only when they fit `i64`, or are non-negative and fit
+/// `u64`; `u128` values must fit `u64`. Wider integers return a serialization
+/// error instead of being truncated or converted to strings. Floating-point
+/// values must be finite.
+///
 /// # Type Parameters
 ///
 /// * `R` - Resource identity tracked by the encode session.

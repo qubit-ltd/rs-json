@@ -15,6 +15,7 @@ use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonMeasurement;
 use serde::Serialize;
 use serde::Serializer;
+use serde::ser::Error;
 
 use super::super::display_budget_kind::DisplayBudgetKind;
 use super::super::json_encode_context::JsonEncodeContext;
@@ -86,12 +87,33 @@ where
     serialize_key_number!(serialize_i16, signed i16);
     serialize_key_number!(serialize_i32, signed i32);
     serialize_key_number!(serialize_i64, signed i64);
-    serialize_key_number!(serialize_i128, signed i128);
     serialize_key_number!(serialize_u8, unsigned u8);
     serialize_key_number!(serialize_u16, unsigned u16);
     serialize_key_number!(serialize_u32, unsigned u32);
     serialize_key_number!(serialize_u64, unsigned u64);
-    serialize_key_number!(serialize_u128, unsigned u128);
+
+    /// Charges an `i128` key representable as `i64` or `u64`.
+    fn serialize_i128(self, value: i128) -> Result<Self::Ok, Self::Error> {
+        let bytes = if let Ok(value) = i64::try_from(value) {
+            JsonLexemeLength::signed_integer(value.into())
+        } else if let Ok(value) = u64::try_from(value) {
+            JsonLexemeLength::unsigned_integer(value.into())
+        } else {
+            return Err(Self::Error::custom(
+                "JSON integer is outside the supported 64-bit range",
+            ));
+        };
+        self.check(bytes)?;
+        self.inner.serialize_i128(value)
+    }
+
+    /// Charges a `u128` key representable as `u64`.
+    fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
+        let value64 = u64::try_from(value)
+            .map_err(|_| Self::Error::custom("JSON integer is outside the supported 64-bit range"))?;
+        self.check(JsonLexemeLength::unsigned_integer(value64.into()))?;
+        self.inner.serialize_u128(value)
+    }
 
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
         if value.is_finite() {

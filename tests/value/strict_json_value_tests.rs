@@ -43,3 +43,13 @@ fn test_strict_json_value_seed_rejects_duplicate_keys() {
 
     assert!(error.to_string().contains("duplicate JSON object key 'key'"));
 }
+
+/// Verifies serde_json's former private number marker has no special meaning.
+#[test]
+fn test_strict_json_value_preserves_private_number_marker_object() {
+    const MARKER: &str = concat!("$", "serde_json", "::private::Number");
+    let input = format!(r#"{{"{MARKER}":"123"}}"#);
+    let value: StrictJsonValue = from_str(&input).expect("the marker-shaped object must remain valid JSON");
+
+    assert_eq!(value.into_inner(), json!({MARKER: "123"}),);
+}

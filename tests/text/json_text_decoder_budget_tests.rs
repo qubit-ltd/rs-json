@@ -240,9 +240,9 @@ fn budget_rejection_keeps_input_and_rolls_back_value() {
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 }
 
-/// Verifies seed-first decoding uses the same lexical admission path.
+/// Verifies seed-first decoding rejects integers outside the public range.
 #[test]
-fn decoder_seed_admits_arbitrary_precision_numbers() {
+fn decoder_seed_rejects_integer_outside_64_bit_range() {
     let input = b"123456789012345678901234567890";
     let session = JsonDecodeSession::owned(
         JsonDecodeLimits::<JsonResource, usize>::builder()
@@ -255,9 +255,10 @@ fn decoder_seed_admits_arbitrary_precision_numbers() {
     );
     let mut decoder = JsonDecoder::new(session);
 
-    decoder
+    let error = decoder
         .decode_seed_utf8(IgnoreSeed, input)
-        .expect("the exact arbitrary-precision lexical number limit must fit");
+        .expect_err("an integer above u64::MAX must be rejected");
+    assert!(matches!(error, JsonDecodeError::Syntax(_)));
 }
 
 /// Verifies lexical limits reject input before a seed is invoked.
