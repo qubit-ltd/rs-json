@@ -291,6 +291,17 @@ fn encode(criterion: &mut Criterion) {
             });
         });
         group.bench_with_input(
+            BenchmarkId::new("encode/incremental-serde-json", size),
+            &fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    let _: () =
+                        serde_json::to_writer(std::io::sink(), black_box(fixture)).expect("fixture must encode");
+                    black_box(())
+                });
+            },
+        );
+        group.bench_with_input(
             BenchmarkId::new("encode/incremental-writer", size),
             &fixture,
             |bencher, fixture| {
@@ -318,6 +329,14 @@ fn encode(criterion: &mut Criterion) {
             .len();
         group.throughput(Throughput::Bytes(numeric_size as u64));
         group.bench_with_input(
+            BenchmarkId::new("encode/numeric-serde-json", numeric_size),
+            &numeric_fixture,
+            |bencher, fixture| {
+                bencher
+                    .iter(|| black_box(serde_json::to_vec(black_box(fixture)).expect("numeric fixture must encode")));
+            },
+        );
+        group.bench_with_input(
             BenchmarkId::new("encode/numeric", numeric_size),
             &numeric_fixture,
             |bencher, fixture| {
@@ -331,6 +350,13 @@ fn encode(criterion: &mut Criterion) {
             },
         );
         group.throughput(Throughput::Bytes(document.len() as u64));
+        group.bench_with_input(
+            BenchmarkId::new("encode/raw-value-serde-json", size),
+            &raw_value,
+            |bencher, raw| {
+                bencher.iter(|| black_box(serde_json::to_vec(black_box(raw)).expect("raw fixture must encode")));
+            },
+        );
         group.bench_with_input(
             BenchmarkId::new("encode/raw-value", size),
             &raw_value,

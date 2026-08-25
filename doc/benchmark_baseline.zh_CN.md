@@ -323,3 +323,44 @@ cargo bench --bench budgeted_serde_json -- encode/incremental-output-only --quic
 记账本身有可测成本，同时缓冲 `Vec` 路径还含有独立的分配/复制成本。结果不足以支持改变
 记账语义或删除每次写入前的边界检查，所以本次只保留可重复的比较基准，不引入未经验证的
 热路径优化。
+
+## 2026-08-26 编码剩余开销分离实验
+
+本次先在提交 `0d6db73a2c29838769df44f762f3b6ec913ec91f` 上固定 CPU 3 运行修改前
+quick 矩阵，随后增加三个与现有 fixture 完全同形态的直接 `serde_json` 对照：
+`incremental-serde-json`、`numeric-serde-json` 和 `raw-value-serde-json`。这些对照分别用于
+分离普通结构 serializer 包装、数字事件包装和 `RawValue` 整段词法验证成本。工具链仍为
+rustc 1.94.0、LLVM 21.1.8，CPU 为 Intel(R) Core(TM) i5-9600K。
+
+Linux `perf` 因主机 `kernel.perf_event_paranoid=4` 拒绝非特权采样，本机也没有可用的
+flamegraph 或 valgrind 工具；实验没有修改系统权限，改用同一 Criterion 进程内的形态对照。
+最终采样命令使用 1 秒预热、2 秒测量和 50 个样本：
+
+```bash
+taskset -c 3 cargo bench --bench budgeted_serde_json -- \
+  '(65533|1048543|54601|873811)' \
+  --warm-up-time 1 --measurement-time 2 --sample-size 50 --noplot
+```
+
+表中倍率以同一行的直接 `serde_json` 对照为 1.00×；`RawValue` 的直接路径信任已构造值，
+而 `JsonEncoder` 按公开契约重新执行词法验证，因此该倍率只用于量化契约成本，不能作为删除
+验证的依据。
+
+| 路径 | 约 64 KiB：直接 / `JsonEncoder` / 倍率 | 约 1 MiB：直接 / `JsonEncoder` / 倍率 |
+| --- | ---: | ---: |
+| 普通缓冲结构 | 67.018 / 178.70 µs / 2.67× | 1.0743 / 2.8220 ms / 2.63× |
+| 普通增量结构 | 22.768 / 103.30 µs / 4.54× | 398.64 µs / 1.6665 ms / 4.18× |
+| 数字数组 | 63.969 / 82.219 µs / 1.29× | 1.0306 / 1.3013 ms / 1.26× |
+| `RawValue` | 1.2525 / 140.00 µs / 111.78× | 31.164 µs / 2.2557 ms / 72.38× |
+
+普通结构路径的主要剩余差异来自每个嵌套值必须再次进入严格 serializer/compound wrapper；
+数字路径只有约 26%—29% 的同类差异；`RawValue` 则由必须遍历完整输入的词法验证主导。
+在不复制一套专用 Serde serializer/compound 状态机、也不取消 `RawValue` 验证的前提下，
+本轮没有找到能够用小范围实现消除且有望达到 10% 主端点改善门槛的候选。因此不保留性能
+候选代码，只保留三个对照基准，供以后评估 serializer 架构方案。
+
+实验同时补上严格编码契约的缺失回归：原实现把非有限 `f32`/`f64` 委托给
+`serde_json` 并输出 `null`，与 `JsonEncoder` 和数字契约文档不符。现在 serializer 在任何
+预算模式下都先拒绝非有限浮点数。修改前测试稳定失败，修正后完整 JSON text encode 测试
+通过；该分支在修改前后 quick 主矩阵中没有产生可复现的 5% 以上回退。它属于契约修复，
+不作为性能候选或 10% 改善声明。
