@@ -97,7 +97,8 @@ visitor。`JsonTreeMutator` 先准入原始 tree，再执行原地 visitor 回�
   需要累计记账时才继续复用该 session。
 - `Syntax`：检查原始字节以及错误中的 reason、offset、line、column；规范化不会凭空补齐 JSON
   语法。
-- `Deserialize`：说明 JSON 已准入，但与目标类型不匹配；分别修正 payload 或目标 schema。
+- `Deserialize`：说明 JSON 已准入，但与目标类型不匹配；分别修正 payload 或目标 schema。这也包括
+  `serde_json` 的具象化递归保护：词法校验使用显式栈，可能准入一个类型化反序列化不会具象化的文档。
 - tree 修改后出现部分结果：`JsonTreeMutator` 是增量式的，visitor 或输出预算失败不会回滚已有
   修改。
 
@@ -106,6 +107,8 @@ visitor。`JsonTreeMutator` 先准入原始 tree，再执行原地 visitor 回�
 所有不可信边界都配置有限限制，至少覆盖输入/输出字节、深度、节点、集合大小、key/string
 字节和 number 字节。不要仅为省去配置而使用无限 session。将应用校验与资源准入分离；超过
 JavaScript 安全整数范围的 wire number 是否转为 `BigInt`，由浏览器协议处理。
+同时保留 Serde 的深度保护。关闭它只会把深度不可信输入转移到 Rust 调用栈，并不能保证任意目标
+反序列化器安全。
 
 ## 延伸阅读
 

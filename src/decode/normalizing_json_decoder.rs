@@ -31,6 +31,11 @@ use crate::lexical::JsonLexicalScanner;
 ///
 /// `NormalizingJsonDecoder` applies a small set of predictable normalization
 /// rules before delegating actual parsing and deserialization to `serde_json`.
+/// Its lexical scanner enforces the configured JSON depth without recursive
+/// traversal, but final typed materialization remains subject to `serde_json`'s
+/// recursion guard. A document can therefore pass lexical admission and still
+/// return a deserialize-stage error; callers should keep that guard enabled
+/// rather than opting into unbounded recursive deserialization.
 ///
 /// # Examples
 ///
