@@ -68,6 +68,17 @@ fn test_json_text_encoder_enforces_64_bit_integer_range() {
     assert!(encoder.to_vec(&u128::MAX).is_err());
 }
 
+/// Verifies strict encoding rejects every non-finite floating-point value
+/// instead of silently converting it to JSON null.
+#[test]
+fn test_json_text_encoder_rejects_non_finite_floats() {
+    let mut encoder = JsonEncoder::unlimited();
+
+    assert!(encoder.to_vec(&f32::NAN).is_err());
+    assert!(encoder.to_vec(&f32::INFINITY).is_err());
+    assert!(encoder.to_vec(&f64::NEG_INFINITY).is_err());
+}
+
 /// Value that emits a prefix before returning a custom Serde error.
 struct FailsAfterPrefix;
 

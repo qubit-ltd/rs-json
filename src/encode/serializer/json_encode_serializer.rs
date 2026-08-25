@@ -239,26 +239,24 @@ where
         self.inner.serialize_u128(value)
     }
 
-    /// Charges and delegates one floating-point number or JSON null.
+    /// Charges and delegates one finite floating-point number.
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
+        if !value.is_finite() {
+            return Err(Self::Error::custom("JSON floating-point value must be finite"));
+        }
         if self.has_value_limits {
-            if value.is_finite() {
-                self.number(JsonLexemeLength::finite_f32(value))?;
-            } else {
-                self.admit(JsonMeasurement::Null { depth: self.depth })?;
-            }
+            self.number(JsonLexemeLength::finite_f32(value))?;
         }
         self.inner.serialize_f32(value)
     }
 
-    /// Charges and delegates one floating-point number or JSON null.
+    /// Charges and delegates one finite floating-point number.
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
+        if !value.is_finite() {
+            return Err(Self::Error::custom("JSON floating-point value must be finite"));
+        }
         if self.has_value_limits {
-            if value.is_finite() {
-                self.number(JsonLexemeLength::finite_f64(value))?;
-            } else {
-                self.admit(JsonMeasurement::Null { depth: self.depth })?;
-            }
+            self.number(JsonLexemeLength::finite_f64(value))?;
         }
         self.inner.serialize_f64(value)
     }
