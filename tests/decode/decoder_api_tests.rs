@@ -13,6 +13,7 @@ use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
+use serde::de::IgnoredAny;
 
 /// Creates a reusable session with no configured resource limits.
 /// Verifies that strict string decoding can borrow from the input.
@@ -52,6 +53,19 @@ fn test_json_decoder_validation_entry_points() {
     decoder
         .validate_utf8(b"true")
         .expect("strict UTF-8 validation should succeed");
+}
+
+/// Verifies both decoder families reject input containing more than one JSON
+/// document.
+#[test]
+fn test_decoders_share_complete_document_admission() {
+    let input = "null true";
+    let mut strict = JsonDecoder::unlimited();
+    let mut normalizing =
+        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::strict(), JsonDecodeLimits::default());
+
+    assert!(strict.decode_str::<IgnoredAny>(input).is_err());
+    assert!(normalizing.decode_str::<IgnoredAny>(input).is_err());
 }
 
 /// Verifies the owned constructor builds a cumulative session from explicit

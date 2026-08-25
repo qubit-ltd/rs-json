@@ -13,12 +13,12 @@ use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use serde::Deserialize;
 use serde::de::DeserializeSeed;
-use serde_json::Deserializer as JsonDeserializer;
 
 use super::JsonDecodeError;
 use super::internal::TypedSeed;
+use super::internal::admit_json_document;
+use super::internal::deserialize_json_document;
 use crate::internal::has_json_value_limits;
-use crate::lexical::JsonLexicalScanner;
 
 /// Strictly decodes complete JSON documents while owning cumulative accounting
 /// state.
@@ -237,16 +237,8 @@ where
     attempt
         .try_consume_input_bytes(input.len())
         .map_err(JsonDecodeError::Budget)?;
-    JsonLexicalScanner::new(attempt.value_transaction_mut(), has_value_limits)
-        .scan(input)
-        .map_err(JsonDecodeError::from_lexical)?;
-    let mut deserializer = JsonDeserializer::from_slice(input);
-    let value = seed
-        .deserialize(&mut deserializer)
-        .map_err(|error| JsonDecodeError::from_serde(&error))?;
-    deserializer
-        .end()
-        .map_err(|error| JsonDecodeError::from_serde(&error))?;
+    admit_json_document(&mut attempt, input, has_value_limits).map_err(JsonDecodeError::from_lexical)?;
+    let value = deserialize_json_document(seed, input).map_err(|error| JsonDecodeError::from_serde(&error))?;
     attempt.commit();
     Ok(value)
 }
@@ -263,9 +255,7 @@ where
     attempt
         .try_consume_input_bytes(input.len())
         .map_err(JsonDecodeError::Budget)?;
-    JsonLexicalScanner::new(attempt.value_transaction_mut(), has_value_limits)
-        .scan(input)
-        .map_err(JsonDecodeError::from_lexical)?;
+    admit_json_document(&mut attempt, input, has_value_limits).map_err(JsonDecodeError::from_lexical)?;
     attempt.commit();
     Ok(())
 }
