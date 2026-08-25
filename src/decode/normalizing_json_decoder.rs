@@ -22,10 +22,12 @@ use super::DiagnosticPolicy;
 use super::JsonRootKind;
 use super::NormalizingJsonDecodeError;
 use super::NormalizingJsonDecodePolicy;
+use super::internal::TypedSeed;
+use super::internal::admit_json_document;
+use super::internal::deserialize_json_document;
 use super::internal::json_normalizer::JsonNormalizer;
 use crate::internal::has_json_value_limits;
 use crate::lexical::JsonLexicalError;
-use crate::lexical::JsonLexicalScanner;
 
 /// A configurable JSON decoder for non-fully-trusted text inputs.
 ///
@@ -319,7 +321,8 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
             privacy_policy,
             has_value_limits,
         )?;
-        let value = Self::parse_value(normalized.as_ref(), raw_input_bytes, normalized.len(), privacy_policy)?;
+        let value =
+            Self::deserialize_normalized(normalized.as_ref(), raw_input_bytes, normalized.len(), privacy_policy)?;
         attempt.commit();
         Ok(value)
     }
@@ -390,8 +393,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         privacy_policy: DiagnosticPolicy,
         has_value_limits: bool,
     ) -> Result<(), NormalizingJsonDecodeError> {
-        JsonLexicalScanner::new(attempt.value_transaction_mut(), has_value_limits)
-            .scan(normalized.as_bytes())
+        admit_json_document(attempt, normalized.as_bytes(), has_value_limits)
             .map_err(|error| Self::map_admission_error(error, normalized, raw_input_bytes, privacy_policy))
     }
 
@@ -474,34 +476,6 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
         }
     }
 
-    /// Materializes normalized JSON text into a dynamic value.
-    ///
-    /// # Parameters
-    ///
-    /// * `normalized` - Normalized JSON text.
-    /// * `raw_input_bytes` - Input length before normalization.
-    /// * `normalized_input_bytes` - Normalized text length.
-    /// * `privacy_policy` - Policy applied to parse diagnostics.
-    ///
-    /// # Returns
-    ///
-    /// The parsed dynamic JSON value.
-    ///
-    /// # Errors
-    ///
-    /// Returns a deserialization error when Serde cannot materialize the
-    /// lexically admitted document as a dynamic value.
-    #[inline]
-    fn parse_value(
-        normalized: &str,
-        raw_input_bytes: usize,
-        normalized_input_bytes: usize,
-        privacy_policy: DiagnosticPolicy,
-    ) -> Result<Value, NormalizingJsonDecodeError> {
-        from_str(normalized)
-            .map_err(|error| Self::map_decode_error(error, raw_input_bytes, normalized_input_bytes, privacy_policy))
-    }
-
     /// Deserializes normalized JSON text into `T`.
     ///
     /// # Parameters
@@ -536,7 +510,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     where
         T: DeserializeOwned,
     {
-        from_str(normalized)
+        deserialize_json_document(TypedSeed::new(), normalized.as_bytes())
             .map_err(|error| Self::map_decode_error(error, raw_input_bytes, normalized_input_bytes, privacy_policy))
     }
 
