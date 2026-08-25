@@ -40,12 +40,15 @@ use crate::lexical::JsonLexicalScanner;
 /// # Examples
 ///
 /// ```
-/// use qubit_budget::json::JsonDecodeLimits;
+/// use qubit_budget::json::{JsonDecodeLimits, JsonResource};
 /// use qubit_json::decode::{NormalizingJsonDecodePolicy, NormalizingJsonDecoder};
 ///
 /// let mut decoder = NormalizingJsonDecoder::owned(
 ///     NormalizingJsonDecodePolicy::lenient(),
-///     JsonDecodeLimits::default(),
+///     JsonDecodeLimits::<JsonResource, usize>::builder()
+///         .max_input_bytes(1024)
+///         .max_nodes(64)
+///         .build(),
 /// );
 /// let value = decoder.decode_value(r#"```json
 /// {"ok":true}
@@ -87,6 +90,7 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     ///
     /// The supplied session is the decoder's only accounting state and
     /// resource-limit source.
+    #[inline]
     #[must_use]
     pub fn from_session(policy: NormalizingJsonDecodePolicy, session: JsonDecodeSession<'budget>) -> Self {
         Self {
@@ -96,18 +100,21 @@ impl<'budget> NormalizingJsonDecoder<'budget> {
     }
 
     /// Returns the cumulative session for read-only inspection.
+    #[inline(always)]
     #[must_use]
     pub const fn session(&self) -> &JsonDecodeSession<'budget> {
         &self.session
     }
 
     /// Returns mutable access to the cumulative session.
+    #[inline(always)]
     #[must_use]
     pub const fn session_mut(&mut self) -> &mut JsonDecodeSession<'budget> {
         &mut self.session
     }
 
     /// Returns the cumulative session and consumes the decoder.
+    #[inline(always)]
     #[must_use]
     pub fn into_session(self) -> JsonDecodeSession<'budget> {
         self.session
