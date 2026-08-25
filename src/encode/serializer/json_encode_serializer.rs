@@ -61,6 +61,7 @@ where
     /// # Returns
     ///
     /// A decorator positioned at the root JSON value.
+    #[inline]
     pub(in crate::encode) fn new(
         inner: S,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
@@ -160,6 +161,7 @@ where
 
 macro_rules! serialize_integer {
     ($name:ident, signed $type:ty) => {
+        #[doc = concat!("Charges and delegates one signed `", stringify!($type), "` JSON integer.")]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
             if self.has_value_limits {
                 self.number(JsonLexemeLength::signed_integer(value.into()))?;
@@ -168,6 +170,7 @@ macro_rules! serialize_integer {
         }
     };
     ($name:ident, unsigned $type:ty) => {
+        #[doc = concat!("Charges and delegates one unsigned `", stringify!($type), "` JSON integer.")]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
             if self.has_value_limits {
                 self.number(JsonLexemeLength::unsigned_integer(value.into()))?;
