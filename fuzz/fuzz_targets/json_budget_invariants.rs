@@ -19,6 +19,7 @@ use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::value::JsonValueSeed;
+use serde_json::Value;
 
 mod internal;
 
@@ -52,7 +53,8 @@ fuzz_target!(|data: &[u8]| {
     let mut value_budget = JsonValueBudget::new(value_limits);
     {
         let session = JsonDecodeSession::borrowing_input(&mut input_budget, &mut value_budget);
-        let decoder = JsonDecoder::new(session);
+        let mut decoder = JsonDecoder::new(session);
+        let _ = decoder.decode_utf8::<Value>(input);
         let session = decoder.into_session();
         assert_eq!(session.max_input_bytes(), Some(bytes));
         assert!(session.value_budget().used_nodes() <= Some(nodes));
@@ -62,7 +64,13 @@ fuzz_target!(|data: &[u8]| {
     assert_eq!(input_budget.used() + input_budget.remaining(), bytes);
     assert!(value_budget.used_nodes() <= Some(nodes));
 
-    let mut transaction = value_budget.transaction();
-    let mut deserializer = serde_json::Deserializer::from_slice(input);
-    let _ = serde::de::DeserializeSeed::deserialize(JsonValueSeed::new(&mut transaction), &mut deserializer);
+    {
+        let mut transaction = value_budget.transaction();
+        let mut deserializer = serde_json::Deserializer::from_slice(input);
+        let decoded = serde::de::DeserializeSeed::deserialize(JsonValueSeed::new(&mut transaction), &mut deserializer);
+        if decoded.is_ok() && deserializer.end().is_ok() {
+            transaction.commit();
+        }
+    }
+    assert!(value_budget.used_nodes() <= Some(nodes));
 });
