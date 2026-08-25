@@ -44,8 +44,9 @@ JavaScript 安全整数但仍在 64 位范围内的标识符允许作为 number 
 用户可用 `JsonValueSeed` 在 `JsonValueTransaction` 中构造 `serde_json::Value`。用户可用
 `JsonTreeReader` 或 `JsonTreeMutator` 对物化 value 进行无 Rust 递归的遍历；reader 可在调用方已有
 transaction 中仅记账而不调用 visitor、不提交 transaction，`JsonTreeBudgetTracker` 复用该路径为
-完整 tree 反复记账。mutator 可以跳过被预算拒绝的子树，但不承诺
-回滚已提交的业务变更。
+完整 tree 反复记账。mutator 在调用 visitor 前先对完整输入 tree 执行预算准入；输入 tree
+任一部分超限时，本次操作直接失败且 visitor 不执行。visitor 成功返回后，实现再对完整输出
+tree 独立计量和准入，但不承诺回滚已提交的业务变更。
 
 ## 错误契约
 
