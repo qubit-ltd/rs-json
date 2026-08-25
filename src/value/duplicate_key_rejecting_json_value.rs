@@ -12,10 +12,10 @@ use serde::Deserializer;
 use serde::de::DeserializeSeed;
 use serde_json::Value;
 
+mod duplicate_key_rejecting_json_value_seed;
 mod internal;
-mod strict_json_value_seed;
 
-pub use strict_json_value_seed::StrictJsonValueSeed;
+pub use duplicate_key_rejecting_json_value_seed::DuplicateKeyRejectingJsonValueSeed;
 
 /// A JSON value whose deserialization rejects duplicate object keys.
 ///
@@ -29,19 +29,19 @@ pub use strict_json_value_seed::StrictJsonValueSeed;
 /// # Examples
 ///
 /// ```
-/// use qubit_json::value::StrictJsonValue;
+/// use qubit_json::value::DuplicateKeyRejectingJsonValue;
 ///
-/// let value: StrictJsonValue = serde_json::from_str(r#"{"ok":true}"#)?;
+/// let value: DuplicateKeyRejectingJsonValue = serde_json::from_str(r#"{"ok":true}"#)?;
 /// assert_eq!(value.into_inner()["ok"], true);
 /// # Ok::<(), serde_json::Error>(())
 /// ```
 #[derive(Debug, PartialEq)]
-pub struct StrictJsonValue(
+pub struct DuplicateKeyRejectingJsonValue(
     /// Fully materialized value that passed duplicate-key validation.
     Value,
 );
 
-impl StrictJsonValue {
+impl DuplicateKeyRejectingJsonValue {
     /// Returns the validated JSON value.
     ///
     /// # Returns
@@ -54,12 +54,12 @@ impl StrictJsonValue {
     }
 }
 
-impl<'de> Deserialize<'de> for StrictJsonValue {
+impl<'de> Deserialize<'de> for DuplicateKeyRejectingJsonValue {
     /// Deserializes JSON recursively while rejecting duplicate object keys.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        StrictJsonValueSeed::new().deserialize(deserializer)
+        DuplicateKeyRejectingJsonValueSeed::new().deserialize(deserializer)
     }
 }
