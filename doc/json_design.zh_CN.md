@@ -90,19 +90,21 @@ key 进行准入。
 `JsonTreeReader::account` 复用 reader 的同一非递归遍历，在调用方已有 transaction 中暂存整棵树
 的消耗，不调用 visitor，也不创建或提交 transaction；失败直接返回 `MeasuredBudgetError`。
 `JsonTreeBudgetTracker` 在完整成功后提交该路径，为整棵 materialized tree 提供自有、可 reset
-的 budget。`JsonTreeMutator`
-在预算拒绝时由 visitor 返回 `JsonTreeBudgetRejection` 选择终止或跳过子树。可变处理是增量的：
-已接受的预算和已执行的变更不回滚。`JsonTreeProcessError` 区分基础设施 budget 失败和业务
-visitor 失败。
+的 budget。`JsonTreeMutator` 先准入原始 tree，再执行 visitor 驱动的原地修改，最后准入完整的
+修改后 tree。它返回 `JsonTreeMutateError::InputBudget`、`::Visitor` 或 `::OutputBudget`；visitor
+和输出失败会保留已执行的修改。`JsonTreeControl::SkipSubtree` 只影响后代回调，最终输出记账
+仍覆盖所有结果后代。`JsonTreeProcessError` 区分 reader 基础设施 budget 失败和业务 visitor
+失败。
 
 ## 公开错误模型
 
-公开错误恰好按领域划分为五种：
+公开错误按领域划分为六种：
 
 1. `decode::NormalizingJsonDecodeError`
 2. `decode::JsonDecodeError`
 3. `encode::JsonEncodeError`
 4. `decode::JsonSyntaxError`
 5. `value::traverse::JsonTreeProcessError`
+6. `value::traverse::JsonTreeMutateError`
 
 每种错误只暴露其领域能稳定提供的上下文；没有根级错误聚合或兼容别名。
