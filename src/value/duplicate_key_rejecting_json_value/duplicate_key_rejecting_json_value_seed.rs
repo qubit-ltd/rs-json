@@ -10,10 +10,10 @@
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
 
-use super::StrictJsonValue;
-use super::internal::StrictJsonVisitor;
+use super::DuplicateKeyRejectingJsonValue;
+use super::internal::DuplicateKeyRejectingJsonVisitor;
 
-/// Serde seed that constructs a [`StrictJsonValue`].
+/// Serde seed that constructs a [`DuplicateKeyRejectingJsonValue`].
 ///
 /// Use this seed when the caller owns a deserializer and needs duplicate-key
 /// rejection without requiring an intermediate typed wrapper.
@@ -21,23 +21,23 @@ use super::internal::StrictJsonVisitor;
 /// # Examples
 ///
 /// ```
-/// use qubit_json::value::StrictJsonValueSeed;
+/// use qubit_json::value::DuplicateKeyRejectingJsonValueSeed;
 /// use serde::de::DeserializeSeed;
 ///
 /// let mut deserializer = serde_json::Deserializer::from_str(r#"{"ok":true}"#);
-/// let value = StrictJsonValueSeed::new().deserialize(&mut deserializer)?;
+/// let value = DuplicateKeyRejectingJsonValueSeed::new().deserialize(&mut deserializer)?;
 /// assert_eq!(value.into_inner()["ok"], true);
 /// # Ok::<(), serde_json::Error>(())
 /// ```
 #[derive(Debug, Default, Clone, Copy)]
-pub struct StrictJsonValueSeed;
+pub struct DuplicateKeyRejectingJsonValueSeed;
 
-impl StrictJsonValueSeed {
+impl DuplicateKeyRejectingJsonValueSeed {
     /// Creates a seed that rejects duplicate keys in every decoded object.
     ///
     /// # Returns
     ///
-    /// A reusable stateless strict JSON value seed.
+    /// A reusable stateless duplicate-key-rejecting JSON value seed.
     #[must_use]
     #[inline(always)]
     pub const fn new() -> Self {
@@ -45,14 +45,14 @@ impl StrictJsonValueSeed {
     }
 }
 
-impl<'de> DeserializeSeed<'de> for StrictJsonValueSeed {
-    type Value = StrictJsonValue;
+impl<'de> DeserializeSeed<'de> for DuplicateKeyRejectingJsonValueSeed {
+    type Value = DuplicateKeyRejectingJsonValue;
 
     /// Deserializes one JSON value with recursive duplicate-key rejection.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_any(StrictJsonVisitor)
+        deserializer.deserialize_any(DuplicateKeyRejectingJsonVisitor)
     }
 }

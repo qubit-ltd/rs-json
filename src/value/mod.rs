@@ -7,12 +7,12 @@
 // =============================================================================
 //! Builds [`serde_json::Value`] values while charging a JSON value budget.
 
+mod duplicate_key_rejecting_json_value;
 mod json_value_seed;
-mod strict_json_value;
 
+pub use duplicate_key_rejecting_json_value::DuplicateKeyRejectingJsonValue;
+pub use duplicate_key_rejecting_json_value::DuplicateKeyRejectingJsonValueSeed;
 pub use json_value_seed::JsonValueSeed;
-pub use strict_json_value::StrictJsonValue;
-pub use strict_json_value::StrictJsonValueSeed;
 
 pub mod traverse;
 

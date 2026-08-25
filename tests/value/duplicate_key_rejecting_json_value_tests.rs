@@ -3,10 +3,10 @@
 //
 //    SPDX-License-Identifier: Apache-2.0
 // =============================================================================
-//! Verifies duplicate-key rejection through `StrictJsonValue`.
+//! Verifies duplicate-key rejection through `DuplicateKeyRejectingJsonValue`.
 
-use qubit_json::value::StrictJsonValue;
-use qubit_json::value::StrictJsonValueSeed;
+use qubit_json::value::DuplicateKeyRejectingJsonValue;
+use qubit_json::value::DuplicateKeyRejectingJsonValueSeed;
 use serde::de::DeserializeSeed;
 use serde_json::Deserializer;
 use serde_json::from_str;
@@ -14,8 +14,8 @@ use serde_json::json;
 
 /// Verifies strict values retain valid nested JSON documents.
 #[test]
-fn test_strict_json_value_decodes_unique_nested_keys() {
-    let value: StrictJsonValue =
+fn test_duplicate_key_rejecting_json_value_decodes_unique_nested_keys() {
+    let value: DuplicateKeyRejectingJsonValue =
         from_str(r#"{"outer":{"inner":1},"items":[true,null]}"#).expect("unique object keys must decode");
 
     assert_eq!(
@@ -26,8 +26,8 @@ fn test_strict_json_value_decodes_unique_nested_keys() {
 
 /// Verifies strict values reject repeated keys at every object depth.
 #[test]
-fn test_strict_json_value_rejects_nested_duplicate_keys() {
-    let error = from_str::<StrictJsonValue>(r#"{"outer":{"key":1,"key":2}}"#)
+fn test_duplicate_key_rejecting_json_value_rejects_nested_duplicate_keys() {
+    let error = from_str::<DuplicateKeyRejectingJsonValue>(r#"{"outer":{"key":1,"key":2}}"#)
         .expect_err("a repeated nested key must be rejected");
 
     assert!(error.to_string().contains("duplicate JSON object key 'key'"));
@@ -35,9 +35,9 @@ fn test_strict_json_value_rejects_nested_duplicate_keys() {
 
 /// Verifies the strict seed is reusable with a caller-owned deserializer.
 #[test]
-fn test_strict_json_value_seed_rejects_duplicate_keys() {
+fn test_duplicate_key_rejecting_json_value_seed_rejects_duplicate_keys() {
     let mut deserializer = Deserializer::from_str(r#"{"key":1,"key":2}"#);
-    let error = StrictJsonValueSeed::new()
+    let error = DuplicateKeyRejectingJsonValueSeed::new()
         .deserialize(&mut deserializer)
         .expect_err("the strict seed must reject duplicate keys");
 
@@ -46,10 +46,11 @@ fn test_strict_json_value_seed_rejects_duplicate_keys() {
 
 /// Verifies serde_json's former private number marker has no special meaning.
 #[test]
-fn test_strict_json_value_preserves_private_number_marker_object() {
+fn test_duplicate_key_rejecting_json_value_preserves_private_number_marker_object() {
     const MARKER: &str = concat!("$", "serde_json", "::private::Number");
     let input = format!(r#"{{"{MARKER}":"123"}}"#);
-    let value: StrictJsonValue = from_str(&input).expect("the marker-shaped object must remain valid JSON");
+    let value: DuplicateKeyRejectingJsonValue =
+        from_str(&input).expect("the marker-shaped object must remain valid JSON");
 
     assert_eq!(value.into_inner(), json!({MARKER: "123"}),);
 }

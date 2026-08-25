@@ -7,6 +7,6 @@
 // =============================================================================
 //! Private deserialization helpers for duplicate-key-free JSON values.
 
-mod strict_json_visitor;
+mod duplicate_key_rejecting_json_visitor;
 
-pub(super) use strict_json_visitor::StrictJsonVisitor;
+pub(super) use duplicate_key_rejecting_json_visitor::DuplicateKeyRejectingJsonVisitor;
