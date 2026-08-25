@@ -31,6 +31,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates an empty collector bound to the shared encode context.
+    #[inline]
     pub(super) fn new(context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>) -> Self {
         Self {
             text: String::new(),

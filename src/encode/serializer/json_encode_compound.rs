@@ -62,6 +62,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a wrapper for a regular JSON array or object compound.
+    #[inline]
     pub(super) const fn new(
         inner: C,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,

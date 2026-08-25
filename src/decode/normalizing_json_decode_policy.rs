@@ -115,26 +115,31 @@ impl NormalizingJsonDecodePolicy {
     }
 
     /// Updates whitespace trimming during builder composition.
+    #[inline(always)]
     pub(super) const fn set_trim_whitespace(&mut self, enabled: bool) {
         self.trim_whitespace = enabled;
     }
 
     /// Updates BOM stripping during builder composition.
+    #[inline(always)]
     pub(super) const fn set_strip_utf8_bom(&mut self, enabled: bool) {
         self.strip_utf8_bom = enabled;
     }
 
     /// Updates Markdown fence handling during builder composition.
+    #[inline(always)]
     pub(super) const fn set_markdown_fence_policy(&mut self, policy: MarkdownFencePolicy) {
         self.markdown_fence_policy = policy;
     }
 
     /// Updates control-character escaping during builder composition.
+    #[inline(always)]
     pub(super) const fn set_escape_control_chars_in_strings(&mut self, enabled: bool) {
         self.escape_control_chars_in_strings = enabled;
     }
 
     /// Updates diagnostic handling during builder composition.
+    #[inline(always)]
     pub(super) const fn set_diagnostic_policy(&mut self, policy: DiagnosticPolicy) {
         self.diagnostic_policy = policy;
     }

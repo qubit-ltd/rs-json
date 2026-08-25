@@ -117,18 +117,21 @@ where
     }
 
     /// Returns the cumulative session for read-only inspection.
+    #[inline(always)]
     #[must_use]
     pub const fn session(&self) -> &JsonEncodeSession<'budget, R, Q> {
         &self.session
     }
 
     /// Returns mutable access to the cumulative session.
+    #[inline(always)]
     #[must_use]
     pub const fn session_mut(&mut self) -> &mut JsonEncodeSession<'budget, R, Q> {
         &mut self.session
     }
 
     /// Returns the cumulative session and consumes the encoder.
+    #[inline(always)]
     #[must_use]
     pub fn into_session(self) -> JsonEncodeSession<'budget, R, Q> {
         self.session

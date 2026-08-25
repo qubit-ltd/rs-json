@@ -41,6 +41,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a nested value wrapper bound to a shared budget context.
+    #[inline(always)]
     pub(super) const fn new(
         value: &'a T,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,

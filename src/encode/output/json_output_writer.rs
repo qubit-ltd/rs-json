@@ -40,6 +40,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates an incremental writer over shared output accounting.
+    #[inline]
     pub(in crate::encode) fn new(writer: W, accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>) -> Self {
         Self {
             writer,
