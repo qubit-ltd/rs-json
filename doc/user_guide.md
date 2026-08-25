@@ -119,7 +119,10 @@ binary rounding should use a string or explicit domain representation. See the
 - A `Syntax` error: validate the original bytes and check the reported reason,
   offset, line, and column; normalization never invents missing JSON syntax.
 - A `Deserialize` error: the JSON was admitted but does not match the target
-  type; fix the payload or the target schema separately.
+  type; fix the payload or the target schema separately. This also includes a
+  `serde_json` materialization recursion-guard failure: lexical validation uses
+  an explicit stack and can admit a document that the typed deserializer will
+  not materialize.
 - An unexpected tree mutation after an error: `JsonTreeMutator` is incremental;
   visitor and output-budget failures do not roll back prior mutations.
 
@@ -130,6 +133,9 @@ depth, nodes, collection sizes, key/string bytes, and number bytes. Do not use
 an unlimited session merely to avoid choosing limits. Keep application
 validation separate from resource admission, and treat browser `BigInt`
 handling as a wire-format concern for integers above JavaScript's safe range.
+Keep Serde's depth guard enabled as well. Disabling it only moves deeply nested
+untrusted inputs onto the Rust call stack and does not make arbitrary target
+deserializers safe.
 
 ## Further reading
 

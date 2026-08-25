@@ -29,6 +29,15 @@ use crate::lexical::JsonLexicalScanner;
 /// range validation happens after the token's `NumberBytes` admission, so a
 /// tighter resource limit is reported first.
 ///
+/// Lexical admission uses this crate's explicit-stack scanner, so the
+/// configured JSON depth limit is enforced without recursively traversing
+/// untrusted input. Typed decoding then delegates materialization to
+/// `serde_json`; its own recursion guard can reject a lexically admitted
+/// document. Such a failure is reported as [`JsonDecodeError::Deserialize`],
+/// not as syntax or budget rejection. Do not enable Serde's unbounded-depth
+/// mode to bypass that guard: custom target deserializers can still consume the
+/// Rust call stack.
+///
 /// # Type Parameters
 ///
 /// * `R` - Resource identity tracked by the decode session.
@@ -172,7 +181,8 @@ where
     ///
     /// Success confirms JSON syntax, numeric range, and configured admission
     /// limits. It does not guarantee that every Serde target can materialize
-    /// the document; target-specific failures are reported by `decode_*` as
+    /// the document: `serde_json` applies an independent recursion guard, and
+    /// target-specific failures are reported by `decode_*` as
     /// [`JsonDecodeError::Deserialize`].
     #[inline(always)]
     pub fn validate_str(&mut self, input: &str) -> Result<(), JsonDecodeError<R, Q>>
@@ -187,7 +197,8 @@ where
     ///
     /// Success confirms JSON syntax, numeric range, and configured admission
     /// limits. It does not guarantee that every Serde target can materialize
-    /// the document; target-specific failures are reported by `decode_*` as
+    /// the document: `serde_json` applies an independent recursion guard, and
+    /// target-specific failures are reported by `decode_*` as
     /// [`JsonDecodeError::Deserialize`].
     pub fn validate_utf8(&mut self, input: &[u8]) -> Result<(), JsonDecodeError<R, Q>>
     where
