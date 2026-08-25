@@ -55,7 +55,8 @@ transaction 中仅记账而不调用 visitor、不提交 transaction，`JsonTree
 2. `JsonDecodeError`：严格预算、语法、类型解码。
 3. `JsonEncodeError`：严格预算、原始 JSON、序列化、写入。
 4. `JsonSyntaxError`：稳定的语法原因和位置。
-5. `JsonTreeProcessError`：tree 的预算和 visitor 错误。
+5. `JsonTreeProcessError`：reader tree 的预算和 visitor 错误。
+6. `JsonTreeMutateError`：mutator 的输入预算、visitor 和输出预算错误。
 
 ## 验收标准
 
@@ -64,5 +65,5 @@ transaction 中仅记账而不调用 visitor、不提交 transaction，`JsonTree
 - 严格 text API 的所有操作经由 decoder/encoder 对象，而非公开自由函数。
 - session-aware decode 在失败后保留输入消耗，value 暂存消耗只在完整成功后提交。
 - value 和 tree 可独立用于已物化 JSON；tree 遍历不依赖 Rust 调用栈深度。
-- 文档与示例只描述当前四领域、五个 error 和 `0.8` 安装方式。
+- 文档与示例只描述当前四领域、六个 error 和 `0.8` 安装方式。
 - 依赖图不启用 serde_json arbitrary precision，旧私有 Number marker 始终是普通 object key。

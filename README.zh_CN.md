@@ -20,8 +20,30 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```
 
-完整 API 路径见[中文用户手册](doc/user_guide.zh_CN.md)，规范性的数字规则见
-[JSON 数字契约](doc/number_contract.zh_CN.md)。
+完整 API 路径见[中文用户手册](doc/user_guide.zh_CN.md)，也可阅读[English user
+guide](doc/user_guide.md)；规范性的数字规则见[JSON 数字契约](doc/number_contract.zh_CN.md)。
+
+## 五分钟完成边界准入
+
+在 HTTP 或配置边界创建带有限制的 decoder，先准入文档，再把结果交给应用代码：
+
+```rust
+use qubit_budget::json::{JsonDecodeLimits, JsonResource};
+use qubit_json::decode::JsonDecoder;
+
+let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    .max_input_bytes(4096)
+    .max_number_bytes(20)
+    .build();
+let mut decoder = JsonDecoder::owned(limits);
+let value: serde_json::Value =
+    decoder.decode_str(r#"{"id":18446744073709551615,"ok":true}"#)?;
+assert_eq!(value["id"], serde_json::json!(u64::MAX));
+# Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
+```
+
+[中文用户手册](doc/user_guide.zh_CN.md)和[English user guide](doc/user_guide.md)
+继续说明规范化、编码、tree 处理、诊断和排障。
 
 ## 按领域选择能力
 
@@ -113,13 +135,14 @@ object key 处理。
 
 ## 错误与预算语义
 
-五个公开 error 各自归属业务领域：
+六个公开 error 各自归属业务领域：
 
 1. `decode::NormalizingJsonDecodeError`：规范化和宽松强类型解码失败。
 2. `decode::JsonDecodeError`：严格预算、语法或强类型解码失败。
 3. `encode::JsonEncodeError`：严格预算、原始 JSON、序列化或 I/O 失败。
 4. `decode::JsonSyntaxError`：稳定的语法原因和位置元数据。
 5. `value::traverse::JsonTreeProcessError`：遍历预算或 visitor 失败。
+6. `value::traverse::JsonTreeMutateError`：原地修改时的输入预算、visitor 或输出预算失败。
 
 带预算操作使用 transaction：解码后 value 或输出消耗在文档定义的成功边界提交。decode
 session 中的输入消耗会在失败尝试后刻意保留。
@@ -130,9 +153,11 @@ session 中的输入消耗会在失败尝试后刻意保留。
 Serde 事件，不能验证原始 token 或数字范围；需要这些保证的 JSON 文本必须经过
 `JsonDecoder`。`JsonTreeReader` 不使用
 Rust 递归地访问每个已准入节点；其 `account` 方法在调用方已有 transaction 中暂存整棵树的
-消耗，不调用 visitor，也不提交 transaction。`JsonTreeMutator` 原地应用 visitor 的变更，并可通过
-`JsonTreeBudgetRejection` 跳过被拒绝的子树。`JsonTreeBudgetTracker` 适合重复执行完整 tree
-记账。
+消耗，不调用 visitor，也不提交 transaction。`JsonTreeMutator` 先准入原始 tree，再原地应用
+visitor 变更，最后准入完整的修改后 tree，并返回 `JsonTreeMutateError::InputBudget`、
+`::Visitor` 或 `::OutputBudget`。visitor 和输出预算失败会保留已经完成的修改；visitor 可返回
+`JsonTreeControl::SkipSubtree` 跳过后代回调，但最终输出记账仍覆盖修改后 tree 的全部后代。
+`JsonTreeBudgetTracker` 适合重复执行完整 tree 记账。
 
 这些能力只核算 JSON 资源限制，不替代应用语义校验。请为实际信任边界选择限制，并避免将
 详细诊断写入不可信日志。

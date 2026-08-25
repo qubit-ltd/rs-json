@@ -21,8 +21,33 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```
 
-For the complete API path, see the [English user guide](doc/user_guide.md).
-The normative numeric rules are in the [number contract](doc/number_contract.md).
+For the complete API path, see the [English user guide](doc/user_guide.md), or
+the [中文用户手册](doc/user_guide.zh_CN.md). The normative numeric rules are in
+the [number contract](doc/number_contract.md).
+
+## Bounded boundary in five minutes
+
+At an HTTP or configuration boundary, create a decoder with finite limits and
+admit the document before handing the resulting value to application code:
+
+```rust
+use qubit_budget::json::{JsonDecodeLimits, JsonResource};
+use qubit_json::decode::JsonDecoder;
+
+let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    .max_input_bytes(4096)
+    .max_number_bytes(20)
+    .build();
+let mut decoder = JsonDecoder::owned(limits);
+let value: serde_json::Value =
+    decoder.decode_str(r#"{"id":18446744073709551615,"ok":true}"#)?;
+assert_eq!(value["id"], serde_json::json!(u64::MAX));
+# Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
+```
+
+The guides continue this scenario with normalization, encoding, tree
+processing, diagnostics, and troubleshooting: [English](doc/user_guide.md) ·
+[中文](doc/user_guide.zh_CN.md).
 
 ## Choose a domain
 
@@ -126,13 +151,15 @@ number-marker key as an ordinary object key.
 
 ## Errors and budget semantics
 
-The five public error types are domain-owned:
+The six public error types are domain-owned:
 
 1. `decode::NormalizingJsonDecodeError` for normalization and lenient typed decode.
 2. `decode::JsonDecodeError` for strict budget, syntax, or typed decode failure.
 3. `encode::JsonEncodeError` for strict budget, raw JSON, serialization, or I/O failure.
 4. `decode::JsonSyntaxError` for stable syntax reason and location metadata.
 5. `value::traverse::JsonTreeProcessError` for traversal budget or visitor failure.
+6. `value::traverse::JsonTreeMutateError` for input-budget, visitor, or
+   output-budget failure during in-place mutation.
 
 Budgeted operations use transactions: staged decoded-value or output charges
 commit on their documented success boundary. Input charges intentionally remain
@@ -147,9 +174,13 @@ cannot enforce text lexeme or numeric-range rules; route JSON text through
 `JsonTreeReader` visits every admitted node without Rust recursion. Its
 `account` method stages whole-tree charges in the caller's existing transaction
 without invoking a visitor or committing it;
-`JsonTreeMutator` applies in-place visitor changes and can skip a rejected
-subtree through `JsonTreeBudgetRejection`. `JsonTreeBudgetTracker` is the
-convenient reusable choice for whole-tree accounting.
+`JsonTreeMutator` first admits the original tree, applies in-place visitor
+changes, and then admits the complete mutated tree. It returns
+`JsonTreeMutateError::InputBudget`, `::Visitor`, or `::OutputBudget`; visitor
+and output failures retain mutations already made. A visitor can return
+`JsonTreeControl::SkipSubtree` to skip descendant callbacks, while final output
+accounting still covers every resulting descendant. `JsonTreeBudgetTracker` is
+the convenient reusable choice for whole-tree accounting.
 
 These facilities account JSON resource limits, not application-specific
 semantics. Choose limits suitable for your trust boundary and keep detailed
