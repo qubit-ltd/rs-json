@@ -33,8 +33,10 @@ pub(in crate::value) struct JsonValueVisitor<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
+    /// Transaction receiving measurements for the value under construction.
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 
+    /// Root-inclusive depth of the value currently being visited.
     depth: usize,
 }
 
@@ -98,6 +100,7 @@ where
 {
     type Value = Value;
 
+    /// Starts an `deserialize_any` visit for the requested JSON value.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -113,10 +116,12 @@ where
 {
     type Value = Value;
 
+    /// Describes the JSON value shape accepted by this visitor.
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("a value representable as JSON")
     }
 
+    /// Accounts and constructs a JSON boolean.
     fn visit_bool<E>(mut self, value: bool) -> Result<Self::Value, E>
     where
         E: Error,
@@ -125,6 +130,7 @@ where
         Ok(Value::Bool(value))
     }
 
+    /// Accounts and constructs a signed JSON integer.
     fn visit_i64<E>(mut self, value: i64) -> Result<Self::Value, E>
     where
         E: Error,
@@ -132,6 +138,8 @@ where
         self.enter_number(Number::from(value))
     }
 
+    /// Rejects unsupported wide signed integers or accounts the representable
+    /// value.
     #[inline(never)]
     fn visit_i128<E>(mut self, value: i128) -> Result<Self::Value, E>
     where
@@ -142,6 +150,7 @@ where
         self.enter_number(number)
     }
 
+    /// Accounts and constructs an unsigned JSON integer.
     fn visit_u64<E>(mut self, value: u64) -> Result<Self::Value, E>
     where
         E: Error,
@@ -149,6 +158,8 @@ where
         self.enter_number(Number::from(value))
     }
 
+    /// Rejects unsupported wide unsigned integers or accounts the representable
+    /// value.
     #[inline(never)]
     fn visit_u128<E>(mut self, value: u128) -> Result<Self::Value, E>
     where
@@ -159,6 +170,7 @@ where
         self.enter_number(number)
     }
 
+    /// Rejects non-finite floats or accounts the representable JSON number.
     fn visit_f64<E>(mut self, value: f64) -> Result<Self::Value, E>
     where
         E: Error,
@@ -168,6 +180,7 @@ where
         self.enter_number(number)
     }
 
+    /// Accounts and copies a borrowed JSON string.
     fn visit_str<E>(mut self, value: &str) -> Result<Self::Value, E>
     where
         E: Error,
@@ -179,6 +192,7 @@ where
         Ok(Value::String(value.to_owned()))
     }
 
+    /// Accounts and adopts an owned JSON string.
     fn visit_string<E>(mut self, value: String) -> Result<Self::Value, E>
     where
         E: Error,
@@ -190,6 +204,7 @@ where
         Ok(Value::String(value))
     }
 
+    /// Accounts a missing optional value as JSON null.
     fn visit_none<E>(mut self) -> Result<Self::Value, E>
     where
         E: Error,
@@ -198,6 +213,7 @@ where
         Ok(Value::Null)
     }
 
+    /// Accounts a unit value as JSON null.
     fn visit_unit<E>(mut self) -> Result<Self::Value, E>
     where
         E: Error,
@@ -206,6 +222,7 @@ where
         Ok(Value::Null)
     }
 
+    /// Delegates an optional value to the same JSON visitor.
     fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -213,6 +230,7 @@ where
         deserializer.deserialize_any(self)
     }
 
+    /// Delegates a newtype payload to the same JSON visitor.
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -220,6 +238,7 @@ where
         deserializer.deserialize_any(self)
     }
 
+    /// Accounts and materializes a JSON array from sequence events.
     fn visit_seq<A>(mut self, mut sequence: A) -> Result<Self::Value, A::Error>
     where
         A: SeqAccess<'de>,
@@ -242,6 +261,7 @@ where
         Ok(Value::Array(values))
     }
 
+    /// Accounts and materializes a JSON object from map events.
     fn visit_map<A>(mut self, mut map: A) -> Result<Self::Value, A::Error>
     where
         A: MapAccess<'de>,

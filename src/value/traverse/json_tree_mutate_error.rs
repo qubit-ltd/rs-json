@@ -22,6 +22,16 @@ use thiserror::Error;
 /// * `R` - Resource identity attached to budget failures.
 /// * `Q` - Quantity representation attached to budget failures.
 /// * `E` - Error type returned by the mutation visitor.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::value::traverse::JsonTreeMutateError;
+///
+/// let error: JsonTreeMutateError<(), usize, &str> =
+///     JsonTreeMutateError::Visitor("mutation rejected");
+/// assert!(matches!(error, JsonTreeMutateError::Visitor(_)));
+/// ```
 #[derive(Debug, Error)]
 pub enum JsonTreeMutateError<R, Q, E>
 where
@@ -29,11 +39,22 @@ where
 {
     /// The complete tree before mutation exceeded its input budget.
     #[error("JSON tree input budget rejected the original value")]
-    InputBudget(#[source] MeasuredBudgetError<R, Q>),
+    InputBudget(
+        /// Resource measurement for the original tree.
+        #[source]
+        MeasuredBudgetError<R, Q>,
+    ),
     /// The caller-defined visitor failed after mutation began.
     #[error("JSON tree mutation visitor failed")]
-    Visitor(E),
+    Visitor(
+        /// Domain error returned after the visitor began mutating the tree.
+        E,
+    ),
     /// The complete tree after mutation exceeded its output budget.
     #[error("JSON tree output budget rejected the mutated value")]
-    OutputBudget(#[source] MeasuredBudgetError<R, Q>),
+    OutputBudget(
+        /// Resource measurement for the mutated tree.
+        #[source]
+        MeasuredBudgetError<R, Q>,
+    ),
 }

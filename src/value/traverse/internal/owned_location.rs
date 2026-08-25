@@ -13,9 +13,18 @@ use super::super::JsonTreeLocation;
 /// Owns the location information needed while mutable traversal advances.
 #[derive(Clone)]
 pub(in crate::value::traverse) enum OwnedLocation {
+    /// The root value of the traversal.
     Root,
-    ArrayElement(usize),
-    ObjectValue(String),
+    /// An array element identified by its index.
+    ArrayElement(
+        /// Zero-based array index.
+        usize,
+    ),
+    /// An object value identified by an owned key.
+    ObjectValue(
+        /// Owned object key.
+        String,
+    ),
 }
 
 impl OwnedLocation {

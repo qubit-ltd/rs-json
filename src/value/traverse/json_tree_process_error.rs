@@ -41,8 +41,15 @@ where
 {
     /// A JSON resource measurement or budget rejected a tree node.
     #[error(transparent)]
-    Budget(#[from] MeasuredBudgetError<R, Q>),
+    Budget(
+        /// Resource measurement that exceeded the configured limit.
+        #[from]
+        MeasuredBudgetError<R, Q>,
+    ),
     /// The caller-defined visitor rejected a budget-admitted node.
     #[error("JSON tree visitor failed")]
-    Visitor(E),
+    Visitor(
+        /// Domain error returned by the visitor callback.
+        E,
+    ),
 }

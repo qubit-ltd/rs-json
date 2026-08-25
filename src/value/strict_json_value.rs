@@ -36,7 +36,10 @@ pub use strict_json_value_seed::StrictJsonValueSeed;
 /// # Ok::<(), serde_json::Error>(())
 /// ```
 #[derive(Debug, PartialEq)]
-pub struct StrictJsonValue(Value);
+pub struct StrictJsonValue(
+    /// Fully materialized value that passed duplicate-key validation.
+    Value,
+);
 
 impl StrictJsonValue {
     /// Returns the validated JSON value.

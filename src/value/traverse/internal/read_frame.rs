@@ -14,8 +14,11 @@ use super::ReadFrameState;
 
 /// Represents one stack-held frame in a read-only depth-first traversal.
 pub(in crate::value::traverse) struct ReadFrame<'value> {
+    /// Borrowed value associated with this frame.
     pub(in crate::value::traverse) value: &'value Value,
+    /// Location and depth passed to visitor callbacks.
     pub(in crate::value::traverse) context: JsonTreeContext<'value>,
+    /// Current enter/children/leave phase for this frame.
     pub(in crate::value::traverse) state: ReadFrameState<'value>,
 }
 

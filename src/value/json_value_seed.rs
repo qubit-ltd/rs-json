@@ -51,6 +51,7 @@ pub struct JsonValueSeed<'transaction, 'budget, R, Q = usize>
 where
     Q: ResourceQuantity,
 {
+    /// Transaction receiving the decoded value's staged resource charges.
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 }
 
@@ -81,6 +82,7 @@ where
 {
     type Value = Value;
 
+    /// Builds one value through the accounting visitor.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,

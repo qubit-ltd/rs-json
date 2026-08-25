@@ -22,8 +22,10 @@ pub(in crate::value) struct JsonKeySeed<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
+    /// Transaction receiving the prospective map entry's resource charges.
     pub(super) transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 
+    /// Number of entries that would exist after admitting the next key.
     pub(super) prospective: usize,
 }
 
@@ -34,6 +36,7 @@ where
 {
     type Value = String;
 
+    /// Checks the map-entry limit before delegating key decoding to Serde.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,

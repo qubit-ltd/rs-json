@@ -15,6 +15,8 @@ use serde::de::DeserializeSeed;
 
 /// Seed adapter that delegates to [`Deserialize`] without allocating state.
 pub(in crate::decode) struct TypedSeed<T> {
+    /// Type marker carrying the requested deserialization target without
+    /// storage.
     marker: PhantomData<fn() -> T>,
 }
 
@@ -31,6 +33,8 @@ where
 {
     type Value = T;
 
+    /// Delegates the seed operation to the target type's `Deserialize`
+    /// implementation.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,

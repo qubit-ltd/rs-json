@@ -55,6 +55,7 @@ pub struct JsonTreeReader<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
+    /// Transaction receiving staged node and payload charges.
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 }
 

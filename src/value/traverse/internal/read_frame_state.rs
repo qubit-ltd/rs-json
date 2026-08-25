@@ -11,7 +11,13 @@ use super::ChildCursor;
 
 /// Current phase of a read-only traversal frame.
 pub(in crate::value::traverse) enum ReadFrameState<'value> {
+    /// The frame is ready for its enter callback.
     Enter,
-    Children(ChildCursor<'value>),
+    /// The frame is enumerating its immediate children.
+    Children(
+        /// Cursor over the frame's immediate children.
+        ChildCursor<'value>,
+    ),
+    /// All children were visited and the leave callback is ready.
     Leave,
 }
