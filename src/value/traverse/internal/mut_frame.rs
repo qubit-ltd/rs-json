@@ -16,11 +16,17 @@ use super::OwnedLocation;
 
 /// Tracks one in-place mutable traversal position.
 pub(in crate::value::traverse) struct MutFrame {
+    /// Owned location reported to the mutation visitor.
     pub(in crate::value::traverse) location: OwnedLocation,
+    /// Root-inclusive depth of the frame's value.
     pub(in crate::value::traverse) depth: usize,
+    /// Non-null pointer to the value being processed in place.
     pub(in crate::value::traverse) value: NonNull<Value>,
+    /// Whether the visitor has entered this value.
     pub(in crate::value::traverse) entered: bool,
+    /// Whether all children and the leave callback have completed.
     pub(in crate::value::traverse) finished: bool,
+    /// Lazy cursor over the value's mutable children.
     pub(in crate::value::traverse) cursor: Option<MutChildCursor>,
 }
 

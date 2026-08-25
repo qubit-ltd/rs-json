@@ -40,6 +40,7 @@ pub struct JsonTreeBudgetTracker<R = JsonResource, Q = usize>
 where
     Q: ResourceQuantity,
 {
+    /// Internally owned budget accumulating successful tree-accounting runs.
     budget: JsonValueBudget<R, Q>,
 }
 

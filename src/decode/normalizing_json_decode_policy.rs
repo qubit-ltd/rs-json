@@ -18,6 +18,17 @@ use super::NormalizingJsonDecodePolicyBuilder;
 /// Resource limits deliberately live in
 /// [`qubit_budget::json::JsonDecodeLimits`]
 /// and are supplied separately when constructing a decoder.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::NormalizingJsonDecodePolicy;
+///
+/// let policy = NormalizingJsonDecodePolicy::builder()
+///     .trim_whitespace(false)
+///     .build();
+/// assert!(!policy.trim_whitespace());
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizingJsonDecodePolicy {
     /// Whether leading and trailing whitespace is removed.

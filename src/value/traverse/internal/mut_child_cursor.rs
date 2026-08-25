@@ -17,8 +17,20 @@ use super::OwnedLocation;
 
 /// Lazily yields mutable children without detaching their parent container.
 pub(in crate::value::traverse) enum MutChildCursor {
-    Array { values: NonNull<Vec<Value>>, next: usize },
-    Object { iter: IterMut<'static> },
+    /// Cursor over mutable array entries.
+    Array {
+        /// Pointer to the parent vector whose entries are borrowed one at a
+        /// time.
+        values: NonNull<Vec<Value>>,
+        /// Index of the next array entry to visit.
+        next: usize,
+    },
+    /// Cursor over mutable object entries.
+    Object {
+        /// Suspended iterator over the parent object's entries.
+        iter: IterMut<'static>,
+    },
+    /// Marker for scalar values without children.
     Empty,
 }
 

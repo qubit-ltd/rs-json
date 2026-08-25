@@ -45,10 +45,18 @@ where
 {
     /// Resource accounting rejected the input or its decoded JSON value.
     #[error(transparent)]
-    Budget(#[from] MeasuredBudgetError<R, Q>),
+    Budget(
+        /// Resource measurement that exceeded the configured limit.
+        #[from]
+        MeasuredBudgetError<R, Q>,
+    ),
     /// The byte stream did not contain one complete JSON document.
     #[error(transparent)]
-    Syntax(#[from] JsonSyntaxError),
+    Syntax(
+        /// Stable syntax failure with reason and location metadata.
+        #[from]
+        JsonSyntaxError,
+    ),
     /// Serde rejected an otherwise admitted document for the requested type.
     #[error("JSON deserialization failed ({category:?}) at line {line}, column {column}")]
     Deserialize {

@@ -36,6 +36,7 @@ where
 
 macro_rules! delegate_number_method {
     ($name:ident, $type:ty) => {
+        #[doc = "Forwards the scalar to the underlying serializer unchanged."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
             self.inner.$name(value)
         }
@@ -74,20 +75,24 @@ where
     delegate_number_method!(serialize_f64, f64);
     delegate_number_method!(serialize_char, char);
 
+    /// Preflights raw JSON text before forwarding the string token.
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
         let PrivateTextKind::RawValue { depth } = self.kind;
         self.context.borrow_mut().preflight_raw(value, depth)?;
         self.inner.serialize_str(value)
     }
 
+    /// Forwards byte payloads unchanged.
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_bytes(value)
     }
 
+    /// Forwards an absent optional payload unchanged.
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_none()
     }
 
+    /// Forwards a present optional payload unchanged.
     fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -95,14 +100,17 @@ where
         self.inner.serialize_some(value)
     }
 
+    /// Forwards a unit payload unchanged.
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit()
     }
 
+    /// Forwards a unit-struct payload unchanged.
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit_struct(name)
     }
 
+    /// Forwards a unit-variant payload unchanged.
     fn serialize_unit_variant(
         self,
         name: &'static str,
@@ -112,6 +120,7 @@ where
         self.inner.serialize_unit_variant(name, variant_index, variant)
     }
 
+    /// Forwards a newtype-struct payload unchanged.
     fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -119,6 +128,7 @@ where
         self.inner.serialize_newtype_struct(name, value)
     }
 
+    /// Forwards a newtype-variant payload unchanged.
     fn serialize_newtype_variant<T>(
         self,
         name: &'static str,
@@ -133,18 +143,22 @@ where
             .serialize_newtype_variant(name, variant_index, variant, value)
     }
 
+    /// Creates a sequence serializer through the underlying serializer.
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         self.inner.serialize_seq(len)
     }
 
+    /// Creates a tuple serializer through the underlying serializer.
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.inner.serialize_tuple(len)
     }
 
+    /// Creates a tuple-struct serializer through the underlying serializer.
     fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.inner.serialize_tuple_struct(name, len)
     }
 
+    /// Creates a tuple-variant serializer through the underlying serializer.
     fn serialize_tuple_variant(
         self,
         name: &'static str,
@@ -155,14 +169,17 @@ where
         self.inner.serialize_tuple_variant(name, variant_index, variant, len)
     }
 
+    /// Creates a map serializer through the underlying serializer.
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.inner.serialize_map(len)
     }
 
+    /// Creates a struct serializer through the underlying serializer.
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         self.inner.serialize_struct(name, len)
     }
 
+    /// Creates a struct-variant serializer through the underlying serializer.
     fn serialize_struct_variant(
         self,
         name: &'static str,
@@ -173,6 +190,7 @@ where
         self.inner.serialize_struct_variant(name, variant_index, variant, len)
     }
 
+    /// Formats, preflights, and forwards a display-based raw payload.
     fn collect_str<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Display + ?Sized,
@@ -188,6 +206,7 @@ where
         self.inner.serialize_str(&text)
     }
 
+    /// Reports the underlying serializer's human-readable mode.
     #[inline(always)]
     fn is_human_readable(&self) -> bool {
         self.inner.is_human_readable()

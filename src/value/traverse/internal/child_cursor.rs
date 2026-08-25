@@ -14,14 +14,21 @@ use super::super::JsonTreeLocation;
 
 /// Lazily yields one container's children, keeping pending memory O(depth).
 pub(in crate::value::traverse) enum ChildCursor<'value> {
+    /// Cursor over an array's children.
     Array {
+        /// Pending array entries in source order.
         iter: std::iter::Enumerate<std::slice::Iter<'value, Value>>,
+        /// Root-inclusive depth assigned to each pending child.
         depth: usize,
     },
+    /// Cursor over an object's children.
     Object {
+        /// Pending object entries in source order.
         iter: Iter<'value>,
+        /// Root-inclusive depth assigned to each pending child.
         depth: usize,
     },
+    /// Marker for scalar values without children.
     Empty,
 }
 

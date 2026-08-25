@@ -49,6 +49,7 @@ pub struct JsonDecoder<'budget, R = JsonResource, Q = usize>
 where
     Q: ResourceQuantity,
 {
+    /// Caller-owned session retaining cumulative input and value charges.
     session: JsonDecodeSession<'budget, R, Q>,
 }
 

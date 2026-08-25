@@ -24,12 +24,16 @@ pub(in crate::value) struct JsonValueChildSeed<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
+    /// Transaction receiving the child value's resource charges.
     pub(super) transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 
+    /// Root-inclusive depth assigned to the child value.
     pub(super) depth: usize,
 
+    /// Container kind whose member count is checked before decoding.
     pub(super) kind: JsonContainerKind,
 
+    /// Number of members that would exist after admitting this child.
     pub(super) prospective: usize,
 }
 
@@ -40,6 +44,8 @@ where
 {
     type Value = Value;
 
+    /// Checks the container limit and then delegates construction to the child
+    /// visitor.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,

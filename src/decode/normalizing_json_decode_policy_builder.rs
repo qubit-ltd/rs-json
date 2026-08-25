@@ -12,6 +12,17 @@ use super::MarkdownFencePolicy;
 use super::NormalizingJsonDecodePolicy;
 
 /// Builder for [`NormalizingJsonDecodePolicy`].
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::NormalizingJsonDecodePolicyBuilder;
+///
+/// let policy = NormalizingJsonDecodePolicyBuilder::new()
+///     .strip_utf8_bom(false)
+///     .build();
+/// assert!(!policy.strip_utf8_bom());
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizingJsonDecodePolicyBuilder {
     /// Policy under construction.

@@ -54,6 +54,7 @@ where
 
 macro_rules! serialize_key_number {
     ($name:ident, signed $type:ty) => {
+        #[doc = "Checks the serialized signed key length before forwarding it."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
             if self.has_value_limits {
                 self.check(JsonLexemeLength::signed_integer(value.into()))?;
@@ -62,6 +63,7 @@ macro_rules! serialize_key_number {
         }
     };
     ($name:ident, unsigned $type:ty) => {
+        #[doc = "Checks the serialized unsigned key length before forwarding it."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
             if self.has_value_limits {
                 self.check(JsonLexemeLength::unsigned_integer(value.into()))?;
@@ -88,6 +90,7 @@ where
     type SerializeStruct = S::SerializeStruct;
     type SerializeStructVariant = S::SerializeStructVariant;
 
+    /// Checks the boolean key length before forwarding it.
     fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
         self.check(if value { 4 } else { 5 })?;
         self.inner.serialize_bool(value)
@@ -129,6 +132,7 @@ where
         self.inner.serialize_u128(value)
     }
 
+    /// Checks a finite `f32` key length before forwarding it.
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
         if self.has_value_limits && value.is_finite() {
             self.check(JsonLexemeLength::finite_f32(value))?;
@@ -136,6 +140,7 @@ where
         self.inner.serialize_f32(value)
     }
 
+    /// Checks a finite `f64` key length before forwarding it.
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
         if self.has_value_limits && value.is_finite() {
             self.check(JsonLexemeLength::finite_f64(value))?;
@@ -143,6 +148,7 @@ where
         self.inner.serialize_f64(value)
     }
 
+    /// Checks the UTF-8 key length before forwarding a character.
     fn serialize_char(self, value: char) -> Result<Self::Ok, Self::Error> {
         if self.has_value_limits {
             self.check(value.len_utf8())?;
@@ -150,6 +156,7 @@ where
         self.inner.serialize_char(value)
     }
 
+    /// Checks the string key length before forwarding it.
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
         if self.has_value_limits {
             self.check(value.len())?;
@@ -157,14 +164,17 @@ where
         self.inner.serialize_str(value)
     }
 
+    /// Forwards byte keys to the underlying serializer.
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_bytes(value)
     }
 
+    /// Forwards an absent optional key without additional accounting.
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_none()
     }
 
+    /// Serializes a present optional key through this decorator.
     fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -172,14 +182,17 @@ where
         value.serialize(self)
     }
 
+    /// Forwards a unit key without additional accounting.
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit()
     }
 
+    /// Forwards a unit-struct key without additional accounting.
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
         self.inner.serialize_unit_struct(name)
     }
 
+    /// Checks a unit-variant key name before forwarding it.
     fn serialize_unit_variant(
         self,
         name: &'static str,
@@ -192,6 +205,7 @@ where
         self.inner.serialize_unit_variant(name, variant_index, variant)
     }
 
+    /// Serializes a newtype key through this decorator.
     fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -199,6 +213,7 @@ where
         value.serialize(self)
     }
 
+    /// Forwards a newtype-variant key and its payload.
     fn serialize_newtype_variant<T>(
         self,
         name: &'static str,
@@ -213,18 +228,22 @@ where
             .serialize_newtype_variant(name, variant_index, variant, value)
     }
 
+    /// Creates a sequence serializer through the underlying serializer.
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         self.inner.serialize_seq(len)
     }
 
+    /// Creates a tuple serializer through the underlying serializer.
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.inner.serialize_tuple(len)
     }
 
+    /// Creates a tuple-struct serializer through the underlying serializer.
     fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.inner.serialize_tuple_struct(name, len)
     }
 
+    /// Creates a tuple-variant serializer through the underlying serializer.
     fn serialize_tuple_variant(
         self,
         name: &'static str,
@@ -235,14 +254,17 @@ where
         self.inner.serialize_tuple_variant(name, variant_index, variant, len)
     }
 
+    /// Creates a map serializer through the underlying serializer.
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.inner.serialize_map(len)
     }
 
+    /// Creates a struct serializer through the underlying serializer.
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         self.inner.serialize_struct(name, len)
     }
 
+    /// Creates a struct-variant serializer through the underlying serializer.
     fn serialize_struct_variant(
         self,
         name: &'static str,
@@ -253,6 +275,7 @@ where
         self.inner.serialize_struct_variant(name, variant_index, variant, len)
     }
 
+    /// Formats, accounts, and forwards a display-based key.
     fn collect_str<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Display + ?Sized,
@@ -264,6 +287,7 @@ where
         self.inner.serialize_str(&text)
     }
 
+    /// Reports the underlying serializer's human-readable mode.
     #[inline(always)]
     fn is_human_readable(&self) -> bool {
         self.inner.is_human_readable()

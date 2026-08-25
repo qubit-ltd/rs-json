@@ -11,5 +11,8 @@
 #[derive(Clone, Copy)]
 pub(in crate::encode::serializer) enum PrivateTextKind {
     /// Raw JSON fragment rooted at the specified final depth.
-    RawValue { depth: usize },
+    RawValue {
+        /// Final root-inclusive depth of the raw JSON fragment.
+        depth: usize,
+    },
 }

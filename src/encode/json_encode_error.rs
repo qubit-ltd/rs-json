@@ -47,16 +47,32 @@ where
 {
     /// Resource accounting rejected the value or output.
     #[error(transparent)]
-    Budget(#[from] MeasuredBudgetError<R, Q>),
+    Budget(
+        /// Resource measurement that exceeded the configured limit.
+        #[from]
+        MeasuredBudgetError<R, Q>,
+    ),
     /// A `RawValue` field did not contain valid JSON text.
     #[error("JSON raw value is invalid: {0}")]
-    InvalidRawJson(#[source] JsonSyntaxError),
+    InvalidRawJson(
+        /// Syntax failure from a `RawValue` payload.
+        #[source]
+        JsonSyntaxError,
+    ),
     /// Serde could not serialize the source value.
     #[error("JSON serialization failed: {0}")]
-    Serialize(#[source] JsonError),
+    Serialize(
+        /// Serde error raised while serializing the source value.
+        #[source]
+        JsonError,
+    ),
     /// The final destination writer rejected buffered bytes.
     #[error("JSON output writer failed: {0}")]
-    Write(#[source] IoError),
+    Write(
+        /// I/O error raised while writing buffered output.
+        #[source]
+        IoError,
+    ),
 }
 
 impl<R, Q> serde::ser::Error for JsonEncodeError<R, Q>

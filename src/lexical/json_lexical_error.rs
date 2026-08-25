@@ -20,9 +20,15 @@ where
     Q: Copy + fmt::Debug,
 {
     /// A decoded-value resource measurement was rejected.
-    Budget(MeasuredBudgetError<R, Q>),
+    Budget(
+        /// Resource measurement that exceeded the configured limit.
+        MeasuredBudgetError<R, Q>,
+    ),
     /// The input is not one complete lexical JSON value.
-    Syntax(JsonLexicalFailure),
+    Syntax(
+        /// Lexical failure describing the invalid or incomplete document.
+        JsonLexicalFailure,
+    ),
 }
 
 impl<R, Q> From<MeasuredBudgetError<R, Q>> for JsonLexicalError<R, Q>
