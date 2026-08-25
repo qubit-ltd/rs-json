@@ -46,6 +46,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a visitor that accounts a value at `depth`.
+    #[inline]
     pub(in crate::value) fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
         depth: usize,

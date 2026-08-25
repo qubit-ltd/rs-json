@@ -93,6 +93,7 @@ where
     ///
     /// This clears accumulated charges and makes the tracker ready for a new
     /// independent accounting run.
+    #[inline(always)]
     pub fn reset(&mut self) {
         self.budget.reset();
     }

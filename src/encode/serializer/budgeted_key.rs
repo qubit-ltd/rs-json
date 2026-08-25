@@ -41,6 +41,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a key wrapper bound to the shared traversal context.
+    #[inline(always)]
     pub(super) const fn new(
         value: &'a T,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
