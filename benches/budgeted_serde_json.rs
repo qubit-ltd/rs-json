@@ -300,6 +300,19 @@ fn encode(criterion: &mut Criterion) {
                 });
             },
         );
+        group.bench_with_input(
+            BenchmarkId::new("encode/incremental-output-only", size),
+            &fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+                        .max_output_bytes(target_bytes.saturating_add(RECORD.len()))
+                        .build();
+                    let session = JsonEncodeSession::owned(limits);
+                    black_box(JsonEncoder::new(session).write_incremental(std::io::sink(), black_box(fixture)))
+                });
+            },
+        );
         let numeric_size = serde_json::to_vec(&numeric_fixture)
             .expect("numeric fixture must encode")
             .len();

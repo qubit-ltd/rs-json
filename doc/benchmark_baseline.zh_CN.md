@@ -305,3 +305,21 @@ cargo bench --bench budgeted_serde_json -- encode --noplot
 最终结果保留该最小优化。剩余开销由严格 Serde decorator、事务生命周期、按事件 output
 writer 和实际启用的 value accounting 构成；若继续优化，必须把 output writer 的可变记账
 作为独立实验，不应与本次能力缓存叠加评估。
+
+## 2026-08-25 输出记账分离实验
+
+新增 `encode/incremental-output-only`，使增量 writer 在与
+`encode/output-only` 相同的输出字节上限下运行。quick 复测使用：
+
+```bash
+cargo bench --bench budgeted_serde_json -- encode/output-only --quick
+cargo bench --bench budgeted_serde_json -- encode/incremental-writer --quick
+cargo bench --bench budgeted_serde_json -- encode/incremental-output-only --quick
+```
+
+本机这轮的 993 B / 64 KiB / 1 MiB 吞吐分别为：缓冲 `output-only` 约
+248 / 287 / 292 MiB/s；不受输出上限约束的增量 writer 约 566 / 600 / 604 MiB/s；
+受相同上限约束的增量 writer 约 381 / 393 / 377 MiB/s。因而这轮实验确认了两件事：输出
+记账本身有可测成本，同时缓冲 `Vec` 路径还含有独立的分配/复制成本。结果不足以支持改变
+记账语义或删除每次写入前的边界检查，所以本次只保留可重复的比较基准，不引入未经验证的
+热路径优化。
