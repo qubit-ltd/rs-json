@@ -29,7 +29,7 @@ use super::json_encode_context::JsonEncodeContext;
 use crate::internal::JsonLexemeLength;
 
 /// Decorates one Serde serializer with eager JSON budget checks.
-pub(in crate::encode) struct JsonEncodeSerializer<'transaction, 'budget, 'context, S, R, Q>
+pub(in crate::encode) struct JsonEncodeSerializer<'transaction, 'budget, 'context, S, R, Q, const VALUE_LIMITS: bool>
 where
     Q: ResourceQuantity,
 {
@@ -41,12 +41,10 @@ where
 
     /// Root-inclusive depth assigned to the current value.
     depth: usize,
-
-    /// Whether value accounting can reject any emitted event.
-    has_value_limits: bool,
 }
 
-impl<'transaction, 'budget, 'context, S, R, Q> JsonEncodeSerializer<'transaction, 'budget, 'context, S, R, Q>
+impl<'transaction, 'budget, 'context, S, R, Q, const VALUE_LIMITS: bool>
+    JsonEncodeSerializer<'transaction, 'budget, 'context, S, R, Q, VALUE_LIMITS>
 where
     R: Clone,
     Q: ResourceQuantity,
@@ -65,13 +63,11 @@ where
     pub(in crate::encode) fn new(
         inner: S,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
-        has_value_limits: bool,
     ) -> Self {
         Self {
             inner,
             context,
             depth: 1,
-            has_value_limits,
         }
     }
 
@@ -80,39 +76,36 @@ where
         inner: S,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         depth: usize,
-        has_value_limits: bool,
     ) -> Self {
-        Self {
-            inner,
-            context,
-            depth,
-            has_value_limits,
-        }
+        Self { inner, context, depth }
     }
 
     /// Stages one complete JSON measurement.
+    #[inline(always)]
     fn admit<E>(&self, measurement: JsonMeasurement) -> Result<(), E>
     where
         E: Error,
     {
-        if !self.has_value_limits {
+        if !VALUE_LIMITS {
             return Ok(());
         }
         self.context.borrow_mut().admit(measurement)
     }
 
     /// Enters one container only when value accounting is active.
+    #[inline(always)]
     fn enter_container<E>(&self, kind: JsonContainerKind, depth: usize) -> Result<(), E>
     where
         E: Error,
     {
-        if !self.has_value_limits {
+        if !VALUE_LIMITS {
             return Ok(());
         }
         self.context.borrow_mut().enter_container(kind, depth)
     }
 
     /// Charges one string node and its UTF-8 payload length.
+    #[inline(always)]
     fn string<E>(&self, bytes: usize) -> Result<(), E>
     where
         E: Error,
@@ -124,6 +117,7 @@ where
     }
 
     /// Charges one number node and its emitted textual length.
+    #[inline(always)]
     fn number<E>(&self, bytes: usize) -> Result<(), E>
     where
         E: Error,
@@ -135,6 +129,7 @@ where
     }
 
     /// Charges one known-length array before its serializer is created.
+    #[inline(always)]
     fn array<E>(&self, depth: usize, items: usize) -> Result<(), E>
     where
         E: Error,
@@ -143,6 +138,7 @@ where
     }
 
     /// Charges one known-length object before its serializer is created.
+    #[inline(always)]
     fn object<E>(&self, depth: usize, entries: usize) -> Result<(), E>
     where
         E: Error,
@@ -151,6 +147,7 @@ where
     }
 
     /// Checks and consumes one object key's UTF-8 payload length.
+    #[inline(always)]
     fn key<E>(&self, key: &str) -> Result<(), E>
     where
         E: Error,
@@ -162,8 +159,9 @@ where
 macro_rules! serialize_integer {
     ($name:ident, signed $type:ty) => {
         #[doc = concat!("Charges and delegates one signed `", stringify!($type), "` JSON integer.")]
+        #[inline(always)]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            if self.has_value_limits {
+            if VALUE_LIMITS {
                 self.number(JsonLexemeLength::signed_integer(value.into()))?;
             }
             self.inner.$name(value)
@@ -171,8 +169,9 @@ macro_rules! serialize_integer {
     };
     ($name:ident, unsigned $type:ty) => {
         #[doc = concat!("Charges and delegates one unsigned `", stringify!($type), "` JSON integer.")]
+        #[inline(always)]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            if self.has_value_limits {
+            if VALUE_LIMITS {
                 self.number(JsonLexemeLength::unsigned_integer(value.into()))?;
             }
             self.inner.$name(value)
@@ -180,8 +179,8 @@ macro_rules! serialize_integer {
     };
 }
 
-impl<'transaction, 'budget, 'context, S, R, Q> Serializer
-    for JsonEncodeSerializer<'transaction, 'budget, 'context, S, R, Q>
+impl<'transaction, 'budget, 'context, S, R, Q, const VALUE_LIMITS: bool> Serializer
+    for JsonEncodeSerializer<'transaction, 'budget, 'context, S, R, Q, VALUE_LIMITS>
 where
     S: Serializer,
     R: Clone,
@@ -189,15 +188,19 @@ where
 {
     type Ok = S::Ok;
     type Error = S::Error;
-    type SerializeSeq = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeSeq, R, Q>;
-    type SerializeTuple = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeTuple, R, Q>;
-    type SerializeTupleStruct = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeTupleStruct, R, Q>;
-    type SerializeTupleVariant = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeTupleVariant, R, Q>;
-    type SerializeMap = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeMap, R, Q>;
-    type SerializeStruct = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeStruct, R, Q>;
-    type SerializeStructVariant = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeStructVariant, R, Q>;
+    type SerializeSeq = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeSeq, R, Q, VALUE_LIMITS>;
+    type SerializeTuple = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeTuple, R, Q, VALUE_LIMITS>;
+    type SerializeTupleStruct =
+        JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeTupleStruct, R, Q, VALUE_LIMITS>;
+    type SerializeTupleVariant =
+        JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeTupleVariant, R, Q, VALUE_LIMITS>;
+    type SerializeMap = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeMap, R, Q, VALUE_LIMITS>;
+    type SerializeStruct = JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeStruct, R, Q, VALUE_LIMITS>;
+    type SerializeStructVariant =
+        JsonEncodeCompound<'transaction, 'budget, 'context, S::SerializeStructVariant, R, Q, VALUE_LIMITS>;
 
     /// Charges and delegates one JSON boolean.
+    #[inline(always)]
     fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
         self.admit(JsonMeasurement::Boolean { depth: self.depth })?;
         self.inner.serialize_bool(value)
@@ -223,7 +226,7 @@ where
                 "JSON integer is outside the supported 64-bit range",
             ));
         };
-        if self.has_value_limits {
+        if VALUE_LIMITS {
             self.number(bytes)?;
         }
         self.inner.serialize_i128(value)
@@ -233,7 +236,7 @@ where
     fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
         let value64 = u64::try_from(value)
             .map_err(|_| Self::Error::custom("JSON integer is outside the supported 64-bit range"))?;
-        if self.has_value_limits {
+        if VALUE_LIMITS {
             self.number(JsonLexemeLength::unsigned_integer(value64.into()))?;
         }
         self.inner.serialize_u128(value)
@@ -244,7 +247,7 @@ where
         if !value.is_finite() {
             return Err(Self::Error::custom("JSON floating-point value must be finite"));
         }
-        if self.has_value_limits {
+        if VALUE_LIMITS {
             self.number(JsonLexemeLength::finite_f32(value))?;
         }
         self.inner.serialize_f32(value)
@@ -255,7 +258,7 @@ where
         if !value.is_finite() {
             return Err(Self::Error::custom("JSON floating-point value must be finite"));
         }
-        if self.has_value_limits {
+        if VALUE_LIMITS {
             self.number(JsonLexemeLength::finite_f64(value))?;
         }
         self.inner.serialize_f64(value)
@@ -268,6 +271,7 @@ where
     }
 
     /// Charges one JSON string before delegating it.
+    #[inline(always)]
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
         self.string(value.len())?;
         self.inner.serialize_str(value)
@@ -275,7 +279,7 @@ where
 
     /// Charges the JSON byte-array structure before delegating it.
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
-        if !self.has_value_limits {
+        if !VALUE_LIMITS {
             return self.inner.serialize_bytes(value);
         }
         self.array(self.depth, value.len())?;
@@ -300,7 +304,7 @@ where
     where
         T: Serialize + ?Sized,
     {
-        let value = BudgetedValue::new(value, self.context, self.depth, self.has_value_limits);
+        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.depth);
         self.inner.serialize_some(&value)
     }
 
@@ -332,7 +336,7 @@ where
     where
         T: Serialize + ?Sized,
     {
-        let value = BudgetedValue::new(value, self.context, self.depth, self.has_value_limits);
+        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.depth);
         self.inner.serialize_newtype_struct(name, &value)
     }
 
@@ -349,23 +353,19 @@ where
     {
         self.object(self.depth, 1)?;
         self.key(variant)?;
-        let value = BudgetedValue::new(value, self.context, self.depth.saturating_add(1), self.has_value_limits);
+        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.depth.saturating_add(1));
         self.inner
             .serialize_newtype_variant(name, variant_index, variant, &value)
     }
 
     /// Charges an array before asking the inner serializer to create it.
+    #[inline(always)]
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         let context = self.context;
         self.enter_container(JsonContainerKind::Sequence, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_seq(len)?;
-        Ok(JsonEncodeCompound::new(
-            inner,
-            context,
-            child_depth,
-            self.has_value_limits,
-        ))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
     /// Charges a fixed-length JSON tuple array.
@@ -374,12 +374,7 @@ where
         self.enter_container(JsonContainerKind::Sequence, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_tuple(len)?;
-        Ok(JsonEncodeCompound::new(
-            inner,
-            context,
-            child_depth,
-            self.has_value_limits,
-        ))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
     /// Charges a fixed-length JSON tuple-struct array.
@@ -388,12 +383,7 @@ where
         self.enter_container(JsonContainerKind::Sequence, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_tuple_struct(name, len)?;
-        Ok(JsonEncodeCompound::new(
-            inner,
-            context,
-            child_depth,
-            self.has_value_limits,
-        ))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
     /// Charges a tuple variant's outer object and nested array.
@@ -411,12 +401,7 @@ where
         let context = self.context;
         let child_depth = array_depth.saturating_add(1);
         let inner = self.inner.serialize_tuple_variant(name, variant_index, variant, len)?;
-        Ok(JsonEncodeCompound::new(
-            inner,
-            context,
-            child_depth,
-            self.has_value_limits,
-        ))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
     /// Charges an object before asking the inner serializer to create it.
@@ -425,15 +410,11 @@ where
         self.enter_container(JsonContainerKind::Map, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_map(len)?;
-        Ok(JsonEncodeCompound::new(
-            inner,
-            context,
-            child_depth,
-            self.has_value_limits,
-        ))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
     /// Charges a JSON object or recognizes serde_json's RawValue shape.
+    #[inline(always)]
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         match SerdeJsonCompat::classify_private_struct(name) {
             Some(PrivateStructKind::RawValue) => {
@@ -447,12 +428,7 @@ where
                 self.enter_container(JsonContainerKind::Map, self.depth)?;
                 let child_depth = self.depth.saturating_add(1);
                 let inner = self.inner.serialize_struct(name, len)?;
-                Ok(JsonEncodeCompound::new(
-                    inner,
-                    context,
-                    child_depth,
-                    self.has_value_limits,
-                ))
+                Ok(JsonEncodeCompound::new(inner, context, child_depth))
             }
         }
     }
@@ -472,12 +448,7 @@ where
         let context = self.context;
         let child_depth = object_depth.saturating_add(1);
         let inner = self.inner.serialize_struct_variant(name, variant_index, variant, len)?;
-        Ok(JsonEncodeCompound::new(
-            inner,
-            context,
-            child_depth,
-            self.has_value_limits,
-        ))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth))
     }
 
     /// Formats one display value once, checks it as a string, and emits it.
@@ -485,7 +456,7 @@ where
     where
         T: Display + ?Sized,
     {
-        if !self.has_value_limits {
+        if !VALUE_LIMITS {
             return self.inner.collect_str(value);
         }
         let text = JsonEncodeContext::collect_display::<S::Error, _>(

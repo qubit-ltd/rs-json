@@ -20,7 +20,7 @@ use super::internal::JsonKeyBudgetSerializer;
 use super::json_encode_context::JsonEncodeContext;
 
 /// Wraps a map key so it is traversed once through a key-aware decorator.
-pub(super) struct BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q>
+pub(super) struct BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q, const VALUE_LIMITS: bool>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -30,12 +30,10 @@ where
 
     /// Shared traversal context.
     context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
-
-    /// Whether key accounting can reject the emitted key.
-    has_value_limits: bool,
 }
 
-impl<'a, 'transaction, 'budget, 'context, T, R, Q> BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q>
+impl<'a, 'transaction, 'budget, 'context, T, R, Q, const VALUE_LIMITS: bool>
+    BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q, VALUE_LIMITS>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -45,31 +43,26 @@ where
     pub(super) const fn new(
         value: &'a T,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
-        has_value_limits: bool,
     ) -> Self {
-        Self {
-            value,
-            context,
-            has_value_limits,
-        }
+        Self { value, context }
     }
 }
 
-impl<T, R, Q> Serialize for BudgetedKey<'_, '_, '_, '_, T, R, Q>
+impl<T, R, Q, const VALUE_LIMITS: bool> Serialize for BudgetedKey<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
 where
     T: Serialize + ?Sized,
     R: Clone,
     Q: ResourceQuantity,
 {
     /// Serializes the original key once through a key-aware decorator.
+    #[inline(always)]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        self.value.serialize(JsonKeyBudgetSerializer {
+        self.value.serialize(JsonKeyBudgetSerializer::<S, R, Q, VALUE_LIMITS> {
             inner: serializer,
             context: self.context,
-            has_value_limits: self.has_value_limits,
         })
     }
 }

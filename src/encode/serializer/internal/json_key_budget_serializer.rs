@@ -22,8 +22,15 @@ use crate::internal::JsonLexemeLength;
 use crate::internal::JsonMapKey;
 
 /// Decorates serde_json's map-key serializer with key-byte checks.
-pub(in crate::encode::serializer) struct JsonKeyBudgetSerializer<'context, 'transaction, 'budget, S, R, Q>
-where
+pub(in crate::encode::serializer) struct JsonKeyBudgetSerializer<
+    'context,
+    'transaction,
+    'budget,
+    S,
+    R,
+    Q,
+    const VALUE_LIMITS: bool,
+> where
     Q: ResourceQuantity,
 {
     /// Underlying map-key serializer.
@@ -31,12 +38,9 @@ where
 
     /// Shared traversal context.
     pub(in crate::encode::serializer) context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
-
-    /// Whether key accounting can reject the emitted key.
-    pub(in crate::encode::serializer) has_value_limits: bool,
 }
 
-impl<S, R, Q> JsonKeyBudgetSerializer<'_, '_, '_, S, R, Q>
+impl<S, R, Q, const VALUE_LIMITS: bool> JsonKeyBudgetSerializer<'_, '_, '_, S, R, Q, VALUE_LIMITS>
 where
     S: Serializer,
     R: Clone,
@@ -45,7 +49,7 @@ where
     /// Checks and consumes one emitted key length, retaining any original
     /// error.
     fn check(&self, bytes: usize) -> Result<(), S::Error> {
-        if !self.has_value_limits {
+        if !VALUE_LIMITS {
             return Ok(());
         }
         self.context.borrow_mut().admit(JsonMeasurement::Key { bytes })
@@ -56,7 +60,7 @@ macro_rules! serialize_key_number {
     ($name:ident, signed $type:ty) => {
         #[doc = "Checks the serialized signed key length before forwarding it."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            if self.has_value_limits {
+            if VALUE_LIMITS {
                 self.check(JsonLexemeLength::signed_integer(value.into()))?;
             }
             self.inner.$name(value)
@@ -65,7 +69,7 @@ macro_rules! serialize_key_number {
     ($name:ident, unsigned $type:ty) => {
         #[doc = "Checks the serialized unsigned key length before forwarding it."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            if self.has_value_limits {
+            if VALUE_LIMITS {
                 self.check(JsonLexemeLength::unsigned_integer(value.into()))?;
             }
             self.inner.$name(value)
@@ -73,8 +77,8 @@ macro_rules! serialize_key_number {
     };
 }
 
-impl<'context, 'transaction, 'budget, S, R, Q> Serializer
-    for JsonKeyBudgetSerializer<'context, 'transaction, 'budget, S, R, Q>
+impl<'context, 'transaction, 'budget, S, R, Q, const VALUE_LIMITS: bool> Serializer
+    for JsonKeyBudgetSerializer<'context, 'transaction, 'budget, S, R, Q, VALUE_LIMITS>
 where
     S: Serializer,
     R: Clone,
@@ -108,7 +112,7 @@ where
     /// Charges and emits one full-range signed integer key as decimal text.
     fn serialize_i128(self, value: i128) -> Result<Self::Ok, Self::Error> {
         let text = JsonMapKey::signed_wide(value);
-        if self.has_value_limits {
+        if VALUE_LIMITS {
             self.check(text.len())?;
         }
         self.inner.serialize_str(&text)
@@ -117,7 +121,7 @@ where
     /// Charges and emits one full-range unsigned integer key as decimal text.
     fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
         let text = JsonMapKey::unsigned_wide(value);
-        if self.has_value_limits {
+        if VALUE_LIMITS {
             self.check(text.len())?;
         }
         self.inner.serialize_str(&text)
@@ -125,7 +129,7 @@ where
 
     /// Checks a finite `f32` key length before forwarding it.
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
-        if self.has_value_limits && value.is_finite() {
+        if VALUE_LIMITS && value.is_finite() {
             self.check(JsonLexemeLength::finite_f32(value))?;
         }
         self.inner.serialize_f32(value)
@@ -133,7 +137,7 @@ where
 
     /// Checks a finite `f64` key length before forwarding it.
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
-        if self.has_value_limits && value.is_finite() {
+        if VALUE_LIMITS && value.is_finite() {
             self.check(JsonLexemeLength::finite_f64(value))?;
         }
         self.inner.serialize_f64(value)
@@ -141,7 +145,7 @@ where
 
     /// Checks the UTF-8 key length before forwarding a character.
     fn serialize_char(self, value: char) -> Result<Self::Ok, Self::Error> {
-        if self.has_value_limits {
+        if VALUE_LIMITS {
             self.check(value.len_utf8())?;
         }
         self.inner.serialize_char(value)
@@ -149,7 +153,7 @@ where
 
     /// Checks the string key length before forwarding it.
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
-        if self.has_value_limits {
+        if VALUE_LIMITS {
             self.check(value.len())?;
         }
         self.inner.serialize_str(value)
@@ -190,7 +194,7 @@ where
         variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        if self.has_value_limits {
+        if VALUE_LIMITS {
             self.check(variant.len())?;
         }
         self.inner.serialize_unit_variant(name, variant_index, variant)
@@ -271,7 +275,7 @@ where
     where
         T: Display + ?Sized,
     {
-        if !self.has_value_limits {
+        if !VALUE_LIMITS {
             return self.inner.collect_str(value);
         }
         let text = JsonEncodeContext::collect_display::<S::Error, _>(self.context, value, DisplayBudgetKind::Key, 1)?;

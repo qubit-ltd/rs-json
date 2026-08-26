@@ -248,7 +248,11 @@ where
                     output: &accounting,
                     has_value_limits,
                 });
-                value.serialize(JsonEncodeSerializer::new(&mut inner, &context, has_value_limits))
+                if has_value_limits {
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
+                } else {
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(&mut inner, &context))
+                }
             };
             if result.is_ok() {
                 let _ = output.flush();
@@ -279,7 +283,11 @@ where
                 output: &accounting,
                 has_value_limits,
             });
-            value.serialize(JsonEncodeSerializer::new(&mut inner, &context, has_value_limits))
+            if has_value_limits {
+                value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
+            } else {
+                value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(&mut inner, &context))
+            }
         };
         if result.is_ok() {
             let _ = output.flush();
