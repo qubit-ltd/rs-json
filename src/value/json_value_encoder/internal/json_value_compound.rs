@@ -27,7 +27,10 @@ use crate::value::JsonValueEncodeError;
 /// Accumulates one Serde compound value in its JSON representation state.
 pub(in crate::value::json_value_encoder) enum JsonValueCompound {
     /// Array-like sequence or tuple values.
-    Sequence(Vec<Value>),
+    Sequence(
+        /// Values accumulated in encounter order.
+        Vec<Value>,
+    ),
     /// Object entries and a key awaiting its value.
     Map {
         /// Completed unique object entries.
