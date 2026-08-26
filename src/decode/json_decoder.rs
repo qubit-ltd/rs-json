@@ -25,6 +25,18 @@ use super::internal::TypedSeed;
 /// This facade performs no normalization. It accepts integers from `i64::MIN`
 /// through `u64::MAX`, requires finite floating-point values, supports values
 /// borrowing from its input, and exposes caller-provided Serde seeds.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::JsonDecoder;
+/// use serde_json::Value;
+///
+/// let mut decoder = JsonDecoder::unlimited();
+/// let value = decoder.decode_str::<Value>(r#"{"ok":true}"#)?;
+/// assert_eq!(value["ok"], true);
+/// # Ok::<(), qubit_json::decode::JsonDecodeError>(())
+/// ```
 #[derive(Debug)]
 pub struct JsonDecoder<'budget, R = JsonResource, Q = usize>
 where

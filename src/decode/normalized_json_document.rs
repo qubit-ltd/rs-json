@@ -20,6 +20,28 @@ use std::borrow::Cow;
 /// escapes can borrow from this document, while strings containing escapes
 /// require an owned target because deserialization must materialize their
 /// unescaped contents.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_budget::json::JsonDecodeLimits;
+/// use qubit_json::decode::NormalizingJsonDecodePolicy;
+/// use qubit_json::decode::NormalizingJsonDecoder;
+/// use serde_json::Value;
+///
+/// let input = "  {\"ok\":true}  ";
+/// let mut decoder = NormalizingJsonDecoder::owned(
+///     NormalizingJsonDecodePolicy::builder().build(),
+///     JsonDecodeLimits::new(),
+/// );
+/// let document = decoder.prepare_str(input)?;
+/// assert_eq!(document.as_str(), r#"{"ok":true}"#);
+/// assert_eq!(document.raw_input_bytes(), input.len());
+/// assert_eq!(document.normalized_input_bytes(), document.as_str().len());
+/// let value = decoder.decode_document::<Value>(&document)?;
+/// assert_eq!(value["ok"], true);
+/// # Ok::<(), qubit_json::decode::JsonDecodeError>(())
+/// ```
 #[derive(Debug, Clone)]
 pub struct NormalizedJsonDocument<'input> {
     /// Normalized text, borrowed when rewriting did not require allocation.
