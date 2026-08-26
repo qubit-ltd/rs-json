@@ -9,8 +9,10 @@
 
 mod json_lexeme_length;
 mod json_lexeme_length_writer;
+mod json_map_key;
 mod json_value_limits;
 
 pub(crate) use json_lexeme_length::JsonLexemeLength;
 pub(crate) use json_lexeme_length_writer::JsonLexemeLengthWriter;
+pub(crate) use json_map_key::JsonMapKey;
 pub(crate) use json_value_limits::has_json_value_limits;
