@@ -46,8 +46,9 @@ impl MutChildCursor {
             },
             Value::Object(entries) => {
                 let iter = entries.iter_mut();
-                // SAFETY: no entry is inserted, removed, or replaced while this
-                // iterator is suspended.
+                // SAFETY: the map structure and key set remain unchanged while
+                // this iterator is suspended. A yielded child value may be
+                // replaced without invalidating the map iterator.
                 let iter = unsafe { std::mem::transmute::<IterMut<'_>, IterMut<'static>>(iter) };
                 Self::Object { iter }
             }
