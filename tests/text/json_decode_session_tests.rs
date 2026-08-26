@@ -21,8 +21,8 @@ use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
+use qubit_json::decode::JsonDecodeError;
 use qubit_json::decode::JsonDecoder;
-use qubit_json::decode::NormalizingJsonDecodeError;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde::de::DeserializeOwned;
@@ -34,12 +34,12 @@ fn run_with_session<'a, T>(
     decoder: &NormalizingJsonDecoder<'_>,
     input: &str,
     session: &mut JsonDecodeSession<'a, JsonResource>,
-) -> Result<T, NormalizingJsonDecodeError>
+) -> Result<T, JsonDecodeError>
 where
     T: DeserializeOwned,
 {
     let owned_session = std::mem::replace(session, JsonDecodeSession::owned(JsonDecodeLimits::new()));
-    let mut stateful = NormalizingJsonDecoder::from_session(decoder.policy().clone(), owned_session);
+    let mut stateful = NormalizingJsonDecoder::new(decoder.policy().clone(), owned_session);
     let result = stateful.decode_str(input);
     *session = stateful.into_session();
     result

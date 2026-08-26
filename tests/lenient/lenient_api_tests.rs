@@ -11,9 +11,9 @@ use std::error::Error;
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_json::decode::DiagnosticPolicy;
-use qubit_json::decode::NormalizingJsonDecodeErrorKind;
+use qubit_json::decode::JsonDecodeErrorKind;
+use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
-use qubit_json::decode::NormalizingJsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecoder;
 
 /// Verifies that lenient decoding exposes domain-owned types and preserves
@@ -32,9 +32,9 @@ fn test_lenient_domain_owns_its_public_types() {
         .decode_str::<u64>(r#""TOP_SECRET""#)
         .expect_err("a string cannot deserialize into u64");
 
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
-    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Deserialize);
-    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.stage(), JsonDecodeStage::Deserialize);
+    assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert!(!error.to_string().contains("TOP_SECRET"));
     assert!(error.source().is_none());
 }

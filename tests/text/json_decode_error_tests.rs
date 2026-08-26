@@ -11,9 +11,9 @@ use std::error::Error;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
+use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::JsonDecoder;
-use serde_json::error::Category;
 
 /// Verifies that strict text decoding uses the operation-specific error API.
 #[test]
@@ -33,14 +33,10 @@ fn test_decoder_returns_safe_deserialize_metadata() {
         .decode_utf8::<u64>(br#""TOP_SECRET""#)
         .expect_err("a JSON string cannot deserialize into u64");
 
-    assert!(matches!(
-        error,
-        JsonDecodeError::Deserialize {
-            category: Category::Data,
-            line: 1,
-            column,
-        } if column > 0
-    ));
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.stage(), JsonDecodeStage::Deserialize);
+    assert_eq!(error.line(), Some(1));
+    assert!(error.column().is_some_and(|column| column > 0));
     assert!(!error.to_string().contains("TOP_SECRET"));
     assert!(error.source().is_none());
     assert!(!format!("{error:?}").contains("TOP_SECRET"));
@@ -60,10 +56,10 @@ fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
     );
 
     let mut decoder = JsonDecoder::<JsonResource, usize>::new(session);
-    assert!(matches!(
-        decoder.decode_utf8::<u64>(rejected),
-        Err(JsonDecodeError::Deserialize { .. })
-    ));
+    let error = decoder
+        .decode_utf8::<u64>(rejected)
+        .expect_err("the rejected value must fail typed decoding");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
     assert_eq!(
         decoder
             .session()

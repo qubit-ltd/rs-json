@@ -15,7 +15,6 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::decode::JsonDecodeError;
 use qubit_json::decode::JsonDecoder;
 use serde::de::IgnoredAny;
 
@@ -36,17 +35,13 @@ fn test_json_lexical_preflight_consumes_payload_for_keys_strings_and_numbers() {
         .expect_err("one key, string, and number must exceed four payload bytes");
 
     assert!(matches!(
-        error,
-        JsonDecodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::Insufficient {
-                    resource: JsonResource::PayloadBytes,
-                    limit: 4,
-                    remaining: 0,
-                    requested: 2,
-                })
-            )
+        error.budget_error().and_then(|error| error.budget_error()),
+        Some(BudgetError::Insufficient {
+            resource: JsonResource::PayloadBytes,
+            limit: 4,
+            remaining: 0,
+            requested: 2,
+        })
     ));
 }
 
@@ -69,16 +64,12 @@ fn test_json_lexical_preflight_charges_decoded_key_bytes() {
         .expect_err("the decoded three-byte key must exceed the two-byte limit");
 
     assert!(matches!(
-        error,
-        JsonDecodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::LimitExceeded {
-                    resource: JsonResource::KeyBytes,
-                    observed: Observation::Exact(3),
-                    maximum: 2,
-                })
-            )
+        error.budget_error().and_then(|error| error.budget_error()),
+        Some(BudgetError::LimitExceeded {
+            resource: JsonResource::KeyBytes,
+            observed: Observation::Exact(3),
+            maximum: 2,
+        })
     ));
 }
 
@@ -98,17 +89,13 @@ fn test_json_lexical_preflight_charges_each_value_node() {
         .expect_err("the object child must exceed the one-node budget");
 
     assert!(matches!(
-        error,
-        JsonDecodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::Insufficient {
-                    resource: JsonResource::Nodes,
-                    limit: 1,
-                    remaining: 0,
-                    requested: 1,
-                })
-            )
+        error.budget_error().and_then(|error| error.budget_error()),
+        Some(BudgetError::Insufficient {
+            resource: JsonResource::Nodes,
+            limit: 1,
+            remaining: 0,
+            requested: 1,
+        })
     ));
 }
 
@@ -128,16 +115,12 @@ fn test_json_lexical_preflight_checks_decoded_string_bytes() {
         .expect_err("the decoded three-byte string must exceed the limit");
 
     assert!(matches!(
-        error,
-        JsonDecodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::LimitExceeded {
-                    resource: JsonResource::StringBytes,
-                    observed: Observation::Exact(3),
-                    maximum: 2,
-                })
-            )
+        error.budget_error().and_then(|error| error.budget_error()),
+        Some(BudgetError::LimitExceeded {
+            resource: JsonResource::StringBytes,
+            observed: Observation::Exact(3),
+            maximum: 2,
+        })
     ));
 }
 
@@ -157,16 +140,12 @@ fn test_json_lexical_preflight_checks_number_lexical_bytes() {
         .expect_err("all four lexical number bytes must be charged");
 
     assert!(matches!(
-        error,
-        JsonDecodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::LimitExceeded {
-                    resource: JsonResource::NumberBytes,
-                    observed: Observation::Exact(4),
-                    maximum: 3,
-                })
-            )
+        error.budget_error().and_then(|error| error.budget_error()),
+        Some(BudgetError::LimitExceeded {
+            resource: JsonResource::NumberBytes,
+            observed: Observation::Exact(4),
+            maximum: 3,
+        })
     ));
 }
 
@@ -188,16 +167,12 @@ fn test_json_lexical_preflight_checks_sequence_items() {
         .expect_err("the second array item must exceed the point limit");
 
     assert!(matches!(
-        error,
-        JsonDecodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::LimitExceeded {
-                    resource: JsonResource::SequenceItems,
-                    observed: Observation::Exact(2),
-                    maximum: 1,
-                })
-            )
+        error.budget_error().and_then(|error| error.budget_error()),
+        Some(BudgetError::LimitExceeded {
+            resource: JsonResource::SequenceItems,
+            observed: Observation::Exact(2),
+            maximum: 1,
+        })
     ));
 }
 
@@ -219,16 +194,12 @@ fn test_json_lexical_preflight_counts_duplicate_map_entries() {
         .expect_err("the duplicate second entry must still exceed the limit");
 
     assert!(matches!(
-        error,
-        JsonDecodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::LimitExceeded {
-                    resource: JsonResource::MapEntries,
-                    observed: Observation::Exact(2),
-                    maximum: 1,
-                })
-            )
+        error.budget_error().and_then(|error| error.budget_error()),
+        Some(BudgetError::LimitExceeded {
+            resource: JsonResource::MapEntries,
+            observed: Observation::Exact(2),
+            maximum: 1,
+        })
     ));
 }
 
@@ -252,17 +223,13 @@ fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
         .expect_err("private token text must consume the ordinary key limit");
 
     assert!(matches!(
-        error,
-        JsonDecodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
+        error.budget_error().and_then(|error| error.budget_error()),
                 Some(BudgetError::LimitExceeded {
                     resource: JsonResource::KeyBytes,
                     observed: Observation::Exact(actual),
                     maximum,
                 }) if *actual == PRIVATE_NUMBER_TOKEN.len()
                     && *maximum == PRIVATE_NUMBER_TOKEN.len() - 1
-            )
     ));
 }
 
@@ -282,16 +249,12 @@ fn test_json_lexical_preflight_charges_duplicate_entry_payloads() {
         .expect_err("both duplicate key-number pairs must consume payload");
 
     assert!(matches!(
-        error,
-        JsonDecodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::Insufficient {
-                    resource: JsonResource::PayloadBytes,
-                    limit: 3,
-                    remaining: 0,
-                    requested: 1,
-                })
-            )
+        error.budget_error().and_then(|error| error.budget_error()),
+        Some(BudgetError::Insufficient {
+            resource: JsonResource::PayloadBytes,
+            limit: 3,
+            remaining: 0,
+            requested: 1,
+        })
     ));
 }

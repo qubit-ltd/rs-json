@@ -10,10 +10,22 @@
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde::de::IgnoredAny;
+
+/// Creates a policy that exercises the normalization facade without rewriting.
+fn no_normalization_policy() -> NormalizingJsonDecodePolicy {
+    NormalizingJsonDecodePolicy::builder()
+        .trim_whitespace(false)
+        .strip_utf8_bom(false)
+        .markdown_fence_policy(MarkdownFencePolicy::Disabled)
+        .escape_control_chars_in_strings(false)
+        .build()
+}
 
 /// Creates a reusable session with no configured resource limits.
 /// Verifies that strict string decoding can borrow from the input.
@@ -55,14 +67,30 @@ fn test_json_decoder_validation_entry_points() {
         .expect("strict UTF-8 validation should succeed");
 }
 
+/// Verifies strict decoding exposes object and array top-level contracts for
+/// both string and byte entry points.
+#[test]
+fn test_json_decoder_typed_root_entry_points() {
+    let mut decoder = JsonDecoder::unlimited();
+
+    let object: serde_json::Value = decoder.decode_object_str("{\"ok\":true}").expect("object string");
+    let array: Vec<u8> = decoder.decode_array_utf8(b"[1,2]").expect("array bytes");
+    let error = decoder
+        .decode_object_utf8::<serde_json::Value>(b"[]")
+        .expect_err("array must not satisfy object contract");
+
+    assert_eq!(object["ok"], true);
+    assert_eq!(array, [1, 2]);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::UnexpectedTopLevel);
+}
+
 /// Verifies both decoder families reject input containing more than one JSON
 /// document.
 #[test]
 fn test_decoders_share_complete_document_admission() {
     let input = "null true";
     let mut strict = JsonDecoder::unlimited();
-    let mut normalizing =
-        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::strict(), JsonDecodeLimits::default());
+    let mut normalizing = NormalizingJsonDecoder::owned(no_normalization_policy(), JsonDecodeLimits::default());
 
     assert!(strict.decode_str::<IgnoredAny>(input).is_err());
     assert!(normalizing.decode_str::<IgnoredAny>(input).is_err());
@@ -133,7 +161,7 @@ fn test_normalizing_decoder_decode_utf8_returns_owned_value() {
 /// `JsonDecodeLimits` while retaining an independent normalization policy.
 #[test]
 fn test_normalizing_decoder_owned_separates_policy_and_limits() {
-    let policy = NormalizingJsonDecodePolicy::strict();
+    let policy = no_normalization_policy();
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(8)
         .max_normalized_input_bytes(6)
@@ -150,12 +178,12 @@ fn test_normalizing_decoder_owned_separates_policy_and_limits() {
 /// Verifies that a caller-provided session remains the decoder's sole source
 /// of limits and can be recovered after use.
 #[test]
-fn test_normalizing_decoder_from_session_preserves_session() {
+fn test_normalizing_decoder_new_preserves_session() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(9)
         .build();
     let session = JsonDecodeSession::owned(limits);
-    let decoder = NormalizingJsonDecoder::from_session(NormalizingJsonDecodePolicy::lenient(), session);
+    let decoder = NormalizingJsonDecoder::new(NormalizingJsonDecodePolicy::lenient(), session);
 
     assert_eq!(decoder.session().max_input_bytes(), Some(9));
     assert_eq!(decoder.into_session().max_input_bytes(), Some(9));
@@ -165,10 +193,7 @@ fn test_normalizing_decoder_from_session_preserves_session() {
 /// limits.
 #[test]
 fn test_normalizing_decoder_policies_do_not_change_session_limits() {
-    for policy in [
-        NormalizingJsonDecodePolicy::strict(),
-        NormalizingJsonDecodePolicy::lenient(),
-    ] {
+    for policy in [no_normalization_policy(), NormalizingJsonDecodePolicy::lenient()] {
         let session = JsonDecodeSession::owned(
             JsonDecodeLimits::<JsonResource, usize>::builder()
                 .max_input_bytes(7)
@@ -176,7 +201,7 @@ fn test_normalizing_decoder_policies_do_not_change_session_limits() {
                 .max_nodes(2)
                 .build(),
         );
-        let decoder = NormalizingJsonDecoder::from_session(policy, session);
+        let decoder = NormalizingJsonDecoder::new(policy, session);
 
         assert_eq!(decoder.session().max_input_bytes(), Some(7));
         assert_eq!(decoder.session().max_normalized_input_bytes(), Some(5));
@@ -194,7 +219,7 @@ fn test_normalizing_decoder_typed_failure_keeps_input_and_rolls_back_value() {
         .max_normalized_input_bytes(input.len())
         .max_nodes(2)
         .build();
-    let mut decoder = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::strict(), limits);
+    let mut decoder = NormalizingJsonDecoder::owned(no_normalization_policy(), limits);
 
     decoder
         .decode_str::<std::collections::HashMap<String, bool>>(input)

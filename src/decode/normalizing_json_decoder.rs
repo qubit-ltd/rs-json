@@ -5,535 +5,228 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Defines the [`NormalizingJsonDecoder`] type and its public decoding methods.
+//! Defines the explicit normalization facade for JSON decoding.
 
-use qubit_budget::ResourceBudget;
-use qubit_budget::json::JsonDecodeAttempt;
+use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
+use serde::Deserialize;
 use serde::de::DeserializeOwned;
-use serde_json::Error;
+use serde::de::DeserializeSeed;
 use serde_json::Value;
-use serde_json::from_str;
-use serde_json::value::RawValue;
 
-use super::DiagnosticPolicy;
+use super::JsonDecodeError;
 use super::JsonRootKind;
-use super::NormalizingJsonDecodeError;
+use super::NormalizedJsonDocument;
 use super::NormalizingJsonDecodePolicy;
+use super::internal::JsonDecodeEngine;
+use super::internal::JsonNormalizer;
 use super::internal::TypedSeed;
-use super::internal::admit_json_document;
-use super::internal::deserialize_json_document;
-use super::internal::json_normalizer::JsonNormalizer;
-use crate::internal::has_json_value_limits;
-use crate::lexical::JsonLexicalError;
 
-/// A configurable JSON decoder for non-fully-trusted text inputs.
+/// Normalizes non-fully-trusted text before decoding complete JSON documents.
 ///
-/// `NormalizingJsonDecoder` applies a small set of predictable normalization
-/// rules before delegating actual parsing and deserialization to `serde_json`.
-/// Its lexical scanner enforces the configured JSON depth without recursive
-/// traversal, but final typed materialization remains subject to `serde_json`'s
-/// recursion guard. A document can therefore pass lexical admission and still
-/// return a deserialize-stage error; callers should keep that guard enabled
-/// rather than opting into unbounded recursive deserialization.
-///
-/// # Examples
-///
-/// ```
-/// use qubit_budget::json::{JsonDecodeLimits, JsonResource};
-/// use qubit_json::decode::{NormalizingJsonDecodePolicy, NormalizingJsonDecoder};
-///
-/// let mut decoder = NormalizingJsonDecoder::owned(
-///     NormalizingJsonDecodePolicy::lenient(),
-///     JsonDecodeLimits::<JsonResource, usize>::builder()
-///         .max_input_bytes(1024)
-///         .max_nodes(64)
-///         .build(),
-/// );
-/// let value = decoder.decode_value(r#"```json
-/// {"ok":true}
-/// ```"#)?;
-/// assert_eq!(value["ok"], true);
-/// # Ok::<(), qubit_json::decode::NormalizingJsonDecodeError>(())
-/// ```
+/// Owned convenience methods prepare and decode in one call. Callers needing
+/// borrowed results, custom seeds, or repeated materialization first create a
+/// [`NormalizedJsonDocument`] and then use a document decoding method.
 #[derive(Debug)]
-pub struct NormalizingJsonDecoder<'budget> {
-    /// Stores the configured normalization pipeline.
+pub struct NormalizingJsonDecoder<'budget, R = JsonResource, Q = usize>
+where
+    Q: ResourceQuantity,
+{
+    /// Configured normalization pipeline.
     normalizer: JsonNormalizer,
-    /// Session that accumulates all input and value charges.
-    session: JsonDecodeSession<'budget>,
+    /// Shared generic decoding and accounting core.
+    engine: JsonDecodeEngine<'budget, R, Q>,
 }
 
-impl NormalizingJsonDecoder<'static> {
+impl<R, Q> NormalizingJsonDecoder<'static, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
     /// Creates a decoder with an owned session built from explicit limits.
-    ///
-    /// # Parameters
-    ///
-    /// * `policy` - Immutable normalization and diagnostic behavior.
-    /// * `limits` - Resource limits used to construct the owned session.
-    ///
-    /// # Returns
-    ///
-    /// A decoder configured with `policy` and an owned session.
-    #[inline(always)]
+    #[inline]
     #[must_use]
-    pub fn owned(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits) -> Self {
-        Self {
-            normalizer: JsonNormalizer::new(policy),
-            session: JsonDecodeSession::owned(limits),
-        }
+    pub fn owned_with_limits(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits<R, Q>) -> Self {
+        Self::new(policy, JsonDecodeSession::owned(limits))
     }
 }
 
-impl<'budget> NormalizingJsonDecoder<'budget> {
-    /// Creates a decoder with a caller-provided cumulative session.
-    ///
-    /// The supplied session is the decoder's only accounting state and
-    /// resource-limit source.
+impl NormalizingJsonDecoder<'static, JsonResource, usize> {
+    /// Creates a standard decoder with an owned standard JSON session.
     #[inline]
     #[must_use]
-    pub fn from_session(policy: NormalizingJsonDecodePolicy, session: JsonDecodeSession<'budget>) -> Self {
+    pub fn owned(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits) -> Self {
+        Self::new(policy, JsonDecodeSession::owned(limits))
+    }
+}
+
+impl<'budget, R, Q> NormalizingJsonDecoder<'budget, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    /// Creates a decoder around a reusable caller-provided session.
+    #[inline]
+    #[must_use]
+    pub const fn new(policy: NormalizingJsonDecodePolicy, session: JsonDecodeSession<'budget, R, Q>) -> Self {
         Self {
             normalizer: JsonNormalizer::new(policy),
-            session,
+            engine: JsonDecodeEngine::new(session),
         }
     }
 
     /// Returns the cumulative session for read-only inspection.
     #[inline(always)]
     #[must_use]
-    pub const fn session(&self) -> &JsonDecodeSession<'budget> {
-        &self.session
+    pub const fn session(&self) -> &JsonDecodeSession<'budget, R, Q> {
+        self.engine.session()
     }
 
     /// Returns mutable access to the cumulative session.
     #[inline(always)]
     #[must_use]
-    pub const fn session_mut(&mut self) -> &mut JsonDecodeSession<'budget> {
-        &mut self.session
+    pub const fn session_mut(&mut self) -> &mut JsonDecodeSession<'budget, R, Q> {
+        self.engine.session_mut()
     }
 
-    /// Returns the cumulative session and consumes the decoder.
+    /// Consumes the decoder and returns its cumulative session.
     #[inline(always)]
     #[must_use]
-    pub fn into_session(self) -> JsonDecodeSession<'budget> {
-        self.session
+    pub fn into_session(self) -> JsonDecodeSession<'budget, R, Q> {
+        self.engine.into_session()
     }
 
-    /// Returns the immutable policy used by this decoder.
-    ///
-    /// # Returns
-    ///
-    /// The policy supplied when the decoder was created.
+    /// Returns the immutable normalization and diagnostic policy.
     #[inline(always)]
     #[must_use]
     pub const fn policy(&self) -> &NormalizingJsonDecodePolicy {
         self.normalizer.policy()
     }
 
-    /// Decodes `input` into the target Rust type `T` without a top-level
-    /// structure constraint.
+    /// Normalizes one string and immediately charges its input budgets.
     ///
-    /// # Type Parameters
+    /// The returned document may borrow `input`. Later document decoding does
+    /// not charge its input again and commits only decoded-value usage.
+    pub fn prepare_str<'input>(
+        &mut self,
+        input: &'input str,
+    ) -> Result<NormalizedJsonDocument<'input>, JsonDecodeError<R, Q>> {
+        self.engine.prepare_str(&self.normalizer, input)
+    }
+
+    /// Charges raw bytes, validates UTF-8, and normalizes one byte slice.
     ///
-    /// * `T` - Target type deserialized from the normalized JSON text.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Raw JSON text to normalize and deserialize.
-    ///
-    /// # Returns
-    ///
-    /// The deserialized target value.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NormalizingJsonDecodeError`] when input normalization, JSON
-    /// parsing, or target deserialization fails.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
-    #[inline(always)]
-    pub fn decode_str<T>(&mut self, input: &str) -> Result<T, NormalizingJsonDecodeError>
+    /// Raw input usage remains charged when UTF-8 validation or normalization
+    /// fails. The returned document may borrow the original byte slice.
+    pub fn prepare_utf8<'input>(
+        &mut self,
+        input: &'input [u8],
+    ) -> Result<NormalizedJsonDocument<'input>, JsonDecodeError<R, Q>> {
+        self.engine.prepare_utf8(&self.normalizer, input)
+    }
+
+    /// Decodes one prepared document and permits results borrowing it.
+    pub fn decode_document<'de, T>(
+        &mut self,
+        document: &'de NormalizedJsonDocument<'_>,
+    ) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        T: Deserialize<'de>,
+    {
+        self.decode_document_seed(document, TypedSeed::new())
+    }
+
+    /// Decodes one prepared document through a caller-provided Serde seed.
+    pub fn decode_document_seed<'de, S>(
+        &mut self,
+        document: &'de NormalizedJsonDocument<'_>,
+        seed: S,
+    ) -> Result<S::Value, JsonDecodeError<R, Q>>
+    where
+        S: DeserializeSeed<'de>,
+    {
+        self.engine
+            .decode_document_seed(document, seed, self.policy().diagnostic_policy(), None)
+    }
+
+    /// Decodes one prepared document while requiring a top-level object.
+    pub fn decode_object_document<'de, T>(
+        &mut self,
+        document: &'de NormalizedJsonDocument<'_>,
+    ) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        T: Deserialize<'de>,
+    {
+        self.engine.decode_document_seed(
+            document,
+            TypedSeed::new(),
+            self.policy().diagnostic_policy(),
+            Some(JsonRootKind::Object),
+        )
+    }
+
+    /// Decodes one prepared document while requiring a top-level array.
+    pub fn decode_array_document<'de, T>(
+        &mut self,
+        document: &'de NormalizedJsonDocument<'_>,
+    ) -> Result<Vec<T>, JsonDecodeError<R, Q>>
+    where
+        T: Deserialize<'de>,
+    {
+        self.engine.decode_document_seed(
+            document,
+            TypedSeed::new(),
+            self.policy().diagnostic_policy(),
+            Some(JsonRootKind::Array),
+        )
+    }
+
+    /// Validates a prepared document and commits its decoded-value usage.
+    pub fn validate_document(&mut self, document: &NormalizedJsonDocument<'_>) -> Result<(), JsonDecodeError<R, Q>> {
+        self.engine
+            .validate_document(document, self.policy().diagnostic_policy(), None)
+    }
+
+    /// Normalizes and decodes one string into an owned target value.
+    pub fn decode_str<T>(&mut self, input: &str) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: DeserializeOwned,
     {
-        self.normalize_then_deserialize(input)
+        let document = self.prepare_str(input)?;
+        self.decode_document(&document)
     }
 
-    /// Decodes one UTF-8 byte slice while accumulating charges in this decoder.
-    ///
-    /// The configured raw byte limit is enforced before UTF-8 validation.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Target type deserialized from the normalized JSON text.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Raw JSON bytes to validate, normalize, and deserialize.
-    ///
-    /// # Returns
-    ///
-    /// The deserialized target value.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NormalizingJsonDecodeError`] when the raw byte limit is
-    /// exceeded, the bytes are not valid UTF-8, or normalization, admission,
-    /// JSON parsing, or target deserialization fails.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
-    pub fn decode_utf8<T>(&mut self, input: &[u8]) -> Result<T, NormalizingJsonDecodeError>
+    /// Normalizes and decodes one UTF-8 byte slice into an owned target value.
+    pub fn decode_utf8<T>(&mut self, input: &[u8]) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: DeserializeOwned,
     {
-        let raw_input_bytes = input.len();
-        let privacy_policy = self.policy().diagnostic_policy();
-        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
-        let mut attempt = self.session.begin_value();
-        attempt.try_consume_input_bytes(raw_input_bytes).map_err(|_| {
-            NormalizingJsonDecodeError::input_too_large(
-                raw_input_bytes,
-                attempt.input_budget().map_or(raw_input_bytes, ResourceBudget::limit),
-                privacy_policy,
-            )
-        })?;
-        let input = std::str::from_utf8(input)
-            .map_err(|error| NormalizingJsonDecodeError::invalid_utf8(error, raw_input_bytes, privacy_policy))?;
-        let normalized = self.normalizer.normalize_after_raw_charge(input, &mut attempt)?;
-        Self::admit_normalized(
-            &mut attempt,
-            normalized.as_ref(),
-            raw_input_bytes,
-            privacy_policy,
-            has_value_limits,
-        )?;
-        let value =
-            Self::deserialize_normalized(normalized.as_ref(), raw_input_bytes, normalized.len(), privacy_policy)?;
-        attempt.commit();
-        Ok(value)
+        let document = self.prepare_utf8(input)?;
+        self.decode_document(&document)
     }
 
-    /// Decodes `input` into `T`, requiring a top-level JSON object.
-    ///
-    /// The target is deserialized directly from normalized text after a
-    /// top-level check, preserving serde's duplicate-field and number handling
-    /// semantics.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Raw JSON text to normalize and deserialize.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Target object type deserialized from the normalized JSON text.
-    ///
-    /// # Returns
-    ///
-    /// The deserialized target value when the normalized input is a JSON
-    /// object. The object requirement applies to the normalized input; the
-    /// representation produced by `T` is not required to remain object-shaped.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NormalizingJsonDecodeError`] when normalization or parsing
-    /// fails, when the top-level value is not an object, or when the object
-    /// cannot be deserialized into `T`.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
-    #[inline(always)]
-    pub fn decode_object<T>(&mut self, input: &str) -> Result<T, NormalizingJsonDecodeError>
+    /// Normalizes and decodes one string while requiring a top-level object.
+    pub fn decode_object<T>(&mut self, input: &str) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: DeserializeOwned,
     {
-        self.decode_with_top_level(input, JsonRootKind::Object)
+        let document = self.prepare_str(input)?;
+        self.decode_object_document(&document)
     }
 
-    /// Decodes `input` into `Vec<T>`, requiring a top-level JSON array.
-    ///
-    /// The elements are deserialized directly from normalized text after a
-    /// top-level check.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Raw JSON text to normalize and deserialize.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Element type deserialized from each array item.
-    ///
-    /// # Returns
-    ///
-    /// The deserialized elements when the normalized input is a JSON array.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NormalizingJsonDecodeError`] when normalization or parsing
-    /// fails, when the top-level value is not an array, or when an element
-    /// cannot be deserialized into `T`.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the [`serde::Deserialize`] implementation for `T` panics.
-    #[inline(always)]
-    pub fn decode_array<T>(&mut self, input: &str) -> Result<Vec<T>, NormalizingJsonDecodeError>
+    /// Normalizes and decodes one string while requiring a top-level array.
+    pub fn decode_array<T>(&mut self, input: &str) -> Result<Vec<T>, JsonDecodeError<R, Q>>
     where
         T: DeserializeOwned,
     {
-        self.decode_with_top_level(input, JsonRootKind::Array)
+        let document = self.prepare_str(input)?;
+        self.decode_array_document(&document)
     }
 
-    /// Decodes `input` into a [`serde_json::Value`].
-    ///
-    /// This entry point intentionally constructs a JSON DOM because its public
-    /// return type is [`Value`].
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Raw JSON text to normalize and parse.
-    ///
-    /// # Returns
-    ///
-    /// The parsed dynamic JSON value.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NormalizingJsonDecodeError`] when input normalization or JSON
-    /// parsing fails.
-    pub fn decode_value(&mut self, input: &str) -> Result<Value, NormalizingJsonDecodeError> {
-        let raw_input_bytes = input.len();
-        let privacy_policy = self.policy().diagnostic_policy();
-        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
-        let mut attempt = self.session.begin_value();
-        let normalized = self.normalizer.normalize(input, &mut attempt)?;
-        Self::admit_normalized(
-            &mut attempt,
-            normalized.as_ref(),
-            raw_input_bytes,
-            privacy_policy,
-            has_value_limits,
-        )?;
-        let value =
-            Self::deserialize_normalized(normalized.as_ref(), raw_input_bytes, normalized.len(), privacy_policy)?;
-        attempt.commit();
-        Ok(value)
-    }
-
-    /// Decodes input while enforcing an object or array top-level contract.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Raw JSON text to normalize and deserialize.
-    /// * `expected` - Required top-level JSON kind.
-    ///
-    /// # Returns
-    ///
-    /// The deserialized target value.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NormalizingJsonDecodeError`] when normalization or parsing
-    /// fails, when the validated top-level kind differs from `expected`, or
-    /// when target deserialization fails.
-    ///
-    /// # Panics
-    ///
-    /// Panics from `T`'s `Deserialize` implementation or visitor methods are
-    /// not caught and propagate to the caller.
-    fn decode_with_top_level<T>(&mut self, input: &str, expected: JsonRootKind) -> Result<T, NormalizingJsonDecodeError>
-    where
-        T: DeserializeOwned,
-    {
-        let raw_input_bytes = input.len();
-        let privacy_policy = self.policy().diagnostic_policy();
-        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
-        let mut attempt = self.session.begin_value();
-        let normalized = self.normalizer.normalize(input, &mut attempt)?;
-        let normalized_input_bytes = normalized.len();
-        Self::admit_normalized(
-            &mut attempt,
-            normalized.as_ref(),
-            raw_input_bytes,
-            privacy_policy,
-            has_value_limits,
-        )?;
-        let actual = JsonRootKind::of_normalized_json(normalized.as_ref());
-        if actual != expected {
-            return Err(NormalizingJsonDecodeError::unexpected_top_level(
-                expected,
-                actual,
-                raw_input_bytes,
-                normalized_input_bytes,
-                privacy_policy,
-            ));
-        }
-        let value = Self::deserialize_normalized(
-            normalized.as_ref(),
-            raw_input_bytes,
-            normalized_input_bytes,
-            privacy_policy,
-        )?;
-        attempt.commit();
-        Ok(value)
-    }
-
-    /// Runs lexical admission against this decoder's session.
-    fn admit_normalized(
-        attempt: &mut JsonDecodeAttempt<'_, JsonResource, usize>,
-        normalized: &str,
-        raw_input_bytes: usize,
-        privacy_policy: DiagnosticPolicy,
-        has_value_limits: bool,
-    ) -> Result<(), NormalizingJsonDecodeError> {
-        admit_json_document(attempt, normalized.as_bytes(), has_value_limits)
-            .map_err(|error| Self::map_admission_error(error, normalized, raw_input_bytes, privacy_policy))
-    }
-
-    /// Normalizes, lexically admits, and directly deserializes input.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Raw JSON text to normalize and deserialize.
-    ///
-    /// # Returns
-    ///
-    /// The deserialized target value.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NormalizingJsonDecodeError`] when normalization, JSON parsing,
-    /// or target deserialization fails.
-    fn normalize_then_deserialize<T>(&mut self, input: &str) -> Result<T, NormalizingJsonDecodeError>
-    where
-        T: DeserializeOwned,
-    {
-        let raw_input_bytes = input.len();
-        let privacy_policy = self.policy().diagnostic_policy();
-        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
-        let mut attempt = self.session.begin_value();
-        let normalized = self.normalizer.normalize(input, &mut attempt)?;
-        Self::admit_normalized(
-            &mut attempt,
-            normalized.as_ref(),
-            raw_input_bytes,
-            privacy_policy,
-            has_value_limits,
-        )?;
-        let value =
-            Self::deserialize_normalized(normalized.as_ref(), raw_input_bytes, normalized.len(), privacy_policy)?;
-        attempt.commit();
-        Ok(value)
-    }
-
-    /// Maps lexical admission failures to the stable public error model.
-    ///
-    /// # Parameters
-    ///
-    /// * `error` - Admission error produced while scanning normalized JSON.
-    /// * `normalized` - Complete normalized JSON text.
-    /// * `raw_input_bytes` - Input length before normalization.
-    /// * `privacy_policy` - Policy applied to retained diagnostics.
-    ///
-    /// # Returns
-    ///
-    /// A budget error for resource rejection or an invalid-JSON error for a
-    /// lexical failure, with input-derived details governed by
-    /// `privacy_policy`.
-    #[must_use]
-    fn map_admission_error(
-        error: JsonLexicalError<JsonResource, usize>,
-        normalized: &str,
-        raw_input_bytes: usize,
-        privacy_policy: DiagnosticPolicy,
-    ) -> NormalizingJsonDecodeError {
-        let normalized_input_bytes = normalized.len();
-        match error {
-            JsonLexicalError::Budget(error) => {
-                NormalizingJsonDecodeError::budget(error, raw_input_bytes, normalized_input_bytes, privacy_policy)
-            }
-            JsonLexicalError::Syntax(error) => match from_str::<&RawValue>(normalized) {
-                Ok(_) => NormalizingJsonDecodeError::invalid_lexical_json(
-                    error,
-                    raw_input_bytes,
-                    normalized_input_bytes,
-                    privacy_policy,
-                ),
-                Err(error) => NormalizingJsonDecodeError::invalid_json(
-                    error,
-                    raw_input_bytes,
-                    normalized_input_bytes,
-                    privacy_policy,
-                ),
-            },
-        }
-    }
-
-    /// Deserializes normalized JSON text into `T`.
-    ///
-    /// # Parameters
-    ///
-    /// * `normalized` - Normalized JSON text.
-    /// * `raw_input_bytes` - Input length before normalization.
-    /// * `normalized_input_bytes` - Normalized text length.
-    /// * `privacy_policy` - Policy applied to decode diagnostics.
-    ///
-    /// # Returns
-    ///
-    /// The deserialized target value.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NormalizingJsonDecodeError`] classified as invalid JSON for
-    /// syntax and end-of-input failures. A data error is classified as a
-    /// deserialization failure only when complete syntax validation
-    /// succeeds.
-    ///
-    /// # Panics
-    ///
-    /// Panics from `T`'s `Deserialize` implementation or visitor methods are
-    /// not caught and propagate to the caller.
-    #[inline]
-    fn deserialize_normalized<T>(
-        normalized: &str,
-        raw_input_bytes: usize,
-        normalized_input_bytes: usize,
-        privacy_policy: DiagnosticPolicy,
-    ) -> Result<T, NormalizingJsonDecodeError>
-    where
-        T: DeserializeOwned,
-    {
-        deserialize_json_document(TypedSeed::new(), normalized.as_bytes())
-            .map_err(|error| Self::map_decode_error(error, raw_input_bytes, normalized_input_bytes, privacy_policy))
-    }
-
-    /// Maps a serde error to the stable public decoder error model.
-    ///
-    /// # Parameters
-    ///
-    /// * `error` - Serde JSON error to classify.
-    /// * `raw_input_bytes` - Input length before normalization.
-    /// * `normalized_input_bytes` - Normalized text length.
-    /// * `privacy_policy` - Policy applied to retained diagnostics.
-    ///
-    /// # Returns
-    ///
-    /// A deserialization error for a document that already passed lexical
-    /// admission but could not be materialized as the requested target.
-    #[must_use]
-    fn map_decode_error(
-        error: Error,
-        raw_input_bytes: usize,
-        normalized_input_bytes: usize,
-        privacy_policy: DiagnosticPolicy,
-    ) -> NormalizingJsonDecodeError {
-        NormalizingJsonDecodeError::deserialize(error, raw_input_bytes, normalized_input_bytes, privacy_policy)
+    /// Normalizes and decodes one string into a dynamic JSON value.
+    pub fn decode_value(&mut self, input: &str) -> Result<Value, JsonDecodeError<R, Q>> {
+        self.decode_str(input)
     }
 }

@@ -7,3 +7,5 @@
 // =============================================================================
 
 mod decoder_api_tests;
+mod json_decode_error_model_tests;
+mod normalized_json_document_tests;

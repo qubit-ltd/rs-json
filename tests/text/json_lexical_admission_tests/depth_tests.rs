@@ -15,7 +15,6 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::decode::JsonDecodeError;
 use qubit_json::decode::JsonDecoder;
 use serde_json::Value;
 
@@ -35,15 +34,11 @@ fn test_json_lexical_preflight_charges_nested_depth() {
         .expect_err("the nested value should exceed the depth budget");
 
     assert!(matches!(
-        error,
-        JsonDecodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::LimitExceeded {
-                    resource: JsonResource::Depth,
-                    observed: Observation::Exact(2),
-                    maximum: 1,
-                })
-            )
+        error.budget_error().and_then(|error| error.budget_error()),
+        Some(BudgetError::LimitExceeded {
+            resource: JsonResource::Depth,
+            observed: Observation::Exact(2),
+            maximum: 1,
+        })
     ));
 }

@@ -59,19 +59,6 @@ impl NormalizingJsonDecodePolicy {
         }
     }
 
-    /// Creates a policy that performs no text rewriting.
-    #[inline]
-    #[must_use]
-    pub const fn strict() -> Self {
-        Self {
-            trim_whitespace: false,
-            strip_utf8_bom: false,
-            markdown_fence_policy: MarkdownFencePolicy::Disabled,
-            escape_control_chars_in_strings: false,
-            diagnostic_policy: DiagnosticPolicy::Redacted,
-        }
-    }
-
     /// Creates a builder initialized with the lenient policy.
     #[inline]
     #[must_use]

@@ -10,7 +10,7 @@
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonSyntaxErrorReason;
 
@@ -57,9 +57,7 @@ fn test_cursor_reports_scalar_and_container_syntax_errors() {
         let error = JsonDecoder::new(session)
             .decode_utf8::<serde_json::Value>(input)
             .expect_err("malformed input should be rejected");
-        let JsonDecodeError::Syntax(error) = error else {
-            panic!("expected a syntax error for {input:?}");
-        };
+        let error = error.syntax_error().expect("expected a syntax error");
         assert_eq!(error.reason(), *expected, "input: {input:?}");
     }
 }
@@ -71,9 +69,7 @@ fn test_cursor_reports_the_invalid_literal_delimiter_location() {
     let error = JsonDecoder::new(session)
         .decode_utf8::<serde_json::Value>(b"truex")
         .expect_err("a literal must end at a JSON value delimiter");
-    let JsonDecodeError::Syntax(error) = error else {
-        panic!("expected a syntax error");
-    };
+    let error = error.syntax_error().expect("expected a syntax error");
 
     assert_eq!(error.reason(), JsonSyntaxErrorReason::UnexpectedByte { byte: b'x' });
     assert_eq!(error.line(), 1);
@@ -93,9 +89,7 @@ fn test_cursor_accepts_unicode_and_reports_coordinates() {
     let error = JsonDecoder::new(session)
         .decode_utf8::<serde_json::Value>("1\r\n@".as_bytes())
         .expect_err("invalid byte should be rejected");
-    let JsonDecodeError::Syntax(error) = error else {
-        panic!("expected a syntax error");
-    };
+    let error = error.syntax_error().expect("expected a syntax error");
     assert_eq!(error.line(), 2);
     assert_eq!(error.column(), 1);
 }
@@ -107,8 +101,6 @@ fn test_cursor_rejects_invalid_utf8_inside_string() {
     let error = JsonDecoder::new(session)
         .decode_utf8::<serde_json::Value>(b"\"\x80\"")
         .expect_err("invalid UTF-8 should be rejected");
-    let JsonDecodeError::Syntax(error) = error else {
-        panic!("expected a syntax error");
-    };
-    assert_eq!(error.reason(), JsonSyntaxErrorReason::InvalidUtf8);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
+    assert_eq!(error.utf8_valid_up_to(), Some(1));
 }
