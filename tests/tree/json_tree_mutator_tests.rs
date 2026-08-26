@@ -12,6 +12,7 @@ use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::value::traverse::JsonTreeContext;
 use qubit_json::value::traverse::JsonTreeControl;
+use qubit_json::value::traverse::JsonTreeLocation;
 use qubit_json::value::traverse::JsonTreeMutVisitor;
 use qubit_json::value::traverse::JsonTreeMutateError;
 use qubit_json::value::traverse::JsonTreeMutator;
@@ -87,6 +88,61 @@ impl JsonTreeMutVisitor for FailingVisitor {
 struct PanickingVisitor {
     calls: usize,
     panic_after: usize,
+}
+
+/// Replaces nested object and array children while recording later visits.
+#[derive(Default)]
+struct StructuralReplacementVisitor {
+    /// Whether traversal entered a descendant created by the object-child
+    /// replacement.
+    visited_object_replacement_child: bool,
+    /// Whether traversal entered a descendant created by the array-child
+    /// replacement.
+    visited_array_replacement_child: bool,
+    /// Whether traversal resumed the original object's next sibling.
+    visited_object_sibling: bool,
+    /// Whether traversal resumed the original array's next sibling.
+    visited_array_sibling: bool,
+    /// Whether traversal resumed the root object's final sibling.
+    visited_root_sibling: bool,
+}
+
+impl JsonTreeMutVisitor for StructuralReplacementVisitor {
+    type Error = std::convert::Infallible;
+
+    /// Replaces two nested children and records descendants and siblings that
+    /// must remain reachable afterward.
+    fn visit(&mut self, value: &mut Value, context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+        match context.location {
+            JsonTreeLocation::ObjectValue { key: "replace_object" } if context.depth == 3 => {
+                *value = json!(["object replacement child"]);
+            }
+            JsonTreeLocation::ArrayElement { index: 0 } if context.depth == 3 => {
+                *value = json!({"array replacement child": null});
+            }
+            JsonTreeLocation::ObjectValue { key: "after_object" } => {
+                self.visited_object_sibling = true;
+            }
+            JsonTreeLocation::ArrayElement { index: 1 } if context.depth == 3 => {
+                self.visited_array_sibling = true;
+            }
+            JsonTreeLocation::ObjectValue { key: "last" } => {
+                self.visited_root_sibling = true;
+            }
+            JsonTreeLocation::ArrayElement { index: 0 }
+                if context.depth == 4 && value == "object replacement child" =>
+            {
+                self.visited_object_replacement_child = true;
+            }
+            JsonTreeLocation::ObjectValue {
+                key: "array replacement child",
+            } if context.depth == 4 => {
+                self.visited_array_replacement_child = true;
+            }
+            JsonTreeLocation::Root | JsonTreeLocation::ArrayElement { .. } | JsonTreeLocation::ObjectValue { .. } => {}
+        }
+        Ok(JsonTreeControl::Descend)
+    }
 }
 
 impl JsonTreeMutVisitor for PanickingVisitor {
@@ -247,6 +303,40 @@ fn test_process_restores_root_after_visitor_panic() {
         to_string(&value).expect("panic-restored value serializes"),
         r#"{"first":[1,2],"second":true,"visited":true}"#,
     );
+}
+
+/// Verifies suspended parent cursors remain valid when a nested child changes
+/// between object, array, and scalar structures.
+#[test]
+fn test_process_continues_after_nested_child_structure_replacement() {
+    let mut input_budget = measured_limits().budget();
+    let mut output_budget = measured_limits().budget();
+    let mut input = input_budget.transaction();
+    let mut output = output_budget.transaction();
+    let mut value = json!({
+        "first": {"replace_object": true, "after_object": 1},
+        "middle": [{"replace_array": true}, "after array"],
+        "last": "after root",
+    });
+    let mut visitor = StructuralReplacementVisitor::default();
+
+    JsonTreeMutator::new(&mut input, &mut output)
+        .process(&mut value, &mut visitor)
+        .expect("nested structural replacements must preserve parent cursors");
+
+    assert_eq!(
+        value,
+        json!({
+            "first": {"replace_object": ["object replacement child"], "after_object": 1},
+            "middle": [{"array replacement child": null}, "after array"],
+            "last": "after root",
+        }),
+    );
+    assert!(visitor.visited_object_replacement_child);
+    assert!(visitor.visited_array_replacement_child);
+    assert!(visitor.visited_object_sibling);
+    assert!(visitor.visited_array_sibling);
+    assert!(visitor.visited_root_sibling);
 }
 
 /// Verifies both accounting passes and mutable callbacks avoid Rust recursion.
