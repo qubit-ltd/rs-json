@@ -61,6 +61,133 @@ impl Serialize for FloatKeyProbe {
     }
 }
 
+/// Selects one Serde serializer entry point for an object key.
+struct MapKeyProbe(u8);
+
+impl Serialize for MapKeyProbe {
+    /// Emits the selected scalar or compound Serde key shape.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.0 {
+            0 => serializer.serialize_bool(true),
+            1 => serializer.serialize_i8(-8),
+            2 => serializer.serialize_i16(-16),
+            3 => serializer.serialize_i32(-32),
+            4 => serializer.serialize_i64(-64),
+            5 => serializer.serialize_i128(-128),
+            6 => serializer.serialize_u8(8),
+            7 => serializer.serialize_u16(16),
+            8 => serializer.serialize_u32(32),
+            9 => serializer.serialize_u64(64),
+            10 => serializer.serialize_u128(128),
+            11 => serializer.serialize_f32(1.5),
+            12 => serializer.serialize_f64(2.5),
+            13 => serializer.serialize_char('x'),
+            14 => serializer.serialize_str("text"),
+            15 => serializer.serialize_bytes(&[1, 2]),
+            16 => serializer.serialize_none(),
+            17 => serializer.serialize_some(&1_i32),
+            18 => serializer.serialize_unit(),
+            19 => serializer.serialize_unit_struct("Unit"),
+            20 => serializer.serialize_unit_variant("Enum", 0, "Unit"),
+            21 => serializer.serialize_newtype_struct("New", &-1_i32),
+            22 => serializer.serialize_newtype_variant("Enum", 0, "New", &1_i32),
+            23 => {
+                let _ = serializer.serialize_seq(Some(0))?;
+                unreachable!("map-key serializer must reject sequences")
+            }
+            24 => {
+                let _ = serializer.serialize_tuple(0)?;
+                unreachable!("map-key serializer must reject tuples")
+            }
+            25 => {
+                let _ = serializer.serialize_tuple_struct("Tuple", 0)?;
+                unreachable!("map-key serializer must reject tuple structs")
+            }
+            26 => {
+                let _ = serializer.serialize_tuple_variant("Enum", 0, "Tuple", 0)?;
+                unreachable!("map-key serializer must reject tuple variants")
+            }
+            27 => {
+                let _ = serializer.serialize_map(Some(0))?;
+                unreachable!("map-key serializer must reject maps")
+            }
+            28 => {
+                let _ = serializer.serialize_struct("Object", 0)?;
+                unreachable!("map-key serializer must reject structs")
+            }
+            29 => {
+                let _ = serializer.serialize_struct_variant("Enum", 0, "Object", 0)?;
+                unreachable!("map-key serializer must reject struct variants")
+            }
+            30 => serializer.collect_str(&DisplayProbe),
+            31 => serializer.serialize_f32(f32::NAN),
+            _ => serializer.serialize_f64(f64::NAN),
+        }
+    }
+}
+
+/// Emits one map entry using a selected key representation.
+struct MapKeyContainer(u8);
+
+impl Serialize for MapKeyContainer {
+    /// Serializes one Boolean value under the selected key shape.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(&MapKeyProbe(self.0), &true)?;
+        map.end()
+    }
+}
+
+/// Selects one boundary or wrapper representation in the unified map-key
+/// contract.
+enum ContractMapKey {
+    /// Full-range signed integer key.
+    Signed(i128),
+    /// Full-range unsigned integer key.
+    Unsigned(u128),
+    /// Present option transparently wrapping an integer key.
+    Present(i32),
+    /// Newtype struct transparently wrapping an integer key.
+    Newtype(i32),
+}
+
+impl Serialize for ContractMapKey {
+    /// Emits the selected key representation through its exact Serde entry
+    /// point.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Signed(value) => serializer.serialize_i128(*value),
+            Self::Unsigned(value) => serializer.serialize_u128(*value),
+            Self::Present(value) => serializer.serialize_some(value),
+            Self::Newtype(value) => serializer.serialize_newtype_struct("Key", value),
+        }
+    }
+}
+
+/// Emits one entry using a boundary or wrapper map key.
+struct ContractMapKeyContainer(ContractMapKey);
+
+impl Serialize for ContractMapKeyContainer {
+    /// Serializes one Boolean value under the selected contract key.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(&self.0, &true)?;
+        map.end()
+    }
+}
+
 /// Reports the stable nested non-finite-float diagnostic.
 struct NestedNonFiniteProbe;
 
@@ -237,6 +364,35 @@ fn test_json_value_encoder_matches_text_encoder_float_map_keys() {
     }
 }
 
+/// Uses one contract for wide integer and transparent wrapper map keys across
+/// both strict encoding entry points.
+#[test]
+fn test_json_value_encoder_matches_text_encoder_wide_and_wrapped_map_keys() {
+    let cases = [
+        (ContractMapKey::Signed(i128::MIN), i128::MIN.to_string()),
+        (ContractMapKey::Signed(i128::MAX), i128::MAX.to_string()),
+        (ContractMapKey::Unsigned(u128::MAX), u128::MAX.to_string()),
+        (ContractMapKey::Present(-7), String::from("-7")),
+        (ContractMapKey::Newtype(9), String::from("9")),
+    ];
+    let value_encoder = JsonValueEncoder::new();
+    let mut text_encoder = JsonEncoder::unlimited();
+
+    for (key, expected_key) in cases {
+        let probe = ContractMapKeyContainer(key);
+        let value = value_encoder
+            .encode(&probe)
+            .expect("contract map key should encode as a JSON value");
+        let value_text = to_vec(&value).expect("encoded JSON value should render");
+        let direct_text = text_encoder
+            .to_vec(&probe)
+            .expect("contract map key should encode as strict text");
+
+        assert_eq!(value, json!({expected_key: true}));
+        assert_eq!(value_text, direct_text, "map-key entry points must agree");
+    }
+}
+
 /// Classifies non-finite map keys as non-finite float failures.
 #[test]
 fn test_json_value_encoder_rejects_non_finite_float_map_key() {
@@ -244,6 +400,56 @@ fn test_json_value_encoder_rejects_non_finite_float_map_key() {
         JsonValueEncoder::new().encode(&FloatKeyProbe(f64::NAN)),
         Err(JsonValueEncodeError::NonFiniteFloat),
     );
+}
+
+/// Covers every scalar key representation accepted by strict value encoding.
+#[test]
+fn test_json_value_encoder_supports_scalar_map_key_entry_points() {
+    const EXPECTED_KEYS: [&str; 19] = [
+        "true", "-8", "-16", "-32", "-64", "-128", "8", "16", "32", "64", "128", "1.5", "2.5", "x", "text", "1",
+        "Unit", "-1", "display",
+    ];
+    let encoder = JsonValueEncoder::new();
+    let supported_indices = (0_u8..=14).chain([17, 20, 21, 30]);
+
+    for (index, expected_key) in supported_indices.zip(EXPECTED_KEYS) {
+        let encoded = encoder
+            .encode(&MapKeyContainer(index))
+            .expect("supported scalar map key should encode");
+        assert_eq!(
+            encoded,
+            json!({expected_key: true}),
+            "unexpected map key for entry point {index}"
+        );
+    }
+}
+
+/// Rejects every compound or wrapped key representation unsupported by JSON.
+#[test]
+fn test_json_value_encoder_rejects_unsupported_map_key_entry_points() {
+    let encoder = JsonValueEncoder::new();
+    let unsupported_indices = (15_u8..=16).chain(18..=19).chain(22..=29);
+
+    for index in unsupported_indices {
+        assert_eq!(
+            encoder.encode(&MapKeyContainer(index)),
+            Err(JsonValueEncodeError::Serialization),
+            "entry point {index} must not produce a JSON object key",
+        );
+    }
+}
+
+/// Classifies non-finite map keys consistently for both float widths.
+#[test]
+fn test_json_value_encoder_rejects_non_finite_map_key_entry_points() {
+    let encoder = JsonValueEncoder::new();
+    for index in [31, 32] {
+        assert_eq!(
+            encoder.encode(&MapKeyContainer(index)),
+            Err(JsonValueEncodeError::NonFiniteFloat),
+            "entry point {index} must preserve the non-finite classification",
+        );
+    }
 }
 
 /// Rejects object keys that collide after JSON key conversion.

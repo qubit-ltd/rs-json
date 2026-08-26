@@ -15,11 +15,11 @@ use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonMeasurement;
 use serde::Serialize;
 use serde::Serializer;
-use serde::ser::Error;
 
 use super::super::display_budget_kind::DisplayBudgetKind;
 use super::super::json_encode_context::JsonEncodeContext;
 use crate::internal::JsonLexemeLength;
+use crate::internal::JsonMapKey;
 
 /// Decorates serde_json's map-key serializer with key-byte checks.
 pub(in crate::encode::serializer) struct JsonKeyBudgetSerializer<'context, 'transaction, 'budget, S, R, Q>
@@ -105,31 +105,22 @@ where
     serialize_key_number!(serialize_u32, unsigned u32);
     serialize_key_number!(serialize_u64, unsigned u64);
 
-    /// Charges an `i128` key representable as `i64` or `u64`.
+    /// Charges and emits one full-range signed integer key as decimal text.
     fn serialize_i128(self, value: i128) -> Result<Self::Ok, Self::Error> {
-        let bytes = if let Ok(value) = i64::try_from(value) {
-            JsonLexemeLength::signed_integer(value.into())
-        } else if let Ok(value) = u64::try_from(value) {
-            JsonLexemeLength::unsigned_integer(value.into())
-        } else {
-            return Err(Self::Error::custom(
-                "JSON integer is outside the supported 64-bit range",
-            ));
-        };
+        let text = JsonMapKey::signed_wide(value);
         if self.has_value_limits {
-            self.check(bytes)?;
+            self.check(text.len())?;
         }
-        self.inner.serialize_i128(value)
+        self.inner.serialize_str(&text)
     }
 
-    /// Charges a `u128` key representable as `u64`.
+    /// Charges and emits one full-range unsigned integer key as decimal text.
     fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
-        let value64 = u64::try_from(value)
-            .map_err(|_| Self::Error::custom("JSON integer is outside the supported 64-bit range"))?;
+        let text = JsonMapKey::unsigned_wide(value);
         if self.has_value_limits {
-            self.check(JsonLexemeLength::unsigned_integer(value64.into()))?;
+            self.check(text.len())?;
         }
-        self.inner.serialize_u128(value)
+        self.inner.serialize_str(&text)
     }
 
     /// Checks a finite `f32` key length before forwarding it.

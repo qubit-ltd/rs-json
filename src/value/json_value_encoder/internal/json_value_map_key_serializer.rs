@@ -15,6 +15,7 @@ use serde::Serializer;
 use serde::ser::Impossible;
 use serde_json::Number;
 
+use crate::internal::JsonMapKey;
 use crate::value::JsonValueEncodeError;
 
 /// Converts supported scalar map keys into JSON object key strings.
@@ -53,13 +54,21 @@ impl Serializer for JsonValueMapKeySerializer {
         serialize_i16(i16),
         serialize_i32(i32),
         serialize_i64(i64),
-        serialize_i128(i128),
         serialize_u8(u8),
         serialize_u16(u16),
         serialize_u32(u32),
         serialize_u64(u64),
-        serialize_u128(u128),
     );
+
+    /// Serializes a full-range signed integer key as canonical decimal text.
+    fn serialize_i128(self, value: i128) -> Result<String, Self::Error> {
+        Ok(JsonMapKey::signed_wide(value))
+    }
+
+    /// Serializes a full-range unsigned integer key as canonical decimal text.
+    fn serialize_u128(self, value: u128) -> Result<String, Self::Error> {
+        Ok(JsonMapKey::unsigned_wide(value))
+    }
 
     /// Serializes a finite 32-bit floating-point key.
     fn serialize_f32(self, value: f32) -> Result<String, Self::Error> {
@@ -100,12 +109,12 @@ impl Serializer for JsonValueMapKeySerializer {
         Err(JsonValueEncodeError::Serialization)
     }
 
-    /// Rejects optional key wrappers.
-    fn serialize_some<T>(self, _value: &T) -> Result<String, Self::Error>
+    /// Delegates a present optional key to its wrapped value.
+    fn serialize_some<T>(self, value: &T) -> Result<String, Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        Err(JsonValueEncodeError::Serialization)
+        value.serialize(self)
     }
 
     /// Rejects unit keys.
