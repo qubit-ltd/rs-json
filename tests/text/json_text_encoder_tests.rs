@@ -287,6 +287,41 @@ struct PrefixWriter {
     maximum: usize,
 }
 
+/// Destination that violates `Write` by accepting no non-empty input.
+struct ZeroWriter;
+
+impl Write for ZeroWriter {
+    /// Reports zero accepted bytes for every input.
+    fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+        Ok(0)
+    }
+
+    /// Completes flushing without additional work.
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Destination that accepts bytes but rejects the final flush.
+#[derive(Default)]
+struct FlushFailWriter {
+    /// Bytes accepted before the injected flush failure.
+    accepted: Vec<u8>,
+}
+
+impl Write for FlushFailWriter {
+    /// Accepts the complete offered slice.
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        self.accepted.extend_from_slice(buffer);
+        Ok(buffer.len())
+    }
+
+    /// Injects a stable finalization failure.
+    fn flush(&mut self) -> io::Result<()> {
+        Err(io::Error::other("injected flush failure"))
+    }
+}
+
 impl Write for PrefixWriter {
     /// Accepts at most the remaining prefix capacity, then reports an error.
     fn write(&mut self, input: &[u8]) -> io::Result<usize> {
@@ -597,6 +632,43 @@ fn test_write_incremental_preserves_partial_output_on_io_error() {
     }
     assert_eq!(output.used(), writer.accepted.len());
     assert_eq!(value.used_nodes(), Some(0));
+}
+
+/// Maps a destination `WriteZero` contract violation to a typed write error.
+#[test]
+fn test_write_incremental_rejects_zero_length_destination_write() {
+    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+
+    let error = write_incremental(ZeroWriter, &true, &mut session)
+        .expect_err("a destination must not accept zero bytes for non-empty output");
+
+    match error {
+        JsonEncodeError::Write(error) => assert_eq!(error.kind(), io::ErrorKind::WriteZero),
+        other => panic!("expected a write error, got {other:?}"),
+    }
+}
+
+/// Preserves accepted output accounting when incremental finalization fails.
+#[test]
+fn test_write_incremental_maps_flush_failure_to_write_error() {
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 16))
+        .build();
+    let mut session = JsonEncodeSession::owned(limits);
+    let mut writer = FlushFailWriter::default();
+
+    let error = write_incremental(&mut writer, &true, &mut session)
+        .expect_err("the destination flush failure must be preserved");
+
+    assert!(matches!(error, JsonEncodeError::Write(_)));
+    assert_eq!(writer.accepted, b"true");
+    assert_eq!(
+        session
+            .output_budget()
+            .expect("output budget should remain configured")
+            .used(),
+        writer.accepted.len(),
+    );
 }
 
 /// Verifies incremental Serde failures retain their accepted prefix and usage.

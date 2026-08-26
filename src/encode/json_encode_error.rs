@@ -66,10 +66,10 @@ where
         #[source]
         JsonError,
     ),
-    /// The final destination writer rejected buffered bytes.
+    /// The external destination writer rejected output bytes.
     #[error("JSON output writer failed: {0}")]
     Write(
-        /// I/O error raised while writing buffered output.
+        /// I/O error raised while writing buffered or incremental output.
         #[source]
         IoError,
     ),
