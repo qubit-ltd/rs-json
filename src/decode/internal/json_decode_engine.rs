@@ -17,6 +17,7 @@ use serde::de::DeserializeSeed;
 use serde_json::from_slice;
 use serde_json::value::RawValue;
 
+use super::DecodeMetadata;
 use super::JsonNormalizer;
 use super::admit_json_document;
 use super::deserialize_json_document;
@@ -27,17 +28,6 @@ use crate::decode::JsonRootKind;
 use crate::decode::NormalizedJsonDocument;
 use crate::internal::has_json_value_limits;
 use crate::lexical::JsonLexicalError;
-
-/// Metadata describing the public input boundary used for one decode.
-#[derive(Clone, Copy)]
-struct DecodeMetadata {
-    /// Original input length.
-    raw_input_bytes: usize,
-    /// Normalized text length when normalization completed.
-    normalized_input_bytes: Option<usize>,
-    /// Policy controlling input-derived diagnostic retention.
-    diagnostic_policy: DiagnosticPolicy,
-}
 
 /// Shared generic execution core used by both public decoder facades.
 #[derive(Debug)]
