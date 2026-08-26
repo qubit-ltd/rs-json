@@ -29,6 +29,23 @@ use super::internal::TypedSeed;
 /// Owned convenience methods prepare and decode in one call. Callers needing
 /// borrowed results, custom seeds, or repeated materialization first create a
 /// [`NormalizedJsonDocument`] and then use a document decoding method.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_budget::json::JsonDecodeLimits;
+/// use qubit_json::decode::NormalizingJsonDecodePolicy;
+/// use qubit_json::decode::NormalizingJsonDecoder;
+/// use serde_json::Value;
+///
+/// let mut decoder = NormalizingJsonDecoder::owned(
+///     NormalizingJsonDecodePolicy::builder().build(),
+///     JsonDecodeLimits::new(),
+/// );
+/// let value = decoder.decode_str::<Value>("```json\n{\"ok\":true}\n```")?;
+/// assert_eq!(value["ok"], true);
+/// # Ok::<(), qubit_json::decode::JsonDecodeError>(())
+/// ```
 #[derive(Debug)]
 pub struct NormalizingJsonDecoder<'budget, R = JsonResource, Q = usize>
 where
