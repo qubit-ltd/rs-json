@@ -27,6 +27,8 @@ Rust 服务需要处理两类 JSON：来自受控协议的严格字节流，以�
 `JsonDecodeLimits` 或 `JsonDecodeSession` 显式交给 `NormalizingJsonDecoder`。policy 不得携带预算，
 decoder 不提供隐式默认预算。默认错误脱敏；只有明确请求 `Detailed` 才保留可能包含输入的信息。
 带 session 的调用必须保留原始与规范化输入消耗，并仅在完整类型解码后提交 value 消耗。
+一次性规范化解码面向 owned 目标；借用、seed 和重复物化通过
+`NormalizedJsonDocument` 两阶段接口完成。prepare 只记一次输入，每次 document decode 独立记账并提交 value。
 
 ### 严格文本
 
@@ -50,14 +52,14 @@ tree 独立计量和准入，但不承诺回滚已提交的业务变更。
 
 ## 错误契约
 
-所有公开错误按领域归属，不提供根级聚合或同名兼容层：
+两个 decoder facade 返回统一的 `JsonDecodeError<R, Q>`，不提供旧错误兼容层。公开错误和诊断
+类型按领域归属：
 
-1. `NormalizingJsonDecodeError`：宽松规范化和类型解码。
-2. `JsonDecodeError`：严格预算、语法、类型解码。
-3. `JsonEncodeError`：严格预算、原始 JSON、序列化、写入。
-4. `JsonSyntaxError`：稳定的语法原因和位置。
-5. `JsonTreeProcessError`：reader tree 的预算和 visitor 错误。
-6. `JsonTreeMutateError`：mutator 的输入预算、visitor 和输出预算错误。
+1. `JsonDecodeError`：严格和规范化解码，通过 kind/stage/accessor 暴露稳定结构。
+2. `JsonEncodeError`：严格预算、原始 JSON、序列化、写入。
+3. `JsonSyntaxError`：稳定的语法原因和位置。
+4. `JsonTreeProcessError`：reader tree 的预算和 visitor 错误。
+5. `JsonTreeMutateError`：mutator 的输入预算、visitor 和输出预算错误。
 
 ## 验收标准
 
@@ -66,5 +68,5 @@ tree 独立计量和准入，但不承诺回滚已提交的业务变更。
 - 严格 text API 的所有操作经由 decoder/encoder 对象，而非公开自由函数。
 - session-aware decode 在失败后保留输入消耗，value 暂存消耗只在完整成功后提交。
 - value 和 tree 可独立用于已物化 JSON；tree 遍历不依赖 Rust 调用栈深度。
-- 文档与示例只描述当前四领域、六个 error 和 `0.8` 安装方式。
+- 文档与示例只描述当前四领域、统一解码错误模型和 `0.8` 安装方式。
 - 依赖图不启用 serde_json arbitrary precision，旧私有 Number marker 始终是普通 object key。

@@ -34,8 +34,7 @@ cargo +1.94.0 bench --bench decoder_bench
 | 64 KiB | 10.978 µs | 10.944 µs | 10.895 µs |
 | 1 MiB | 184.94 µs | 185.18 µs | 186.52 µs |
 
-“按次构造严格 decoder”在每个 Criterion 迭代内执行
-`NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::strict(), qubit_budget::json::JsonDecodeLimits::default())` 后再调用 `decode_utf8`，与当前
+“按次构造严格 decoder”在每个 Criterion 迭代内构造 `JsonDecoder` 后调用 `decode_utf8`，与当前
 `rs-http` 的响应和 SSE 调用方式一致。三种严格路径的数值接近，比较时应以同机多次运行及
 Criterion 的置信区间为准，而非将单次结果视为回归结论。
 
@@ -159,8 +158,8 @@ cargo bench --bench budgeted_serde_json -- --noplot
 
 `owned-session` 在每次迭代构造 `JsonDecodeSession::owned`；`borrowed-session` 在每次
 迭代构造借用 `JsonValueBudget` 的会话；`reused-session` 在迭代之间复用无限制会话。后两项
-`NormalizingJsonDecoder` 均采用 `NormalizingJsonDecodePolicy::strict()`，其中带 session 的项复用一个
-无限制会话。
+严格项均采用 `JsonDecoder`，其中带 session 的项复用一个无限制会话；表中
+`NormalizingJsonDecoder` 项仅用于比较显式规范化 facade。
 
 | 场景 | 约 1 KiB（延迟 / 吞吐 / 倍率） | 约 64 KiB（延迟 / 吞吐 / 倍率） | 约 1 MiB（延迟 / 吞吐 / 倍率） |
 | --- | ---: | ---: | ---: |
@@ -169,7 +168,7 @@ cargo bench --bench budgeted_serde_json -- --noplot
 | `borrowed-session` | 5.5218 µs / 171.50 MiB/s / 1.81× | 372.26 µs / 167.89 MiB/s / 1.64× | 6.4005 ms / 156.23 MiB/s / 1.61× |
 | `reused-session` | 5.5906 µs / 169.39 MiB/s / 1.83× | 378.06 µs / 165.31 MiB/s / 1.67× | 6.4071 ms / 156.07 MiB/s / 1.62× |
 | `NormalizingJsonDecoder::decode_str` | 2.6992 µs / 350.84 MiB/s / 0.88× | 186.22 µs / 335.60 MiB/s / 0.82× | 3.3947 ms / 294.57 MiB/s / 0.86× |
-| `NormalizingJsonDecoder::from_session(...).decode_str` | 2.6619 µs / 355.76 MiB/s / 0.87× | 182.60 µs / 342.25 MiB/s / 0.81× | 3.3478 ms / 298.69 MiB/s / 0.84× |
+| `NormalizingJsonDecoder::new(...).decode_str` | 2.6619 µs / 355.76 MiB/s / 0.87× | 182.60 µs / 342.25 MiB/s / 0.81× | 3.3478 ms / 298.69 MiB/s / 0.84× |
 
 ### 严格编码
 
@@ -205,16 +204,16 @@ cargo bench --bench budgeted_serde_json -- --noplot
 | `borrowed-session` | 5.8399 µs / 162.16 MiB/s / 2.00× / +5.76% | 368.75 µs / 169.48 MiB/s / 1.69× / -0.94% | 6.3221 ms / 158.17 MiB/s / 1.62× / -1.22% |
 | `reused-session` | 5.4755 µs / 172.95 MiB/s / 1.88× / -2.06% | 369.54 µs / 169.12 MiB/s / 1.69× / -2.25% | 6.4119 ms / 155.96 MiB/s / 1.65× / +0.07% |
 | `NormalizingJsonDecoder::decode_str` | 2.7992 µs / 338.31 MiB/s / 0.96× / +3.70% | 178.91 µs / 349.33 MiB/s / 0.82× / -3.93% | 3.2670 ms / 306.08 MiB/s / 0.84× / -3.76% |
-| `NormalizingJsonDecoder::from_session(...).decode_str` | 5.1220 µs / 184.89 MiB/s / 1.76× / +92.42% | 326.85 µs / 191.21 MiB/s / 1.50× / +79.00% | 5.6367 ms / 177.40 MiB/s / 1.45× / +68.37% |
+| `NormalizingJsonDecoder::new(...).decode_str` | 5.1220 µs / 184.89 MiB/s / 1.76× / +92.42% | 326.85 µs / 191.21 MiB/s / 1.50× / +79.00% | 5.6367 ms / 177.40 MiB/s / 1.45× / +68.37% |
 
 这一组历史数据记录的是 API 清理前的实现，不能作为当前 `decode_str()` 的性能结论。
-当前实现中，普通 `decode_str()` 与 `from_session(...).decode_str()` 都会先执行 lexical
+当前实现中，普通 `decode_str()` 与 `new(...).decode_str()` 都会先执行 lexical
 admission，再直接反序列化目标类型；参见 2026-08-18 的快速复测。后续性能比较必须使用
 同一命令和同一实现重新采样，不得把本节两个路径的旧差异解释为当前行为。
 
 owned、borrowed 与 reused 三条通用 budgeted decode 路径的差异在 1 KiB 仅约
 0.27—0.36 µs；64 KiB 和 1 MiB 的符号会翻转，且幅度不足各自总耗时的约 2%。这说明固定
-session 构造/借用成本只在小输入上可见，并非中大尺寸优化重点。`from_session(...).decode_str()` 的
+session 构造/借用成本只在小输入上可见，并非中大尺寸优化重点。`new(...).decode_str()` 的
 本次会话在迭代间复用，因此它与 `decode_str()` 的差值主要反映新增 preflight，而不是 session
 构造。
 

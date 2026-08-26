@@ -19,21 +19,33 @@ src/
 
 `lexical` 不是公共接口。领域不通过根级错误或选项模块共享公共 API。
 
-## Lenient
+## 两个 facade 与共享核心
+
+公开层保留两个职责明确的 facade：`JsonDecoder` 负责不修改输入的严格 JSON 解码，
+`NormalizingJsonDecoder` 负责显式允许的文本规范化。二者都委托给 crate-private、对资源类型 `R`
+和数量类型 `Q` 泛化的 `JsonDecodeEngine<'budget, R, Q>`。共享核心统一负责 session、lexical
+admission、数字契约、顶层类型检查、Serde 物化和 transaction 提交边界；facade 只定义输入是否
+先经过规范化以及公开入口形态。这样既不会把两种信任边界混成一个带模式开关的对象，也不会
+维护两套错误映射和记账实现。
+
+## Normalizing facade
 
 `NormalizingJsonDecoder` 持有不可变 `NormalizingJsonDecodePolicy`，只执行显式配置的规则：空白、
 BOM、Markdown 围栏及字符串内控制字符处理。它不推测缺失的 JSON 标点或结构。
 
 `NormalizingJsonDecodePolicy` 只定义文本规范化和诊断行为，不拥有预算。调用方通过
 `NormalizingJsonDecoder::owned(policy, limits)` 显式传入 `JsonDecodeLimits`，或通过
-`NormalizingJsonDecoder::from_session(policy, session)` 复用唯一的 `JsonDecodeSession`。
+`NormalizingJsonDecoder::new(policy, session)` 复用唯一的 `JsonDecodeSession`。
 raw/normalized 输入字节以及 depth、nodes、collection、payload 等限制全部来自该 limits/session；
 只有明确传入 `JsonDecodeLimits::default()` 才表示无限预算。原始输入和规范化输入先累计，解码后
 value 的消耗暂存；完整强类型解码成功才提交 value 消耗，失败后输入消耗仍留在 session 中。
 
-`NormalizingJsonDecodeError` 是该领域唯一公开的解码错误。其 kind、stage、top-level 及安全位置
-元数据表达空输入、UTF-8、大小限制、规范化、语法、准入或类型反序列化失败。默认
-`DiagnosticPolicy::Redacted` 不暴露输入派生诊断；`Detailed` 必须由调用方明确选择。
+一次性 `decode_str`/`decode_utf8` 为避免让临时规范化缓冲区逃逸，只接受
+`DeserializeOwned`。需要借用反序列化、Serde seed 或重复物化时，调用方先通过
+`prepare_str`/`prepare_utf8` 得到 `NormalizedJsonDocument<'input>`，再调用 document decode。
+prepare 立即且只提交一次 raw/normalized 输入消耗；每次 document decode 独立暂存并在成功时
+提交 value 消耗。document 不绑定创建它的 decoder。若规范化无需分配，其文本可借用原输入；
+包含 JSON 转义的字符串仍需 owned 目标，因为 Serde 必须物化解转义结果。
 
 ## Strict text
 
@@ -62,8 +74,10 @@ transaction 只在完整成功时提交。
 `write_incremental`。buffered 写入在完整字节序列可用后才写入目标；incremental 写入可在失败
 时保留已接受前缀。
 
-严格 decode 只返回 `JsonDecodeError`：`Budget`、`Syntax` 或带 category、line、column 的
-`Deserialize`。严格 encode 只返回 `JsonEncodeError`：`Budget`、`InvalidRawJson`、
+严格 decode 与 normalizing decode 都返回同一个泛型 `JsonDecodeError<R, Q>`。它的内部 failure
+保持私有；调用方通过稳定的 `JsonDecodeErrorKind`、`JsonDecodeStage` 以及 budget、syntax、UTF-8、
+top-level accessor 获取互斥的结构化信息。默认 `DiagnosticPolicy::Redacted` 不保留输入派生
+source；`Detailed` 必须由调用方明确选择。严格 encode 只返回 `JsonEncodeError`：`Budget`、`InvalidRawJson`、
 `Serialize` 或 `Write`。`JsonSyntaxError` 单独持有稳定的语法原因、偏移、行和列。
 
 ### 数字表示
@@ -98,13 +112,12 @@ key 进行准入。
 
 ## 公开错误模型
 
-公开错误按领域划分为六种：
+公开错误和诊断类型按领域划分：
 
-1. `decode::NormalizingJsonDecodeError`
-2. `decode::JsonDecodeError`
-3. `encode::JsonEncodeError`
-4. `decode::JsonSyntaxError`
-5. `value::traverse::JsonTreeProcessError`
-6. `value::traverse::JsonTreeMutateError`
+1. `decode::JsonDecodeError`：两个 decoder facade 共用。
+2. `encode::JsonEncodeError`
+3. `decode::JsonSyntaxError`
+4. `value::traverse::JsonTreeProcessError`
+5. `value::traverse::JsonTreeMutateError`
 
 每种错误只暴露其领域能稳定提供的上下文；没有根级错误聚合或兼容别名。
