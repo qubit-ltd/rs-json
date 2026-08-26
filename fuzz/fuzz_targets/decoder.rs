@@ -16,14 +16,15 @@ use internal::fuzz_record::FuzzRecord;
 use libfuzzer_sys::fuzz_target;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_json::decode::DiagnosticPolicy;
-use qubit_json::decode::JsonDecoder as StrictJsonDecoder;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
+use qubit_json::decode::JsonDecodeStage;
+use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::MarkdownFenceClosing;
 use qubit_json::decode::MarkdownFencePolicy;
-use qubit_json::decode::NormalizingJsonDecodeError as JsonDecodeError;
-use qubit_json::decode::NormalizingJsonDecodeErrorKind;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
-use qubit_json::decode::NormalizingJsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecoder;
+use qubit_json_fuzz::json_number_contract::numbers_fit_contract;
 
 /// Verifies stable diagnostics shared by every redacted decoder configuration.
 ///
@@ -38,19 +39,34 @@ use qubit_json::decode::NormalizingJsonDecoder;
 /// or source retention.
 fn assert_error_invariants(error: &JsonDecodeError, raw_input_bytes: usize) {
     assert_eq!(error.raw_input_bytes(), raw_input_bytes);
-    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
-    assert!(std::error::Error::source(error).is_none());
-    let expected_stage = match error.kind() {
-        NormalizingJsonDecodeErrorKind::InputTooLarge | NormalizingJsonDecodeErrorKind::EmptyInput => {
-            NormalizingJsonDecodeStage::Normalize
-        }
-        NormalizingJsonDecodeErrorKind::InvalidUtf8 => NormalizingJsonDecodeStage::DecodeText,
-        NormalizingJsonDecodeErrorKind::InvalidJson => NormalizingJsonDecodeStage::Parse,
-        NormalizingJsonDecodeErrorKind::UnexpectedTopLevel => NormalizingJsonDecodeStage::TopLevelCheck,
-        NormalizingJsonDecodeErrorKind::Deserialize => NormalizingJsonDecodeStage::Deserialize,
-        _ => return,
+    assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
+    if error.kind() == JsonDecodeErrorKind::Budget {
+        assert!(std::error::Error::source(error).is_some());
+    } else {
+        assert!(std::error::Error::source(error).is_none());
+    }
+    let valid_stage = match error.kind() {
+        JsonDecodeErrorKind::Budget => matches!(
+            error.stage(),
+            JsonDecodeStage::Input | JsonDecodeStage::Normalize | JsonDecodeStage::Admission
+        ),
+        JsonDecodeErrorKind::EmptyInput => error.stage() == JsonDecodeStage::Normalize,
+        JsonDecodeErrorKind::InvalidUtf8 => error.stage() == JsonDecodeStage::DecodeText,
+        JsonDecodeErrorKind::InvalidJson => error.stage() == JsonDecodeStage::Parse,
+        JsonDecodeErrorKind::UnexpectedTopLevel => error.stage() == JsonDecodeStage::TopLevelCheck,
+        JsonDecodeErrorKind::Deserialize => error.stage() == JsonDecodeStage::Deserialize,
     };
-    assert_eq!(error.stage(), expected_stage);
+    assert!(valid_stage, "error kind and stage are inconsistent: {error:?}");
+}
+
+/// Creates a normalization policy that leaves input text unchanged.
+fn no_normalization_policy() -> NormalizingJsonDecodePolicy {
+    NormalizingJsonDecodePolicy::builder()
+        .trim_whitespace(false)
+        .strip_utf8_bom(false)
+        .markdown_fence_policy(MarkdownFencePolicy::Disabled)
+        .escape_control_chars_in_strings(false)
+        .build()
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -76,13 +92,12 @@ fuzz_target!(|data: &[u8]| {
         let error = bounded
             .decode_utf8::<serde_json::Value>(data)
             .expect_err("an input above its raw byte limit must fail");
-        assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
+        assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+        assert_eq!(error.stage(), JsonDecodeStage::Input);
         assert_error_invariants(&error, data.len());
     }
 
-    let strict_result =
-        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::strict(), JsonDecodeLimits::default())
-            .decode_utf8::<serde_json::Value>(data);
+    let strict_result = JsonDecoder::unlimited().decode_utf8::<serde_json::Value>(data);
     let serde_result = serde_json::from_slice::<serde_json::Value>(data);
     match (strict_result, serde_result) {
         (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
@@ -93,8 +108,8 @@ fuzz_target!(|data: &[u8]| {
         (Err(error), Ok(_)) => {
             assert_error_invariants(&error, data.len());
             assert!(
-                StrictJsonDecoder::unlimited().validate_utf8(data).is_err(),
-                "normalizing strict decode and strict lexical validation must agree",
+                !numbers_fit_contract(data),
+                "strict decoding must accept serde_json input whose numbers fit the public contract",
             );
         }
     }
@@ -105,7 +120,7 @@ fuzz_target!(|data: &[u8]| {
 
     let decoder_configurations = [
         (NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default()),
-        (NormalizingJsonDecodePolicy::strict(), JsonDecodeLimits::default()),
+        (no_normalization_policy(), JsonDecodeLimits::default()),
         (
             NormalizingJsonDecodePolicy::builder()
                 .markdown_fence_policy(MarkdownFencePolicy::Any {
