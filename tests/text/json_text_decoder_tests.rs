@@ -12,7 +12,7 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonSyntaxErrorReason;
 use serde::Deserializer;
@@ -140,11 +140,10 @@ fn test_json_text_decoder_enforces_integer_boundaries() {
         let error = decoder
             .decode_utf8::<Value>(input)
             .expect_err("an integer outside the supported range must fail");
-        assert!(matches!(
-            error,
-            JsonDecodeError::Syntax(error)
-                if error.reason() == JsonSyntaxErrorReason::IntegerOutOfRange
-        ));
+        assert_eq!(
+            error.syntax_error().map(|error| error.reason()),
+            Some(JsonSyntaxErrorReason::IntegerOutOfRange),
+        );
     }
 }
 
@@ -154,11 +153,10 @@ fn test_json_text_decoder_rejects_float_outside_finite_f64_range() {
     let error = JsonDecoder::unlimited()
         .decode_utf8::<Value>(b"1e400")
         .expect_err("infinite f64 results must be rejected");
-    assert!(matches!(
-        error,
-        JsonDecodeError::Syntax(error)
-            if error.reason() == JsonSyntaxErrorReason::FloatOutOfRange
-    ));
+    assert_eq!(
+        error.syntax_error().map(|error| error.reason()),
+        Some(JsonSyntaxErrorReason::FloatOutOfRange),
+    );
 }
 
 /// Verifies lexical number budgeting has priority over range classification.
@@ -175,7 +173,7 @@ fn test_json_text_decoder_prioritizes_number_budget_over_range() {
     let error = JsonDecoder::owned(limits)
         .decode_utf8::<Value>(input)
         .expect_err("the tighter number-byte budget must reject first");
-    assert!(matches!(error, JsonDecodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
 }
 
 /// Verifies lexical validation and target materialization expose separate
@@ -200,15 +198,15 @@ fn test_json_text_decoder_classifies_serde_depth_as_deserialization() {
     decoder
         .validate_str(&deep)
         .expect("the deep document remains valid lexical JSON");
-    assert!(matches!(
-        decoder.decode_str::<Value>(&deep),
-        Err(JsonDecodeError::Deserialize { .. })
-    ));
+    let error = decoder
+        .decode_str::<Value>(&deep)
+        .expect_err("the deep value must hit Serde's recursion guard");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
     decoder
         .validate_utf8(deep.as_bytes())
         .expect("UTF-8 lexical admission must use the same depth contract");
-    assert!(matches!(
-        decoder.decode_utf8::<Value>(deep.as_bytes()),
-        Err(JsonDecodeError::Deserialize { .. })
-    ));
+    let error = decoder
+        .decode_utf8::<Value>(deep.as_bytes())
+        .expect_err("the deep UTF-8 value must hit Serde's recursion guard");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
 }

@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Tests for the public [`qubit_json::decode::NormalizingJsonDecodeError`]
+//! Tests for the public [`qubit_json::decode::JsonDecodeError`]
 //! type.
 
 use qubit_budget::ResourceLimit;
@@ -14,11 +14,11 @@ use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::DiagnosticPolicy;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
+use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::JsonRootKind;
-use qubit_json::decode::NormalizingJsonDecodeError;
-use qubit_json::decode::NormalizingJsonDecodeErrorKind;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
-use qubit_json::decode::NormalizingJsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -31,12 +31,12 @@ fn run_with_session<'a, T>(
     decoder: &NormalizingJsonDecoder<'_>,
     input: &str,
     session: &mut JsonDecodeSession<'a, JsonResource>,
-) -> Result<T, NormalizingJsonDecodeError>
+) -> Result<T, JsonDecodeError>
 where
     T: DeserializeOwned,
 {
     let owned_session = std::mem::replace(session, JsonDecodeSession::owned(JsonDecodeLimits::new()));
-    let mut stateful = NormalizingJsonDecoder::from_session(decoder.policy().clone(), owned_session);
+    let mut stateful = NormalizingJsonDecoder::new(decoder.policy().clone(), owned_session);
     let result = stateful.decode_str(input);
     *session = stateful.into_session();
     result
@@ -63,11 +63,11 @@ fn test_budget_error_exposes_measured_rejection_details() {
     let error = run_with_session::<Value>(&decoder, r#"{"k":"v"}"#, &mut session)
         .expect_err("string budget must reject the normalized value");
 
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Budget);
-    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Admission);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), JsonDecodeStage::Admission);
     assert_eq!(
         *error
-            .measured_budget_error()
+            .budget_error()
             .expect("budget details must be retained")
             .resource(),
         JsonResource::StringBytes,
@@ -86,7 +86,7 @@ fn test_error_display_for_empty_input_uses_message() {
         .decode_value("")
         .expect_err("empty input should return a normalization error");
     assert_eq!(error.to_string(), "JSON input is empty after normalization");
-    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
+    assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert_eq!(error.raw_input_bytes(), 0);
     assert_eq!(error.normalized_input_bytes(), None);
     assert_eq!(error.utf8_valid_up_to(), None);
@@ -108,7 +108,7 @@ fn test_error_exposes_top_level_mismatch_context() {
     assert_eq!(error.actual_top_level(), Some(JsonRootKind::Array));
     assert_eq!(error.raw_input_bytes(), 2);
     assert_eq!(error.normalized_input_bytes(), Some(2));
-    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
+    assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert_eq!(
         error.to_string(),
         "Unexpected JSON top-level type: expected object, got array"
@@ -127,13 +127,13 @@ fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_locatio
         .decode_value("  {\n")
         .expect_err("incomplete JSON should fail after whitespace normalization");
 
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
-    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Parse);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.stage(), JsonDecodeStage::Parse);
     assert_eq!(error.raw_input_bytes(), 4);
     assert_eq!(error.normalized_input_bytes(), Some(1));
-    assert_eq!(error.normalized_line(), Some(1));
-    assert_eq!(error.normalized_column(), Some(1));
-    assert_eq!(error.to_string(), "Failed to parse JSON at normalized line 1 column 1");
+    assert_eq!(error.line(), Some(1));
+    assert_eq!(error.column(), Some(2));
+    assert!(error.to_string().contains("line 1 column 2"));
     assert!(std::error::Error::source(&error).is_none());
 }
 
@@ -170,12 +170,12 @@ fn test_default_error_privacy_redacts_input_derived_serde_details() {
         .decode_str::<PublicChoice>(&format!("\"{SECRET}\""))
         .expect_err("an unknown enum variant should fail deserialization");
 
-    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
+    assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert!(!error.to_string().contains(SECRET));
     assert!(!format!("{error:?}").contains(SECRET));
     assert!(std::error::Error::source(&error).is_none());
-    assert_eq!(error.normalized_line(), Some(1));
-    assert_eq!(error.normalized_column(), Some(18));
+    assert_eq!(error.line(), Some(1));
+    assert_eq!(error.column(), Some(18));
 }
 
 /// Verifies that detailed error privacy preserves input derived serde details.
@@ -197,7 +197,7 @@ fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
         .decode_str::<PublicChoice>(&format!("\"{SECRET}\""))
         .expect_err("an unknown enum variant should fail deserialization");
 
-    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Detailed);
+    assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Detailed);
     assert!(error.to_string().contains(SECRET));
     assert!(format!("{error:?}").contains(SECRET));
     let source = std::error::Error::source(&error).expect("detailed errors should retain the serde_json source");
@@ -215,7 +215,7 @@ fn test_default_invalid_json_error_does_not_expose_serde_source() {
         .decode_value("{")
         .expect_err("invalid JSON should fail parsing");
 
-    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
+    assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert!(std::error::Error::source(&error).is_none());
 }
 
@@ -229,7 +229,7 @@ fn test_invalid_utf8_redacted_error_does_not_expose_source() {
     let error = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default())
         .decode_utf8::<Value>(&[0xff])
         .expect_err("invalid UTF-8 must fail");
-    assert_eq!(error.privacy_policy(), DiagnosticPolicy::Redacted);
+    assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert_eq!(error.utf8_valid_up_to(), Some(0));
     assert_eq!(error.utf8_error_len(), Some(1));
     assert!(std::error::Error::source(&error).is_none());
@@ -284,7 +284,7 @@ fn test_invalid_utf8_detailed_error_retains_utf8_source() {
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_normalization_errors_retain_the_configured_privacy_policy() {
+fn test_normalization_errors_retain_the_configured_diagnostic_policy() {
     let redacted = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default())
         .decode_value("")
         .expect_err("empty input should fail normalization");
@@ -297,8 +297,8 @@ fn test_normalization_errors_retain_the_configured_privacy_policy() {
     .decode_value("")
     .expect_err("empty input should fail normalization");
 
-    assert_eq!(redacted.privacy_policy(), DiagnosticPolicy::Redacted);
-    assert_eq!(detailed.privacy_policy(), DiagnosticPolicy::Detailed);
+    assert_eq!(redacted.diagnostic_policy(), DiagnosticPolicy::Redacted);
+    assert_eq!(detailed.diagnostic_policy(), DiagnosticPolicy::Detailed);
 }
 
 /// Verifies that error display for deserialize error uses context message.
@@ -311,8 +311,8 @@ fn test_error_display_for_deserialize_error_uses_context_message() {
     let error = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default())
         .decode_str::<u64>("\"text\"")
         .expect_err("string JSON should not deserialize into u64");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::Deserialize);
-    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Deserialize);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.stage(), JsonDecodeStage::Deserialize);
     assert_eq!(error.raw_input_bytes(), 6);
     assert_eq!(error.normalized_input_bytes(), Some(6));
     assert_eq!(
@@ -338,9 +338,9 @@ fn test_cloned_error_preserves_public_diagnostics() {
 
     assert_eq!(cloned.kind(), first.kind());
     assert_eq!(cloned.stage(), first.stage());
-    assert_eq!(cloned.privacy_policy(), first.privacy_policy());
+    assert_eq!(cloned.diagnostic_policy(), first.diagnostic_policy());
     assert_eq!(cloned.raw_input_bytes(), first.raw_input_bytes());
     assert_eq!(cloned.normalized_input_bytes(), first.normalized_input_bytes());
-    assert_eq!(cloned.normalized_line(), first.normalized_line());
-    assert_eq!(cloned.normalized_column(), first.normalized_column());
+    assert_eq!(cloned.line(), first.line());
+    assert_eq!(cloned.column(), first.column());
 }

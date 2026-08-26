@@ -8,9 +8,9 @@
 //! Tests for lenient Markdown fence normalization behavior.
 
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::MarkdownFenceClosing;
 use qubit_json::decode::MarkdownFencePolicy;
-use qubit_json::decode::NormalizingJsonDecodeErrorKind;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde_json::json;
@@ -25,7 +25,7 @@ fn test_decode_value_default_rejects_non_json_markdown_fence() {
     let error = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default())
         .decode_value("~~~python\n{\"ok\":true}\n~~~")
         .expect_err("default decoder must reject a non-JSON fence label");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value explicit any accepts non json markdown fence.
@@ -190,7 +190,7 @@ fn test_decode_value_rejects_deeply_indented_code_fence_when_trimming_disabled()
     let error = decoder
         .decode_value("    ```json\n{\"a\":1}\n    ```")
         .expect_err("deeply indented fences should remain ordinary text");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value strips code fence with more than three backticks.
@@ -253,7 +253,7 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_optional_pol
         let error = decoder
             .decode_value(&input)
             .expect_err("invalid closing-fence whitespace must remain in the JSON body");
-        assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+        assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
     }
 }
 
@@ -278,7 +278,7 @@ fn test_decode_value_rejects_invalid_closing_fence_indentation_with_required_pol
         let error = decoder
             .decode_value(&input)
             .expect_err("required mode must reject invalid closing-fence whitespace");
-        assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+        assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
     }
 }
 
@@ -300,7 +300,7 @@ fn test_decode_value_rejects_closing_fence_shorter_than_opening_fence() {
     let error = decoder
         .decode_value("````json\n{\"a\":1}\n```")
         .expect_err("closing fence shorter than the opening fence should not be stripped");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value strips code fence without closing fence.
@@ -336,7 +336,7 @@ fn test_decode_value_can_require_closing_code_fence() {
     let error = decoder
         .decode_value("```json\n{\"a\":1}")
         .expect_err("opening fence without closing fence should be rejected when strict mode is enabled");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value allows strict closing code fence when present.
@@ -372,7 +372,7 @@ fn test_decode_value_can_restrict_code_fence_to_json_language_tags() {
     let error = decoder
         .decode_value("```python\n{\"a\":1}\n```")
         .expect_err("non-JSON code fence should not be stripped in json-only mode");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value json only mode accepts longer json code fence.
@@ -448,7 +448,7 @@ fn test_decode_value_json_only_mode_rejects_non_json_info_string_first_token() {
     let error = decoder
         .decode_value("```python json\n{\"a\":1}\n```")
         .expect_err("json-only mode should use the first info-string token");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value does not accept inline closing ticks as fence
@@ -464,7 +464,7 @@ fn test_decode_value_does_not_accept_inline_closing_ticks_as_fence_end() {
     let error = decoder
         .decode_value("```json\n{\"a\":1}```")
         .expect_err("inline trailing ticks are not treated as a valid closing fence");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value reports invalid json for code fence without
@@ -482,7 +482,7 @@ fn test_decode_value_reports_invalid_json_for_code_fence_without_newline() {
     let error = decoder
         .decode_value("```json")
         .expect_err("text without a fence body newline should not be stripped");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value reports empty input for empty code fence body.
@@ -497,7 +497,7 @@ fn test_decode_value_reports_empty_input_for_empty_code_fence_body() {
     let error = decoder
         .decode_value("```json\n```")
         .expect_err("empty fenced body should become empty input after normalization");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::EmptyInput);
     assert_eq!(error.normalized_input_bytes(), Some(0));
 }
 
@@ -517,7 +517,7 @@ fn test_decode_value_can_disable_code_fence_stripping() {
     let error = decoder
         .decode_value("```json\n{\"name\":\"alice\"}\n```")
         .expect_err("code fences should remain when stripping is disabled");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value handles uppercase code fence language tag.

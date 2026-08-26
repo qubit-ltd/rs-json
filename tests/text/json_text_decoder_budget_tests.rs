@@ -14,7 +14,7 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonSyntaxErrorReason;
 use serde::Deserialize;
@@ -60,10 +60,10 @@ fn deeply_nested_input_fails_by_limit_without_stack_overflow() {
             )
             .build(),
     );
-    assert!(matches!(
-        JsonDecoder::new(session).decode_utf8::<serde_json::Value>(input.as_bytes()),
-        Err(JsonDecodeError::Budget(_))
-    ));
+    let error = JsonDecoder::new(session)
+        .decode_utf8::<serde_json::Value>(input.as_bytes())
+        .expect_err("the depth limit must reject the document");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
 }
 
 #[test]
@@ -100,9 +100,7 @@ fn json_decode_reports_structured_syntax_locations() {
         let error = JsonDecoder::new(session)
             .decode_utf8::<serde_json::Value>(input)
             .expect_err("input should be rejected");
-        let JsonDecodeError::Syntax(error) = error else {
-            panic!("expected structured syntax error");
-        };
+        let error = error.syntax_error().expect("expected structured syntax error");
         assert_eq!(error.offset(), offset);
         assert_eq!(error.line(), line);
         assert_eq!(error.column(), column);
@@ -117,9 +115,7 @@ fn json_decode_counts_unicode_columns_and_crlf_lines() {
     let error = JsonDecoder::new(session)
         .decode_utf8::<serde_json::Value>(input)
         .expect_err("missing colon should be rejected");
-    let JsonDecodeError::Syntax(error) = error else {
-        panic!("expected structured syntax error");
-    };
+    let error = error.syntax_error().expect("expected structured syntax error");
     assert_eq!(error.line(), 2);
     assert_eq!(error.column(), 7);
     assert_eq!(error.reason(), JsonSyntaxErrorReason::ExpectedColon);
@@ -135,14 +131,14 @@ fn typed_decode_failure_consumes_input_before_the_next_attempt() {
     );
     let mut decoder = JsonDecoder::new(session);
 
-    assert!(matches!(
-        decoder.decode_utf8::<u8>(br#""x""#),
-        Err(JsonDecodeError::Deserialize { .. })
-    ));
-    assert!(matches!(
-        decoder.decode_utf8::<u8>(b"0"),
-        Err(JsonDecodeError::Budget(_))
-    ));
+    let error = decoder
+        .decode_utf8::<u8>(br#""x""#)
+        .expect_err("the string must fail typed decoding");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    let error = decoder
+        .decode_utf8::<u8>(b"0")
+        .expect_err("the exhausted input budget must reject the next value");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
 }
 
 /// Verifies a typed seed failure retains raw input while discarding staged
@@ -225,10 +221,10 @@ fn budget_rejection_keeps_input_and_rolls_back_value() {
     );
     let mut decoder = JsonDecoder::new(session);
 
-    assert!(matches!(
-        decoder.decode_utf8::<serde_json::Value>(input),
-        Err(JsonDecodeError::Budget(_))
-    ));
+    let error = decoder
+        .decode_utf8::<serde_json::Value>(input)
+        .expect_err("the node budget must reject the document");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     assert_eq!(
         decoder
             .session()
@@ -258,7 +254,7 @@ fn decoder_seed_rejects_integer_outside_64_bit_range() {
     let error = decoder
         .decode_seed_utf8(IgnoreSeed, input)
         .expect_err("an integer above u64::MAX must be rejected");
-    assert!(matches!(error, JsonDecodeError::Syntax(_)));
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies lexical limits reject input before a seed is invoked.
@@ -277,7 +273,7 @@ fn point_limit_fails_before_seed_and_keeps_work_charged() {
     let error = decoder
         .decode_seed_utf8(PanicSeed, br#""ab""#)
         .expect_err("string limit must fail");
-    assert!(matches!(error, JsonDecodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 }
 

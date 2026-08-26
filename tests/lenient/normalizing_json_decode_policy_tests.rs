@@ -70,21 +70,6 @@ fn test_builder_configures_policy_and_consumes_itself() {
     assert_eq!(policy.diagnostic_policy(), DiagnosticPolicy::Detailed);
 }
 
-/// Verifies that strict disables all normalization rules.
-///
-/// # Panics
-///
-/// Panics when the expected behavior is not observed.
-#[test]
-fn test_strict_disables_all_normalization_rules() {
-    let policy = NormalizingJsonDecodePolicy::strict();
-    assert!(!policy.trim_whitespace());
-    assert!(!policy.strip_utf8_bom());
-    assert_eq!(policy.markdown_fence_policy(), &MarkdownFencePolicy::Disabled,);
-    assert!(!policy.escape_control_chars_in_strings());
-    assert_eq!(policy.diagnostic_policy(), DiagnosticPolicy::Redacted,);
-}
-
 /// Verifies that builders set requested policies.
 ///
 /// # Panics

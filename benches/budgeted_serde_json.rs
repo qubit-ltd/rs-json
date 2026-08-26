@@ -22,6 +22,7 @@ use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use qubit_json::encode::JsonEncoder;
@@ -37,6 +38,16 @@ const DOCUMENT_SIZES: [usize; 3] = [1_024, 65_536, 1_048_576];
 const RECORD: &[u8] = br#"{"id":7,"text":"benchmark-record"}"#;
 const DOCUMENT_PREFIX: &[u8] = br#"{"records":["#;
 const DOCUMENT_SUFFIX: &[u8] = br#"]}"#;
+
+/// Creates a normalization policy that performs no text rewriting.
+fn no_normalization_policy() -> NormalizingJsonDecodePolicy {
+    NormalizingJsonDecodePolicy::builder()
+        .trim_whitespace(false)
+        .strip_utf8_bom(false)
+        .markdown_fence_policy(MarkdownFencePolicy::Disabled)
+        .escape_control_chars_in_strings(false)
+        .build()
+}
 
 /// JSON fixture with an object array that scales to each target document size.
 #[derive(Debug, Deserialize, Serialize)]
@@ -93,7 +104,7 @@ fn benchmark_document(target_bytes: usize) -> Vec<u8> {
 ///
 /// Panics when a generated document cannot be decoded by a benchmark path.
 fn decode(criterion: &mut Criterion) {
-    let mut decoder = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::strict(), JsonDecodeLimits::default());
+    let mut decoder = NormalizingJsonDecoder::owned(no_normalization_policy(), JsonDecodeLimits::default());
     let mut group = criterion.benchmark_group("budgeted-json-decode");
 
     for target_bytes in DOCUMENT_SIZES {
@@ -192,7 +203,7 @@ fn decode(criterion: &mut Criterion) {
             |bencher, input| {
                 bencher.iter(|| {
                     black_box(
-                        NormalizingJsonDecoder::from_session(
+                        NormalizingJsonDecoder::new(
                             decoder.policy().clone(),
                             JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build()),
                         )

@@ -8,11 +8,21 @@
 //! Tests control-character escaping through public lenient decoder behavior.
 
 use qubit_budget::json::JsonDecodeLimits;
-use qubit_json::decode::NormalizingJsonDecodeErrorKind;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
+use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
-use qubit_json::decode::NormalizingJsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde_json::json;
+
+/// Returns the configured limit retained by a measured budget failure.
+fn configured_limit(error: &JsonDecodeError) -> usize {
+    error
+        .budget_error()
+        .and_then(|error| error.budget_error())
+        .expect("the normalized-size failure must contain a budget error")
+        .configured_limit()
+}
 
 /// Verifies that decode value preserves existing escapes.
 ///
@@ -75,7 +85,7 @@ fn test_decode_value_can_disable_control_char_escaping() {
     let error = decoder
         .decode_value("{\"text\":\"a\nb\"}")
         .expect_err("control characters should remain invalid JSON when escaping is disabled");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value covers all supported control char escapes.
@@ -208,11 +218,10 @@ fn test_decode_value_bounds_all_control_character_escapes_by_normalized_size() {
     )
     .decode_value(&json_input)
     .expect_err("one byte below the C0 replacement size must fail");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
-    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Normalize);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), JsonDecodeStage::Normalize);
     assert_eq!(error.normalized_input_bytes(), Some(normalized_bytes));
-    assert_eq!(error.max_normalized_bytes(), Some(normalized_bytes - 1));
-    assert_eq!(error.max_input_bytes(), None);
+    assert_eq!(configured_limit(&error), normalized_bytes - 1);
 }
 
 /// Verifies that decode value escapes control char after unmatched backslash.
@@ -309,5 +318,5 @@ fn test_decode_value_leaves_non_whitespace_controls_outside_strings_invalid() {
         .decode_value("\u{0001}{\"text\":\"value\"}")
         .expect_err("a raw control character outside a JSON string must not be repaired");
 
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }

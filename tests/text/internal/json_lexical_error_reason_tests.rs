@@ -10,7 +10,6 @@
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::decode::JsonDecodeError;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonSyntaxErrorReason;
 
@@ -22,8 +21,6 @@ fn test_lexical_error_reason_reports_trailing_characters() {
         .validate_utf8(b"true false")
         .expect_err("trailing JSON value must be rejected");
 
-    let JsonDecodeError::Syntax(error) = error else {
-        panic!("expected a syntax error");
-    };
+    let error = error.syntax_error().expect("expected a syntax error");
     assert_eq!(error.reason(), JsonSyntaxErrorReason::TrailingCharacters);
 }

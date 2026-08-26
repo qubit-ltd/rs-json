@@ -8,14 +8,24 @@
 //! Tests for lenient normalization behavior through the public decoder.
 
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
+use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::MarkdownFenceClosing;
 use qubit_json::decode::MarkdownFencePolicy;
-use qubit_json::decode::NormalizingJsonDecodeErrorKind;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
-use qubit_json::decode::NormalizingJsonDecodeStage;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde_json::json;
 use serde_json::to_string;
+
+/// Returns the configured limit retained by a measured budget failure.
+fn configured_limit(error: &JsonDecodeError) -> usize {
+    error
+        .budget_error()
+        .and_then(|error| error.budget_error())
+        .expect("the size failure must contain a budget error")
+        .configured_limit()
+}
 
 /// Verifies that decode value reports empty input for empty string.
 ///
@@ -29,7 +39,7 @@ fn test_decode_value_reports_empty_input_for_empty_string() {
     let error = decoder
         .decode_value("")
         .expect_err("empty input should be rejected before JSON parsing");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::EmptyInput);
     assert_eq!(error.normalized_input_bytes(), None);
 }
 
@@ -45,7 +55,7 @@ fn test_decode_value_reports_empty_input_for_whitespace_by_default() {
     let error = decoder
         .decode_value(" \n\t ")
         .expect_err("whitespace-only input should be empty after default trimming");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::EmptyInput);
     assert_eq!(error.normalized_input_bytes(), None);
 }
 
@@ -63,11 +73,10 @@ fn test_decode_value_respects_input_size_limit() {
     let error = decoder
         .decode_value("{\"a\":1}")
         .expect_err("input above the configured byte limit should be rejected");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
-    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Normalize);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), JsonDecodeStage::Input);
     assert_eq!(error.raw_input_bytes(), 7);
-    assert_eq!(error.max_input_bytes(), Some(6));
-    assert!(error.to_string().contains("6 bytes"));
+    assert_eq!(configured_limit(&error), 6);
 }
 
 /// Verifies that decode value accepts input at size limit.
@@ -101,7 +110,7 @@ fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
     let error = decoder
         .decode_value("{")
         .expect_err("size guard should run before parser handling");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
 }
 
 /// Verifies that decode value rejects control-character expansion above the
@@ -122,12 +131,11 @@ fn test_decode_value_rejects_control_character_expansion_above_normalized_size_l
         .decode_str::<String>(input)
         .expect_err("control-character expansion above the normalized limit must fail");
 
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
-    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Normalize);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), JsonDecodeStage::Normalize);
     assert_eq!(error.raw_input_bytes(), input.len());
     assert_eq!(error.normalized_input_bytes(), Some(8));
-    assert_eq!(error.max_input_bytes(), None);
-    assert_eq!(error.max_normalized_bytes(), Some(7));
+    assert_eq!(configured_limit(&error), 7);
 }
 
 /// Verifies that decode value accepts control-character expansion at the
@@ -179,11 +187,11 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
     )
     .decode_str::<String>(input)
     .expect_err("one byte below the post-fence normalized size must fail");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InputTooLarge);
-    assert_eq!(error.stage(), NormalizingJsonDecodeStage::Normalize);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), JsonDecodeStage::Normalize);
     assert_eq!(error.raw_input_bytes(), input.len());
     assert_eq!(error.normalized_input_bytes(), Some(normalized_bytes));
-    assert_eq!(error.max_normalized_bytes(), Some(normalized_bytes - 1));
+    assert_eq!(configured_limit(&error), normalized_bytes - 1);
 }
 
 /// Verifies that decode value strips utf8 bom by default.
@@ -213,7 +221,7 @@ fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
     let error = decoder
         .decode_value("\u{feff}")
         .expect_err("input containing only BOM should become empty after normalization");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::EmptyInput);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::EmptyInput);
     assert_eq!(error.normalized_input_bytes(), Some(0));
 }
 
@@ -231,7 +239,7 @@ fn test_decode_value_can_leave_utf8_bom_when_disabled() {
     let error = decoder
         .decode_value("\u{feff}{\"a\":1}")
         .expect_err("BOM should remain and break parsing when BOM stripping is disabled");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value trims surrounding whitespace by default.
@@ -267,7 +275,7 @@ fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled(
     let error = decoder
         .decode_value("   ")
         .expect_err("whitespace-only input should reach JSON parser when trimming is disabled");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value accepts terminal unicode whitespace when trimming
@@ -301,7 +309,7 @@ fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled(
     let error = decoder
         .decode_value("```json\n{\"a\":1}\n```\u{00a0}")
         .expect_err("terminal Unicode whitespace should remain without trimming");
-    assert_eq!(error.kind(), NormalizingJsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
 /// Verifies that decode value randomized inputs do not panic and round trip
