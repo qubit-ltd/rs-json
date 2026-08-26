@@ -74,14 +74,20 @@ let mut decoder = NormalizingJsonDecoder::owned(
 );
 let value = decoder.decode_value("```json\n{\"ok\":true}\n```")?;
 assert_eq!(value["ok"], true);
-# Ok::<(), qubit_json::decode::NormalizingJsonDecodeError>(())
+# Ok::<(), qubit_json::decode::JsonDecodeError>(())
 ```
 
-需要累计记账时使用 `NormalizingJsonDecoder::from_session` 构造有状态 decoder。原始输入和规范化
+需要累计记账时使用 `NormalizingJsonDecoder::new` 构造有状态 decoder。原始输入和规范化
 输入的消耗会在一次尝试后保留；只有完整的强类型解码成功，解码后 value 的暂存消耗才提交。
 错误默认脱敏；仅在输入诊断可安全暴露的环境中启用 `DiagnosticPolicy::Detailed`。
-规范化 policy 不携带资源限制：`owned` 显式接收 `JsonDecodeLimits`，`from_session` 显式接收
+规范化 policy 不携带资源限制：`owned` 显式接收 `JsonDecodeLimits`，`new` 显式接收
 `JsonDecodeSession`。只有确实需要无限预算时才传入 `JsonDecodeLimits::default()`。
+
+需要对同一份规范化文本重复解码、让结果借用文本，或使用 Serde seed 时，先调用
+`prepare_str`/`prepare_utf8`，再通过返回的 `NormalizedJsonDocument` 解码。prepare 只提交一次
+raw/normalized 输入消耗；每次成功的 document decode 分别提交自己的 value 消耗。未包含 JSON
+转义的字符串可以借用 document；包含转义的字符串必须使用 owned 目标，因为 Serde 需要物化
+解转义后的内容。
 
 ## 严格文本对象
 
@@ -135,19 +141,25 @@ object key 处理。
 
 ## 错误与预算语义
 
-六个公开 error 各自归属业务领域：
+两个 decoder facade 共用同一个公开解码错误模型：
 
-1. `decode::NormalizingJsonDecodeError`：规范化和宽松强类型解码失败。
-2. `decode::JsonDecodeError`：严格预算、语法或强类型解码失败。
-3. `encode::JsonEncodeError`：严格预算、原始 JSON、序列化或 I/O 失败。
-4. `decode::JsonSyntaxError`：稳定的语法原因和位置元数据。
-5. `value::traverse::JsonTreeProcessError`：遍历预算或 visitor 失败。
-6. `value::traverse::JsonTreeMutateError`：原地修改时的输入预算、visitor 或输出预算失败。
+1. `decode::JsonDecodeError`：严格与规范化解码失败；调用方通过 `kind()`、`stage()` 和其他
+   accessor 分支，不匹配私有实现细节。
+2. `encode::JsonEncodeError`：严格预算、原始 JSON、序列化或 I/O 失败。
+3. `decode::JsonSyntaxError`：稳定的语法原因和位置元数据。
+4. `value::traverse::JsonTreeProcessError`：遍历预算或 visitor 失败。
+5. `value::traverse::JsonTreeMutateError`：原地修改时的输入预算、visitor 或输出预算失败。
 
 带预算操作使用 transaction：解码后 value 或输出消耗在文档定义的成功边界提交。decode
 session 中的输入消耗会在失败尝试后刻意保留。
 
 ## 高级 value 与 tree 用法
+
+`strict` 只表示严格执行 JSON 语法、数字范围和资源准入，并不自动要求 object key 唯一。
+重复 key 的处理由 Serde 目标类型决定：`serde_json::Value` 和 `serde_json::Map` 保留最后一个值，
+部分强类型 struct 则会拒绝重复字段。若要求每一层 object 的 key 都唯一，应通过
+`JsonDecoder` 解码为 `DuplicateKeyRejectingJsonValue`；确实需要规范化时也可与
+`NormalizingJsonDecoder` 组合。完整示例见[用户手册](doc/user_guide.zh_CN.md#重复-object-key)。
 
 `JsonValueSeed` 在调用方 transaction 中构造已物化 value 并记账。由于 seed 只能看到解码后的
 Serde 事件，不能验证原始 token 或数字范围；需要这些保证的 JSON 文本必须经过

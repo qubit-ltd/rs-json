@@ -58,8 +58,9 @@ assert_eq!(value["id"], serde_json::json!(u64::MAX));
 ```
 
 可观察结果是已准入的 `serde_json::Value`；超限会在 typed value 提交前返回
-`JsonDecodeError::Budget`。语法或数字范围问题返回 `JsonDecodeError::Syntax`，目标类型不匹配
-返回 `JsonDecodeError::Deserialize`。
+`kind()` 为 `JsonDecodeErrorKind::Budget` 的 `JsonDecodeError`。语法或数字范围问题使用
+`InvalidJson`，目标类型不匹配使用 `Deserialize`。通过 `stage()` 区分输入、规范化、准入、解析、
+顶层检查和物化阶段。
 
 输出侧使用 `JsonEncoder::owned(JsonEncodeLimits::...)`，再调用 `to_vec`、`write_buffered` 或
 `write_incremental`。buffered 只有完整字节序列准备好后才提交；incremental 的 writer 失败时，
@@ -69,10 +70,70 @@ assert_eq!(value["id"], serde_json::json!(u64::MAX));
 
 只有在边界明确允许时才使用 `NormalizingJsonDecoder`，并通过 policy 选择 BOM、外围空白、一层
 JSON Markdown 围栏或控制字符转义。policy 不携带 `JsonDecodeLimits`；`owned` 显式接收 limits，
-`from_session` 显式接收 session。
+`new` 显式接收 session。
+
+### 已准备的规范化文档
+
+一次性规范化方法只能返回 owned 目标，因为临时规范化文本无法跨越调用存活。需要借用结果、
+seed 解码或重复物化时，应显式 prepare document：
+
+```rust
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_json::decode::{NormalizingJsonDecodePolicy, NormalizingJsonDecoder};
+
+let mut decoder = NormalizingJsonDecoder::owned(
+    NormalizingJsonDecodePolicy::lenient(),
+    JsonDecodeLimits::default(),
+);
+let document = decoder.prepare_str("  \"borrowed\"  ")?;
+let first: &str = decoder.decode_document(&document)?;
+let second: &str = decoder.decode_document(&document)?;
+assert_eq!((first, second), ("borrowed", "borrowed"));
+# Ok::<(), qubit_json::decode::JsonDecodeError>()
+```
+
+`prepare_str`/`prepare_utf8` 立即提交 raw 与 normalized 输入消耗。每次成功的
+`decode_document`、`decode_document_seed`、带顶层类型约束的 document decode 或
+`validate_document` 分别提交一份 value 消耗；物化失败只回滚该次尝试的 value 消耗。document
+与创建它的 decoder 解耦，可交给另一个预算类型兼容的 decoder 解码。借用遵循 Serde 表示规则：
+未转义 JSON 字符串可借用 document，包含转义的字符串必须使用 owned 目标。
 
 当另一个 Serde deserializer 持有输入时使用 `JsonValueSeed`。它核算解码事件，但看不到原始
 number lexeme、`NumberBytes` 或文本级整数范围；需要这些保证时使用 `JsonDecoder`。
+边界还要求特定顶层容器时，使用 `decode_object_str`/`decode_object_utf8` 或对应的 array 方法。
+
+### 重复 object key
+
+严格准入不会额外施加全局 key 唯一规则。重复 key 如何处理取决于 Serde 目标类型：
+`serde_json::Value` 与 `serde_json::Map` 采用“后值覆盖前值”，许多派生 struct 则会拒绝重复的
+已知字段。因此，应通过目标类型表达文档契约，不能把 `strict` 理解为自动校验 key 唯一。
+
+动态 JSON 若要求每层 object 的 key 都唯一，可将严格文本准入与
+`DuplicateKeyRejectingJsonValue` 组合：
+
+```rust
+use qubit_json::decode::JsonDecoder;
+use qubit_json::value::DuplicateKeyRejectingJsonValue;
+
+let input = r#"{"role":"user","role":"admin"}"#;
+
+let mut ordinary_decoder = JsonDecoder::unlimited();
+let ordinary: serde_json::Value = ordinary_decoder.decode_str(input)?;
+assert_eq!(ordinary["role"], "admin");
+
+let mut unique_key_decoder = JsonDecoder::unlimited();
+let error = unique_key_decoder
+    .decode_str::<DuplicateKeyRejectingJsonValue>(input)
+    .expect_err("duplicate object keys must be rejected");
+assert!(error.to_string().contains("deserialization failed"));
+# Ok::<(), qubit_json::decode::JsonDecodeError<
+#     qubit_budget::json::JsonResource,
+# >>(())
+```
+
+该 wrapper 会递归检查嵌套 object；如果输入契约本来就包含文本规范化，也可将它作为
+`NormalizingJsonDecoder` 的目标类型。调用方自行持有 Serde deserializer 时，可使用对应的
+`DuplicateKeyRejectingJsonValueSeed`。
 
 对已有 value，`JsonTreeReader::account` 在调用方 transaction 中暂存整棵树的消耗，不调用
 visitor。`JsonTreeMutator` 先准入原始 tree，再执行原地 visitor 回调，最后准入修改后的 tree。
@@ -82,10 +143,11 @@ visitor。`JsonTreeMutator` 先准入原始 tree，再执行原地 visitor 回�
 
 ## 错误与诊断
 
-公开错误领域包括 `NormalizingJsonDecodeError`、`JsonDecodeError`、`JsonEncodeError`、
-`JsonSyntaxError`、`JsonTreeProcessError` 和 `JsonTreeMutateError`。先区分错误领域，再决定重试、
-返回客户端错误或记录诊断。规范化诊断可能保留输入派生信息；`DiagnosticPolicy::Detailed` 只应
-在可信边界启用，不可信日志默认脱敏。
+严格与规范化 decoder 返回同一个泛型 `JsonDecodeError`。先通过 `kind()` 按
+`JsonDecodeErrorKind` 分支，再按需读取 `stage()`、`budget_error()`、`syntax_error()`、顶层类型
+或 UTF-8 accessor。只有 `DiagnosticPolicy::Detailed` 会保留输入派生 source；它只应在可信边界
+启用，不可信日志默认脱敏。其他领域错误为 `JsonEncodeError`、`JsonSyntaxError`、
+`JsonTreeProcessError` 和 `JsonTreeMutateError`。
 
 数字契约独立于资源限制：负整数装入 `i64`，非负整数装入 `u64`，小数/指数必须是有限 `f64`。
 超出范围或必须避免二进制浮点舍入的精确十进制，应使用字符串或显式领域表示。详见
@@ -95,10 +157,11 @@ visitor。`JsonTreeMutator` 先准入原始 tree，再执行原地 visitor 回�
 
 - `Budget`：检查对应的输入字节、number 字节、深度、节点、集合、key/string 或输出限制；只有
   需要累计记账时才继续复用该 session。
-- `Syntax`：检查原始字节以及错误中的 reason、offset、line、column；规范化不会凭空补齐 JSON
+- `InvalidJson`：检查原始字节以及错误中的 reason、offset、line、column；规范化不会凭空补齐 JSON
   语法。
 - `Deserialize`：说明 JSON 已准入，但与目标类型不匹配；分别修正 payload 或目标 schema。这也包括
-  `serde_json` 的具象化递归保护：词法校验使用显式栈，可能准入一个类型化反序列化不会具象化的文档。
+  `serde_json` 的具象化递归保护：词法校验使用显式栈，可能准入一个类型化反序列化不会具象化的文档；
+  目标类型为 `DuplicateKeyRejectingJsonValue` 时，重复 object key 也在这一边界报告。
 - tree 修改后出现部分结果：`JsonTreeMutator` 是增量式的，visitor 或输出预算失败不会回滚已有
   修改。
 

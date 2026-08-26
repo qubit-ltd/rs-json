@@ -80,17 +80,25 @@ let mut decoder = NormalizingJsonDecoder::owned(
 );
 let value = decoder.decode_value("```json\n{\"ok\":true}\n```")?;
 assert_eq!(value["ok"], true);
-# Ok::<(), qubit_json::decode::NormalizingJsonDecodeError>(())
+# Ok::<(), qubit_json::decode::JsonDecodeError>(())
 ```
 
 For cumulative accounting, construct a stateful decoder with
-`NormalizingJsonDecoder::from_session`. Raw input and normalized input charges
+`NormalizingJsonDecoder::new`. Raw input and normalized input charges
 remain after an attempt; decoded-value charges commit only after the complete
 typed decode succeeds. Errors are redacted by default. Enable
 `DiagnosticPolicy::Detailed` only where input-derived diagnostics are safe.
 Normalization policy never carries resource limits: pass `JsonDecodeLimits`
-to `owned`, or a `JsonDecodeSession` to `from_session`. Explicitly pass
+to `owned`, or a `JsonDecodeSession` to `new`. Explicitly pass
 `JsonDecodeLimits::default()` only when unlimited decoding is intended.
+
+When normalized text must be decoded more than once, borrowed by the result,
+or materialized through a Serde seed, call `prepare_str`/`prepare_utf8` once and
+then decode the returned `NormalizedJsonDocument`. Preparation commits raw and
+normalized input charges once; every successful document decode commits its
+own value charges. Unescaped JSON strings may borrow from the document, while
+escaped strings require an owned target because Serde must materialize the
+unescaped value.
 
 ## Strict text objects
 
@@ -151,14 +159,14 @@ number-marker key as an ordinary object key.
 
 ## Errors and budget semantics
 
-The six public error types are domain-owned:
+The public decoding error model is shared by both decoder facades:
 
-1. `decode::NormalizingJsonDecodeError` for normalization and lenient typed decode.
-2. `decode::JsonDecodeError` for strict budget, syntax, or typed decode failure.
-3. `encode::JsonEncodeError` for strict budget, raw JSON, serialization, or I/O failure.
-4. `decode::JsonSyntaxError` for stable syntax reason and location metadata.
-5. `value::traverse::JsonTreeProcessError` for traversal budget or visitor failure.
-6. `value::traverse::JsonTreeMutateError` for input-budget, visitor, or
+1. `decode::JsonDecodeError` for strict and normalizing decode failures; inspect
+   `kind()` and `stage()` instead of matching private implementation details.
+2. `encode::JsonEncodeError` for strict budget, raw JSON, serialization, or I/O failure.
+3. `decode::JsonSyntaxError` for stable syntax reason and location metadata.
+4. `value::traverse::JsonTreeProcessError` for traversal budget or visitor failure.
+5. `value::traverse::JsonTreeMutateError` for input-budget, visitor, or
    output-budget failure during in-place mutation.
 
 Budgeted operations use transactions: staged decoded-value or output charges
@@ -166,6 +174,15 @@ commit on their documented success boundary. Input charges intentionally remain
 visible in decode sessions after failed attempts.
 
 ## Advanced values and trees
+
+`strict` describes JSON syntax, number range, and resource admission; it does
+not imply unique object keys. Duplicate-key behavior comes from the requested
+Serde target: `serde_json::Value` and `serde_json::Map` keep the last value,
+while some typed structs reject repeated fields. To require unique keys at
+every object depth, decode `DuplicateKeyRejectingJsonValue` through
+`JsonDecoder` (or `NormalizingJsonDecoder` when normalization is intentional).
+The [user guide](doc/user_guide.md#duplicate-object-keys) contains a complete
+composition example.
 
 `JsonValueSeed` builds a materialized value while charging a caller transaction.
 Because a seed sees decoded Serde events rather than the original token, it
