@@ -190,11 +190,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             BenchmarkId::new("strict_decoder_decode_utf8", payload_bytes),
             &input,
             |bencher, input| {
-                bencher.iter(|| {
-                    let session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build());
-                    let mut decoder = JsonDecoder::new(session);
-                    black_box(decoder.decode_utf8::<BenchmarkRecord>(black_box(input.as_bytes())))
-                });
+                let session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+                let mut decoder = JsonDecoder::new(session);
+                bencher.iter(|| black_box(decoder.decode_utf8::<BenchmarkRecord>(black_box(input.as_bytes()))));
             },
         );
         plain_group.bench_with_input(
