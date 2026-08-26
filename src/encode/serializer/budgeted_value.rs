@@ -17,7 +17,7 @@ use super::json_encode_context::JsonEncodeContext;
 use super::json_encode_serializer::JsonEncodeSerializer;
 
 /// Re-enters the budget-aware serializer for one nested value.
-pub(super) struct BudgetedValue<'a, 'transaction, 'budget, 'context, T, R, Q>
+pub(super) struct BudgetedValue<'a, 'transaction, 'budget, 'context, T, R, Q, const VALUE_LIMITS: bool>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -30,12 +30,10 @@ where
 
     /// Root-inclusive depth assigned to the nested value.
     depth: usize,
-
-    /// Whether value accounting can reject any emitted event.
-    has_value_limits: bool,
 }
 
-impl<'a, 'transaction, 'budget, 'context, T, R, Q> BudgetedValue<'a, 'transaction, 'budget, 'context, T, R, Q>
+impl<'a, 'transaction, 'budget, 'context, T, R, Q, const VALUE_LIMITS: bool>
+    BudgetedValue<'a, 'transaction, 'budget, 'context, T, R, Q, VALUE_LIMITS>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -46,33 +44,28 @@ where
         value: &'a T,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         depth: usize,
-        has_value_limits: bool,
     ) -> Self {
-        Self {
-            value,
-            context,
-            depth,
-            has_value_limits,
-        }
+        Self { value, context, depth }
     }
 }
 
-impl<T, R, Q> Serialize for BudgetedValue<'_, '_, '_, '_, T, R, Q>
+impl<T, R, Q, const VALUE_LIMITS: bool> Serialize for BudgetedValue<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
 where
     T: Serialize + ?Sized,
     R: Clone,
     Q: ResourceQuantity,
 {
     /// Serializes the wrapped value through a child budget decorator.
+    #[inline(always)]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        self.value.serialize(JsonEncodeSerializer::with_context(
-            serializer,
-            self.context,
-            self.depth,
-            self.has_value_limits,
-        ))
+        self.value
+            .serialize(JsonEncodeSerializer::<S, R, Q, VALUE_LIMITS>::with_context(
+                serializer,
+                self.context,
+                self.depth,
+            ))
     }
 }
