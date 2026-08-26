@@ -14,6 +14,7 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
+use qubit_json_fuzz::json_number_contract::numbers_fit_contract;
 use serde_json::Value;
 
 const MAX_INPUT_LEN: usize = 4 * 1024;
@@ -24,9 +25,16 @@ fuzz_target!(|data: &[u8]| {
     let admitted = JsonDecoder::new(session).decode_utf8::<Value>(input).is_ok();
     let validation_session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     let validated = JsonDecoder::new(validation_session).validate_utf8(input).is_ok();
-    let reference = serde_json::from_slice::<Value>(input).is_ok();
+    let reference = serde_json::from_slice::<Value>(input);
+    let reference_admitted = reference.is_ok() && numbers_fit_contract(input);
 
     assert_eq!(admitted, validated, "decode and validation must agree");
-    assert!(!admitted || reference, "strict admission must be a serde_json subset");
-    assert!(!validated || reference, "strict validation must be a serde_json subset");
+    assert_eq!(
+        admitted, reference_admitted,
+        "strict admission must match the reference contract"
+    );
+    assert_eq!(
+        validated, reference_admitted,
+        "strict validation must match the reference contract"
+    );
 });
