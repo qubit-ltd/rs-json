@@ -14,6 +14,16 @@ use std::str::FromStr;
 ///
 /// Stages describe public domain boundaries and do not expose whether the
 /// scanner, normalizer, or Serde first detected a failure.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::JsonDecodeStage;
+///
+/// let stage = "parse".parse::<JsonDecodeStage>()?;
+/// assert_eq!(stage, JsonDecodeStage::Parse);
+/// # Ok::<(), &'static str>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeStage {
     /// Charging raw input bytes.
