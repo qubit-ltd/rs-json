@@ -156,7 +156,7 @@ fn test_normalized_json_document_failure_rolls_back_only_value_usage() {
     let mut decoder = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::lenient(), limits);
     let document = decoder.prepare_str(input).expect("prepare must succeed");
 
-    decoder
+    let _ = decoder
         .decode_document::<std::collections::HashMap<String, bool>>(&document)
         .expect_err("number must not deserialize as bool");
 

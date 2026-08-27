@@ -221,7 +221,7 @@ fn test_normalizing_decoder_typed_failure_keeps_input_and_rolls_back_value() {
         .build();
     let mut decoder = NormalizingJsonDecoder::owned(no_normalization_policy(), limits);
 
-    decoder
+    let _ = decoder
         .decode_str::<std::collections::HashMap<String, bool>>(input)
         .expect_err("number should not deserialize as bool");
 

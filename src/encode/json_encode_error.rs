@@ -40,6 +40,7 @@ use crate::decode::JsonSyntaxError;
 ///     <JsonEncodeError<JsonResource> as Error>::custom("example failure");
 /// assert!(matches!(error, JsonEncodeError::Serialize(_)));
 /// ```
+#[must_use]
 #[derive(Debug, Error)]
 pub enum JsonEncodeError<R, Q = usize>
 where

@@ -34,6 +34,7 @@ use thiserror::Error;
 ///     JsonTreeProcessError::Visitor("visitor rejected the node");
 /// assert!(matches!(error, JsonTreeProcessError::Visitor(_)));
 /// ```
+#[must_use]
 #[derive(Debug, Error)]
 pub enum JsonTreeProcessError<R, Q, E>
 where

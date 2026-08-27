@@ -32,6 +32,7 @@ use thiserror::Error;
 ///     JsonTreeMutateError::Visitor("mutation rejected");
 /// assert!(matches!(error, JsonTreeMutateError::Visitor(_)));
 /// ```
+#[must_use]
 #[derive(Debug, Error)]
 pub enum JsonTreeMutateError<R, Q, E>
 where
