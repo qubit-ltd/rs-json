@@ -7,9 +7,10 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![中文文档](https://img.shields.io/badge/文档-中文版-blue.svg)](README.zh_CN.md)
 
-Resource-aware JSON infrastructure for Rust. It preserves Serde's data model
-while making input normalization, strict codecs, decoded values, and tree work
-explicitly budgeted.
+Resource-aware JSON infrastructure for Rust services, configuration readers,
+and data pipelines. It complements `serde_json` by admitting JSON under
+caller-chosen limits before untrusted input consumes unbounded parsing,
+materialization, or output resources, while preserving Serde's data model.
 
 ## Installation
 
@@ -17,191 +18,97 @@ explicitly budgeted.
 [dependencies]
 qubit-json = "0.8"
 qubit-budget = { version = "0.3", features = ["json"] }
-serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```
 
-For the complete API path, see the [English user guide](doc/user_guide.md), or
-the [中文用户手册](doc/user_guide.zh_CN.md). The normative numeric rules are in
-the [number contract](doc/number_contract.md).
+Add `serde = { version = "1.0", features = ["derive"] }` when decoding into
+derived application types.
 
-## Bounded boundary in five minutes
+## Quick start: admit an HTTP request body
 
-At an HTTP or configuration boundary, create a decoder with finite limits and
-admit the document before handing the resulting value to application code:
+This example accepts one request body containing a full-range `u64` identifier,
+then demonstrates that an oversized body is rejected before a decoded value is
+committed:
 
 ```rust
-use qubit_budget::json::{JsonDecodeLimits, JsonResource};
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 
-let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
-    .max_input_bytes(4096)
-    .max_number_bytes(20)
-    .build();
-let mut decoder = JsonDecoder::owned(limits);
-let value: serde_json::Value =
-    decoder.decode_str(r#"{"id":18446744073709551615,"ok":true}"#)?;
-assert_eq!(value["id"], serde_json::json!(u64::MAX));
-# Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
+fn main() -> Result<(), JsonDecodeError<JsonResource>> {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4096)
+        .max_depth(32)
+        .max_nodes(256)
+        .max_sequence_items(64)
+        .max_map_entries(64)
+        .max_key_bytes(128)
+        .max_string_bytes(2048)
+        .max_number_bytes(20)
+        .max_payload_bytes(4096)
+        .build();
+    let mut decoder = JsonDecoder::owned(limits);
+    let value: serde_json::Value =
+        decoder.decode_utf8(br#"{"id":18446744073709551615,"ok":true}"#)?;
+    assert_eq!(value["id"], serde_json::json!(u64::MAX));
+
+    let small_limits = limits.into_builder().max_input_bytes(8).build();
+    let mut small_decoder = JsonDecoder::owned(small_limits);
+    let error = small_decoder
+        .decode_utf8::<serde_json::Value>(br#"{"ok":true}"#)
+        .expect_err("the request body must exceed eight bytes");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    Ok(())
+}
 ```
 
-The guides continue this scenario with normalization, encoding, tree
-processing, diagnostics, and troubleshooting: [English](doc/user_guide.md) ·
-[中文](doc/user_guide.zh_CN.md).
+Unlike calling `serde_json::from_slice` alone, this boundary makes resource
+admission explicit and exposes a stable error category through `kind()`. Apply
+schema validation, authorization, and domain rules after a value is admitted.
 
-## Choose a domain
+## Why this project exists
+
+Valid JSON can still be too large, too deep, or too expensive to materialize.
+`qubit-json` keeps JSON syntax and Serde compatibility while letting callers
+bound raw and normalized input, nesting, nodes, collection sizes, keys, strings,
+numbers, payload, and encoded output. It also makes cumulative accounting and
+commit boundaries explicit through `qubit-budget` sessions and transactions.
+
+## What it provides
 
 | Domain | Use it for | Boundary |
 | --- | --- | --- |
-| `decode` | Normalizing text inputs and strict JSON bytes | Never guesses missing quotes, commas, or braces |
-| `encode` | Strict JSON output | Stateful encoder objects with caller-owned sessions |
-| `value` | Constructing `serde_json::Value` from Serde events | Charges the decoded value transaction |
-| `value::traverse` | Iterative reads or mutations of materialized values | Mutable processing is incremental, not transactional |
+| `decode` | Strict JSON admission or explicitly configured text normalization | Normalization applies only configured transformations; it never invents missing JSON syntax |
+| `encode` | Budgeted strict JSON output | Buffered accounting commits after a complete write, although an I/O failure can still leave bytes in the external writer |
+| `value` | Building budgeted `serde_json::Value` trees from Serde events | A seed cannot inspect original number text or enforce text-level range rules |
+| `value::traverse` | Iterative reads or in-place mutations of materialized values | Mutation is incremental; visitor and output-budget failures do not roll back prior changes |
 
 `qubit-budget` owns limits, resource identities, budgets, and sessions.
 `qubit-json` owns JSON normalization, lexical validation, text codecs, value
 construction, and traversal.
 
-## Lenient input
+## Explicit boundaries
 
-`NormalizingJsonDecoder` is a reusable object with immutable
-`NormalizingJsonDecodePolicy`. It can remove only configured noise, then
-deserialize directly into the requested type.
+- Strict admission validates JSON syntax and the documented numeric range; it
+  does not require object keys to be unique. Choose a target such as
+  `DuplicateKeyRejectingJsonValue` when uniqueness is part of the contract.
+- Negative integers fit `i64`, non-negative integers fit `u64`, and fractional
+  or exponential values must be finite `f64`. Use strings or domain types for
+  wider integers or exact decimals that must avoid binary rounding.
+- Set finite limits at every untrusted boundary. Unlimited sessions are an
+  explicit opt-out, not a safe default for request handling.
+- Diagnostics are redacted by default. Enable `DiagnosticPolicy::Detailed`
+  only where input-derived details are safe to retain and log.
 
-```rust
-use qubit_budget::json::JsonDecodeLimits;
-use qubit_json::decode::{NormalizingJsonDecodePolicy, NormalizingJsonDecoder};
+## Learn more
 
-let mut decoder = NormalizingJsonDecoder::owned(
-    NormalizingJsonDecodePolicy::builder().build(),
-    JsonDecodeLimits::builder()
-        .max_input_bytes(1024)
-        .build(),
-);
-let value = decoder.decode_value("```json\n{\"ok\":true}\n```")?;
-assert_eq!(value["ok"], true);
-# Ok::<(), qubit_json::decode::JsonDecodeError>(())
-```
-
-For cumulative accounting, construct a stateful decoder with
-`NormalizingJsonDecoder::new`. Raw input and normalized input charges
-remain after an attempt; decoded-value charges commit only after the complete
-typed decode succeeds. Errors are redacted by default. Enable
-`DiagnosticPolicy::Detailed` only where input-derived diagnostics are safe.
-Normalization policy never carries resource limits: pass `JsonDecodeLimits`
-to `owned`, or a `JsonDecodeSession` to `new`. Explicitly pass
-`JsonDecodeLimits::default()` only when unlimited decoding is intended.
-
-When normalized text must be decoded more than once, borrowed by the result,
-or materialized through a Serde seed, call `prepare_str`/`prepare_utf8` once and
-then decode the returned `NormalizedJsonDocument`. Preparation commits raw and
-normalized input charges once; every successful document decode commits its
-own value charges. Unescaped JSON strings may borrow from the document, while
-escaped strings require an owned target because Serde must materialize the
-unescaped value.
-
-## Strict text objects
-
-Strict APIs do not repair text. Construct a decoder or encoder around the
-caller-owned session and use its methods for one or more documents. Codecs do
-not implement `Default`; call `owned(limits)` normally, or `unlimited()` only
-when an unbounded standard session is intentional.
-
-```rust
-use qubit_budget::json::{JsonDecodeLimits, JsonResource};
-use qubit_json::decode::JsonDecoder;
-
-let mut decoder = JsonDecoder::owned(
-    JsonDecodeLimits::<JsonResource, usize>::new(),
-);
-let value: serde_json::Value = decoder.decode_utf8(br#"{"ok":true}"#)?;
-assert_eq!(value["ok"], true);
-# Ok::<(), qubit_json::decode::JsonDecodeError<
-#     qubit_budget::json::JsonResource,
-# >>(())
-```
-
-```rust
-use qubit_budget::json::{JsonEncodeLimits, JsonResource};
-use qubit_json::encode::JsonEncoder;
-
-let value = serde_json::json!({"ok": true});
-let mut encoder = JsonEncoder::owned(
-    JsonEncodeLimits::<JsonResource, usize>::new(),
-);
-let bytes = encoder.to_vec(&value)?;
-assert_eq!(bytes, br#"{"ok":true}"#);
-# Ok::<(), qubit_json::encode::JsonEncodeError<
-#     qubit_budget::json::JsonResource,
-# >>(())
-```
-
-`JsonEncoder::write_buffered` commits only after complete output is ready
-for its writer. `write_incremental` retains accepted output prefixes when a
-streaming write fails.
-
-## Number contract and browser interoperability
-
-Strict decoding and encoding support negative integers through `i64::MIN`,
-non-negative integers through `u64::MAX`, and fractional or exponential JSON
-numbers that are finite `f64` values. This is deliberately wider than
-JavaScript's safe-integer range (`2^53 - 1`) so Java `long` identifiers can
-remain numeric on the wire. Browser clients must use a parser that preserves
-these integers and maps them to `BigInt` where necessary. The JavaScript `n`
-suffix is source-code syntax and is never valid JSON.
-
-Integers below `i64::MIN` or above `u64::MAX`, and exact decimal values that
-must not undergo binary floating-point rounding, need a string or explicit
-domain representation. `NumberBytes` is an independent resource limit on the
-original token; it does not change the representable range. This crate does
-not enable serde_json's arbitrary-precision mode and treats its former private
-number-marker key as an ordinary object key.
-
-## Errors and budget semantics
-
-The public decoding error model is shared by both decoder facades:
-
-1. `decode::JsonDecodeError` for strict and normalizing decode failures; inspect
-   `kind()` and `stage()` instead of matching private implementation details.
-2. `encode::JsonEncodeError` for strict budget, raw JSON, serialization, or I/O failure.
-3. `decode::JsonSyntaxError` for stable syntax reason and location metadata.
-4. `value::traverse::JsonTreeProcessError` for traversal budget or visitor failure.
-5. `value::traverse::JsonTreeMutateError` for input-budget, visitor, or
-   output-budget failure during in-place mutation.
-
-Budgeted operations use transactions: staged decoded-value or output charges
-commit on their documented success boundary. Input charges intentionally remain
-visible in decode sessions after failed attempts.
-
-## Advanced values and trees
-
-`strict` describes JSON syntax, number range, and resource admission; it does
-not imply unique object keys. Duplicate-key behavior comes from the requested
-Serde target: `serde_json::Value` and `serde_json::Map` keep the last value,
-while some typed structs reject repeated fields. To require unique keys at
-every object depth, decode `DuplicateKeyRejectingJsonValue` through
-`JsonDecoder` (or `NormalizingJsonDecoder` when normalization is intentional).
-The [user guide](doc/user_guide.md#duplicate-object-keys) contains a complete
-composition example.
-
-`JsonValueSeed` builds a materialized value while charging a caller transaction.
-Because a seed sees decoded Serde events rather than the original token, it
-cannot enforce text lexeme or numeric-range rules; route JSON text through
-`JsonDecoder` for those guarantees.
-`JsonTreeReader` visits every admitted node without Rust recursion. Its
-`account` method stages whole-tree charges in the caller's existing transaction
-without invoking a visitor or committing it;
-`JsonTreeMutator` first admits the original tree, applies in-place visitor
-changes, and then admits the complete mutated tree. It returns
-`JsonTreeMutateError::InputBudget`, `::Visitor`, or `::OutputBudget`; visitor
-and output failures retain mutations already made. A visitor can return
-`JsonTreeControl::SkipSubtree` to skip descendant callbacks, while final output
-accounting still covers every resulting descendant. `JsonTreeBudgetTracker` is
-the convenient reusable choice for whole-tree accounting.
-
-These facilities account JSON resource limits, not application-specific
-semantics. Choose limits suitable for your trust boundary and keep detailed
-diagnostics out of untrusted logs.
+- [English user guide](doc/user_guide.md) ·
+  [中文用户手册](doc/user_guide.zh_CN.md)
+- [JSON number contract](doc/number_contract.md) ·
+  [JSON 数字契约](doc/number_contract.zh_CN.md)
+- [API documentation](https://docs.rs/qubit-json/0.8.0/qubit_json/)
 
 ## Testing
 
