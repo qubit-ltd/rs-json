@@ -100,47 +100,56 @@ fn benchmark_read(c: &mut Criterion) {
     for size in ARRAY_SIZES {
         let value = large_array(size);
         group.bench_with_input(BenchmarkId::new("large-array", size), &value, |bencher, value| {
-            bencher.iter(|| {
-                let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
-                let mut transaction = budget.transaction();
-                let mut visitor = ReadVisitor;
-                JsonTreeReader::new(&mut transaction)
-                    .process(black_box(value), &mut visitor)
-                    .expect("unlimited read traversal succeeds");
-                transaction.commit();
-                let _ = black_box(budget);
-            });
+            bencher.iter_batched(
+                || JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build()),
+                |mut budget| {
+                    let mut transaction = budget.transaction();
+                    let mut visitor = ReadVisitor;
+                    JsonTreeReader::new(&mut transaction)
+                        .process(black_box(value), &mut visitor)
+                        .expect("unlimited read traversal succeeds");
+                    transaction.commit();
+                    let _ = black_box(budget);
+                },
+                BatchSize::SmallInput,
+            );
         });
     }
 
     for size in OBJECT_SIZES {
         let value = large_object(size);
         group.bench_with_input(BenchmarkId::new("large-object", size), &value, |bencher, value| {
-            bencher.iter(|| {
-                let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
-                let mut transaction = budget.transaction();
-                let mut visitor = ReadVisitor;
-                JsonTreeReader::new(&mut transaction)
-                    .process(black_box(value), &mut visitor)
-                    .expect("unlimited read traversal succeeds");
-                transaction.commit();
-                let _ = black_box(budget);
-            });
+            bencher.iter_batched(
+                || JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build()),
+                |mut budget| {
+                    let mut transaction = budget.transaction();
+                    let mut visitor = ReadVisitor;
+                    JsonTreeReader::new(&mut transaction)
+                        .process(black_box(value), &mut visitor)
+                        .expect("unlimited read traversal succeeds");
+                    transaction.commit();
+                    let _ = black_box(budget);
+                },
+                BatchSize::SmallInput,
+            );
         });
     }
 
     let value = deep_tree(DEEP_TREE_DEPTH);
     group.bench_function("deep-tree", |bencher| {
-        bencher.iter(|| {
-            let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
-            let mut transaction = budget.transaction();
-            let mut visitor = ReadVisitor;
-            JsonTreeReader::new(&mut transaction)
-                .process(black_box(&value), &mut visitor)
-                .expect("unlimited read traversal succeeds");
-            transaction.commit();
-            let _ = black_box(budget);
-        });
+        bencher.iter_batched(
+            || JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build()),
+            |mut budget| {
+                let mut transaction = budget.transaction();
+                let mut visitor = ReadVisitor;
+                JsonTreeReader::new(&mut transaction)
+                    .process(black_box(&value), &mut visitor)
+                    .expect("unlimited read traversal succeeds");
+                transaction.commit();
+                let _ = black_box(budget);
+            },
+            BatchSize::SmallInput,
+        );
     });
     group.finish();
 }
