@@ -19,6 +19,15 @@ const NON_FINITE_FLOAT_MESSAGE: &str = "non-finite floating-point value";
 /// The error intentionally exposes stable categories instead of retaining
 /// third-party diagnostic text. This keeps callers independent from Serde and
 /// serde_json wording changes.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::value::JsonValueEncodeError;
+///
+/// let error = JsonValueEncodeError::NonFiniteFloat;
+/// assert_eq!(error.to_string(), "non-finite float");
+/// ```
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum JsonValueEncodeError {

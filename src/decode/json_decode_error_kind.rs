@@ -14,6 +14,16 @@ use std::str::FromStr;
 ///
 /// This exhaustive enum is the stable branching contract shared by strict and
 /// normalizing decoders.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::JsonDecodeErrorKind;
+///
+/// let kind = "invalid_json".parse::<JsonDecodeErrorKind>()?;
+/// assert_eq!(kind, JsonDecodeErrorKind::InvalidJson);
+/// # Ok::<(), &'static str>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeErrorKind {
     /// A configured resource budget rejected a measurement.
