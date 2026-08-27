@@ -28,6 +28,25 @@ use crate::lexical::JsonLexicalFailure;
 ///
 /// Internal variants are private so callers branch through stable semantic
 /// accessors rather than depending on scanner, normalizer, or Serde details.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity attached to budget failures.
+/// * `Q` - Quantity representation attached to budget failures.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::{JsonDecodeError, JsonDecodeErrorKind, JsonDecoder};
+/// use serde_json::Value;
+///
+/// let mut decoder = JsonDecoder::unlimited();
+/// let error: JsonDecodeError = decoder
+///     .decode_str::<Value>("")
+///     .expect_err("empty input must be rejected");
+/// assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+/// ```
+#[must_use]
 #[derive(Clone)]
 pub struct JsonDecodeError<R = JsonResource, Q = usize>
 where
@@ -44,7 +63,7 @@ where
     Q: Copy + fmt::Debug,
 {
     /// Creates a measured-budget failure at a semantic stage.
-    #[must_use]
+    #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) const fn budget(
         source: MeasuredBudgetError<R, Q>,
         stage: JsonDecodeStage,
@@ -64,7 +83,7 @@ where
     }
 
     /// Creates an empty-input failure at a semantic stage.
-    #[must_use]
+    #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) const fn empty_input(
         stage: JsonDecodeStage,
         raw_input_bytes: usize,
@@ -82,7 +101,7 @@ where
     }
 
     /// Creates an invalid-UTF-8 failure and conditionally retains its source.
-    #[must_use]
+    #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) fn invalid_utf8(
         source: std::str::Utf8Error,
         raw_input_bytes: usize,
@@ -103,7 +122,7 @@ where
     }
 
     /// Creates a stable invalid-JSON failure from lexical admission.
-    #[must_use]
+    #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) fn invalid_json(
         syntax_source: JsonLexicalFailure,
         detailed_source: Option<Arc<dyn Error + Send + Sync>>,
@@ -123,7 +142,7 @@ where
     }
 
     /// Creates an unexpected-top-level failure.
-    #[must_use]
+    #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) const fn unexpected_top_level(
         expected: JsonRootKind,
         actual: JsonRootKind,
@@ -144,7 +163,7 @@ where
 
     /// Creates a target-deserialization failure and conditionally retains its
     /// input-derived source.
-    #[must_use]
+    #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) fn deserialize(
         source: JsonError,
         raw_input_bytes: usize,
@@ -169,6 +188,7 @@ where
 
     /// Returns the stable failure category.
     #[must_use]
+    #[inline(always)]
     pub const fn kind(&self) -> JsonDecodeErrorKind {
         match self.failure {
             JsonDecodeFailure::Budget { .. } => JsonDecodeErrorKind::Budget,
@@ -182,6 +202,7 @@ where
 
     /// Returns the semantic stage that produced the failure.
     #[must_use]
+    #[inline(always)]
     pub const fn stage(&self) -> JsonDecodeStage {
         match self.failure {
             JsonDecodeFailure::Budget { stage, .. } | JsonDecodeFailure::EmptyInput { stage, .. } => stage,
@@ -194,12 +215,14 @@ where
 
     /// Returns the diagnostic policy applied while constructing this error.
     #[must_use]
+    #[inline(always)]
     pub const fn diagnostic_policy(&self) -> DiagnosticPolicy {
         self.diagnostic_policy
     }
 
     /// Returns the original input length in bytes.
     #[must_use]
+    #[inline(always)]
     pub const fn raw_input_bytes(&self) -> usize {
         match self.failure {
             JsonDecodeFailure::Budget { raw_input_bytes, .. }
@@ -213,6 +236,7 @@ where
 
     /// Returns the normalized text length when normalization completed.
     #[must_use]
+    #[inline(always)]
     pub const fn normalized_input_bytes(&self) -> Option<usize> {
         match self.failure {
             JsonDecodeFailure::Budget {
@@ -236,6 +260,7 @@ where
 
     /// Returns the one-based error line when available.
     #[must_use]
+    #[inline(always)]
     pub const fn line(&self) -> Option<usize> {
         match &self.failure {
             JsonDecodeFailure::InvalidJson { syntax, .. } => Some(syntax.line()),
@@ -246,6 +271,7 @@ where
 
     /// Returns the one-based error column when available.
     #[must_use]
+    #[inline(always)]
     pub const fn column(&self) -> Option<usize> {
         match &self.failure {
             JsonDecodeFailure::InvalidJson { syntax, .. } => Some(syntax.column()),
@@ -256,6 +282,7 @@ where
 
     /// Returns the structured syntax failure for invalid JSON.
     #[must_use]
+    #[inline(always)]
     pub const fn syntax_error(&self) -> Option<&JsonSyntaxError> {
         match &self.failure {
             JsonDecodeFailure::InvalidJson { syntax, .. } => Some(syntax),
@@ -265,6 +292,7 @@ where
 
     /// Returns the complete measured-budget failure when present.
     #[must_use]
+    #[inline(always)]
     pub const fn budget_error(&self) -> Option<&MeasuredBudgetError<R, Q>> {
         match &self.failure {
             JsonDecodeFailure::Budget { source, .. } => Some(source),
@@ -274,6 +302,7 @@ where
 
     /// Returns the valid UTF-8 prefix length for invalid byte input.
     #[must_use]
+    #[inline(always)]
     pub const fn utf8_valid_up_to(&self) -> Option<usize> {
         match self.failure {
             JsonDecodeFailure::InvalidUtf8 { valid_up_to, .. } => Some(valid_up_to),
@@ -283,6 +312,7 @@ where
 
     /// Returns the invalid UTF-8 sequence length when known.
     #[must_use]
+    #[inline(always)]
     pub const fn utf8_error_len(&self) -> Option<usize> {
         match self.failure {
             JsonDecodeFailure::InvalidUtf8 { error_len, .. } => error_len,
@@ -292,6 +322,7 @@ where
 
     /// Returns the expected top-level kind for a constrained decode failure.
     #[must_use]
+    #[inline(always)]
     pub const fn expected_top_level(&self) -> Option<JsonRootKind> {
         match self.failure {
             JsonDecodeFailure::UnexpectedTopLevel { expected, .. } => Some(expected),
@@ -301,6 +332,7 @@ where
 
     /// Returns the observed top-level kind for a constrained decode failure.
     #[must_use]
+    #[inline(always)]
     pub const fn actual_top_level(&self) -> Option<JsonRootKind> {
         match self.failure {
             JsonDecodeFailure::UnexpectedTopLevel { actual, .. } => Some(actual),

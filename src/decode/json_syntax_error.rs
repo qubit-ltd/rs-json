@@ -23,6 +23,7 @@ use crate::lexical::JsonLexicalFailure;
 /// JsonSyntaxErrorReason::UnexpectedEnd); assert_eq!(error.line(), 1);
 /// assert_eq!(error.reason(), JsonSyntaxErrorReason::UnexpectedEnd);
 /// ```
+#[must_use]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct JsonSyntaxError {
     /// Zero-based byte offset at which the error was observed.
@@ -49,7 +50,7 @@ impl JsonSyntaxError {
     ///
     /// A syntax error containing the supplied location and classification.
     #[inline]
-    #[must_use]
+    #[must_use = "return or inspect the constructed syntax error"]
     pub const fn new(offset: usize, line: usize, column: usize, reason: JsonSyntaxErrorReason) -> Self {
         Self {
             offset,
