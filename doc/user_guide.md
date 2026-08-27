@@ -26,18 +26,18 @@ the application layer after JSON admission.
   events.
 - `value::traverse` reads or mutates an existing tree without Rust recursion.
 
-Strict decoders and encoders are stateful objects. A caller may use
-`owned(limits)` for an isolated run or pass a `JsonDecodeSession`/
-`JsonEncodeSession` to accumulate charges across calls. Decoded-value and
-buffered-output charges are staged and commit at their documented success
-boundary; input charges remain visible after a failed decode attempt.
+Strict decoders and encoders are stateful objects. Use `owned(limits)` with a
+fresh owned session, or pass a `JsonDecodeSession`/`JsonEncodeSession` when
+charges must accumulate across calls. Decoded-value and buffered-output charges
+are staged in transactions and commit at their documented success boundary;
+input charges remain visible in the session after a failed decode attempt.
 
 ## Scenario: bounded JSON at an HTTP boundary
 
-Suppose an endpoint accepts a JSON document containing an identifier and a
-small payload. The service wants to reject oversized requests before building
-application state, while still accepting the full unsigned 64-bit identifier
-range.
+Suppose an endpoint receives a JSON request body containing an identifier and a
+small payload. Success means accepting the complete unsigned 64-bit identifier
+range, rejecting an oversized body before a decoded value is committed, and
+then handing only admitted data to application validation.
 
 ### Installation and minimal configuration
 
@@ -45,37 +45,66 @@ range.
 [dependencies]
 qubit-json = "0.8"
 qubit-budget = { version = "0.3", features = ["json"] }
-serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```
+
+Add `serde = { version = "1.0", features = ["derive"] }` when the application
+decodes into derived types.
 
 ### Core workflow
 
 ```rust
-use qubit_budget::json::{JsonDecodeLimits, JsonResource};
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 
-let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
-    .max_input_bytes(4096)
-    .max_number_bytes(20)
-    .build();
-let mut decoder = JsonDecoder::owned(limits);
-let value: serde_json::Value =
-    decoder.decode_str(r#"{"id":18446744073709551615,"ok":true}"#)?;
-assert_eq!(value["id"], serde_json::json!(u64::MAX));
-# Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
+fn main() -> Result<(), JsonDecodeError<JsonResource>> {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4096)
+        .max_depth(32)
+        .max_nodes(256)
+        .max_sequence_items(64)
+        .max_map_entries(64)
+        .max_key_bytes(128)
+        .max_string_bytes(2048)
+        .max_number_bytes(20)
+        .max_payload_bytes(4096)
+        .build();
+    let mut decoder = JsonDecoder::owned(limits);
+
+    let request_body = br#"{"id":18446744073709551615,"ok":true}"#;
+    let value: serde_json::Value = decoder.decode_utf8(request_body)?;
+    assert_eq!(value["id"], serde_json::json!(u64::MAX));
+
+    let small_limits = limits.into_builder().max_input_bytes(8).build();
+    let mut small_decoder = JsonDecoder::owned(small_limits);
+    let error = small_decoder
+        .decode_utf8::<serde_json::Value>(br#"{"ok":true}"#)
+        .expect_err("the request body must exceed eight bytes");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.raw_input_bytes(), 11);
+    Ok(())
+}
 ```
 
-The observable result is an admitted `serde_json::Value`; a limit breach is a
-`JsonDecodeError` whose `kind()` is `JsonDecodeErrorKind::Budget` before the
-typed value is committed. Syntax and number-range problems use `InvalidJson`;
-target type mismatches use `Deserialize`. Use `stage()` to distinguish input,
-normalization, admission, parsing, top-level checking, and materialization.
+The observable success result is an admitted `serde_json::Value`. The failure
+branch returns `JsonDecodeErrorKind::Budget` and preserves the measured raw
+input length without committing a decoded value. This lets an HTTP adapter map
+stable error categories to responses without matching private parser details.
 
 For output, create `JsonEncoder::owned(JsonEncodeLimits::...)` and call
-`to_vec`, `write_buffered`, or `write_incremental`. Buffered output is committed
-only when the complete byte sequence is ready; incremental output may leave an
-accepted prefix in the writer when the writer fails.
+`to_vec`, `write_buffered`, or `write_incremental`. Buffered mode finishes
+serialization and budget checks before touching the writer, and commits
+accounting only after the complete write succeeds; an I/O failure can still
+leave partial bytes in the external writer. Incremental mode retains accepted
+prefixes when a later serialization, budget, or writer operation fails.
+
+The next step is to deserialize the admitted document into an application type
+and apply schema, authorization, and identifier rules. Continue below when the
+boundary also needs normalization, repeated decoding, unique object keys, or
+tree processing.
 
 ## Advanced usage
 
@@ -92,17 +121,33 @@ or repeated materialization, prepare a document explicitly:
 
 ```rust
 use qubit_budget::json::JsonDecodeLimits;
-use qubit_json::decode::{NormalizingJsonDecodePolicy, NormalizingJsonDecoder};
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
+use qubit_json::decode::NormalizingJsonDecoder;
 
-let mut decoder = NormalizingJsonDecoder::owned(
-    NormalizingJsonDecodePolicy::lenient(),
-    JsonDecodeLimits::default(),
-);
-let document = decoder.prepare_str("  \"borrowed\"  ")?;
-let first: &str = decoder.decode_document(&document)?;
-let second: &str = decoder.decode_document(&document)?;
-assert_eq!((first, second), ("borrowed", "borrowed"));
-# Ok::<(), qubit_json::decode::JsonDecodeError>()
+fn main() -> Result<(), JsonDecodeError> {
+    let limits = JsonDecodeLimits::builder()
+        .max_input_bytes(1024)
+        .max_normalized_input_bytes(1024)
+        .max_depth(16)
+        .max_nodes(64)
+        .max_sequence_items(32)
+        .max_map_entries(32)
+        .max_key_bytes(128)
+        .max_string_bytes(512)
+        .max_number_bytes(32)
+        .max_payload_bytes(1024)
+        .build();
+    let mut decoder = NormalizingJsonDecoder::owned(
+        NormalizingJsonDecodePolicy::lenient(),
+        limits,
+    );
+    let document = decoder.prepare_str("  \"borrowed\"  ")?;
+    let first: &str = decoder.decode_document(&document)?;
+    let second: &str = decoder.decode_document(&document)?;
+    assert_eq!((first, second), ("borrowed", "borrowed"));
+    Ok(())
+}
 ```
 
 `prepare_str`/`prepare_utf8` immediately commit raw and normalized input
@@ -131,23 +176,38 @@ Compose strict text admission with `DuplicateKeyRejectingJsonValue` when every
 object in a dynamic document must have unique keys:
 
 ```rust
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::value::DuplicateKeyRejectingJsonValue;
 
-let input = r#"{"role":"user","role":"admin"}"#;
+fn main() -> Result<(), JsonDecodeError<JsonResource>> {
+    let input = r#"{"role":"user","role":"admin"}"#;
+    let limits = JsonDecodeLimits::builder()
+        .max_input_bytes(1024)
+        .max_depth(16)
+        .max_nodes(64)
+        .max_sequence_items(16)
+        .max_map_entries(16)
+        .max_key_bytes(64)
+        .max_string_bytes(256)
+        .max_number_bytes(32)
+        .max_payload_bytes(1024)
+        .build();
 
-let mut ordinary_decoder = JsonDecoder::unlimited();
-let ordinary: serde_json::Value = ordinary_decoder.decode_str(input)?;
-assert_eq!(ordinary["role"], "admin");
+    let mut ordinary_decoder = JsonDecoder::owned(limits);
+    let ordinary: serde_json::Value = ordinary_decoder.decode_str(input)?;
+    assert_eq!(ordinary["role"], "admin");
 
-let mut unique_key_decoder = JsonDecoder::unlimited();
-let error = unique_key_decoder
-    .decode_str::<DuplicateKeyRejectingJsonValue>(input)
-    .expect_err("duplicate object keys must be rejected");
-assert!(error.to_string().contains("deserialization failed"));
-# Ok::<(), qubit_json::decode::JsonDecodeError<
-#     qubit_budget::json::JsonResource,
-# >>(())
+    let mut unique_key_decoder = JsonDecoder::owned(limits);
+    let error = unique_key_decoder
+        .decode_str::<DuplicateKeyRejectingJsonValue>(input)
+        .expect_err("duplicate object keys must be rejected");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    Ok(())
+}
 ```
 
 The wrapper validates nested objects recursively and can also be the target of
@@ -167,12 +227,33 @@ output accounting still covers every resulting descendant.
 ## Errors and diagnostics
 
 Strict and normalizing decoders return the same generic `JsonDecodeError`.
-Branch on `JsonDecodeErrorKind` through `kind()`, then use `stage()`,
-`budget_error()`, `syntax_error()`, top-level accessors, or UTF-8 accessors for
-the applicable structured details. Input-derived sources are retained only by
-`DiagnosticPolicy::Detailed`; enable it only at trusted boundaries and keep
-untrusted logs redacted. The other domains expose `JsonEncodeError`,
-`JsonSyntaxError`, `JsonTreeProcessError`, and `JsonTreeMutateError`.
+Branch on the stable category returned by `kind()`:
+
+| `JsonDecodeErrorKind` | Meaning | Structured details |
+| --- | --- | --- |
+| `Budget` | A configured resource limit rejected a measurement | `budget_error()`, `raw_input_bytes()`, `normalized_input_bytes()` |
+| `EmptyInput` | Input was empty at the active strict or normalization boundary | `stage()`, input byte counts |
+| `InvalidUtf8` | A byte input was not valid UTF-8 | `utf8_valid_up_to()`, `utf8_error_len()` |
+| `InvalidJson` | Syntax or the numeric contract was invalid | `syntax_error()`, `line()`, `column()` |
+| `UnexpectedTopLevel` | An object/array-specific API received the wrong root kind | `expected_top_level()`, `actual_top_level()` |
+| `Deserialize` | An admitted document could not materialize as the requested type | `line()`, `column()`, and a detailed source when enabled |
+
+`stage()` identifies the public processing boundary precisely:
+
+| `JsonDecodeStage` | Boundary |
+| --- | --- |
+| `Input` | Charge raw input bytes |
+| `DecodeText` | Validate byte input as UTF-8 |
+| `Normalize` | Transform text or charge normalized bytes |
+| `Admission` | Admit decoded-value resources |
+| `Parse` | Validate JSON syntax and numeric range |
+| `TopLevelCheck` | Enforce an object or array root |
+| `Deserialize` | Materialize the requested Rust type |
+
+Input-derived sources are retained only by `DiagnosticPolicy::Detailed`.
+Enable it only at trusted boundaries and keep untrusted logs redacted. The
+other domains expose `JsonEncodeError`, `JsonSyntaxError`,
+`JsonTreeProcessError`, and `JsonTreeMutateError`.
 
 The numeric contract is independent from resource limits: negative integers fit
 `i64`, non-negative integers fit `u64`, and fractional/exponential values must
@@ -185,8 +266,15 @@ binary rounding should use a string or explicit domain representation. See the
 - A `Budget` error: inspect the matching limit (input bytes, number bytes,
   depth, nodes, collection sizes, key/string bytes, or output bytes) and keep
   the session alive only if cumulative accounting is intended.
+- An `EmptyInput` error: check whether the body was empty before decoding or
+  became empty after the configured whitespace, BOM, or fence handling.
+- An `InvalidUtf8` error: inspect `utf8_valid_up_to()` and `utf8_error_len()`,
+  and reject or repair the byte transport before JSON parsing.
 - An `InvalidJson` error: validate the original bytes and check the reported reason,
   offset, line, and column; normalization never invents missing JSON syntax.
+- An `UnexpectedTopLevel` error: compare `expected_top_level()` with
+  `actual_top_level()`, then either fix the payload or select a decoder method
+  whose root contract matches it.
 - A `Deserialize` error: the JSON was admitted but does not match the target
   type; fix the payload or the target schema separately. This also includes a
   `serde_json` materialization recursion-guard failure: lexical validation uses
