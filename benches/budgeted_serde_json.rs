@@ -104,7 +104,10 @@ fn benchmark_document(target_bytes: usize) -> Vec<u8> {
 ///
 /// Panics when a generated document cannot be decoded by a benchmark path.
 fn decode(criterion: &mut Criterion) {
-    let mut decoder = NormalizingJsonDecoder::with_limits(no_normalization_policy(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let mut decoder = NormalizingJsonDecoder::with_limits(
+        no_normalization_policy(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
     let mut group = criterion.benchmark_group("budgeted-json-decode");
 
     for target_bytes in DOCUMENT_SIZES {
@@ -129,7 +132,9 @@ fn decode(criterion: &mut Criterion) {
             &document,
             |bencher, input| {
                 bencher.iter(|| {
-                    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+                    let session = JsonDecodeSession::from_limits(
+                        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build(),
+                    );
                     black_box(
                         JsonDecoder::new(session)
                             .decode_utf8::<Fixture>(black_box(input))
@@ -153,7 +158,9 @@ fn decode(criterion: &mut Criterion) {
                 });
             },
         );
-        let reused_session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+        let reused_session = JsonDecodeSession::from_limits(
+            JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build(),
+        );
         let mut reused_decoder = JsonDecoder::new(reused_session);
         group.bench_with_input(
             BenchmarkId::new("decode/reused-session", size),
@@ -205,7 +212,9 @@ fn decode(criterion: &mut Criterion) {
                     black_box(
                         NormalizingJsonDecoder::new(
                             decoder.policy().clone(),
-                            JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build()),
+                            JsonDecodeSession::from_limits(
+                                JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build(),
+                            ),
                         )
                         .decode_str::<Fixture>(black_box(input))
                         .expect("fixture must decode"),
@@ -317,7 +326,8 @@ fn encode(criterion: &mut Criterion) {
             &fixture,
             |bencher, fixture| {
                 bencher.iter(|| {
-                    let session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+                    let session =
+                        JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
                     black_box(JsonEncoder::new(session).write_incremental(std::io::sink(), black_box(fixture)))
                 });
             },

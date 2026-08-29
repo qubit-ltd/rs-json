@@ -74,8 +74,10 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    let mut default_decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let mut default_decoder = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
     match default_decoder.decode_utf8::<serde_json::Value>(data) {
         Ok(value) => {
             let encoded = serde_json::to_vec(&value).expect("serde_json::Value must serialize");
@@ -119,8 +121,14 @@ fuzz_target!(|data: &[u8]| {
     };
 
     let decoder_configurations = [
-        (NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default()),
-        (no_normalization_policy(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default()),
+        (
+            NormalizingJsonDecodePolicy::default(),
+            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        ),
+        (
+            no_normalization_policy(),
+            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        ),
         (
             NormalizingJsonDecodePolicy::builder()
                 .markdown_fence_policy(MarkdownFencePolicy::Any {

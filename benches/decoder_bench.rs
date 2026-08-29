@@ -19,7 +19,6 @@ use criterion::criterion_main;
 use internal::BenchmarkRecord;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
-use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
@@ -36,11 +35,14 @@ use qubit_json::decode::NormalizingJsonDecoder;
 /// Panics when a fixed benchmark fixture no longer satisfies its documented
 /// decoding contract.
 fn benchmark_decoder(c: &mut Criterion) {
-    let mut default_decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let mut default_decoder = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
     let plain_input = r#"{"id":7,"text":"plain"}"#;
     consume_record(serde_json::from_str::<BenchmarkRecord>(plain_input).expect("strict benchmark input must decode"));
-    let strict_session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let strict_session =
+        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     consume_record(
         JsonDecoder::new(strict_session)
             .decode_utf8::<BenchmarkRecord>(plain_input.as_bytes())
@@ -57,7 +59,9 @@ fn benchmark_decoder(c: &mut Criterion) {
     });
     comparison.bench_function("strict_decoder", |bencher| {
         bencher.iter(|| {
-            let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+            let session = JsonDecodeSession::from_limits(
+                JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build(),
+            );
             let mut decoder = JsonDecoder::new(session);
             black_box(decoder.decode_utf8::<BenchmarkRecord>(black_box(plain_input.as_bytes())))
         });
@@ -69,7 +73,8 @@ fn benchmark_decoder(c: &mut Criterion) {
 
     let plain_bytes = plain_input.as_bytes();
     consume_record(serde_json::from_slice::<BenchmarkRecord>(plain_bytes).expect("strict benchmark input must decode"));
-    let strict_session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let strict_session =
+        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     consume_record(
         JsonDecoder::new(strict_session)
             .decode_utf8::<BenchmarkRecord>(plain_bytes)
@@ -86,7 +91,9 @@ fn benchmark_decoder(c: &mut Criterion) {
     });
     bytes_comparison.bench_function("strict_decoder_decode_utf8", |bencher| {
         bencher.iter(|| {
-            let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+            let session = JsonDecodeSession::from_limits(
+                JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build(),
+            );
             let mut decoder = JsonDecoder::new(session);
             black_box(decoder.decode_utf8::<BenchmarkRecord>(black_box(plain_bytes)))
         });
@@ -157,8 +164,10 @@ fn benchmark_decoder(c: &mut Criterion) {
 /// Panics when a generated benchmark payload no longer satisfies its expected
 /// decoding contract.
 fn benchmark_downstream_scaling(c: &mut Criterion) {
-    let mut default_decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let mut default_decoder = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
     let mut plain_group = c.benchmark_group("downstream-plain-bytes");
 
     for payload_bytes in [1_024_usize, 65_536, 1_048_576] {
@@ -167,7 +176,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             serde_json::from_slice::<BenchmarkRecord>(input.as_bytes())
                 .expect("strict byte benchmark input must decode"),
         );
-        let strict_session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+        let strict_session = JsonDecodeSession::from_limits(
+            JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build(),
+        );
         consume_record(
             JsonDecoder::new(strict_session)
                 .decode_utf8::<BenchmarkRecord>(input.as_bytes())
@@ -190,7 +201,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             BenchmarkId::new("strict_decoder_decode_utf8", payload_bytes),
             &input,
             |bencher, input| {
-                let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+                let session = JsonDecodeSession::from_limits(
+                    JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build(),
+                );
                 let mut decoder = JsonDecoder::new(session);
                 bencher.iter(|| black_box(decoder.decode_utf8::<BenchmarkRecord>(black_box(input.as_bytes()))));
             },
@@ -200,7 +213,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             &input,
             |bencher, input| {
                 bencher.iter(|| {
-                    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+                    let session = JsonDecodeSession::from_limits(
+                        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build(),
+                    );
                     let mut decoder = JsonDecoder::new(session);
                     black_box(decoder.decode_utf8::<BenchmarkRecord>(black_box(input.as_bytes())))
                 });
@@ -237,7 +252,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
             );
             lenient_group.throughput(Throughput::Bytes(input.len() as u64));
             lenient_group.bench_with_input(BenchmarkId::new(name, payload_bytes), &input, |bencher, input| {
-                bencher.iter(|| black_box(default_decoder.decode_object_str::<BenchmarkRecord>(black_box(input.as_str()))));
+                bencher.iter(|| {
+                    black_box(default_decoder.decode_object_str::<BenchmarkRecord>(black_box(input.as_str())))
+                });
             });
         }
     }
@@ -273,8 +290,9 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
         bencher.iter(|| black_box(default_decoder.decode_object_str::<BenchmarkRecord>(black_box(malformed))));
     });
     failure_group.bench_function("top-level-mismatch", |bencher| {
-        bencher
-            .iter(|| black_box(default_decoder.decode_object_str::<BenchmarkRecord>(black_box(wrong_top_level.as_str()))));
+        bencher.iter(|| {
+            black_box(default_decoder.decode_object_str::<BenchmarkRecord>(black_box(wrong_top_level.as_str())))
+        });
     });
     failure_group.bench_function("size-limit-rejection", |bencher| {
         bencher.iter(|| black_box(bounded_decoder.decode_utf8::<BenchmarkRecord>(black_box(plain.as_bytes()))));
@@ -322,8 +340,10 @@ fn benchmark_downstream_scaling(c: &mut Criterion) {
 ///
 /// Panics when a generated control-character payload cannot be decoded.
 fn benchmark_control_character_scaling(c: &mut Criterion) {
-    let mut decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let mut decoder = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
     let mut group = c.benchmark_group("control-characters");
 
     for payload_bytes in [1_024_usize, 65_536, 1_048_576] {

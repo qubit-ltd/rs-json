@@ -59,7 +59,10 @@ fn test_budget_error_exposes_measured_rejection_details() {
         .build();
     let mut session = JsonDecodeSession::from_limits(limits);
 
-    let decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let decoder = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
     let error = run_with_session::<Value>(&decoder, r#"{"k":"v"}"#, &mut session)
         .expect_err("string budget must reject the normalized value");
 
@@ -82,9 +85,12 @@ fn test_budget_error_exposes_measured_rejection_details() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_display_for_empty_input_uses_message() {
-    let error = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default())
-        .decode_value("")
-        .expect_err("empty input should return a normalization error");
+    let error = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    )
+    .decode_value("")
+    .expect_err("empty input should return a normalization error");
     assert_eq!(error.to_string(), "JSON input is empty after normalization");
     assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert_eq!(error.raw_input_bytes(), 0);
@@ -101,9 +107,12 @@ fn test_error_display_for_empty_input_uses_message() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_exposes_top_level_mismatch_context() {
-    let error = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default())
-        .decode_object_str::<Value>("[]")
-        .expect_err("top-level array should fail an object contract");
+    let error = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    )
+    .decode_object_str::<Value>("[]")
+    .expect_err("top-level array should fail an object contract");
     assert_eq!(error.expected_top_level(), Some(JsonRootKind::Object));
     assert_eq!(error.actual_top_level(), Some(JsonRootKind::Array));
     assert_eq!(error.raw_input_bytes(), 2);
@@ -123,9 +132,12 @@ fn test_error_exposes_top_level_mismatch_context() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_location() {
-    let error = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default())
-        .decode_value("  {\n")
-        .expect_err("incomplete JSON should fail after whitespace normalization");
+    let error = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    )
+    .decode_value("  {\n")
+    .expect_err("incomplete JSON should fail after whitespace normalization");
 
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
     assert_eq!(error.stage(), JsonDecodeStage::Parse);
@@ -166,9 +178,12 @@ fn test_error_source_for_invalid_json_preserves_serde_error() {
 fn test_default_error_privacy_redacts_input_derived_serde_details() {
     const SECRET: &str = "TOP_SECRET_VALUE";
 
-    let error = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default())
-        .decode_str::<PublicChoice>(&format!("\"{SECRET}\""))
-        .expect_err("an unknown enum variant should fail deserialization");
+    let error = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    )
+    .decode_str::<PublicChoice>(&format!("\"{SECRET}\""))
+    .expect_err("an unknown enum variant should fail deserialization");
 
     assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert!(!error.to_string().contains(SECRET));
@@ -211,9 +226,12 @@ fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_default_invalid_json_error_does_not_expose_serde_source() {
-    let error = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default())
-        .decode_value("{")
-        .expect_err("invalid JSON should fail parsing");
+    let error = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    )
+    .decode_value("{")
+    .expect_err("invalid JSON should fail parsing");
 
     assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert!(std::error::Error::source(&error).is_none());
@@ -226,9 +244,12 @@ fn test_default_invalid_json_error_does_not_expose_serde_source() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_invalid_utf8_redacted_error_does_not_expose_source() {
-    let error = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default())
-        .decode_utf8::<Value>(&[0xff])
-        .expect_err("invalid UTF-8 must fail");
+    let error = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    )
+    .decode_utf8::<Value>(&[0xff])
+    .expect_err("invalid UTF-8 must fail");
     assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert_eq!(error.utf8_valid_up_to(), Some(0));
     assert_eq!(error.utf8_error_len(), Some(1));
@@ -243,15 +264,21 @@ fn test_invalid_utf8_redacted_error_does_not_expose_source() {
 /// Panics when the decoder omits the valid prefix or invalid sequence length.
 #[test]
 fn test_invalid_utf8_exposes_safe_position_diagnostics() {
-    let definite = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default())
-        .decode_utf8::<Value>(&[b'{', 0xff])
-        .expect_err("invalid UTF-8 must fail");
+    let definite = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    )
+    .decode_utf8::<Value>(&[b'{', 0xff])
+    .expect_err("invalid UTF-8 must fail");
     assert_eq!(definite.utf8_valid_up_to(), Some(1));
     assert_eq!(definite.utf8_error_len(), Some(1));
 
-    let incomplete = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default())
-        .decode_utf8::<Value>(&[0xe2, 0x82])
-        .expect_err("incomplete UTF-8 must fail");
+    let incomplete = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    )
+    .decode_utf8::<Value>(&[0xe2, 0x82])
+    .expect_err("incomplete UTF-8 must fail");
     assert_eq!(incomplete.utf8_valid_up_to(), Some(0));
     assert_eq!(incomplete.utf8_error_len(), None);
 }
@@ -285,9 +312,12 @@ fn test_invalid_utf8_detailed_error_retains_utf8_source() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_normalization_errors_retain_the_configured_diagnostic_policy() {
-    let redacted = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default())
-        .decode_value("")
-        .expect_err("empty input should fail normalization");
+    let redacted = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    )
+    .decode_value("")
+    .expect_err("empty input should fail normalization");
     let detailed = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder()
             .diagnostic_policy(DiagnosticPolicy::Detailed)
@@ -308,9 +338,12 @@ fn test_normalization_errors_retain_the_configured_diagnostic_policy() {
 /// Panics when the expected behavior is not observed.
 #[test]
 fn test_error_display_for_deserialize_error_uses_context_message() {
-    let error = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default())
-        .decode_str::<u64>("\"text\"")
-        .expect_err("string JSON should not deserialize into u64");
+    let error = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    )
+    .decode_str::<u64>("\"text\"")
+    .expect_err("string JSON should not deserialize into u64");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
     assert_eq!(error.stage(), JsonDecodeStage::Deserialize);
     assert_eq!(error.raw_input_bytes(), 6);
@@ -329,8 +362,10 @@ fn test_error_display_for_deserialize_error_uses_context_message() {
 /// Panics when cloning changes any public diagnostic field.
 #[test]
 fn test_cloned_error_preserves_public_diagnostics() {
-    let mut decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let mut decoder = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
     let first = decoder
         .decode_value("{\n")
         .expect_err("invalid JSON should return parse error");

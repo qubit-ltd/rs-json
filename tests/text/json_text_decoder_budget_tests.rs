@@ -96,7 +96,9 @@ fn json_decode_reports_structured_syntax_locations() {
         ),
     ];
     for (input, offset, line, column, reason) in cases {
-        let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+        let session = JsonDecodeSession::from_limits(
+            JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build(),
+        );
         let error = JsonDecoder::new(session)
             .decode_utf8::<serde_json::Value>(input)
             .expect_err("input should be rejected");
@@ -111,7 +113,8 @@ fn json_decode_reports_structured_syntax_locations() {
 #[test]
 fn json_decode_counts_unicode_columns_and_crlf_lines() {
     let input = "{\r\n  \"中\" 1}".as_bytes();
-    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let session =
+        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     let error = JsonDecoder::new(session)
         .decode_utf8::<serde_json::Value>(input)
         .expect_err("missing colon should be rejected");

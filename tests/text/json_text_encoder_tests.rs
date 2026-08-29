@@ -569,7 +569,8 @@ fn test_write_buffered_io_failure_can_leave_partial_output() {
 #[test]
 fn test_write_incremental_matches_encode() {
     let value = json!({"items": [1, true, "text"]});
-    let mut expected_session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let mut expected_session =
+        JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let expected = encode(&value, &mut expected_session).expect("transactional encoding should succeed");
     let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let mut output = Vec::new();
