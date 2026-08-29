@@ -223,7 +223,10 @@ fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity
             .max_nodes(1)
             .build(),
     );
-    let decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let decoder = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
 
     assert!(run_with_session::<u8>(&decoder, rejected, &mut session).is_err());
     assert_eq!(session.input_budget().expect("input budget").used(), rejected.len(),);

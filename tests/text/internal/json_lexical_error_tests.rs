@@ -9,14 +9,14 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
-use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 
 /// Verifies malformed lexical input becomes a strict syntax error.
 #[test]
 fn test_lexical_error_maps_to_syntax_error() {
-    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let session =
+        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     let error = JsonDecoder::new(session)
         .decode_utf8::<serde_json::Value>(b"[")
         .expect_err("unterminated array must fail lexical admission");

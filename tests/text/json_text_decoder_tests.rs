@@ -55,7 +55,8 @@ fn nested_array(container_depth: usize) -> String {
 /// Verifies a decoder returns a typed value for one complete document.
 #[test]
 fn test_json_text_decoder_decodes_typed_value() {
-    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let session =
+        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     let value = JsonDecoder::new(session)
         .decode_utf8::<bool>(b"true")
         .expect("JSON boolean should decode");
@@ -66,7 +67,8 @@ fn test_json_text_decoder_decodes_typed_value() {
 /// Verifies validation accounts a complete document without deserializing it.
 #[test]
 fn test_json_text_decoder_validates_complete_document() {
-    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let session =
+        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     JsonDecoder::new(session)
         .validate_utf8(br#"{"ok":[true,null]}"#)
         .expect("a complete JSON document should validate");
@@ -75,7 +77,8 @@ fn test_json_text_decoder_validates_complete_document() {
 /// Verifies seed deserialization failures retain safe Serde metadata.
 #[test]
 fn test_json_text_decoder_maps_seed_failure() {
-    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let session =
+        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     assert!(
         JsonDecoder::new(session)
             .decode_seed_utf8(FailingSeed, b"true")
@@ -86,7 +89,8 @@ fn test_json_text_decoder_maps_seed_failure() {
 /// Verifies a seed that leaves input unread is rejected by the final check.
 #[test]
 fn test_json_text_decoder_rejects_unconsumed_seed_input() {
-    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let session =
+        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     assert!(
         JsonDecoder::new(session)
             .decode_seed_utf8(NonConsumingSeed, b"true")

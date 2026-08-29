@@ -58,8 +58,9 @@ fn test_json_encode_compound_serializes_tuple_struct_fields() {
 fn test_json_encode_scalar_paths_support_u8_quantities() {
     macro_rules! assert_scalar {
         ($value:expr) => {{
-            let mut session =
-                JsonEncodeSession::<JsonResource, u8>::from_limits(JsonEncodeLimits::<JsonResource, u8>::builder().build());
+            let mut session = JsonEncodeSession::<JsonResource, u8>::from_limits(
+                JsonEncodeLimits::<JsonResource, u8>::builder().build(),
+            );
             encode(&$value, &mut session).expect("scalar should fit an unconfigured budget");
         }};
     }

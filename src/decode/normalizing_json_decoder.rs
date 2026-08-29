@@ -62,7 +62,8 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    /// Creates a normalizing decoder with a cumulative session built from explicit limits.
+    /// Creates a normalizing decoder with a cumulative session built from
+    /// explicit limits.
     #[inline]
     #[must_use]
     pub fn with_limits(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits<R, Q>) -> Self {
@@ -224,7 +225,8 @@ where
         self.decode_object_document(&document)
     }
 
-    /// Normalizes and decodes one UTF-8 byte slice while requiring a top-level object.
+    /// Normalizes and decodes one UTF-8 byte slice while requiring a top-level
+    /// object.
     pub fn decode_object_utf8<T>(&mut self, input: &[u8]) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: DeserializeOwned,
@@ -242,7 +244,8 @@ where
         self.decode_array_document(&document)
     }
 
-    /// Normalizes and decodes one UTF-8 byte slice while requiring a top-level array.
+    /// Normalizes and decodes one UTF-8 byte slice while requiring a top-level
+    /// array.
     pub fn decode_array_utf8<T>(&mut self, input: &[u8]) -> Result<Vec<T>, JsonDecodeError<R, Q>>
     where
         T: DeserializeOwned,
