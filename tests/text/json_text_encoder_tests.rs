@@ -375,7 +375,7 @@ fn test_write_buffered_failure_does_not_touch_external_writer() {
                 .build(),
         )
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
     let mut output = Vec::new();
 
     let error = write_buffered(&mut output, &"long", &mut session)
@@ -397,7 +397,7 @@ fn test_write_buffered_failure_does_not_touch_external_writer() {
 #[test]
 fn test_encode_counts_raw_value_once() {
     let raw = RawValue::from_string(String::from(r#"{"k":"v"}"#)).expect("the fixture must be valid raw JSON");
-    let session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
 
     let output = JsonEncoder::new(session)
         .to_vec(raw.as_ref())
@@ -432,7 +432,7 @@ fn test_encode_budget_modes_emit_identical_output() {
 /// Verifies a custom Serde failure does not commit its buffered prefix.
 #[test]
 fn test_write_buffered_serde_failure_does_not_touch_external_writer() {
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let mut output = Vec::new();
 
     let error =
@@ -531,7 +531,7 @@ fn test_encode_output_limit_stops_before_source_tail() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 8))
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
 
     let error = encode(&value, &mut session).expect_err("the output budget must reject the long sequence");
 
@@ -569,9 +569,9 @@ fn test_write_buffered_io_failure_can_leave_partial_output() {
 #[test]
 fn test_write_incremental_matches_encode() {
     let value = json!({"items": [1, true, "text"]});
-    let mut expected_session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let mut expected_session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let expected = encode(&value, &mut expected_session).expect("transactional encoding should succeed");
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let mut output = Vec::new();
 
     write_incremental(&mut output, &value, &mut session).expect("incremental encoding should succeed");
@@ -590,7 +590,7 @@ fn test_write_incremental_preserves_partial_output_on_budget_error() {
                 .build(),
         )
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
     let mut output = Vec::new();
 
     let error = write_incremental(&mut output, &json!([1, 2, 3]), &mut session)
@@ -637,7 +637,7 @@ fn test_write_incremental_preserves_partial_output_on_io_error() {
 /// Maps a destination `WriteZero` contract violation to a typed write error.
 #[test]
 fn test_write_incremental_rejects_zero_length_destination_write() {
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
 
     let error = write_incremental(ZeroWriter, &true, &mut session)
         .expect_err("a destination must not accept zero bytes for non-empty output");
@@ -654,7 +654,7 @@ fn test_write_incremental_maps_flush_failure_to_write_error() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 16))
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
     let mut writer = FlushFailWriter::default();
 
     let error = write_incremental(&mut writer, &true, &mut session)
@@ -682,7 +682,7 @@ fn test_write_incremental_preserves_partial_output_on_serde_error() {
                 .build(),
         )
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
     let mut output = Vec::new();
 
     let error = write_incremental(&mut output, &FailsAfterPrefix, &mut session)
@@ -727,7 +727,7 @@ fn test_write_incremental_panic_rolls_back_value_budget() {
 /// Verifies a session remains usable after an uncommitted writer attempt.
 #[test]
 fn test_write_buffered_reuses_session_after_failed_attempt() {
-    let mut session = JsonEncodeSession::owned(
+    let mut session = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 16))
             .value_limits(

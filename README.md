@@ -38,7 +38,7 @@ use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 
 fn main() -> Result<(), JsonDecodeError<JsonResource>> {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .max_input_bytes(4096)
         .max_depth(32)
         .max_nodes(256)
@@ -49,13 +49,13 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
         .max_number_bytes(20)
         .max_payload_bytes(4096)
         .build();
-    let mut decoder = JsonDecoder::owned(limits);
+    let mut decoder = JsonDecoder::with_limits(limits);
     let value: serde_json::Value =
         decoder.decode_utf8(br#"{"id":18446744073709551615,"ok":true}"#)?;
     assert_eq!(value["id"], serde_json::json!(u64::MAX));
 
     let small_limits = limits.into_builder().max_input_bytes(8).build();
-    let mut small_decoder = JsonDecoder::owned(small_limits);
+    let mut small_decoder = JsonDecoder::with_limits(small_limits);
     let error = small_decoder
         .decode_utf8::<serde_json::Value>(br#"{"ok":true}"#)
         .expect_err("the request body must exceed eight bytes");

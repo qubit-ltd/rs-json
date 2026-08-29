@@ -23,7 +23,7 @@ fn test_json_output_buffer_rejects_quantity_conversion_overflow() {
     let limits = JsonEncodeLimits::<JsonResource, u8>::builder()
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, u8::MAX))
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
     let value = "x".repeat(300);
     let error = encode(&value, &mut session).expect_err("output larger than u8 should reject quantity conversion");
 
@@ -37,7 +37,7 @@ fn test_json_output_writer_rejects_quantity_conversion_overflow() {
     let limits = JsonEncodeLimits::<JsonResource, u8>::builder()
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, u8::MAX))
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
     let value = "x".repeat(300);
     let mut output = Vec::new();
     let error = write_incremental(&mut output, &value, &mut session)
@@ -53,7 +53,7 @@ fn test_json_output_buffer_rejects_excess_output() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 3))
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
     let error = encode(&"long", &mut session).expect_err("output should exceed the configured budget");
 
     assert!(matches!(error, JsonEncodeError::Budget(_)));
@@ -65,7 +65,7 @@ fn test_json_output_buffer_accepts_complete_output() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 16))
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
     let output = encode(&"ok", &mut session).expect("output within the bound should succeed");
 
     assert_eq!(output, br#""ok""#);

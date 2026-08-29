@@ -29,7 +29,7 @@ impl Serialize for DisplayValue {
 /// Verifies collected display text is constrained by the string budget.
 #[test]
 fn test_budgeted_display_collector_rejects_excess_text() {
-    let session = JsonEncodeSession::owned(
+    let session = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_string_bytes(0)
             .build(),

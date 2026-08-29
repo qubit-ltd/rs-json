@@ -22,11 +22,11 @@ use qubit_json::decode::NormalizingJsonDecoder;
 /// Panics when the public API or privacy contract is not satisfied.
 #[test]
 fn test_lenient_domain_owns_its_public_types() {
-    let mut decoder = NormalizingJsonDecoder::owned(
+    let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder()
             .diagnostic_policy(DiagnosticPolicy::Redacted)
             .build(),
-        JsonDecodeLimits::default(),
+        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
     );
     let error = decoder
         .decode_str::<u64>(r#""TOP_SECRET""#)

@@ -75,7 +75,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     let mut default_decoder =
-        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
+        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
     match default_decoder.decode_utf8::<serde_json::Value>(data) {
         Ok(value) => {
             let encoded = serde_json::to_vec(&value).expect("serde_json::Value must serialize");
@@ -85,7 +85,7 @@ fuzz_target!(|data: &[u8]| {
         Err(error) => assert_error_invariants(&error, data.len()),
     }
     if !data.is_empty() {
-        let mut bounded = NormalizingJsonDecoder::owned(
+        let mut bounded = NormalizingJsonDecoder::with_limits(
             NormalizingJsonDecodePolicy::builder().build(),
             JsonDecodeLimits::builder().max_input_bytes(data.len() - 1).build(),
         );
@@ -119,15 +119,15 @@ fuzz_target!(|data: &[u8]| {
     };
 
     let decoder_configurations = [
-        (NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default()),
-        (no_normalization_policy(), JsonDecodeLimits::default()),
+        (NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default()),
+        (no_normalization_policy(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default()),
         (
             NormalizingJsonDecodePolicy::builder()
                 .markdown_fence_policy(MarkdownFencePolicy::Any {
                     closing: MarkdownFenceClosing::Optional,
                 })
                 .build(),
-            JsonDecodeLimits::default(),
+            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
         ),
         (
             NormalizingJsonDecodePolicy::builder()
@@ -135,7 +135,7 @@ fuzz_target!(|data: &[u8]| {
                     closing: MarkdownFenceClosing::Required,
                 })
                 .build(),
-            JsonDecodeLimits::default(),
+            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
         ),
         (
             NormalizingJsonDecodePolicy::default(),
@@ -146,14 +146,14 @@ fuzz_target!(|data: &[u8]| {
     ];
 
     for (policy, limits) in decoder_configurations {
-        let mut decoder = NormalizingJsonDecoder::owned(policy, limits);
+        let mut decoder = NormalizingJsonDecoder::with_limits(policy, limits);
         if let Err(error) = decoder.decode_str::<FuzzRecord>(input) {
             assert_error_invariants(&error, input.len());
         }
-        if let Err(error) = decoder.decode_object::<FuzzRecord>(input) {
+        if let Err(error) = decoder.decode_object_str::<FuzzRecord>(input) {
             assert_error_invariants(&error, input.len());
         }
-        if let Err(error) = decoder.decode_array::<FuzzRecord>(input) {
+        if let Err(error) = decoder.decode_array_str::<FuzzRecord>(input) {
             assert_error_invariants(&error, input.len());
         }
         if let Err(error) = decoder.decode_value(input) {
@@ -161,13 +161,13 @@ fuzz_target!(|data: &[u8]| {
         }
     }
 
-    if let Ok(value) = default_decoder.decode_object::<serde_json::Value>(input) {
+    if let Ok(value) = default_decoder.decode_object_str::<serde_json::Value>(input) {
         let decoded = default_decoder
             .decode_value(input)
             .expect("typed object decoding must agree with dynamic decoding");
         assert_eq!(value, decoded);
     }
-    if let Ok(values) = default_decoder.decode_array::<serde_json::Value>(input) {
+    if let Ok(values) = default_decoder.decode_array_str::<serde_json::Value>(input) {
         let encoded = serde_json::to_vec(&values).expect("decoded array elements must serialize");
         let reparsed: serde_json::Value =
             serde_json::from_slice(&encoded).expect("decoded array must remain strict JSON");

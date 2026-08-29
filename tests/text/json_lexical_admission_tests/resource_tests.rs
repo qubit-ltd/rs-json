@@ -22,14 +22,14 @@ use serde::de::IgnoredAny;
 /// budget.
 #[test]
 fn test_json_lexical_preflight_consumes_payload_for_keys_strings_and_numbers() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 4))
                 .build(),
         )
         .build();
-    let session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::from_limits(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#"{"a":"bc","n":12}"#)
         .expect_err("one key, string, and number must exceed four payload bytes");
@@ -48,7 +48,7 @@ fn test_json_lexical_preflight_consumes_payload_for_keys_strings_and_numbers() {
 /// Verifies decoded escapes use their decoded UTF-8 byte length for key limits.
 #[test]
 fn test_json_lexical_preflight_charges_decoded_key_bytes() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(
@@ -58,7 +58,7 @@ fn test_json_lexical_preflight_charges_decoded_key_bytes() {
                 .build(),
         )
         .build();
-    let session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::from_limits(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#"{"\u4e2d":null}"#)
         .expect_err("the decoded three-byte key must exceed the two-byte limit");
@@ -76,14 +76,14 @@ fn test_json_lexical_preflight_charges_decoded_key_bytes() {
 /// Verifies each JSON value consumes exactly one node from the shared session.
 #[test]
 fn test_json_lexical_preflight_charges_each_value_node() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)))
                 .build(),
         )
         .build();
-    let session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::from_limits(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#"{"value":true}"#)
         .expect_err("the object child must exceed the one-node budget");
@@ -102,14 +102,14 @@ fn test_json_lexical_preflight_charges_each_value_node() {
 /// Verifies decoded string payloads enforce the per-string byte maximum.
 #[test]
 fn test_json_lexical_preflight_checks_decoded_string_bytes() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2))
                 .build(),
         )
         .build();
-    let session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::from_limits(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#""\u4e2d""#)
         .expect_err("the decoded three-byte string must exceed the limit");
@@ -127,14 +127,14 @@ fn test_json_lexical_preflight_checks_decoded_string_bytes() {
 /// Verifies number limits use the original lexical representation length.
 #[test]
 fn test_json_lexical_preflight_checks_number_lexical_bytes() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, 3))
                 .build(),
         )
         .build();
-    let session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::from_limits(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(b"1e+3")
         .expect_err("all four lexical number bytes must be charged");
@@ -152,7 +152,7 @@ fn test_json_lexical_preflight_checks_number_lexical_bytes() {
 /// Verifies lexical arrays enforce their observed item count.
 #[test]
 fn test_json_lexical_preflight_checks_sequence_items() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(
@@ -161,7 +161,7 @@ fn test_json_lexical_preflight_checks_sequence_items() {
                 .build(),
         )
         .build();
-    let session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::from_limits(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(b"[null,null]")
         .expect_err("the second array item must exceed the point limit");
@@ -179,7 +179,7 @@ fn test_json_lexical_preflight_checks_sequence_items() {
 /// Verifies duplicate object keys still count as distinct map entries.
 #[test]
 fn test_json_lexical_preflight_counts_duplicate_map_entries() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(
@@ -188,7 +188,7 @@ fn test_json_lexical_preflight_counts_duplicate_map_entries() {
                 .build(),
         )
         .build();
-    let session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::from_limits(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#"{"a":1,"a":2}"#)
         .expect_err("the duplicate second entry must still exceed the limit");
@@ -208,7 +208,7 @@ fn test_json_lexical_preflight_counts_duplicate_map_entries() {
 fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
     const PRIVATE_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
     let input = format!(r#"{{"{PRIVATE_NUMBER_TOKEN}":"x"}}"#);
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(StructureLimits::<JsonResource, usize>::builder().key_bytes_limit(
@@ -217,7 +217,7 @@ fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
                 .build(),
         )
         .build();
-    let session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::from_limits(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(input.as_bytes())
         .expect_err("private token text must consume the ordinary key limit");
@@ -236,14 +236,14 @@ fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
 /// Verifies duplicate entries consume key and number payload every time.
 #[test]
 fn test_json_lexical_preflight_charges_duplicate_entry_payloads() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
                 .build(),
         )
         .build();
-    let session = JsonDecodeSession::owned(limits);
+    let session = JsonDecodeSession::from_limits(limits);
     let error = JsonDecoder::new(session)
         .decode_utf8::<IgnoredAny>(br#"{"a":1,"a":2}"#)
         .expect_err("both duplicate key-number pairs must consume payload");

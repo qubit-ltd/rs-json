@@ -34,10 +34,10 @@ admission、数字契约、顶层类型检查、Serde 物化和 transaction 提�
 BOM、Markdown 围栏及字符串内控制字符处理。它不推测缺失的 JSON 标点或结构。
 
 `NormalizingJsonDecodePolicy` 只定义文本规范化和诊断行为，不拥有预算。调用方通过
-`NormalizingJsonDecoder::owned(policy, limits)` 显式传入 `JsonDecodeLimits`，或通过
+`NormalizingJsonDecoder::with_limits(policy, limits)` 显式传入 `JsonDecodeLimits`，或通过
 `NormalizingJsonDecoder::new(policy, session)` 复用唯一的 `JsonDecodeSession`。
 raw/normalized 输入字节以及 depth、nodes、collection、payload 等限制全部来自该 limits/session；
-只有明确传入 `JsonDecodeLimits::default()` 才表示无限预算。原始输入和规范化输入先累计，解码后
+只有明确传入 `JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default()` 才表示无限预算。原始输入和规范化输入先累计，解码后
 value 的消耗暂存；完整强类型解码成功才提交 value 消耗，失败后输入消耗仍留在 session 中。
 
 一次性 `decode_str`/`decode_utf8` 为避免让临时规范化缓冲区逃逸，只接受
@@ -55,8 +55,8 @@ prepare 立即且只提交一次 raw/normalized 输入消耗；每次 document d
 use qubit_budget::json::{JsonDecodeLimits, JsonResource};
 use qubit_json::decode::JsonDecoder;
 
-let mut decoder = JsonDecoder::owned(
-    JsonDecodeLimits::<JsonResource, usize>::new(),
+let mut decoder = JsonDecoder::with_limits(
+    JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::new(),
 );
 let value: serde_json::Value = decoder.decode_utf8(br#"{"ok":true}"#)?;
 # Ok::<(), qubit_json::decode::JsonDecodeError<

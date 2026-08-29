@@ -55,7 +55,7 @@ fn nested_array(container_depth: usize) -> String {
 /// Verifies a decoder returns a typed value for one complete document.
 #[test]
 fn test_json_text_decoder_decodes_typed_value() {
-    let session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     let value = JsonDecoder::new(session)
         .decode_utf8::<bool>(b"true")
         .expect("JSON boolean should decode");
@@ -66,7 +66,7 @@ fn test_json_text_decoder_decodes_typed_value() {
 /// Verifies validation accounts a complete document without deserializing it.
 #[test]
 fn test_json_text_decoder_validates_complete_document() {
-    let session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     JsonDecoder::new(session)
         .validate_utf8(br#"{"ok":[true,null]}"#)
         .expect("a complete JSON document should validate");
@@ -75,7 +75,7 @@ fn test_json_text_decoder_validates_complete_document() {
 /// Verifies seed deserialization failures retain safe Serde metadata.
 #[test]
 fn test_json_text_decoder_maps_seed_failure() {
-    let session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     assert!(
         JsonDecoder::new(session)
             .decode_seed_utf8(FailingSeed, b"true")
@@ -86,7 +86,7 @@ fn test_json_text_decoder_maps_seed_failure() {
 /// Verifies a seed that leaves input unread is rejected by the final check.
 #[test]
 fn test_json_text_decoder_rejects_unconsumed_seed_input() {
-    let session = JsonDecodeSession::owned(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
     assert!(
         JsonDecoder::new(session)
             .decode_seed_utf8(NonConsumingSeed, b"true")
@@ -100,14 +100,14 @@ fn test_json_text_decoder_rejects_unconsumed_seed_input() {
 fn test_json_text_decoder_preserves_private_number_marker_object() {
     const MARKER: &str = concat!("$", "serde_json", "::private::Number");
     let input = format!(r#"{{"{MARKER}":"123"}}"#);
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::builder()
                 .number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, 1))
                 .build(),
         )
         .build();
-    let value = JsonDecoder::owned(limits)
+    let value = JsonDecoder::with_limits(limits)
         .decode_str::<Value>(&input)
         .expect("the marker-shaped object contains no JSON number token");
 
@@ -163,14 +163,14 @@ fn test_json_text_decoder_rejects_float_outside_finite_f64_range() {
 #[test]
 fn test_json_text_decoder_prioritizes_number_budget_over_range() {
     let input = b"18446744073709551616";
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::builder()
                 .number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, input.len() - 1))
                 .build(),
         )
         .build();
-    let error = JsonDecoder::owned(limits)
+    let error = JsonDecoder::with_limits(limits)
         .decode_utf8::<Value>(input)
         .expect_err("the tighter number-byte budget must reject first");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);

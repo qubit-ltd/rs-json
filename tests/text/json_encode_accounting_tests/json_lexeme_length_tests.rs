@@ -22,7 +22,7 @@ where
     T: Debug + Serialize,
 {
     let expected = serde_json::to_vec(&value).expect("finite test number must serialize");
-    let mut exact = JsonEncodeSession::owned(
+    let mut exact = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_number_bytes(expected.len())
             .build(),
@@ -30,7 +30,7 @@ where
     let encoded = encode(&value, &mut exact).expect("exact number-byte budget must admit the value");
     assert_eq!(encoded, expected, "compact output must match serde_json for {value:?}");
 
-    let mut short = JsonEncodeSession::owned(
+    let mut short = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_number_bytes(expected.len() - 1)
             .build(),
@@ -44,14 +44,14 @@ where
 /// Verifies integer and floating point measurements match emitted JSON text.
 #[test]
 fn test_scalar_lexeme_limits_match_json_output() {
-    let mut integers = JsonEncodeSession::owned(
+    let mut integers = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_number_bytes(20)
             .build(),
     );
     assert!(encode(&u64::MAX, &mut integers).is_ok());
 
-    let mut floats = JsonEncodeSession::owned(
+    let mut floats = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_number_bytes(4)
             .build(),

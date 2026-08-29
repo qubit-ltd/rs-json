@@ -19,7 +19,7 @@ fn test_json_encode_context_charges_string_payload() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_string_bytes(0)
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
 
     assert!(encode(&"value", &mut session).is_err());
 }

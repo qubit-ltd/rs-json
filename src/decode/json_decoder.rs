@@ -51,11 +51,11 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    /// Creates a decoder with an owned session built from explicit limits.
+    /// Creates a decoder with a cumulative session built from explicit limits.
     #[inline(always)]
     #[must_use]
-    pub fn owned(limits: JsonDecodeLimits<R, Q>) -> Self {
-        Self::new(JsonDecodeSession::owned(limits))
+    pub fn with_limits(limits: JsonDecodeLimits<R, Q>) -> Self {
+        Self::new(JsonDecodeSession::from_limits(limits))
     }
 }
 
@@ -64,7 +64,7 @@ impl JsonDecoder<'static, JsonResource, usize> {
     #[inline(always)]
     #[must_use]
     pub fn unlimited() -> Self {
-        Self::owned(JsonDecodeLimits::new())
+        Self::with_limits(JsonDecodeLimits::new())
     }
 }
 

@@ -30,7 +30,7 @@ use std::borrow::Cow;
 /// use serde_json::Value;
 ///
 /// let input = "  {\"ok\":true}  ";
-/// let mut decoder = NormalizingJsonDecoder::owned(
+/// let mut decoder = NormalizingJsonDecoder::with_limits(
 ///     NormalizingJsonDecodePolicy::builder().build(),
 ///     JsonDecodeLimits::new(),
 /// );

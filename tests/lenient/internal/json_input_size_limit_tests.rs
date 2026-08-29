@@ -30,7 +30,7 @@ fn configured_limit(error: &JsonDecodeError) -> usize {
 /// Panics when the public raw-size diagnostics are not observed.
 #[test]
 fn test_raw_size_limit_exposes_only_raw_limit() {
-    let mut decoder = NormalizingJsonDecoder::owned(
+    let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
         JsonDecodeLimits::builder().max_input_bytes(7).build(),
     );
@@ -51,7 +51,7 @@ fn test_raw_size_limit_exposes_only_raw_limit() {
 /// Panics when the public normalized-size diagnostics are not observed.
 #[test]
 fn test_normalized_size_limit_exposes_only_normalized_limit() {
-    let mut decoder = NormalizingJsonDecoder::owned(
+    let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
         JsonDecodeLimits::builder().max_normalized_input_bytes(7).build(),
     );
