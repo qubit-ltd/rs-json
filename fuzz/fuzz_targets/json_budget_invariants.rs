@@ -18,7 +18,7 @@ use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::JsonDecoder;
-use qubit_json::value::JsonValueSeed;
+use qubit_json::value::AccountingJsonValueSeed;
 use serde_json::Value;
 
 mod internal;
@@ -67,7 +67,8 @@ fuzz_target!(|data: &[u8]| {
     {
         let mut transaction = value_budget.transaction();
         let mut deserializer = serde_json::Deserializer::from_slice(input);
-        let decoded = serde::de::DeserializeSeed::deserialize(JsonValueSeed::new(&mut transaction), &mut deserializer);
+        let decoded =
+            serde::de::DeserializeSeed::deserialize(AccountingJsonValueSeed::new(&mut transaction), &mut deserializer);
         if decoded.is_ok() && deserializer.end().is_ok() {
             transaction.commit();
         }

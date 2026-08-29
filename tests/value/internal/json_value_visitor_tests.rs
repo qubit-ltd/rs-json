@@ -9,7 +9,7 @@
 
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::value::JsonValueSeed;
+use qubit_json::value::AccountingJsonValueSeed;
 use serde::de::DeserializeSeed;
 use serde_json::Deserializer;
 use serde_json::json;
@@ -20,7 +20,7 @@ fn test_json_value_visitor_builds_nested_value() {
     let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"{"key":[true,3]}"#);
-    let value = JsonValueSeed::new(&mut transaction)
+    let value = AccountingJsonValueSeed::new(&mut transaction)
         .deserialize(&mut deserializer)
         .expect("JSON value seed should build the nested value");
 

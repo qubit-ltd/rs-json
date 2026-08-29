@@ -11,7 +11,7 @@ use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::value::JsonValueSeed;
+use qubit_json::value::AccountingJsonValueSeed;
 use serde::de::DeserializeSeed;
 use serde_json::Deserializer;
 
@@ -28,7 +28,7 @@ fn test_json_value_child_seed_checks_prospective_array_item() {
     let mut deserializer = Deserializer::from_slice(br#"[null,null]"#);
 
     assert!(
-        JsonValueSeed::new(&mut transaction)
+        AccountingJsonValueSeed::new(&mut transaction)
             .deserialize(&mut deserializer)
             .is_err()
     );

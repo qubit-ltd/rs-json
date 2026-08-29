@@ -7,7 +7,7 @@
 // =============================================================================
 //! Public behavior tests for decoded JSON values.
 
+mod accounting_json_value_seed_tests;
 mod duplicate_key_rejecting_json_value_tests;
 mod internal;
 mod json_value_encoder_tests;
-mod json_value_seed_tests;
