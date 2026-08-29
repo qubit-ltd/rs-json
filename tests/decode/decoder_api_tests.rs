@@ -9,7 +9,6 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
-use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::MarkdownFencePolicy;
@@ -90,13 +89,16 @@ fn test_json_decoder_typed_root_entry_points() {
 fn test_decoders_share_complete_document_admission() {
     let input = "null true";
     let mut strict = JsonDecoder::unlimited();
-    let mut normalizing = NormalizingJsonDecoder::with_limits(no_normalization_policy(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let mut normalizing = NormalizingJsonDecoder::with_limits(
+        no_normalization_policy(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
 
     assert!(strict.decode_str::<IgnoredAny>(input).is_err());
     assert!(normalizing.decode_str::<IgnoredAny>(input).is_err());
 }
 
-/// Verifies the owned constructor builds a cumulative session from explicit
+/// Verifies the limits constructor builds a cumulative session from explicit
 /// limits.
 #[test]
 fn test_json_decoder_owned_uses_explicit_limits() {
@@ -123,8 +125,10 @@ fn test_json_decoder_unlimited_has_no_limits() {
 /// Verifies that normalizing string decoding returns an owned target.
 #[test]
 fn test_normalizing_decoder_decode_str_returns_owned_value() {
-    let mut decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let mut decoder = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::lenient(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
 
     let value: String = decoder
         .decode_str("  \"owned\"  ")
@@ -147,8 +151,10 @@ fn test_json_decoder_accumulates_owned_session_usage() {
 /// Verifies that normalizing UTF-8 byte decoding returns an owned target.
 #[test]
 fn test_normalizing_decoder_decode_utf8_returns_owned_value() {
-    let mut decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
+    let mut decoder = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::lenient(),
+        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+    );
 
     let value: String = decoder
         .decode_utf8(br#"  "owned"  "#)

@@ -64,7 +64,7 @@ let value: serde_json::Value = decoder.decode_utf8(br#"{"ok":true}"#)?;
 # >>(())
 ```
 
-`JsonDecoder` 持有一个 `JsonDecodeSession`。`owned(limits)` 是显式 limits 的常用构造入口，
+`JsonDecoder` 持有一个 `JsonDecodeSession`。`with_limits(limits)` 是显式 limits 的常用构造入口，
 `new(session)` 用于复用调用方准备的 session；只有确实需要无限预算时才调用 `unlimited()`。
 codec 不实现 `Default`，避免把无限预算伪装成安全默认值。decoder 提供 `decode_str`、`decode_utf8`、对应的 seed
 入口和 `validate_str`/`validate_utf8`。每次尝试先记录输入，再经共享 scanner 准入；值
@@ -77,7 +77,8 @@ transaction 只在完整成功时提交。
 严格 decode 与 normalizing decode 都返回同一个泛型 `JsonDecodeError<R, Q>`。它的内部 failure
 保持私有；调用方通过稳定的 `JsonDecodeErrorKind`、`JsonDecodeStage` 以及 budget、syntax、UTF-8、
 top-level accessor 获取互斥的结构化信息。默认 `DiagnosticPolicy::Redacted` 不保留输入派生
-source；`Detailed` 必须由调用方明确选择。严格 encode 只返回 `JsonEncodeError`：`Budget`、`InvalidRawJson`、
+source；严格 decoder 通过 `with_diagnostic_policy` 显式选择 `Detailed`，normalizing decoder
+则从 `NormalizingJsonDecodePolicy` 读取该设置。严格 encode 只返回 `JsonEncodeError`：`Budget`、`InvalidRawJson`、
 `Serialize` 或 `Write`。`JsonSyntaxError` 单独持有稳定的语法原因、偏移、行和列。
 
 ### 数字表示
@@ -90,7 +91,7 @@ strict 与 normalizing 文本路径共享同一数字契约：负整数装入 `i
 
 ## Value
 
-`JsonValueSeed` 是从 Serde 解码事件构造 `serde_json::Value` 的公开 seed。调用方将其绑定到
+`AccountingJsonValueSeed` 是从 Serde 解码事件构造 `serde_json::Value` 的公开 seed。调用方将其绑定到
 `JsonValueTransaction`；它适用于原始 JSON 字节不可用而仍需对物化 value 记账的场景。词法
 准入与该 seed 的职责不同：前者验证 JSON 文本，后者观察已解码值。
 seed 无法检查原始数字 lexeme；需要数字范围和 `NumberBytes` 保证时必须使用 `JsonDecoder`。

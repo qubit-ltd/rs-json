@@ -53,7 +53,7 @@ does not interpret its former private Number marker. An object whose key is
 `$serde_json::private::Number` is an ordinary object and is budgeted as such.
 The independent `RawValue` integration remains supported.
 
-`JsonValueSeed` sees already-decoded Serde events. It can reject wide numeric
+`AccountingJsonValueSeed` sees already-decoded Serde events. It can reject wide numeric
 events that do not fit the value model, but it cannot inspect the original
 number token or enforce lexical budgets. Route JSON text through `JsonDecoder`
 when syntax, range, and `NumberBytes` guarantees are required.

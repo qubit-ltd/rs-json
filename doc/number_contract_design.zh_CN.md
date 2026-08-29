@@ -39,7 +39,7 @@ serde_json 的公开 `CompactFormatter` 接口计算，不直接耦合其底层�
 
 ## Seed 与物化 value
 
-`JsonValueSeed` 只能观察已解码 Serde 事件。`i128/u128` 超出 i64/u64 联合范围时返回可恢复错误，
+`AccountingJsonValueSeed` 只能观察已解码 Serde 事件。`i128/u128` 超出 i64/u64 联合范围时返回可恢复错误，
 但 seed 无法核验原始 number token、词法预算或文本范围；这些保证必须由 `JsonDecoder` 提供。
 
 ## 验收不变量

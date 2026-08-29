@@ -9,14 +9,15 @@
 
 面向 Rust 服务、配置读取器和数据管道的资源感知 JSON 基础设施。它在保留 Serde 数据模型的
 同时，为 `serde_json` 补充调用方可控的资源准入，防止不可信输入在解析、值构造或输出阶段
-无限制地消耗资源。
+无限制地消耗资源。输入必须是严格 JSON 时使用 `JsonDecoder`；如果输入边界明确允许对外部
+文本中的 JSON 做受控清理，则使用 `NormalizingJsonDecoder`。
 
 ## 安装
 
 ```toml
 [dependencies]
 qubit-json = "0.8"
-qubit-budget = { version = "0.3", features = ["json"] }
+qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -65,6 +66,60 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 与只调用 `serde_json::from_slice` 相比，这个边界会显式执行资源准入，并通过 `kind()` 返回稳定的
 错误类别。JSON 准入成功后，再执行模式校验、权限检查和领域规则。
 
+## 规范化外部文本中的 JSON
+
+当输入本应是 JSON，但可能带有输入契约明确允许的传输或展示痕迹时，应使用
+`NormalizingJsonDecoder`。常见来源包括生成式文本、从 Markdown 复制的代码片段和文本配置
+文件。它先按 `NormalizingJsonDecodePolicy` 规范化文本，再执行与 `JsonDecoder` 相同的严格
+JSON 语法、数字范围和资源准入检查。
+
+`NormalizingJsonDecodePolicy::lenient()` 提供标准规范化配置：
+
+- 去除首尾空白；
+- 去除一个开头的 UTF-8 BOM；
+- 去除一层外围 JSON Markdown 代码围栏，结束围栏可以省略；
+- 转义 JSON 字符串内部未经转义的 ASCII 控制字符；
+- 对源自输入的诊断细节进行脱敏。
+
+这里的“宽松”仅指执行上述受控规范化，并不是支持另一种 JSON 方言。注释、尾随逗号、未加
+引号的键或缺失的 JSON 语法仍会被拒绝。
+
+```rust
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
+use qubit_json::decode::NormalizingJsonDecoder;
+
+let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    .max_input_bytes(4096)
+    .max_normalized_input_bytes(4096)
+    .max_depth(32)
+    .max_nodes(256)
+    .max_sequence_items(64)
+    .max_map_entries(64)
+    .max_key_bytes(128)
+    .max_string_bytes(2048)
+    .max_number_bytes(20)
+    .max_payload_bytes(4096)
+    .build();
+let mut decoder = NormalizingJsonDecoder::with_limits(
+    NormalizingJsonDecodePolicy::lenient(),
+    limits,
+);
+let value = decoder
+    .decode_object_str::<serde_json::Value>("```json\n{\"ok\":true}\n```")
+    .expect("当前策略应接受 Markdown JSON 代码围栏");
+assert_eq!(value["ok"], true);
+```
+
+应根据输入契约选择解码入口：
+
+| 输入契约 | API |
+| --- | --- |
+| 输入必须已经是完整、严格的 JSON | `JsonDecoder` |
+| 严格解码前允许清理指定的展示痕迹 | 使用显式策略构造的 `NormalizingJsonDecoder` |
+| 需要检查规范化结果、重复解码，或让结果借用规范化文本 | 先调用 `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`，再通过 `NormalizedJsonDocument` 的解码方法处理 |
+
 ## 为什么需要这个项目
 
 语法正确的 JSON 仍可能过大、嵌套过深，或在构造内存对象时消耗过多资源。`qubit-json` 保留
@@ -84,6 +139,66 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 `qubit-budget` 负责限制、资源标识、预算和会话；`qubit-json` 负责 JSON 规范化、词法校验、
 文本编解码、值构造和遍历。
 
+## 核心 API 一览
+
+| API | 用途 |
+| --- | --- |
+| `decode::JsonDecoder` | 严格校验并解码完整的 JSON 字符串或 UTF-8 字节切片；支持限制顶层必须为对象或数组，并可复用累计记账状态 |
+| `decode::NormalizingJsonDecoder` | 规范化外部文本中明确允许的展示痕迹，再执行与 `JsonDecoder` 相同的严格解码和资源准入 |
+| `decode::NormalizingJsonDecodePolicy` / `NormalizingJsonDecodePolicyBuilder` | 选择允许执行的规范化操作，以及诊断信息采用脱敏还是详细模式；资源限制仍单独配置 |
+| `decode::NormalizedJsonDocument` | 保存规范化后的文本，便于检查、借用式反序列化或重复解码，后续解码不会再次收取输入资源 |
+| `decode::JsonDecodeError` 及诊断枚举 | 提供稳定的错误类别、处理阶段、顶层类型要求和语法原因，调用方无需解析错误消息 |
+| `encode::JsonEncoder` | 将值序列化为严格、紧凑的 JSON 字节或写入 writer，同时限制输出和编码值所消耗的资源 |
+| `value::JsonValueEncoder` | 不生成文本、不执行资源记账，直接把任意 `Serialize` 值投影为严格的 `serde_json::Value` |
+| `value::AccountingJsonValueSeed` | 从任意 Serde 反序列化器构造 `serde_json::Value`，并把解码值用量暂存到调用方持有的事务中 |
+| `value::DuplicateKeyRejectingJsonValue` / `DuplicateKeyRejectingJsonValueSeed` | 构造 JSON 值时递归拒绝对象中的重复键 |
+| `value::traverse::JsonTreeBudgetTracker` | 使用内部持有且可复用的值预算，对完整的已构造 JSON 树执行资源记账 |
+| `value::traverse::JsonTreeReader` / `JsonTreeVisitor` | 以非递归、预算感知的方式只读遍历 JSON 树，并向访问器提供节点深度和位置上下文 |
+| `value::traverse::JsonTreeMutator` / `JsonTreeMutVisitor` | 在独立的输入、输出事务之间非递归地原地修改 JSON 树；通过 `JsonTreeControl` 控制是否继续回调子节点 |
+
+限制编码输出大小及值结构：
+
+```rust
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::encode::JsonEncoder;
+
+let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+    .max_output_bytes(64)
+    .max_depth(4)
+    .max_nodes(8)
+    .build();
+let mut encoder = JsonEncoder::with_limits(limits);
+let bytes = encoder
+    .to_vec(&serde_json::json!({"ok": true}))
+    .expect("该值应满足配置的资源限制");
+assert_eq!(bytes, br#"{"ok":true}"#);
+```
+
+拒绝有歧义的重复键，并对已经构造的 JSON 树记账：
+
+```rust
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::value::DuplicateKeyRejectingJsonValue;
+use qubit_json::value::traverse::JsonTreeBudgetTracker;
+
+let duplicate = serde_json::from_str::<DuplicateKeyRejectingJsonValue>(
+    r#"{"role":"reader","role":"admin"}"#,
+);
+assert!(duplicate.is_err());
+
+let mut tracker = JsonTreeBudgetTracker::new(
+    JsonValueLimits::<JsonResource, usize>::builder()
+        .max_depth(4)
+        .max_nodes(8)
+        .build(),
+);
+tracker
+    .account(&serde_json::json!({"role": "reader"}))
+    .expect("完整 JSON 树应满足配置的资源限制");
+```
+
 ## 明确边界
 
 - 严格准入会检查 JSON 语法和文档规定的数字范围，但不会自动要求对象键唯一。若唯一性属于
@@ -92,7 +207,8 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
   更宽的整数以及不能接受二进制舍入的精确十进制值，应使用字符串或领域类型。
 - 所有不可信边界都应设置有限资源上限。无限会话是调用方显式放弃保护的选择，不适合作为
   请求处理的默认配置。
-- 诊断信息默认脱敏。只有在输入派生信息可以安全保留和记录时，才启用
+- 诊断信息默认脱敏。严格解码器通过 `JsonDecoder::with_diagnostic_policy` 配置，规范化
+  解码器通过其规范化策略配置。只有在输入派生信息可以安全保留和记录时，才启用
   `DiagnosticPolicy::Detailed`。
 
 ## 延伸阅读

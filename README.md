@@ -11,13 +11,16 @@ Resource-aware JSON infrastructure for Rust services, configuration readers,
 and data pipelines. It complements `serde_json` by admitting JSON under
 caller-chosen limits before untrusted input consumes unbounded parsing,
 materialization, or output resources, while preserving Serde's data model.
+Use `JsonDecoder` when the input must already be strict JSON, or
+`NormalizingJsonDecoder` when the boundary explicitly permits controlled
+cleanup of JSON embedded in external text.
 
 ## Installation
 
 ```toml
 [dependencies]
 qubit-json = "0.8"
-qubit-budget = { version = "0.3", features = ["json"] }
+qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -68,6 +71,63 @@ Unlike calling `serde_json::from_slice` alone, this boundary makes resource
 admission explicit and exposes a stable error category through `kind()`. Apply
 schema validation, authorization, and domain rules after a value is admitted.
 
+## Normalize JSON from external text
+
+`NormalizingJsonDecoder` is the main entry point when the input is intended to
+be JSON but may contain explicitly permitted transport or presentation
+artifacts. Typical sources include generated text, copied Markdown snippets,
+and text configuration files. It first applies a
+`NormalizingJsonDecodePolicy`, then runs the same strict JSON syntax, numeric,
+and resource admission used by `JsonDecoder`.
+
+`NormalizingJsonDecodePolicy::lenient()` enables the library's standard
+normalization profile:
+
+- trim surrounding whitespace;
+- remove one leading UTF-8 BOM;
+- unwrap one outer JSON Markdown code fence, with an optional closing fence;
+- escape raw ASCII control characters found inside JSON strings; and
+- redact input-derived diagnostic details.
+
+This is controlled normalization, not a permissive JSON dialect. It does not
+accept comments, trailing commas, unquoted keys, or missing JSON syntax.
+
+```rust
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::decode::NormalizingJsonDecodePolicy;
+use qubit_json::decode::NormalizingJsonDecoder;
+
+let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    .max_input_bytes(4096)
+    .max_normalized_input_bytes(4096)
+    .max_depth(32)
+    .max_nodes(256)
+    .max_sequence_items(64)
+    .max_map_entries(64)
+    .max_key_bytes(128)
+    .max_string_bytes(2048)
+    .max_number_bytes(20)
+    .max_payload_bytes(4096)
+    .build();
+let mut decoder = NormalizingJsonDecoder::with_limits(
+    NormalizingJsonDecodePolicy::lenient(),
+    limits,
+);
+let value = decoder
+    .decode_object_str::<serde_json::Value>("```json\n{\"ok\":true}\n```")
+    .expect("the configured policy accepts a JSON Markdown fence");
+assert_eq!(value["ok"], true);
+```
+
+Choose the decoding entry point according to the input contract:
+
+| Input contract | API |
+| --- | --- |
+| Input must already be complete, strict JSON | `JsonDecoder` |
+| Specific presentation artifacts are allowed before strict decoding | `NormalizingJsonDecoder` with an explicit policy |
+| Normalized text must be inspected, decoded repeatedly, or borrowed by the result | `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`, followed by `NormalizedJsonDocument` decoding methods |
+
 ## Why this project exists
 
 Valid JSON can still be too large, too deep, or too expensive to materialize.
@@ -89,6 +149,66 @@ commit boundaries explicit through `qubit-budget` sessions and transactions.
 `qubit-json` owns JSON normalization, lexical validation, text codecs, value
 construction, and traversal.
 
+## Core API at a glance
+
+| API | Purpose |
+| --- | --- |
+| `decode::JsonDecoder` | Strictly validates and decodes complete JSON strings or UTF-8 byte slices, with optional top-level object/array checks and reusable cumulative accounting |
+| `decode::NormalizingJsonDecoder` | Normalizes explicitly permitted external-text artifacts, then performs the same strict decoding and resource admission as `JsonDecoder` |
+| `decode::NormalizingJsonDecodePolicy` / `NormalizingJsonDecodePolicyBuilder` | Selects each permitted normalization and whether diagnostics are redacted or detailed; resource limits remain separate |
+| `decode::NormalizedJsonDocument` | Retains normalized text for inspection, borrowed deserialization, or repeated decoding without charging the input a second time |
+| `decode::JsonDecodeError` and diagnostic enums | Exposes stable error kind, processing stage, root expectation, and syntax reason without requiring callers to parse messages |
+| `encode::JsonEncoder` | Serializes strict compact JSON to a byte vector or writer while enforcing output and encoded-value limits |
+| `value::JsonValueEncoder` | Projects any `Serialize` value into a strict `serde_json::Value` without text output or resource accounting |
+| `value::AccountingJsonValueSeed` | Builds a `serde_json::Value` from any Serde deserializer while staging decoded-value charges in a caller-owned transaction |
+| `value::DuplicateKeyRejectingJsonValue` / `DuplicateKeyRejectingJsonValueSeed` | Materializes JSON while rejecting duplicate object keys recursively |
+| `value::traverse::JsonTreeBudgetTracker` | Accounts a complete materialized tree with a reusable, internally owned value budget |
+| `value::traverse::JsonTreeReader` / `JsonTreeVisitor` | Performs non-recursive, budget-aware, read-only traversal with node depth and location context |
+| `value::traverse::JsonTreeMutator` / `JsonTreeMutVisitor` | Performs non-recursive in-place mutation between separate input and output transactions; `JsonTreeControl` selects whether callbacks descend into children |
+
+Encode with output and value limits:
+
+```rust
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::encode::JsonEncoder;
+
+let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+    .max_output_bytes(64)
+    .max_depth(4)
+    .max_nodes(8)
+    .build();
+let mut encoder = JsonEncoder::with_limits(limits);
+let bytes = encoder
+    .to_vec(&serde_json::json!({"ok": true}))
+    .expect("the value fits the configured limits");
+assert_eq!(bytes, br#"{"ok":true}"#);
+```
+
+Reject ambiguous objects and account an already materialized tree:
+
+```rust
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::value::DuplicateKeyRejectingJsonValue;
+use qubit_json::value::traverse::JsonTreeBudgetTracker;
+
+let duplicate = serde_json::from_str::<DuplicateKeyRejectingJsonValue>(
+    r#"{"role":"reader","role":"admin"}"#,
+);
+assert!(duplicate.is_err());
+
+let mut tracker = JsonTreeBudgetTracker::new(
+    JsonValueLimits::<JsonResource, usize>::builder()
+        .max_depth(4)
+        .max_nodes(8)
+        .build(),
+);
+tracker
+    .account(&serde_json::json!({"role": "reader"}))
+    .expect("the complete tree fits the configured limits");
+```
+
 ## Explicit boundaries
 
 - Strict admission validates JSON syntax and the documented numeric range; it
@@ -99,8 +219,10 @@ construction, and traversal.
   wider integers or exact decimals that must avoid binary rounding.
 - Set finite limits at every untrusted boundary. Unlimited sessions are an
   explicit opt-out, not a safe default for request handling.
-- Diagnostics are redacted by default. Enable `DiagnosticPolicy::Detailed`
-  only where input-derived details are safe to retain and log.
+- Diagnostics are redacted by default. Configure a strict decoder with
+  `JsonDecoder::with_diagnostic_policy`, or a normalizing decoder through its
+  normalization policy. Enable `DiagnosticPolicy::Detailed` only where
+  input-derived details are safe to retain and log.
 
 ## Learn more
 
