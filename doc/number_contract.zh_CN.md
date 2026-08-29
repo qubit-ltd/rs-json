@@ -42,6 +42,6 @@ parser。`n` 后缀仅属于 JavaScript 源码；`123n` 不是合法 JSON，绝�
 键为 `$serde_json::private::Number` 的对象是普通对象，并按 object/key/string 正常记账；独立的
 `RawValue` 集成仍保留。
 
-`JsonValueSeed` 看到的是已解码的 Serde 事件。它可以拒绝无法装入 value 模型的宽整数事件，
+`AccountingJsonValueSeed` 看到的是已解码的 Serde 事件。它可以拒绝无法装入 value 模型的宽整数事件，
 但不能检查原始 token 或执行词法预算。需要语法、范围和 `NumberBytes` 保证时，JSON 文本必须
 经过 `JsonDecoder`。

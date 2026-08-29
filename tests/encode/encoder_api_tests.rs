@@ -11,7 +11,7 @@ use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonResource;
 use qubit_json::encode::JsonEncoder;
 
-/// Verifies the owned constructor builds a cumulative session from explicit
+/// Verifies the limits constructor builds a cumulative session from explicit
 /// limits.
 #[test]
 fn test_json_encoder_owned_uses_explicit_limits() {

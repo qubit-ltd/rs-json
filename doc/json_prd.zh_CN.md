@@ -32,9 +32,12 @@ decoder 不提供隐式默认预算。默认错误脱敏；只有明确请求 `D
 
 ### 严格文本
 
-用户必须以对象方式传入调用方持有的 session：`JsonDecoder` 负责 `decode`、`decode_seed`
-和 `validate`，`JsonEncoder` 负责 `to_vec`、`write_buffered` 和 `write_incremental`。严格
+用户必须以对象方式传入调用方持有的 session：`JsonDecoder` 负责 `decode_str`/`decode_utf8`、
+`decode_seed_str`/`decode_seed_utf8` 和 `validate_str`/`validate_utf8`，`JsonEncoder` 负责
+`to_vec`、`write_buffered` 和 `write_incremental`。严格
 输入不经过任何修复；每个 document 的记账边界由相应 session transaction 定义。
+`JsonDecoder` 默认使用 `DiagnosticPolicy::Redacted`，调用方只能通过显式调用
+`with_diagnostic_policy(DiagnosticPolicy::Detailed)` 保留输入派生来源错误。
 
 JSON 数字的产品边界为：负整数 `i64`、非负整数 `u64`、小数/指数有限 `f64`。超过
 JavaScript 安全整数但仍在 64 位范围内的标识符允许作为 number 传输，前端必须使用保持整数
@@ -43,7 +46,7 @@ JavaScript 安全整数但仍在 64 位范围内的标识符允许作为 number 
 
 ### Value 与 tree
 
-用户可用 `JsonValueSeed` 在 `JsonValueTransaction` 中构造 `serde_json::Value`。用户可用
+用户可用 `AccountingJsonValueSeed` 在 `JsonValueTransaction` 中构造 `serde_json::Value`。用户可用
 `JsonTreeReader` 或 `JsonTreeMutator` 对物化 value 进行无 Rust 递归的遍历；reader 可在调用方已有
 transaction 中仅记账而不调用 visitor、不提交 transaction，`JsonTreeBudgetTracker` 复用该路径为
 完整 tree 反复记账。mutator 在调用 visitor 前先对完整输入 tree 执行预算准入；输入 tree

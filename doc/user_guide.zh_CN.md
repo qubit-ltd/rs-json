@@ -21,8 +21,9 @@
 - `value`：从 Serde 事件构造或校验已经生成的 `serde_json::Value` 值树。
 - `value::traverse`：不依赖 Rust 递归地读取或修改已有值树。
 
-严格解码器和编码器都是有状态对象。使用 `owned(limits)` 可以创建新的独立会话；需要跨调用
-累计用量时，则传入 `JsonDecodeSession` 或 `JsonEncodeSession`。解码结果和缓冲输出的资源用量
+严格解码器和编码器都是有状态对象。使用 `with_limits(limits)` 可以创建新的独立会话；需要跨
+调用累计用量时，则通过 `new(session)` 传入 `JsonDecodeSession` 或 `JsonEncodeSession`。解码
+结果和缓冲输出的资源用量
 先在事务中暂存，到文档规定的成功边界才提交；解码失败后，输入用量仍会保留在会话中。
 
 ## 贯穿场景：HTTP 边界上的有界 JSON
@@ -35,7 +36,7 @@
 ```toml
 [dependencies]
 qubit-json = "0.8"
-qubit-budget = { version = "0.3", features = ["json"] }
+qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -141,7 +142,7 @@ fn main() -> Result<(), JsonDecodeError> {
 遵循 Serde 的表示方式：未转义的 JSON 字符串可以借用文档内容，包含转义的字符串则必须构造
 自有数据。
 
-当输入由另一个 Serde 反序列化器持有时，可以使用 `JsonValueSeed`。它会核算解码事件，但看不到
+当输入由另一个 Serde 反序列化器持有时，可以使用 `AccountingJsonValueSeed`。它会核算解码事件，但看不到
 数字的原始文本、`NumberBytes` 或文本级整数范围；需要这些保证时应使用 `JsonDecoder`。
 如果边界还要求特定的顶层容器，请使用 `decode_object_str`、`decode_object_utf8` 或对应的数组方法。
 
@@ -225,8 +226,10 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 | `TopLevelCheck` | 检查根节点是否为要求的对象或数组 |
 | `Deserialize` | 构造请求的 Rust 类型 |
 
-只有 `DiagnosticPolicy::Detailed` 会保留由输入产生的来源错误。它只应在可信边界启用，不可信
-日志应保持默认脱敏。其他领域还提供 `JsonEncodeError`、`JsonSyntaxError`、
+只有 `DiagnosticPolicy::Detailed` 会保留由输入产生的来源错误。严格解码通过
+`JsonDecoder::with_diagnostic_policy(DiagnosticPolicy::Detailed)` 配置，规范化解码通过
+`NormalizingJsonDecodePolicyBuilder` 配置。详细诊断只应在可信边界启用，不可信日志应保持
+默认脱敏。其他领域还提供 `JsonEncodeError`、`JsonSyntaxError`、
 `JsonTreeProcessError` 和 `JsonTreeMutateError`。
 
 数字契约独立于资源限制：负整数装入 `i64`，非负整数装入 `u64`，小数/指数必须是有限 `f64`。

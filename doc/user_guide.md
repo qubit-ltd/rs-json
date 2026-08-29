@@ -26,9 +26,10 @@ the application layer after JSON admission.
   events.
 - `value::traverse` reads or mutates an existing tree without Rust recursion.
 
-Strict decoders and encoders are stateful objects. Use `owned(limits)` with a
-fresh owned session, or pass a `JsonDecodeSession`/`JsonEncodeSession` when
-charges must accumulate across calls. Decoded-value and buffered-output charges
+Strict decoders and encoders are stateful objects. Use `with_limits(limits)`
+with a fresh owned session, or pass a `JsonDecodeSession`/`JsonEncodeSession` to
+`new(session)` when charges must accumulate across calls. Decoded-value and
+buffered-output charges
 are staged in transactions and commit at their documented success boundary;
 input charges remain visible in the session after a failed decode attempt.
 
@@ -44,7 +45,7 @@ then handing only admitted data to application validation.
 ```toml
 [dependencies]
 qubit-json = "0.8"
-qubit-budget = { version = "0.3", features = ["json"] }
+qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -158,7 +159,7 @@ document is detached and may be decoded by another compatible decoder.
 Borrowing follows Serde's representation rules: unescaped JSON strings can
 borrow from the document, while escaped strings require owned targets.
 
-Use `JsonValueSeed` when another Serde deserializer owns the input. It charges
+Use `AccountingJsonValueSeed` when another Serde deserializer owns the input. It charges
 decoded events but cannot inspect original number lexemes, `NumberBytes`, or
 text-level integer range. Use `JsonDecoder` for those guarantees.
 Use `decode_object_str`/`decode_object_utf8` or the corresponding array methods
@@ -251,8 +252,11 @@ Branch on the stable category returned by `kind()`:
 | `Deserialize` | Materialize the requested Rust type |
 
 Input-derived sources are retained only by `DiagnosticPolicy::Detailed`.
-Enable it only at trusted boundaries and keep untrusted logs redacted. The
-other domains expose `JsonEncodeError`, `JsonSyntaxError`,
+Configure strict decoding with
+`JsonDecoder::with_diagnostic_policy(DiagnosticPolicy::Detailed)`; configure
+normalizing decoding through `NormalizingJsonDecodePolicyBuilder`. Enable
+detailed diagnostics only at trusted boundaries and keep untrusted logs
+redacted. The other domains expose `JsonEncodeError`, `JsonSyntaxError`,
 `JsonTreeProcessError`, and `JsonTreeMutateError`.
 
 The numeric contract is independent from resource limits: negative integers fit

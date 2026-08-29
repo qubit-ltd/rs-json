@@ -46,7 +46,8 @@ Criterion 的置信区间为准，而非将单次结果视为回归结论。
 | 64 KiB | 13.337 µs | 13.656 µs | 241.17 µs |
 | 1 MiB | 223.03 µs | 220.23 µs | 2.2784 ms |
 
-该组通过 `NormalizingJsonDecoder::with_limits(qubit_json::decode::NormalizingJsonDecodePolicy::default(), qubit_budget::json::qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default()).decode_object` 解码类型化记录，覆盖 `rs-http`
+该组通过 `NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(),
+JsonDecodeLimits::<JsonResource, usize>::default()).decode_object_str` 解码类型化记录，覆盖 `rs-http`
 宽松 SSE 消息所依赖的普通、fenced 与控制字符规范化路径。控制字符密度会显著影响结果，
 因此应单独与相同输入形态的历史运行比较。
 
