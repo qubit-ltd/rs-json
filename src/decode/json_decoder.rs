@@ -42,6 +42,8 @@ pub struct JsonDecoder<'budget, R = JsonResource, Q = usize>
 where
     Q: ResourceQuantity,
 {
+    /// Diagnostic detail retained for input-derived failures.
+    diagnostic_policy: DiagnosticPolicy,
     /// Shared generic decoding and accounting core.
     engine: JsonDecodeEngine<'budget, R, Q>,
 }
@@ -78,8 +80,28 @@ where
     #[must_use]
     pub const fn new(session: JsonDecodeSession<'budget, R, Q>) -> Self {
         Self {
+            diagnostic_policy: DiagnosticPolicy::Redacted,
             engine: JsonDecodeEngine::new(session),
         }
+    }
+
+    /// Configures whether input-derived error sources are retained.
+    ///
+    /// The default is [`DiagnosticPolicy::Redacted`]. Selecting
+    /// [`DiagnosticPolicy::Detailed`] may retain source errors containing
+    /// fragments or structural details derived from the input.
+    #[inline(always)]
+    #[must_use]
+    pub const fn with_diagnostic_policy(mut self, policy: DiagnosticPolicy) -> Self {
+        self.diagnostic_policy = policy;
+        self
+    }
+
+    /// Returns the configured diagnostic policy.
+    #[inline(always)]
+    #[must_use]
+    pub const fn diagnostic_policy(&self) -> DiagnosticPolicy {
+        self.diagnostic_policy
     }
 
     /// Returns the cumulative session for read-only inspection.
@@ -132,7 +154,7 @@ where
     where
         S: DeserializeSeed<'de>,
     {
-        self.engine.decode_seed_utf8(seed, input, DiagnosticPolicy::Redacted)
+        self.engine.decode_seed_utf8(seed, input, self.diagnostic_policy)
     }
 
     /// Decodes a complete JSON string while requiring a top-level object.
@@ -151,7 +173,7 @@ where
         self.engine.decode_seed_utf8_with_top_level(
             TypedSeed::new(),
             input,
-            DiagnosticPolicy::Redacted,
+            self.diagnostic_policy,
             Some(JsonRootKind::Object),
         )
     }
@@ -172,7 +194,7 @@ where
         self.engine.decode_seed_utf8_with_top_level(
             TypedSeed::new(),
             input,
-            DiagnosticPolicy::Redacted,
+            self.diagnostic_policy,
             Some(JsonRootKind::Array),
         )
     }
@@ -186,6 +208,6 @@ where
     /// Validates and accounts for one complete UTF-8 JSON byte slice without
     /// materializing a target value.
     pub fn validate_utf8(&mut self, input: &[u8]) -> Result<(), JsonDecodeError<R, Q>> {
-        self.engine.validate_utf8(input, DiagnosticPolicy::Redacted)
+        self.engine.validate_utf8(input, self.diagnostic_policy)
     }
 }
