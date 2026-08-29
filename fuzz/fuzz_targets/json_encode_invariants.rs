@@ -41,20 +41,20 @@ fuzz_target!(|data: &[u8]| {
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, output_bytes))
         .value_limits(value_limits)
         .build();
-    let vector_session = JsonEncodeSession::owned(limits.clone());
+    let vector_session = JsonEncodeSession::from_limits(limits.clone());
     let (encoded, vector_session) = {
         let mut encoder = JsonEncoder::new(vector_session);
         let encoded = encoder.to_vec(&value);
         (encoded, encoder.into_session())
     };
-    let buffered_session = JsonEncodeSession::owned(limits.clone());
+    let buffered_session = JsonEncodeSession::from_limits(limits.clone());
     let mut buffered_output = Vec::new();
     let (buffered, buffered_session) = {
         let mut encoder = JsonEncoder::new(buffered_session);
         let buffered = encoder.write_buffered(&mut buffered_output, &value);
         (buffered, encoder.into_session())
     };
-    let incremental_session = JsonEncodeSession::owned(limits);
+    let incremental_session = JsonEncodeSession::from_limits(limits);
     let mut incremental_output = Vec::new();
     let (incremental, incremental_session) = {
         let mut encoder = JsonEncoder::new(incremental_session);

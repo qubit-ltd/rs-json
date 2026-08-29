@@ -38,7 +38,7 @@ fn run_with_session<'a, T>(
 where
     T: DeserializeOwned,
 {
-    let owned_session = std::mem::replace(session, JsonDecodeSession::owned(JsonDecodeLimits::new()));
+    let owned_session = std::mem::replace(session, JsonDecodeSession::from_limits(JsonDecodeLimits::new()));
     let mut stateful = NormalizingJsonDecoder::new(decoder.policy().clone(), owned_session);
     let result = stateful.decode_str(input);
     *session = stateful.into_session();
@@ -48,12 +48,12 @@ where
 /// Verifies decode and encode sessions expose only their directional resources.
 #[test]
 fn decode_and_encode_sessions_have_independent_directional_resources() {
-    let decode = JsonDecodeSession::owned(
-        JsonDecodeLimits::<JsonResource, usize>::builder()
+    let decode = JsonDecodeSession::from_limits(
+        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
             .input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 8))
             .build(),
     );
-    let encode = JsonEncodeSession::owned(
+    let encode = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 8))
             .build(),
@@ -66,8 +66,8 @@ fn decode_and_encode_sessions_have_independent_directional_resources() {
 /// Verifies input-byte consumption is cumulative and atomic within one attempt.
 #[test]
 fn test_decode_attempt_consumes_input_bytes_atomically() {
-    let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::<JsonResource, usize>::builder()
+    let mut session = JsonDecodeSession::from_limits(
+        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
             .input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 3))
             .build(),
     );
@@ -114,8 +114,8 @@ fn test_decode_session_preserves_embedded_value_limits() {
         .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
         .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)))
         .build();
-    let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::<JsonResource, usize>::builder()
+    let mut session = JsonDecodeSession::from_limits(
+        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
             .value_limits(value_limits)
             .build(),
     );
@@ -156,8 +156,8 @@ fn test_failed_second_value_preserves_first_commit_and_accumulates_input() {
     let first = b"null";
     let second = br#"[null,null]"#;
     let third = b"null";
-    let session = JsonDecodeSession::owned(
-        JsonDecodeLimits::<JsonResource, usize>::builder()
+    let session = JsonDecodeSession::from_limits(
+        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
             .max_input_bytes(64)
             .max_nodes(3)
             .build(),
@@ -182,8 +182,8 @@ fn test_failed_second_value_preserves_first_commit_and_accumulates_input() {
 /// value accounting, leaving the session reusable.
 #[test]
 fn test_decode_attempt_panic_retains_input_and_reuses_value_capacity() {
-    let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::<JsonResource, usize>::builder()
+    let mut session = JsonDecodeSession::from_limits(
+        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
             .max_input_bytes(8)
             .max_nodes(1)
             .build(),
@@ -216,14 +216,14 @@ fn test_decode_attempt_panic_retains_input_and_reuses_value_capacity() {
 fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity() {
     let rejected = "```json\nnull\n```";
     let accepted = "null";
-    let mut session = JsonDecodeSession::owned(
-        JsonDecodeLimits::<JsonResource, usize>::builder()
+    let mut session = JsonDecodeSession::from_limits(
+        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
             .max_input_bytes(rejected.len() + accepted.len())
             .max_normalized_input_bytes(8)
             .max_nodes(1)
             .build(),
     );
-    let decoder = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::default(), JsonDecodeLimits::default());
+    let decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
 
     assert!(run_with_session::<u8>(&decoder, rejected, &mut session).is_err());
     assert_eq!(session.input_budget().expect("input budget").used(), rejected.len(),);

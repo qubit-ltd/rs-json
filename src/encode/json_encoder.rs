@@ -69,7 +69,7 @@ where
     ///
     /// # Parameters
     ///
-    /// * `limits` - Resource limits used to construct the owned session.
+    /// * `limits` - Resource limits used to construct the cumulative session.
     ///
     /// # Returns
     ///
@@ -77,8 +77,8 @@ where
     /// by `limits`.
     #[inline(always)]
     #[must_use]
-    pub fn owned(limits: JsonEncodeLimits<R, Q>) -> Self {
-        Self::new(JsonEncodeSession::owned(limits))
+    pub fn with_limits(limits: JsonEncodeLimits<R, Q>) -> Self {
+        Self::new(JsonEncodeSession::from_limits(limits))
     }
 }
 
@@ -91,7 +91,7 @@ impl JsonEncoder<'static, JsonResource, usize> {
     #[inline(always)]
     #[must_use]
     pub fn unlimited() -> Self {
-        Self::owned(JsonEncodeLimits::new())
+        Self::with_limits(JsonEncodeLimits::new())
     }
 }
 

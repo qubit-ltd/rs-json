@@ -31,7 +31,7 @@ fn test_budgeted_key_checks_key_bytes() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_key_bytes(2)
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
 
     assert!(encode(&values, &mut session).is_err());
 }
@@ -172,7 +172,7 @@ fn test_budgeted_key_checks_each_scalar_serializer_path() {
         ScalarKey::HumanReadable,
     ];
     for key in keys {
-        let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+        let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
         let _ = encode(&OneKey(key), &mut session);
     }
 }

@@ -83,6 +83,6 @@ impl JsonTestLimits {
 
     /// Creates fresh encode accounting from this test configuration.
     pub(crate) fn encode_session(&self) -> JsonEncodeSession<'static> {
-        JsonEncodeSession::owned(self.limits.build())
+        JsonEncodeSession::from_limits(self.limits.build())
     }
 }

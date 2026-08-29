@@ -42,7 +42,7 @@ impl<'de> DeserializeSeed<'de> for BorrowedStrSeed {
 #[test]
 fn test_normalized_json_document_supports_borrowing_and_seed() {
     let mut decoder =
-        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::lenient(), JsonDecodeLimits::default());
+        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
     let document = decoder
         .prepare_str("  \"borrowed\"  ")
         .expect("normalization must succeed");
@@ -66,7 +66,7 @@ fn test_normalized_json_document_supports_borrowing_and_seed() {
 #[test]
 fn test_normalized_json_document_owns_repaired_text() {
     let mut decoder =
-        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::lenient(), JsonDecodeLimits::default());
+        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
     let document = decoder
         .prepare_str("\"line\nfeed\"")
         .expect("control-character escaping must succeed");
@@ -87,7 +87,7 @@ fn test_normalized_json_document_separates_input_and_value_accounting() {
         .max_normalized_input_bytes(3_usize)
         .max_nodes(2_usize)
         .build();
-    let mut decoder = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::lenient(), limits);
+    let mut decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
     let document = decoder.prepare_str("\"x\"").expect("prepare must fit");
 
     let _: &str = decoder.decode_document(&document).expect("first decode must fit");
@@ -112,7 +112,7 @@ fn test_normalizing_decoder_supports_custom_resource_and_quantity_types() {
     let limits = JsonDecodeLimits::<CustomResource, u64>::builder()
         .input_bytes_limit(ResourceLimit::new(CustomResource::InputBytes, 2_u64))
         .build();
-    let mut decoder = NormalizingJsonDecoder::owned_with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
+    let mut decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
 
     let error = decoder
         .prepare_str("\"x\"")
@@ -129,7 +129,7 @@ fn test_normalizing_decoder_supports_custom_resource_and_quantity_types() {
 #[test]
 fn test_normalized_json_document_supports_typed_root_checks_and_validation() {
     let mut decoder =
-        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::lenient(), JsonDecodeLimits::default());
+        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
     let object = decoder.prepare_str(" {\"value\":1} ").expect("object prepare");
     let array = decoder.prepare_str(" [1,2] ").expect("array prepare");
 
@@ -153,7 +153,7 @@ fn test_normalized_json_document_failure_rolls_back_only_value_usage() {
         .max_normalized_input_bytes(input.len())
         .max_nodes(2_usize)
         .build();
-    let mut decoder = NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::lenient(), limits);
+    let mut decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
     let document = decoder.prepare_str(input).expect("prepare must succeed");
 
     let _ = decoder

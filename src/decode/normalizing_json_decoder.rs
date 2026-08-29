@@ -38,7 +38,7 @@ use super::internal::TypedSeed;
 /// use qubit_json::decode::NormalizingJsonDecoder;
 /// use serde_json::Value;
 ///
-/// let mut decoder = NormalizingJsonDecoder::owned(
+/// let mut decoder = NormalizingJsonDecoder::with_limits(
 ///     NormalizingJsonDecodePolicy::builder().build(),
 ///     JsonDecodeLimits::new(),
 /// );
@@ -62,20 +62,11 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    /// Creates a decoder with an owned session built from explicit limits.
+    /// Creates a normalizing decoder with a cumulative session built from explicit limits.
     #[inline]
     #[must_use]
-    pub fn owned_with_limits(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits<R, Q>) -> Self {
-        Self::new(policy, JsonDecodeSession::owned(limits))
-    }
-}
-
-impl NormalizingJsonDecoder<'static, JsonResource, usize> {
-    /// Creates a standard decoder with an owned standard JSON session.
-    #[inline]
-    #[must_use]
-    pub fn owned(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits) -> Self {
-        Self::new(policy, JsonDecodeSession::owned(limits))
+    pub fn with_limits(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits<R, Q>) -> Self {
+        Self::new(policy, JsonDecodeSession::from_limits(limits))
     }
 }
 
@@ -225,7 +216,7 @@ where
     }
 
     /// Normalizes and decodes one string while requiring a top-level object.
-    pub fn decode_object<T>(&mut self, input: &str) -> Result<T, JsonDecodeError<R, Q>>
+    pub fn decode_object_str<T>(&mut self, input: &str) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: DeserializeOwned,
     {
@@ -233,12 +224,30 @@ where
         self.decode_object_document(&document)
     }
 
+    /// Normalizes and decodes one UTF-8 byte slice while requiring a top-level object.
+    pub fn decode_object_utf8<T>(&mut self, input: &[u8]) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        T: DeserializeOwned,
+    {
+        let document = self.prepare_utf8(input)?;
+        self.decode_object_document(&document)
+    }
+
     /// Normalizes and decodes one string while requiring a top-level array.
-    pub fn decode_array<T>(&mut self, input: &str) -> Result<Vec<T>, JsonDecodeError<R, Q>>
+    pub fn decode_array_str<T>(&mut self, input: &str) -> Result<Vec<T>, JsonDecodeError<R, Q>>
     where
         T: DeserializeOwned,
     {
         let document = self.prepare_str(input)?;
+        self.decode_array_document(&document)
+    }
+
+    /// Normalizes and decodes one UTF-8 byte slice while requiring a top-level array.
+    pub fn decode_array_utf8<T>(&mut self, input: &[u8]) -> Result<Vec<T>, JsonDecodeError<R, Q>>
+    where
+        T: DeserializeOwned,
+    {
+        let document = self.prepare_utf8(input)?;
         self.decode_array_document(&document)
     }
 

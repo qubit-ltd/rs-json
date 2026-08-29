@@ -46,7 +46,7 @@ fn test_json_decode_error_reports_strict_parse_failure() {
 #[test]
 fn test_json_decode_error_reports_normalization_failure() {
     let mut decoder =
-        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::lenient(), JsonDecodeLimits::default());
+        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
     let error = decoder.decode_value("").expect_err("empty normalized input must fail");
 
     assert_eq!(error.kind(), JsonDecodeErrorKind::EmptyInput);
@@ -59,7 +59,7 @@ fn test_json_decode_error_reports_normalization_failure() {
 #[test]
 fn test_decoder_facades_share_error_classification() {
     let mut strict = JsonDecoder::unlimited();
-    let mut normalizing = NormalizingJsonDecoder::owned(no_normalization_policy(), JsonDecodeLimits::default());
+    let mut normalizing = NormalizingJsonDecoder::with_limits(no_normalization_policy(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
 
     let strict_syntax = strict.decode_str::<serde_json::Value>("{").expect_err("syntax error");
     let normalizing_syntax = normalizing
@@ -74,8 +74,8 @@ fn test_decoder_facades_share_error_classification() {
     assert_eq!(strict_target.stage(), normalizing_target.stage());
 
     let limits = JsonDecodeLimits::builder().max_input_bytes(1_usize).build();
-    let mut strict = JsonDecoder::owned(limits);
-    let mut normalizing = NormalizingJsonDecoder::owned(no_normalization_policy(), limits);
+    let mut strict = JsonDecoder::with_limits(limits);
+    let mut normalizing = NormalizingJsonDecoder::with_limits(no_normalization_policy(), limits);
     let strict_budget = strict.decode_str::<bool>("true").expect_err("input budget");
     let normalizing_budget = normalizing.decode_str::<bool>("true").expect_err("input budget");
     assert_eq!(strict_budget.kind(), normalizing_budget.kind());
@@ -128,7 +128,7 @@ fn test_json_decode_error_model_representative_matrix() {
     assert_eq!(error.utf8_valid_up_to(), Some(0));
 
     let mut decoder =
-        NormalizingJsonDecoder::owned(NormalizingJsonDecodePolicy::lenient(), JsonDecodeLimits::default());
+        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default());
     let document = decoder.prepare_str("null").expect("prepare scalar");
     let error = decoder
         .decode_object_document::<serde_json::Value>(&document)

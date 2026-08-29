@@ -19,7 +19,7 @@ fn test_json_encoder_owned_uses_explicit_limits() {
         .max_output_bytes(8)
         .max_nodes(2)
         .build();
-    let encoder = JsonEncoder::owned(limits);
+    let encoder = JsonEncoder::with_limits(limits);
 
     assert_eq!(encoder.session().max_output_bytes(), Some(8));
     assert_eq!(encoder.session().value_budget().limits().max_nodes(), Some(2));

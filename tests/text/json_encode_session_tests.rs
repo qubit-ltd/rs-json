@@ -90,7 +90,7 @@ impl Write for PrefixWriter {
 /// Verifies borrowed encode sessions charge caller-owned budgets in place.
 #[test]
 fn test_encode_session_exposes_only_output_resource() {
-    let encode = JsonEncodeSession::owned(
+    let encode = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 8))
             .build(),
@@ -103,7 +103,7 @@ fn test_encode_session_exposes_only_output_resource() {
 /// attempt.
 #[test]
 fn test_encode_attempt_consumes_output_bytes_atomically() {
-    let mut session = JsonEncodeSession::owned(
+    let mut session = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 3))
             .build(),
@@ -125,7 +125,7 @@ fn test_encode_attempt_preserves_embedded_value_limits() {
         .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
         .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)))
         .build();
-    let mut session = JsonEncodeSession::owned(
+    let mut session = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .value_limits(value_limits)
             .build(),
@@ -186,7 +186,7 @@ fn test_encode_session_borrows_output_and_value_budgets() {
 /// accounting when a streamed Serde value fails.
 #[test]
 fn test_encode_stream_failure_rolls_back_output_and_value() {
-    let mut session = JsonEncodeSession::owned(
+    let mut session = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_output_bytes(64)
             .max_nodes(2)
@@ -202,7 +202,7 @@ fn test_encode_stream_failure_rolls_back_output_and_value() {
 /// charge, while their staged value accounting rolls back after I/O failure.
 #[test]
 fn test_buffered_writer_failure_keeps_prefix_and_rolls_back_value() {
-    let mut session = JsonEncodeSession::owned(
+    let mut session = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_output_bytes(64)
             .max_nodes(3)
@@ -226,7 +226,7 @@ fn test_buffered_writer_failure_keeps_prefix_and_rolls_back_value() {
 /// staged values when serialization returns an error.
 #[test]
 fn test_incremental_stream_failure_keeps_prefix_and_rolls_back_value() {
-    let mut session = JsonEncodeSession::owned(
+    let mut session = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_output_bytes(64)
             .max_nodes(2)
@@ -244,7 +244,7 @@ fn test_incremental_stream_failure_keeps_prefix_and_rolls_back_value() {
 /// staged values so the session can encode a later value.
 #[test]
 fn test_incremental_panic_keeps_prefix_and_reuses_value_capacity() {
-    let mut session = JsonEncodeSession::owned(
+    let mut session = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_output_bytes(64)
             .max_nodes(2)

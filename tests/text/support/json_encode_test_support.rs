@@ -27,7 +27,7 @@ where
     R: Clone + Debug + 'static,
     Q: ResourceQuantity + 'static,
 {
-    let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
+    let placeholder = JsonEncodeSession::from_limits(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = std::mem::replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| encoder.to_vec(value)));
@@ -50,7 +50,7 @@ where
     R: Clone + Debug + 'static,
     Q: ResourceQuantity + 'static,
 {
-    let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
+    let placeholder = JsonEncodeSession::from_limits(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = std::mem::replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| encoder.write_buffered(writer, value)));
@@ -73,7 +73,7 @@ where
     R: Clone + Debug + 'static,
     Q: ResourceQuantity + 'static,
 {
-    let placeholder = JsonEncodeSession::owned(JsonEncodeLimits::<R, Q>::builder().build());
+    let placeholder = JsonEncodeSession::from_limits(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = std::mem::replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

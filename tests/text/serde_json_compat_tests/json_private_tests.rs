@@ -19,7 +19,7 @@ use crate::text::json_encode_test_support::encode;
 fn test_private_serde_json_shapes_encode_through_budget() {
     let number = u64::MAX;
     let raw = RawValue::from_string(String::from("{\"ok\":true}")).expect("raw JSON should parse");
-    let mut session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
 
     let output = encode(&(&number, &raw), &mut session).expect("private serde_json shapes should encode");
 
@@ -38,7 +38,7 @@ fn test_real_number_uses_scalar_classification() {
         .max_string_bytes(0)
         .max_number_bytes(NUMBER_TEXT.len())
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
 
     let output = encode(&number, &mut session).expect("integer scalar must not consume map limits");
 
@@ -55,7 +55,7 @@ fn test_real_raw_value_uses_private_raw_value_classification() {
         .max_key_bytes(2)
         .max_string_bytes(0)
         .build();
-    let mut session = JsonEncodeSession::owned(limits);
+    let mut session = JsonEncodeSession::from_limits(limits);
 
     let output = encode(&raw, &mut session).expect("private RawValue metadata should not consume string limits");
 

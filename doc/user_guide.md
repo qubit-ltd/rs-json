@@ -61,7 +61,7 @@ use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 
 fn main() -> Result<(), JsonDecodeError<JsonResource>> {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
         .max_input_bytes(4096)
         .max_depth(32)
         .max_nodes(256)
@@ -72,14 +72,14 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
         .max_number_bytes(20)
         .max_payload_bytes(4096)
         .build();
-    let mut decoder = JsonDecoder::owned(limits);
+    let mut decoder = JsonDecoder::with_limits(limits);
 
     let request_body = br#"{"id":18446744073709551615,"ok":true}"#;
     let value: serde_json::Value = decoder.decode_utf8(request_body)?;
     assert_eq!(value["id"], serde_json::json!(u64::MAX));
 
     let small_limits = limits.into_builder().max_input_bytes(8).build();
-    let mut small_decoder = JsonDecoder::owned(small_limits);
+    let mut small_decoder = JsonDecoder::with_limits(small_limits);
     let error = small_decoder
         .decode_utf8::<serde_json::Value>(br#"{"ok":true}"#)
         .expect_err("the request body must exceed eight bytes");
@@ -94,7 +94,7 @@ branch returns `JsonDecodeErrorKind::Budget` and preserves the measured raw
 input length without committing a decoded value. This lets an HTTP adapter map
 stable error categories to responses without matching private parser details.
 
-For output, create `JsonEncoder::owned(JsonEncodeLimits::...)` and call
+For output, create `JsonEncoder::with_limits(JsonEncodeLimits::...)` and call
 `to_vec`, `write_buffered`, or `write_incremental`. Buffered mode finishes
 serialization and budget checks before touching the writer, and commits
 accounting only after the complete write succeeds; an I/O failure can still
@@ -138,7 +138,7 @@ fn main() -> Result<(), JsonDecodeError> {
         .max_number_bytes(32)
         .max_payload_bytes(1024)
         .build();
-    let mut decoder = NormalizingJsonDecoder::owned(
+    let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::lenient(),
         limits,
     );
@@ -197,11 +197,11 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
         .max_payload_bytes(1024)
         .build();
 
-    let mut ordinary_decoder = JsonDecoder::owned(limits);
+    let mut ordinary_decoder = JsonDecoder::with_limits(limits);
     let ordinary: serde_json::Value = ordinary_decoder.decode_str(input)?;
     assert_eq!(ordinary["role"], "admin");
 
-    let mut unique_key_decoder = JsonDecoder::owned(limits);
+    let mut unique_key_decoder = JsonDecoder::with_limits(limits);
     let error = unique_key_decoder
         .decode_str::<DuplicateKeyRejectingJsonValue>(input)
         .expect_err("duplicate object keys must be rejected");

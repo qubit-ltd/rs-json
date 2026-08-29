@@ -15,7 +15,7 @@ use qubit_json::encode::JsonEncoder;
 /// Verifies nested values re-enter the budget-aware encoder traversal.
 #[test]
 fn test_budgeted_value_serializes_nested_values() {
-    let session = JsonEncodeSession::owned(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let output = JsonEncoder::new(session)
         .to_vec(&vec![vec![1_u8]])
         .expect("nested values should encode");
