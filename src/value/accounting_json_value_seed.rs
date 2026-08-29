@@ -27,6 +27,13 @@ use super::internal::JsonValueVisitor;
 /// ordinary [`serde::Deserialize`] implementation, where the original input
 /// bytes are unavailable.
 ///
+/// Do not pass this seed to [`crate::decode::JsonDecoder::decode_seed_str`] or
+/// [`crate::decode::JsonDecoder::decode_seed_utf8`] when its transaction and
+/// the decoder represent the same logical decoded-value budget. `JsonDecoder`
+/// already accounts the complete value during lexical admission, so the seed
+/// would charge that value a second time. In that pipeline, use a seed that
+/// performs only domain deserialization and domain-specific checks.
+///
 /// # Type Parameters
 ///
 /// * `R` - Resource identity tracked by the value transaction.
@@ -36,18 +43,18 @@ use super::internal::JsonValueVisitor;
 ///
 /// ```
 /// use qubit_budget::json::{JsonResource, JsonValueBudget, JsonValueLimits};
-/// use qubit_json::value::JsonValueSeed;
+/// use qubit_json::value::AccountingJsonValueSeed;
 /// use serde::de::DeserializeSeed;
 ///
 /// let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::default());
 /// let mut transaction = budget.transaction();
 /// let mut deserializer = serde_json::Deserializer::from_str(r#"{"ok":true}"#);
-/// let value = JsonValueSeed::new(&mut transaction).deserialize(&mut deserializer)?;
+/// let value = AccountingJsonValueSeed::new(&mut transaction).deserialize(&mut deserializer)?;
 /// assert_eq!(value["ok"], true);
 /// transaction.commit();
 /// # Ok::<(), serde_json::Error>(())
 /// ```
-pub struct JsonValueSeed<'transaction, 'budget, R, Q = usize>
+pub struct AccountingJsonValueSeed<'transaction, 'budget, R, Q = usize>
 where
     Q: ResourceQuantity,
 {
@@ -55,7 +62,7 @@ where
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
 }
 
-impl<'transaction, 'budget, R, Q> JsonValueSeed<'transaction, 'budget, R, Q>
+impl<'transaction, 'budget, R, Q> AccountingJsonValueSeed<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -64,6 +71,8 @@ where
     /// # Parameters
     ///
     /// * `transaction` - Transaction receiving decoded JSON resource charges.
+    ///   It must not duplicate decoded-value accounting already performed by an
+    ///   outer [`crate::decode::JsonDecoder`].
     ///
     /// # Returns
     ///
@@ -75,7 +84,7 @@ where
     }
 }
 
-impl<'de, R, Q> DeserializeSeed<'de> for JsonValueSeed<'_, '_, R, Q>
+impl<'de, R, Q> DeserializeSeed<'de> for AccountingJsonValueSeed<'_, '_, R, Q>
 where
     R: Clone + Debug,
     Q: ResourceQuantity,
