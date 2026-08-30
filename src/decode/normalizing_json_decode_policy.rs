@@ -45,6 +45,14 @@ pub struct NormalizingJsonDecodePolicy {
 
 impl NormalizingJsonDecodePolicy {
     /// Creates the default permissive normalization policy.
+    ///
+    /// The defaults trim surrounding whitespace, strip a leading UTF-8 BOM,
+    /// accept JSON-only Markdown fences with an optional closing fence, escape
+    /// raw string control characters, and redact input-derived diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// A policy with the documented permissive defaults.
     #[inline]
     #[must_use]
     pub const fn lenient() -> Self {
@@ -60,6 +68,10 @@ impl NormalizingJsonDecodePolicy {
     }
 
     /// Creates a builder initialized with the lenient policy.
+    ///
+    /// # Returns
+    ///
+    /// A builder whose fields can be selectively changed before `build`.
     #[inline]
     #[must_use]
     pub const fn builder() -> NormalizingJsonDecodePolicyBuilder {
@@ -67,6 +79,11 @@ impl NormalizingJsonDecodePolicy {
     }
 
     /// Returns whether surrounding whitespace is removed.
+    ///
+    /// # Returns
+    ///
+    /// `true` when leading and trailing whitespace is discarded before JSON
+    /// parsing.
     #[inline(always)]
     #[must_use]
     pub const fn trim_whitespace(&self) -> bool {
@@ -74,6 +91,10 @@ impl NormalizingJsonDecodePolicy {
     }
 
     /// Returns whether a leading UTF-8 byte order mark is removed.
+    ///
+    /// # Returns
+    ///
+    /// `true` when a leading UTF-8 BOM is discarded before JSON parsing.
     #[inline(always)]
     #[must_use]
     pub const fn strip_utf8_bom(&self) -> bool {
@@ -81,6 +102,10 @@ impl NormalizingJsonDecodePolicy {
     }
 
     /// Returns the outer Markdown fence policy.
+    ///
+    /// # Returns
+    ///
+    /// A shared reference to the policy governing Markdown fence stripping.
     #[inline(always)]
     #[must_use]
     pub const fn markdown_fence_policy(&self) -> &MarkdownFencePolicy {
@@ -88,6 +113,11 @@ impl NormalizingJsonDecodePolicy {
     }
 
     /// Returns whether raw control characters in strings are escaped.
+    ///
+    /// # Returns
+    ///
+    /// `true` when raw JSON string control characters are rewritten to escaped
+    /// forms during normalization.
     #[inline(always)]
     #[must_use]
     pub const fn escape_control_chars_in_strings(&self) -> bool {
@@ -95,6 +125,10 @@ impl NormalizingJsonDecodePolicy {
     }
 
     /// Returns the error diagnostic policy.
+    ///
+    /// # Returns
+    ///
+    /// The policy controlling retention of input-derived error details.
     #[inline(always)]
     #[must_use]
     pub const fn diagnostic_policy(&self) -> DiagnosticPolicy {

@@ -187,6 +187,10 @@ where
     }
 
     /// Returns the stable failure category.
+    ///
+    /// # Returns
+    ///
+    /// The category describing which kind of decode operation failed.
     #[must_use]
     #[inline(always)]
     pub const fn kind(&self) -> JsonDecodeErrorKind {
@@ -201,6 +205,10 @@ where
     }
 
     /// Returns the semantic stage that produced the failure.
+    ///
+    /// # Returns
+    ///
+    /// The pipeline stage at which the failure was recorded.
     #[must_use]
     #[inline(always)]
     pub const fn stage(&self) -> JsonDecodeStage {
@@ -214,6 +222,10 @@ where
     }
 
     /// Returns the diagnostic policy applied while constructing this error.
+    ///
+    /// # Returns
+    ///
+    /// The policy that determines whether input-derived details are retained.
     #[must_use]
     #[inline(always)]
     pub const fn diagnostic_policy(&self) -> DiagnosticPolicy {
@@ -221,6 +233,10 @@ where
     }
 
     /// Returns the original input length in bytes.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes charged for the input that caused this error.
     #[must_use]
     #[inline(always)]
     pub const fn raw_input_bytes(&self) -> usize {
@@ -235,6 +251,11 @@ where
     }
 
     /// Returns the normalized text length when normalization completed.
+    ///
+    /// # Returns
+    ///
+    /// `Some(length)` when normalization produced text, or `None` when the
+    /// failure occurred before a normalized document existed.
     #[must_use]
     #[inline(always)]
     pub const fn normalized_input_bytes(&self) -> Option<usize> {
@@ -259,6 +280,10 @@ where
     }
 
     /// Returns the one-based error line when available.
+    ///
+    /// # Returns
+    ///
+    /// `Some(line)` for failures with source coordinates, otherwise `None`.
     #[must_use]
     #[inline(always)]
     pub const fn line(&self) -> Option<usize> {
@@ -270,6 +295,10 @@ where
     }
 
     /// Returns the one-based error column when available.
+    ///
+    /// # Returns
+    ///
+    /// `Some(column)` for failures with source coordinates, otherwise `None`.
     #[must_use]
     #[inline(always)]
     pub const fn column(&self) -> Option<usize> {
@@ -281,6 +310,10 @@ where
     }
 
     /// Returns the structured syntax failure for invalid JSON.
+    ///
+    /// # Returns
+    ///
+    /// A borrowed syntax error when parsing failed, otherwise `None`.
     #[must_use]
     #[inline(always)]
     pub const fn syntax_error(&self) -> Option<&JsonSyntaxError> {
@@ -291,6 +324,11 @@ where
     }
 
     /// Returns the complete measured-budget failure when present.
+    ///
+    /// # Returns
+    ///
+    /// A borrowed budget error when resource accounting rejected the input,
+    /// otherwise `None`.
     #[must_use]
     #[inline(always)]
     pub const fn budget_error(&self) -> Option<&MeasuredBudgetError<R, Q>> {
@@ -301,6 +339,11 @@ where
     }
 
     /// Returns the valid UTF-8 prefix length for invalid byte input.
+    ///
+    /// # Returns
+    ///
+    /// `Some(bytes)` for an invalid UTF-8 failure, or `None` for other failure
+    /// kinds.
     #[must_use]
     #[inline(always)]
     pub const fn utf8_valid_up_to(&self) -> Option<usize> {
@@ -311,6 +354,11 @@ where
     }
 
     /// Returns the invalid UTF-8 sequence length when known.
+    ///
+    /// # Returns
+    ///
+    /// The length of the invalid sequence when the decoder can determine it,
+    /// otherwise `None`.
     #[must_use]
     #[inline(always)]
     pub const fn utf8_error_len(&self) -> Option<usize> {
@@ -321,6 +369,11 @@ where
     }
 
     /// Returns the expected top-level kind for a constrained decode failure.
+    ///
+    /// # Returns
+    ///
+    /// The required root kind when a constrained operation failed, otherwise
+    /// `None`.
     #[must_use]
     #[inline(always)]
     pub const fn expected_top_level(&self) -> Option<JsonRootKind> {
@@ -331,6 +384,10 @@ where
     }
 
     /// Returns the observed top-level kind for a constrained decode failure.
+    ///
+    /// # Returns
+    ///
+    /// The root kind observed in the valid document, otherwise `None`.
     #[must_use]
     #[inline(always)]
     pub const fn actual_top_level(&self) -> Option<JsonRootKind> {
