@@ -9,13 +9,13 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
 
 /// Verifies lexical scanning accepts one complete JSON document.
 #[test]
 fn test_lexical_scanner_admits_complete_document() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
 
     JsonDecoder::new(session)
         .validate_utf8(br#"{"items":[true,null]}"#)

@@ -9,14 +9,14 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonSyntaxErrorReason;
 
 /// Verifies trailing bytes retain their stable lexical rejection reason.
 #[test]
 fn test_lexical_error_reason_reports_trailing_characters() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     let error = JsonDecoder::new(session)
         .validate_utf8(b"true false")
         .expect_err("trailing JSON value must be rejected");

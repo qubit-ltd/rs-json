@@ -8,6 +8,7 @@
 //! Tests for lenient normalization behavior through the public decoder.
 
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecodeError;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecodeStage;
@@ -36,7 +37,7 @@ fn configured_limit(error: &JsonDecodeError) -> usize {
 fn test_decode_value_reports_empty_input_for_empty_string() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
         .decode_value("")
@@ -54,7 +55,7 @@ fn test_decode_value_reports_empty_input_for_empty_string() {
 fn test_decode_value_reports_empty_input_for_whitespace_by_default() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
         .decode_value(" \n\t ")
@@ -72,7 +73,7 @@ fn test_decode_value_reports_empty_input_for_whitespace_by_default() {
 fn test_decode_value_respects_input_size_limit() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().build(),
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_input_bytes(6)
             .build(),
     );
@@ -94,7 +95,7 @@ fn test_decode_value_respects_input_size_limit() {
 fn test_decode_value_accepts_input_at_size_limit() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().build(),
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_input_bytes(7)
             .build(),
     );
@@ -113,7 +114,7 @@ fn test_decode_value_accepts_input_at_size_limit() {
 fn test_decode_value_size_limit_runs_before_parser_error_mapping() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().build(),
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_input_bytes(0)
             .build(),
     );
@@ -134,7 +135,7 @@ fn test_decode_value_rejects_control_character_expansion_above_normalized_size_l
     let input = "\"\u{0000}\"";
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().build(),
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_normalized_input_bytes(7)
             .build(),
     );
@@ -160,7 +161,7 @@ fn test_decode_value_rejects_control_character_expansion_above_normalized_size_l
 fn test_decode_value_accepts_control_character_expansion_at_normalized_size_limit() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().build(),
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_normalized_input_bytes(8)
             .build(),
     );
@@ -185,7 +186,7 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
 
     let accepted = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().build(),
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_normalized_input_bytes(normalized_bytes)
             .build(),
     )
@@ -195,7 +196,7 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
 
     let error = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().build(),
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_normalized_input_bytes(normalized_bytes - 1)
             .build(),
     )
@@ -217,7 +218,7 @@ fn test_decode_value_bounds_fenced_control_character_by_normalized_size() {
 fn test_decode_value_strips_utf8_bom_by_default() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let value = decoder
         .decode_value("\u{feff}{\"a\":1}")
@@ -234,7 +235,7 @@ fn test_decode_value_strips_utf8_bom_by_default() {
 fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
         .decode_value("\u{feff}")
@@ -252,7 +253,7 @@ fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
 fn test_decode_value_can_leave_utf8_bom_when_disabled() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().strip_utf8_bom(false).build(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
         .decode_value("\u{feff}{\"a\":1}")
@@ -269,7 +270,7 @@ fn test_decode_value_can_leave_utf8_bom_when_disabled() {
 fn test_decode_value_trims_surrounding_whitespace_by_default() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let value = decoder
         .decode_value("\n{\"text\":\"abc\"}\n")
@@ -290,7 +291,7 @@ fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled(
             .trim_whitespace(false)
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .build(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
         .decode_value("   ")
@@ -308,7 +309,7 @@ fn test_decode_value_reports_invalid_json_for_whitespace_when_trimming_disabled(
 fn test_decode_value_accepts_terminal_unicode_whitespace_when_trimming_enabled() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let value = decoder
         .decode_value("```json\n{\"a\":1}\n```\u{00a0}")
@@ -326,7 +327,7 @@ fn test_decode_value_accepts_terminal_unicode_whitespace_when_trimming_enabled()
 fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().trim_whitespace(false).build(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
         .decode_value("```json\n{\"a\":1}\n```\u{00a0}")
@@ -345,14 +346,14 @@ fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid() 
     let mut decoders = [
         NormalizingJsonDecoder::with_limits(
             NormalizingJsonDecodePolicy::default(),
-            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+            JsonDecodeLimits::<JsonResource, usize>::default(),
         ),
         NormalizingJsonDecoder::with_limits(
             NormalizingJsonDecodePolicy::builder()
                 .trim_whitespace(false)
                 .markdown_fence_policy(MarkdownFencePolicy::Disabled)
                 .build(),
-            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+            JsonDecodeLimits::<JsonResource, usize>::default(),
         ),
         NormalizingJsonDecoder::with_limits(
             NormalizingJsonDecodePolicy::builder()
@@ -360,7 +361,7 @@ fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid() 
                     closing: MarkdownFenceClosing::Required,
                 })
                 .build(),
-            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+            JsonDecodeLimits::<JsonResource, usize>::default(),
         ),
     ];
 
@@ -441,7 +442,7 @@ fn test_decode_value_with_trim_disabled_and_escape_enabled_still_decodes_owned_o
             .markdown_fence_policy(MarkdownFencePolicy::Disabled)
             .escape_control_chars_in_strings(true)
             .build(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let value = decoder
         .decode_value("{\"text\":\"a\nb\"}")
@@ -458,7 +459,7 @@ fn test_decode_value_with_trim_disabled_and_escape_enabled_still_decodes_owned_o
 fn test_decode_value_trims_before_control_character_repair() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let value = decoder
         .decode_value("```json\n  {\"text\":\"a\nb\"}  \n```")

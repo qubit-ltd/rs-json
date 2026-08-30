@@ -8,6 +8,7 @@
 //! Tests control-character escaping through public lenient decoder behavior.
 
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecodeError;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecodeStage;
@@ -33,7 +34,7 @@ fn configured_limit(error: &JsonDecodeError) -> usize {
 fn test_decode_value_preserves_existing_escapes() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let value = decoder
         .decode_value("{\"text\":\"a\\nb\"}")
@@ -50,7 +51,7 @@ fn test_decode_value_preserves_existing_escapes() {
 fn test_decode_value_escapes_control_chars_in_strings() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let value = decoder
         .decode_value("{\"text\":\"a\nb\"}")
@@ -67,7 +68,7 @@ fn test_decode_value_escapes_control_chars_in_strings() {
 fn test_decode_value_preserves_utf8_after_escaped_control_char() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let value = decoder
         .decode_value("{\"text\":\"first\n你好😀\nlast\\nend\"}")
@@ -86,7 +87,7 @@ fn test_decode_value_can_disable_control_char_escaping() {
         NormalizingJsonDecodePolicy::builder()
             .escape_control_chars_in_strings(false)
             .build(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
         .decode_value("{\"text\":\"a\nb\"}")
@@ -112,7 +113,7 @@ fn test_decode_value_covers_all_supported_control_char_escapes() {
 
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let value = decoder
         .decode_value(&json_input)
@@ -129,7 +130,7 @@ fn test_decode_value_covers_all_supported_control_char_escapes() {
 fn test_decode_value_escapes_each_control_char_at_each_chunk_offset() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
 
     for prefix_len in 0..=24 {
@@ -173,7 +174,7 @@ fn test_decode_value_preserves_state_across_each_chunk_boundary_offset() {
 
         let decoded = NormalizingJsonDecoder::with_limits(
             NormalizingJsonDecodePolicy::default(),
-            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+            JsonDecodeLimits::<JsonResource, usize>::default(),
         )
         .decode_value(&json_input)
         .unwrap_or_else(|error| {
@@ -245,7 +246,7 @@ fn test_decode_value_bounds_all_control_character_escapes_by_normalized_size() {
 fn test_decode_value_escapes_control_char_after_unmatched_backslash() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
 
     for code_point in 0_u32..=0x1f {
@@ -298,7 +299,7 @@ fn test_decode_value_repairs_equal_length_escape_at_normalized_size_limit() {
 fn test_decode_value_escapes_control_chars_after_odd_and_even_backslashes() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
 
     for control in ['\n', '\u{0000}'] {
@@ -332,7 +333,7 @@ fn test_decode_value_escapes_control_chars_after_odd_and_even_backslashes() {
 fn test_decode_value_leaves_non_whitespace_controls_outside_strings_invalid() {
     let error = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     )
     .decode_value("\u{0001}{\"text\":\"value\"}")
     .expect_err("a raw control character outside a JSON string must not be repaired");
