@@ -27,7 +27,6 @@ use super::output::JsonOutputBuffer;
 use super::output::JsonOutputWriter;
 use super::serializer::json_encode_context::JsonEncodeContext;
 use super::serializer::json_encode_serializer::JsonEncodeSerializer;
-use crate::internal::has_json_value_limits;
 
 /// Encodes strict JSON text while owning cumulative accounting state.
 ///
@@ -159,7 +158,7 @@ where
     where
         T: Serialize + ?Sized,
     {
-        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
+        let has_value_limits = self.session.value_budget().limits().has_limits();
         let mut attempt = self.session.begin_value();
         let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits)?;
         attempt
@@ -198,7 +197,7 @@ where
         W: Write,
         T: Serialize + ?Sized,
     {
-        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
+        let has_value_limits = self.session.value_budget().limits().has_limits();
         let mut attempt = self.session.begin_value();
         let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits)?;
         attempt
@@ -235,7 +234,7 @@ where
         W: Write,
         T: Serialize + ?Sized,
     {
-        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
+        let has_value_limits = self.session.value_budget().limits().has_limits();
         let mut attempt = self.session.begin_value();
         let result = {
             let (output_budget, transaction) = attempt.split_mut();
