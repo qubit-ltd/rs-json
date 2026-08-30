@@ -124,29 +124,18 @@ fn test_decode_session_preserves_embedded_value_limits() {
     attempt
         .try_admit(JsonMeasurement::String { depth: 1, bytes: 2 })
         .expect("exact string limit fits");
-    assert_eq!(
-        *attempt
-            .try_admit(JsonMeasurement::String { depth: 1, bytes: 3 })
-            .expect_err("overlong string fails")
-            .resource(),
-        JsonResource::StringBytes,
-    );
-    attempt
+    let first_error = attempt
+        .try_admit(JsonMeasurement::String { depth: 1, bytes: 3 })
+        .expect_err("overlong string poisons the attempt");
+    assert_eq!(*first_error.resource(), JsonResource::StringBytes);
+    let repeated_error = attempt
         .try_admit(JsonMeasurement::Number { depth: 1, bytes: 1 })
-        .expect("exact payload limit fits");
-    assert_eq!(
-        *attempt
-            .try_admit(JsonMeasurement::Key { bytes: 1 })
-            .expect_err("exhausted payload fails")
-            .resource(),
-        JsonResource::PayloadBytes,
-    );
-    let _ = attempt
-        .try_admit(JsonMeasurement::Null { depth: 1 })
-        .expect_err("string and number already exhaust the node limit");
-    attempt.commit();
-    assert_eq!(session.value_budget().used_nodes(), Some(2));
-    assert_eq!(session.value_budget().used_payload_bytes(), Some(3));
+        .expect_err("poisoned attempt rejects later values");
+    assert_eq!(repeated_error.resource(), first_error.resource());
+    let commit_error = attempt.commit().expect_err("poisoned attempt cannot commit");
+    assert_eq!(commit_error.resource(), first_error.resource());
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
+    assert_eq!(session.value_budget().used_payload_bytes(), Some(0));
 }
 
 /// Verifies a rejected value attempt preserves earlier committed values while

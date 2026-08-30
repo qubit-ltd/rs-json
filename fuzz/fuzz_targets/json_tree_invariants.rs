@@ -152,8 +152,8 @@ fuzz_target!(|data: &[u8]| {
         JsonTreeMutator::new(&mut input_transaction, &mut output_transaction)
             .process(&mut success_value, &mut SuccessVisitor)
             .expect("generous success traversal must complete");
-        input_transaction.commit();
-        output_transaction.commit();
+        input_transaction.commit().expect("input transaction commits");
+        output_transaction.commit().expect("output transaction commits");
     }
     assert_serializable(&success_value);
 

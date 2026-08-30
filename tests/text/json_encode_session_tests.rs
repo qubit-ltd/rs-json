@@ -135,33 +135,42 @@ fn test_encode_attempt_preserves_embedded_value_limits() {
     attempt
         .try_admit(JsonMeasurement::String { depth: 1, bytes: 2 })
         .expect("exact string limit fits");
-    assert_eq!(
-        attempt
-            .try_admit(JsonMeasurement::String { depth: 1, bytes: 3 })
-            .expect_err("overlong string fails")
-            .resource(),
-        &JsonResource::StringBytes,
-    );
+    let string_error = attempt
+        .try_admit(JsonMeasurement::String { depth: 1, bytes: 3 })
+        .expect_err("overlong string poisons the attempt");
+    assert_eq!(string_error.resource(), &JsonResource::StringBytes);
+    let commit_error = attempt.commit().expect_err("poisoned string attempt cannot commit");
+    assert_eq!(commit_error.resource(), string_error.resource());
+
+    let mut attempt = session.begin_value();
+    attempt
+        .try_admit(JsonMeasurement::String { depth: 1, bytes: 2 })
+        .expect("string payload fits");
     attempt
         .try_admit(JsonMeasurement::Key { bytes: 1 })
         .expect("exact payload limit fits");
-    assert_eq!(
-        attempt
-            .try_admit(JsonMeasurement::Key { bytes: 1 })
-            .expect_err("exhausted payload fails")
-            .resource(),
-        &JsonResource::PayloadBytes,
-    );
+    let payload_error = attempt
+        .try_admit(JsonMeasurement::Key { bytes: 1 })
+        .expect_err("exhausted payload poisons the attempt");
+    assert_eq!(payload_error.resource(), &JsonResource::PayloadBytes);
+    let commit_error = attempt.commit().expect_err("poisoned payload attempt cannot commit");
+    assert_eq!(commit_error.resource(), payload_error.resource());
+
+    let mut attempt = session.begin_value();
+    attempt
+        .try_admit(JsonMeasurement::Null { depth: 1 })
+        .expect("first node fits");
     attempt
         .try_admit(JsonMeasurement::Null { depth: 1 })
         .expect("exact node limit fits");
-    assert_eq!(
-        attempt
-            .try_admit(JsonMeasurement::Null { depth: 1 })
-            .expect_err("exhausted node limit fails")
-            .resource(),
-        &JsonResource::Nodes,
-    );
+    let node_error = attempt
+        .try_admit(JsonMeasurement::Null { depth: 1 })
+        .expect_err("exhausted node budget poisons the attempt");
+    assert_eq!(node_error.resource(), &JsonResource::Nodes);
+    let commit_error = attempt.commit().expect_err("poisoned node attempt cannot commit");
+    assert_eq!(commit_error.resource(), node_error.resource());
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
+    assert_eq!(session.value_budget().used_payload_bytes(), Some(0));
 }
 
 #[test]

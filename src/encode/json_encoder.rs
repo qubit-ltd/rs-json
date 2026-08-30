@@ -188,7 +188,7 @@ where
         attempt
             .try_consume_output_bytes(bytes.len())
             .map_err(JsonEncodeError::Budget)?;
-        attempt.commit();
+        attempt.commit().map_err(JsonEncodeError::Budget)?;
         Ok(bytes)
     }
 
@@ -225,7 +225,7 @@ where
             .check_output_bytes(bytes.len())
             .map_err(JsonEncodeError::Budget)?;
         Self::write_buffer(writer, &bytes, &mut attempt)?;
-        attempt.commit();
+        attempt.commit().map_err(JsonEncodeError::Budget)?;
         Ok(())
     }
 
@@ -280,7 +280,7 @@ where
             output.into_result(result)
         };
         result?;
-        attempt.commit();
+        attempt.commit().map_err(JsonEncodeError::Budget)?;
         Ok(())
     }
 
