@@ -22,7 +22,7 @@ use serde::de::IgnoredAny;
 /// budget.
 #[test]
 fn test_json_lexical_preflight_consumes_payload_for_keys_strings_and_numbers() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 4))
@@ -48,7 +48,7 @@ fn test_json_lexical_preflight_consumes_payload_for_keys_strings_and_numbers() {
 /// Verifies decoded escapes use their decoded UTF-8 byte length for key limits.
 #[test]
 fn test_json_lexical_preflight_charges_decoded_key_bytes() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(
@@ -76,7 +76,7 @@ fn test_json_lexical_preflight_charges_decoded_key_bytes() {
 /// Verifies each JSON value consumes exactly one node from the shared session.
 #[test]
 fn test_json_lexical_preflight_charges_each_value_node() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)))
@@ -102,7 +102,7 @@ fn test_json_lexical_preflight_charges_each_value_node() {
 /// Verifies decoded string payloads enforce the per-string byte maximum.
 #[test]
 fn test_json_lexical_preflight_checks_decoded_string_bytes() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2))
@@ -127,7 +127,7 @@ fn test_json_lexical_preflight_checks_decoded_string_bytes() {
 /// Verifies number limits use the original lexical representation length.
 #[test]
 fn test_json_lexical_preflight_checks_number_lexical_bytes() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, 3))
@@ -152,7 +152,7 @@ fn test_json_lexical_preflight_checks_number_lexical_bytes() {
 /// Verifies lexical arrays enforce their observed item count.
 #[test]
 fn test_json_lexical_preflight_checks_sequence_items() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(
@@ -179,7 +179,7 @@ fn test_json_lexical_preflight_checks_sequence_items() {
 /// Verifies duplicate object keys still count as distinct map entries.
 #[test]
 fn test_json_lexical_preflight_counts_duplicate_map_entries() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(
@@ -208,7 +208,7 @@ fn test_json_lexical_preflight_counts_duplicate_map_entries() {
 fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
     const PRIVATE_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
     let input = format!(r#"{{"{PRIVATE_NUMBER_TOKEN}":"x"}}"#);
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(StructureLimits::<JsonResource, usize>::builder().key_bytes_limit(
@@ -236,7 +236,7 @@ fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
 /// Verifies duplicate entries consume key and number payload every time.
 #[test]
 fn test_json_lexical_preflight_charges_duplicate_entry_payloads() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))

@@ -10,6 +10,7 @@
 use std::error::Error;
 
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::DiagnosticPolicy;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecodeStage;
@@ -26,7 +27,7 @@ fn test_lenient_domain_owns_its_public_types() {
         NormalizingJsonDecodePolicy::builder()
             .diagnostic_policy(DiagnosticPolicy::Redacted)
             .build(),
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
         .decode_str::<u64>(r#""TOP_SECRET""#)

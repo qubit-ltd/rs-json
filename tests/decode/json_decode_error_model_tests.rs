@@ -10,6 +10,7 @@
 use std::str::FromStr;
 
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::JsonDecoder;
@@ -47,7 +48,7 @@ fn test_json_decode_error_reports_strict_parse_failure() {
 fn test_json_decode_error_reports_normalization_failure() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::lenient(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder.decode_value("").expect_err("empty normalized input must fail");
 
@@ -63,7 +64,7 @@ fn test_decoder_facades_share_error_classification() {
     let mut strict = JsonDecoder::unlimited();
     let mut normalizing = NormalizingJsonDecoder::with_limits(
         no_normalization_policy(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
 
     let strict_syntax = strict.decode_str::<serde_json::Value>("{").expect_err("syntax error");
@@ -134,7 +135,7 @@ fn test_json_decode_error_model_representative_matrix() {
 
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::lenient(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let document = decoder.prepare_str("null").expect("prepare scalar");
     let error = decoder

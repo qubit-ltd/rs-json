@@ -26,7 +26,7 @@ use serde::de::IgnoredAny;
 /// Verifies escaped and direct Unicode text consume the same decoded payload.
 #[test]
 fn escaped_and_direct_unicode_charge_equal_decoded_payload() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
@@ -50,7 +50,7 @@ fn escaped_and_direct_unicode_charge_equal_decoded_payload() {
 fn deeply_nested_input_fails_by_limit_without_stack_overflow() {
     let input = format!("{}0{}", "[".repeat(20_000), "]".repeat(20_000));
     let session = JsonDecodeSession::from_limits(
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .value_limits(
                 JsonValueLimits::<JsonResource, usize>::builder()
                     .structure_limits(
@@ -96,9 +96,7 @@ fn json_decode_reports_structured_syntax_locations() {
         ),
     ];
     for (input, offset, line, column, reason) in cases {
-        let session = JsonDecodeSession::from_limits(
-            JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build(),
-        );
+        let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
         let error = JsonDecoder::new(session)
             .decode_utf8::<serde_json::Value>(input)
             .expect_err("input should be rejected");
@@ -113,8 +111,7 @@ fn json_decode_reports_structured_syntax_locations() {
 #[test]
 fn json_decode_counts_unicode_columns_and_crlf_lines() {
     let input = "{\r\n  \"中\" 1}".as_bytes();
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     let error = JsonDecoder::new(session)
         .decode_utf8::<serde_json::Value>(input)
         .expect_err("missing colon should be rejected");
@@ -128,7 +125,7 @@ fn json_decode_counts_unicode_columns_and_crlf_lines() {
 #[test]
 fn typed_decode_failure_consumes_input_before_the_next_attempt() {
     let session = JsonDecodeSession::from_limits(
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, 3))
             .build(),
     );
@@ -150,7 +147,7 @@ fn typed_decode_failure_consumes_input_before_the_next_attempt() {
 fn seed_rejection_keeps_input_and_rolls_back_value() {
     let input = br#"{"value":1}"#;
     let session = JsonDecodeSession::from_limits(
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_input_bytes(64)
             .max_nodes(8)
             .build(),
@@ -176,7 +173,7 @@ fn syntax_rejection_rolls_back_value_and_reuses_session() {
     let rejected = br#"{"value":]"#;
     let accepted = br#"null"#;
     let session = JsonDecodeSession::from_limits(
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_input_bytes(rejected.len() + accepted.len())
             .max_nodes(1)
             .build(),
@@ -217,7 +214,7 @@ fn syntax_rejection_rolls_back_value_and_reuses_session() {
 fn budget_rejection_keeps_input_and_rolls_back_value() {
     let input = br#"[null]"#;
     let session = JsonDecodeSession::from_limits(
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .max_input_bytes(input.len())
             .max_nodes(1)
             .build(),
@@ -244,7 +241,7 @@ fn budget_rejection_keeps_input_and_rolls_back_value() {
 fn decoder_seed_rejects_integer_outside_64_bit_range() {
     let input = b"123456789012345678901234567890";
     let session = JsonDecodeSession::from_limits(
-        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        JsonDecodeLimits::<JsonResource, usize>::builder()
             .value_limits(
                 JsonValueLimits::<JsonResource, usize>::builder()
                     .number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, input.len()))
@@ -263,7 +260,7 @@ fn decoder_seed_rejects_integer_outside_64_bit_range() {
 /// Verifies lexical limits reject input before a seed is invoked.
 #[test]
 fn point_limit_fails_before_seed_and_keeps_work_charged() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)))
@@ -282,7 +279,7 @@ fn point_limit_fails_before_seed_and_keeps_work_charged() {
 
 #[test]
 fn decoder_supports_usize_quantities() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(

@@ -9,6 +9,7 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::MarkdownFencePolicy;
@@ -91,7 +92,7 @@ fn test_decoders_share_complete_document_admission() {
     let mut strict = JsonDecoder::unlimited();
     let mut normalizing = NormalizingJsonDecoder::with_limits(
         no_normalization_policy(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
 
     assert!(strict.decode_str::<IgnoredAny>(input).is_err());
@@ -102,7 +103,7 @@ fn test_decoders_share_complete_document_admission() {
 /// limits.
 #[test]
 fn test_json_decoder_owned_uses_explicit_limits() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(8)
         .max_nodes(2)
         .build();
@@ -127,7 +128,7 @@ fn test_json_decoder_unlimited_has_no_limits() {
 fn test_normalizing_decoder_decode_str_returns_owned_value() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::lenient(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
 
     let value: String = decoder
@@ -139,7 +140,7 @@ fn test_normalizing_decoder_decode_str_returns_owned_value() {
 
 #[test]
 fn test_json_decoder_accumulates_owned_session_usage() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(16)
         .build();
     let mut decoder = JsonDecoder::new(JsonDecodeSession::from_limits(limits));
@@ -153,7 +154,7 @@ fn test_json_decoder_accumulates_owned_session_usage() {
 fn test_normalizing_decoder_decode_utf8_returns_owned_value() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::lenient(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
 
     let value: String = decoder
@@ -168,7 +169,7 @@ fn test_normalizing_decoder_decode_utf8_returns_owned_value() {
 #[test]
 fn test_normalizing_decoder_owned_separates_policy_and_limits() {
     let policy = no_normalization_policy();
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(8)
         .max_normalized_input_bytes(6)
         .max_nodes(1)
@@ -185,7 +186,7 @@ fn test_normalizing_decoder_owned_separates_policy_and_limits() {
 /// of limits and can be recovered after use.
 #[test]
 fn test_normalizing_decoder_new_preserves_session() {
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(9)
         .build();
     let session = JsonDecodeSession::from_limits(limits);
@@ -201,7 +202,7 @@ fn test_normalizing_decoder_new_preserves_session() {
 fn test_normalizing_decoder_policies_do_not_change_session_limits() {
     for policy in [no_normalization_policy(), NormalizingJsonDecodePolicy::lenient()] {
         let session = JsonDecodeSession::from_limits(
-            JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+            JsonDecodeLimits::<JsonResource, usize>::builder()
                 .max_input_bytes(7)
                 .max_normalized_input_bytes(5)
                 .max_nodes(2)
@@ -220,7 +221,7 @@ fn test_normalizing_decoder_policies_do_not_change_session_limits() {
 #[test]
 fn test_normalizing_decoder_typed_failure_keeps_input_and_rolls_back_value() {
     let input = r#"{"flag":1}"#;
-    let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(input.len())
         .max_normalized_input_bytes(input.len())
         .max_nodes(2)

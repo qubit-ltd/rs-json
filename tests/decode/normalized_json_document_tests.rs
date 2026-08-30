@@ -9,6 +9,7 @@
 
 use qubit_budget::ResourceLimit;
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde::Deserialize;
@@ -43,7 +44,7 @@ impl<'de> DeserializeSeed<'de> for BorrowedStrSeed {
 fn test_normalized_json_document_supports_borrowing_and_seed() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::lenient(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let document = decoder
         .prepare_str("  \"borrowed\"  ")
@@ -69,7 +70,7 @@ fn test_normalized_json_document_supports_borrowing_and_seed() {
 fn test_normalized_json_document_owns_repaired_text() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::lenient(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let document = decoder
         .prepare_str("\"line\nfeed\"")
@@ -134,7 +135,7 @@ fn test_normalizing_decoder_supports_custom_resource_and_quantity_types() {
 fn test_normalized_json_document_supports_typed_root_checks_and_validation() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::lenient(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let object = decoder.prepare_str(" {\"value\":1} ").expect("object prepare");
     let array = decoder.prepare_str(" [1,2] ").expect("array prepare");
