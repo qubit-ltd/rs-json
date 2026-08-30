@@ -26,7 +26,6 @@ use crate::decode::JsonDecodeError;
 use crate::decode::JsonDecodeStage;
 use crate::decode::JsonRootKind;
 use crate::decode::NormalizedJsonDocument;
-use crate::internal::has_json_value_limits;
 use crate::lexical::JsonLexicalError;
 
 /// Shared generic execution core used by both public decoder facades.
@@ -200,7 +199,7 @@ where
     where
         S: DeserializeSeed<'de>,
     {
-        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
+        let has_value_limits = self.session.value_budget().limits().has_limits();
         let mut attempt = self.session.begin_value();
         Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
         Self::check_top_level(input, metadata, expected)?;
@@ -225,7 +224,7 @@ where
         charge_raw_input: bool,
         expected: Option<JsonRootKind>,
     ) -> Result<(), JsonDecodeError<R, Q>> {
-        let has_value_limits = has_json_value_limits(self.session.value_budget().limits());
+        let has_value_limits = self.session.value_budget().limits().has_limits();
         let mut attempt = self.session.begin_value();
         Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
         Self::check_top_level(input, metadata, expected)?;
