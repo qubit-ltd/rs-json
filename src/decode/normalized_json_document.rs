@@ -66,6 +66,13 @@ impl<'input> NormalizedJsonDocument<'input> {
     }
 
     /// Returns the normalized JSON text retained by this document.
+    ///
+    /// The returned slice borrows the document. It is the exact text consumed
+    /// by later document-based decoding and does not allocate.
+    ///
+    /// # Returns
+    ///
+    /// The normalized JSON text.
     #[inline(always)]
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -73,6 +80,13 @@ impl<'input> NormalizedJsonDocument<'input> {
     }
 
     /// Returns the original input length in bytes.
+    ///
+    /// This value includes whitespace, a UTF-8 byte-order mark, and any other
+    /// input bytes removed or rewritten during normalization.
+    ///
+    /// # Returns
+    ///
+    /// The byte length charged for the original input.
     #[inline(always)]
     #[must_use]
     pub const fn raw_input_bytes(&self) -> usize {
@@ -80,6 +94,13 @@ impl<'input> NormalizedJsonDocument<'input> {
     }
 
     /// Returns the normalized text length in bytes.
+    ///
+    /// This is the byte length of [`Self::as_str`], after all enabled
+    /// normalization has completed.
+    ///
+    /// # Returns
+    ///
+    /// The byte length charged for normalized text.
     #[inline(always)]
     #[must_use]
     pub const fn normalized_input_bytes(&self) -> usize {

@@ -93,6 +93,10 @@ where
     ///
     /// This clears accumulated charges and makes the tracker ready for a new
     /// independent accounting run.
+    ///
+    /// Resetting does not change the configured limits or resource identities;
+    /// it only discards usage accumulated since construction or the previous
+    /// reset.
     #[inline(always)]
     pub fn reset(&mut self) {
         self.budget.reset();

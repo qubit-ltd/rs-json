@@ -116,6 +116,13 @@ where
     }
 
     /// Returns the cumulative session for read-only inspection.
+    ///
+    /// The reference exposes charges committed by completed encode
+    /// operations and remains borrowed from this encoder.
+    ///
+    /// # Returns
+    ///
+    /// A shared reference to the cumulative encode session.
     #[inline(always)]
     #[must_use]
     pub const fn session(&self) -> &JsonEncodeSession<'budget, R, Q> {
@@ -123,6 +130,13 @@ where
     }
 
     /// Returns mutable access to the cumulative session.
+    ///
+    /// Changes made through the reference affect the limits and accounting
+    /// state used by subsequent encode operations.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to the cumulative encode session.
     #[inline(always)]
     #[must_use]
     pub const fn session_mut(&mut self) -> &mut JsonEncodeSession<'budget, R, Q> {
@@ -130,6 +144,13 @@ where
     }
 
     /// Returns the cumulative session and consumes the encoder.
+    ///
+    /// No output is produced and no accounting is reset; ownership of the
+    /// accumulated state is transferred to the caller.
+    ///
+    /// # Returns
+    ///
+    /// The session previously owned by this encoder.
     #[inline(always)]
     #[must_use]
     pub fn into_session(self) -> JsonEncodeSession<'budget, R, Q> {
