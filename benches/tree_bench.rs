@@ -108,7 +108,7 @@ fn benchmark_read(c: &mut Criterion) {
                     JsonTreeReader::new(&mut transaction)
                         .process(black_box(value), &mut visitor)
                         .expect("unlimited read traversal succeeds");
-                    transaction.commit();
+                    transaction.commit().expect("tree transaction commits");
                     let _ = black_box(budget);
                 },
                 BatchSize::SmallInput,
@@ -127,7 +127,7 @@ fn benchmark_read(c: &mut Criterion) {
                     JsonTreeReader::new(&mut transaction)
                         .process(black_box(value), &mut visitor)
                         .expect("unlimited read traversal succeeds");
-                    transaction.commit();
+                    transaction.commit().expect("tree transaction commits");
                     let _ = black_box(budget);
                 },
                 BatchSize::SmallInput,
@@ -145,7 +145,7 @@ fn benchmark_read(c: &mut Criterion) {
                 JsonTreeReader::new(&mut transaction)
                     .process(black_box(&value), &mut visitor)
                     .expect("unlimited read traversal succeeds");
-                transaction.commit();
+                transaction.commit().expect("tree transaction commits");
                 let _ = black_box(budget);
             },
             BatchSize::SmallInput,
@@ -176,8 +176,8 @@ fn benchmark_mut(c: &mut Criterion) {
                     JsonTreeMutator::new(&mut input, &mut output)
                         .process(black_box(&mut value), &mut visitor)
                         .expect("unlimited mutable traversal succeeds");
-                    input.commit();
-                    output.commit();
+                    input.commit().expect("input transaction commits");
+                    output.commit().expect("output transaction commits");
                     black_box(value);
                 },
                 BatchSize::SmallInput,

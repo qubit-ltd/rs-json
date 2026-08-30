@@ -70,7 +70,7 @@ fuzz_target!(|data: &[u8]| {
         let decoded =
             serde::de::DeserializeSeed::deserialize(AccountingJsonValueSeed::new(&mut transaction), &mut deserializer);
         if decoded.is_ok() && deserializer.end().is_ok() {
-            transaction.commit();
+            transaction.commit().expect("admitted transaction commits");
         }
     }
     assert!(value_budget.used_nodes() <= Some(nodes));

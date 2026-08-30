@@ -211,7 +211,15 @@ where
                 metadata.diagnostic_policy,
             )
         })?;
-        attempt.commit();
+        attempt.commit().map_err(|source| {
+            JsonDecodeError::budget(
+                source,
+                JsonDecodeStage::Admission,
+                metadata.raw_input_bytes,
+                metadata.normalized_input_bytes,
+                metadata.diagnostic_policy,
+            )
+        })?;
         Ok(value)
     }
 
@@ -228,7 +236,15 @@ where
         let mut attempt = self.session.begin_value();
         Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
         Self::check_top_level(input, metadata, expected)?;
-        attempt.commit();
+        attempt.commit().map_err(|source| {
+            JsonDecodeError::budget(
+                source,
+                JsonDecodeStage::Admission,
+                metadata.raw_input_bytes,
+                metadata.normalized_input_bytes,
+                metadata.diagnostic_policy,
+            )
+        })?;
         Ok(())
     }
 

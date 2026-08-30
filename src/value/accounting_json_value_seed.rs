@@ -51,8 +51,8 @@ use super::internal::JsonValueVisitor;
 /// let mut deserializer = serde_json::Deserializer::from_str(r#"{"ok":true}"#);
 /// let value = AccountingJsonValueSeed::new(&mut transaction).deserialize(&mut deserializer)?;
 /// assert_eq!(value["ok"], true);
-/// transaction.commit();
-/// # Ok::<(), serde_json::Error>(())
+/// transaction.commit()?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct AccountingJsonValueSeed<'transaction, 'budget, R, Q = usize>
 where

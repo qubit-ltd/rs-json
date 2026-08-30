@@ -83,10 +83,10 @@ where
     pub fn account(&mut self, value: &Value) -> Result<(), MeasuredBudgetError<R, Q>> {
         let mut transaction = self.budget.transaction();
         let result = JsonTreeReader::new(&mut transaction).account(value);
-        if result.is_ok() {
-            transaction.commit();
+        match result {
+            Ok(()) => transaction.commit(),
+            Err(error) => Err(error),
         }
-        result
     }
 
     /// Restores the owned budget to its original configured state.

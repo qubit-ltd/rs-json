@@ -145,10 +145,10 @@ fn test_account_stages_exact_charges_and_rolls_back_without_commit() {
     assert_eq!(budget.used_payload_bytes(), Some(0));
 }
 
-/// Verifies an account rejection returns the raw budget error and leaves the
-/// same transaction reusable for a smaller value.
+/// Verifies an account rejection returns the raw budget error and poisons the
+/// caller-owned transaction.
 #[test]
-fn test_account_returns_budget_error_and_keeps_transaction_reusable() {
+fn test_account_returns_budget_error_and_poisons_transaction() {
     let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
         .max_nodes(1)
         .max_sequence_items(0)
@@ -157,7 +157,16 @@ fn test_account_returns_budget_error_and_keeps_transaction_reusable() {
     let mut transaction = budget.transaction();
     let mut reader = JsonTreeReader::new(&mut transaction);
 
-    assert!(reader.account(&json!([true])).is_err());
-    reader.account(&Value::Null).expect("smaller value should fit");
-    assert_eq!(transaction.used_nodes(), Some(1));
+    let first_error = reader
+        .account(&json!([true]))
+        .expect_err("array item limit rejects the tree");
+    let repeated_error = reader
+        .account(&Value::Null)
+        .expect_err("poisoned transaction rejects a smaller tree");
+    assert_eq!(repeated_error.resource(), first_error.resource());
+    let commit_error = transaction
+        .commit()
+        .expect_err("poisoned tree transaction cannot commit");
+    assert_eq!(commit_error.resource(), first_error.resource());
+    assert_eq!(budget.used_nodes(), Some(0));
 }
