@@ -122,17 +122,13 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
     where
         A: MapAccess<'de>,
     {
-        let Some(first_key) = map.next_key::<String>()? else {
-            return Ok(DuplicateKeyRejectingJsonValue(Value::Object(Map::new())));
-        };
-
         let mut values = Map::new();
-        let first_value = map.next_value::<DuplicateKeyRejectingJsonValue>()?;
-        values.insert(first_key.clone(), first_value.into_inner());
-        while let Some((key, value)) = map.next_entry::<String, DuplicateKeyRejectingJsonValue>()? {
-            if values.insert(key.clone(), value.into_inner()).is_some() {
-                return Err(de::Error::custom(format!("duplicate JSON object key '{key}'")));
+        while let Some(key) = map.next_key::<String>()? {
+            if values.contains_key(&key) {
+                return Err(de::Error::custom("duplicate JSON object key"));
             }
+            let value = map.next_value::<DuplicateKeyRejectingJsonValue>()?;
+            values.insert(key, value.into_inner());
         }
         Ok(DuplicateKeyRejectingJsonValue(Value::Object(values)))
     }
