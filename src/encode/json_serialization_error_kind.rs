@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Defines precise, privacy-safe strict JSON value encoding failures.
+//! Defines precise, privacy-safe strict JSON serialization failures.
 
 use thiserror::Error;
 
@@ -14,9 +14,9 @@ use super::JsonIntegerSignedness;
 use super::JsonMapKeyKind;
 use super::JsonSerializerStateError;
 
-/// Precise reason why a Serde value could not become strict materialized JSON.
+/// Precise reason why a Serde value could not become strict JSON.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
-pub enum JsonValueEncodeErrorKind {
+pub enum JsonSerializationErrorKind {
     /// A signed or unsigned integer exceeded the strict 64-bit union range.
     #[error("JSON integer is outside the supported 64-bit range")]
     IntegerOutOfRange {

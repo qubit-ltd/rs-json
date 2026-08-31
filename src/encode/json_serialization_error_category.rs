@@ -9,7 +9,7 @@
 
 /// Stable strategy category for a strict JSON value encoding failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum JsonValueEncodeErrorCategory {
+pub enum JsonSerializationErrorCategory {
     /// A numeric value violated the strict JSON number contract.
     Number,
     /// A JSON object key could not be represented unambiguously.

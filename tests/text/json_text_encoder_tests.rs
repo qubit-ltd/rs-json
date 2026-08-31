@@ -8,6 +8,7 @@
 //! Tests budget-aware JSON text encoding.
 
 use std::cell::Cell;
+use std::fmt;
 use std::io;
 use std::io::Write;
 use std::panic;
@@ -22,6 +23,10 @@ use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::encode::JsonEncodeError;
 use qubit_json::encode::JsonEncoder;
+use qubit_json::encode::JsonIntegerSignedness;
+use qubit_json::encode::JsonMapKeyKind;
+use qubit_json::encode::JsonSerializationErrorKind;
+use qubit_json::encode::JsonSerializerStateError;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error as _;
@@ -64,8 +69,22 @@ fn test_json_text_encoder_enforces_64_bit_integer_range() {
             .expect("an i128 value inside i64 range must encode"),
         i64::MIN.to_string().as_bytes(),
     );
-    assert!(encoder.to_vec(&i128::MAX).is_err());
-    assert!(encoder.to_vec(&u128::MAX).is_err());
+    let signed = encoder.to_vec(&i128::MAX).expect_err("wide signed integer must fail");
+    let unsigned = encoder.to_vec(&u128::MAX).expect_err("wide unsigned integer must fail");
+    assert!(matches!(
+        signed,
+        JsonEncodeError::Serialize(error)
+            if error.kind() == (JsonSerializationErrorKind::IntegerOutOfRange {
+                signedness: JsonIntegerSignedness::Signed,
+            })
+    ));
+    assert!(matches!(
+        unsigned,
+        JsonEncodeError::Serialize(error)
+            if error.kind() == (JsonSerializationErrorKind::IntegerOutOfRange {
+                signedness: JsonIntegerSignedness::Unsigned,
+            })
+    ));
 }
 
 /// Verifies strict encoding rejects every non-finite floating-point value
@@ -91,6 +110,76 @@ impl Serialize for FailsAfterPrefix {
         let mut sequence = serializer.serialize_seq(None)?;
         sequence.serialize_element(&1_u8)?;
         Err(S::Error::custom("deliberate serialization failure"))
+    }
+}
+
+/// Map whose key enters Serde through the unsupported byte-key entry point.
+struct UnsupportedByteKeyMap;
+
+impl Serialize for UnsupportedByteKeyMap {
+    /// Emits one byte-shaped object key.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        struct ByteKey;
+
+        impl Serialize for ByteKey {
+            /// Enters the map-key serializer through `serialize_bytes`.
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                serializer.serialize_bytes(b"secret-key")
+            }
+        }
+
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(&ByteKey, &true)?;
+        map.end()
+    }
+}
+
+/// Map serializer that deliberately violates one compound-state rule.
+struct InvalidTextMapStateProbe(u8);
+
+impl Serialize for InvalidTextMapStateProbe {
+    /// Executes the selected invalid map operation sequence.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(None)?;
+        match self.0 {
+            0 => map.serialize_value(&true)?,
+            1 => {
+                map.serialize_key("first")?;
+                map.serialize_key("second")?;
+            }
+            2 => map.serialize_key("pending")?,
+            _ => unreachable!("the test supplies only supported probe indices"),
+        }
+        map.end()
+    }
+}
+
+/// Display value that deliberately rejects formatting.
+struct FailingTextDisplay;
+
+impl fmt::Display for FailingTextDisplay {
+    /// Returns a formatting error without emitting text.
+    fn fmt(&self, _formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Err(fmt::Error)
+    }
+}
+
+impl Serialize for FailingTextDisplay {
+    /// Enters the serializer through `collect_str`.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(self)
     }
 }
 
@@ -440,6 +529,95 @@ fn test_write_buffered_serde_failure_does_not_touch_external_writer() {
 
     assert!(matches!(error, JsonEncodeError::Serialize(_)));
     assert!(output.is_empty());
+}
+
+/// Verifies arbitrary serializer diagnostics are absent from every public
+/// representation of a text-encoding failure.
+#[test]
+fn test_json_text_encoder_redacts_custom_serde_diagnostic() {
+    const SECRET: &str = "CUSTOM_SERIALIZER_SECRET";
+
+    struct SecretFailure;
+
+    impl Serialize for SecretFailure {
+        /// Returns one injected custom failure containing sensitive text.
+        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            Err(S::Error::custom(SECRET))
+        }
+    }
+
+    let error = JsonEncoder::unlimited()
+        .to_vec(&SecretFailure)
+        .expect_err("the injected serializer must fail");
+    let JsonEncodeError::Serialize(source) = &error else {
+        panic!("expected a serialization error, got {error:?}");
+    };
+
+    assert_eq!(source.kind(), JsonSerializationErrorKind::CustomSerialization);
+    assert!(!error.to_string().contains(SECRET));
+    assert!(!format!("{error:?}").contains(SECRET));
+    assert!(!source.to_string().contains(SECRET));
+    assert!(std::error::Error::source(source).is_none());
+}
+
+/// Verifies the text encoder reports the same stable object-key shape as the
+/// materialized-value encoder.
+#[test]
+fn test_json_text_encoder_classifies_unsupported_map_key() {
+    let error = JsonEncoder::unlimited()
+        .to_vec(&UnsupportedByteKeyMap)
+        .expect_err("byte-shaped object keys must fail");
+    let JsonEncodeError::Serialize(error) = error else {
+        panic!("expected a serialization error");
+    };
+
+    assert_eq!(
+        error.kind(),
+        JsonSerializationErrorKind::UnsupportedMapKey {
+            kind: JsonMapKeyKind::Bytes,
+        },
+    );
+    assert_eq!(error.map_key_kind(), Some(JsonMapKeyKind::Bytes));
+}
+
+/// Verifies invalid map call sequences use stable serializer-contract errors.
+#[test]
+fn test_json_text_encoder_classifies_invalid_map_states() {
+    let expected = [
+        JsonSerializerStateError::MapValueWithoutKey,
+        JsonSerializerStateError::MapKeyAlreadyPending,
+        JsonSerializerStateError::MapEndedWithPendingKey,
+    ];
+
+    for (index, reason) in expected.into_iter().enumerate() {
+        let error = JsonEncoder::unlimited()
+            .to_vec(&InvalidTextMapStateProbe(index as u8))
+            .expect_err("the invalid map state must fail");
+        let JsonEncodeError::Serialize(error) = error else {
+            panic!("expected a serialization error");
+        };
+        assert_eq!(
+            error.kind(),
+            JsonSerializationErrorKind::InvalidSerializerState { reason },
+        );
+    }
+}
+
+/// Verifies fallible display formatting has a stable serializer-contract kind.
+#[test]
+fn test_json_text_encoder_classifies_display_formatting_failure() {
+    let error = JsonEncoder::unlimited()
+        .to_vec(&FailingTextDisplay)
+        .expect_err("the failing display implementation must be rejected");
+    let JsonEncodeError::Serialize(error) = error else {
+        panic!("expected a serialization error");
+    };
+
+    assert_eq!(error.kind(), JsonSerializationErrorKind::DisplayFormattingFailed,);
+    assert!(error.is_serializer_contract_error());
 }
 
 /// Verifies a failed Vec encode rolls back borrowed output and value budgets.

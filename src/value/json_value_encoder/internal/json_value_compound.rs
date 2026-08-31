@@ -22,9 +22,9 @@ use super::JsonValueMapKeySerializer;
 use super::JsonValueSerializer;
 use super::json_value_serializer::RAW_VALUE_TOKEN;
 use super::json_value_serializer::decode_raw_value;
-use crate::value::JsonSerializerStateError;
-use crate::value::JsonValueEncodeError;
-use crate::value::JsonValueEncodeErrorKind;
+use crate::encode::JsonSerializationError;
+use crate::encode::JsonSerializationErrorKind;
+use crate::encode::JsonSerializerStateError;
 
 /// Accumulates one Serde compound value in its JSON representation state.
 pub(in crate::value::json_value_encoder) enum JsonValueCompound {
@@ -107,9 +107,11 @@ impl JsonValueCompound {
     }
 
     /// Inserts one unique object entry into the supplied map.
-    fn insert(values: &mut Map<String, Value>, key: String, value: Value) -> Result<(), JsonValueEncodeError> {
+    fn insert(values: &mut Map<String, Value>, key: String, value: Value) -> Result<(), JsonSerializationError> {
         if values.contains_key(&key) {
-            return Err(JsonValueEncodeError::new(JsonValueEncodeErrorKind::DuplicateObjectKey));
+            return Err(JsonSerializationError::new(
+                JsonSerializationErrorKind::DuplicateObjectKey,
+            ));
         }
         values.insert(key, value);
         Ok(())
@@ -118,7 +120,7 @@ impl JsonValueCompound {
 
 impl SerializeSeq for JsonValueCompound {
     type Ok = Value;
-    type Error = JsonValueEncodeError;
+    type Error = JsonSerializationError;
 
     /// Serializes and appends one sequence element.
     fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
@@ -143,7 +145,7 @@ impl SerializeSeq for JsonValueCompound {
 
 impl SerializeTuple for JsonValueCompound {
     type Ok = Value;
-    type Error = JsonValueEncodeError;
+    type Error = JsonSerializationError;
 
     /// Serializes and appends one tuple element.
     #[inline(always)]
@@ -163,7 +165,7 @@ impl SerializeTuple for JsonValueCompound {
 
 impl SerializeTupleStruct for JsonValueCompound {
     type Ok = Value;
-    type Error = JsonValueEncodeError;
+    type Error = JsonSerializationError;
 
     /// Serializes and appends one tuple-struct field.
     #[inline(always)]
@@ -183,7 +185,7 @@ impl SerializeTupleStruct for JsonValueCompound {
 
 impl SerializeTupleVariant for JsonValueCompound {
     type Ok = Value;
-    type Error = JsonValueEncodeError;
+    type Error = JsonSerializationError;
 
     /// Serializes and appends one tuple variant field.
     fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
@@ -210,7 +212,7 @@ impl SerializeTupleVariant for JsonValueCompound {
 
 impl SerializeMap for JsonValueCompound {
     type Ok = Value;
-    type Error = JsonValueEncodeError;
+    type Error = JsonSerializationError;
 
     /// Serializes and retains the next map key.
     fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
@@ -255,7 +257,7 @@ impl SerializeMap for JsonValueCompound {
 
 impl SerializeStruct for JsonValueCompound {
     type Ok = Value;
-    type Error = JsonValueEncodeError;
+    type Error = JsonSerializationError;
 
     /// Serializes one unique named struct field.
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
@@ -302,7 +304,7 @@ impl SerializeStruct for JsonValueCompound {
 
 impl SerializeStructVariant for JsonValueCompound {
     type Ok = Value;
-    type Error = JsonValueEncodeError;
+    type Error = JsonSerializationError;
 
     /// Serializes one unique named struct-variant field.
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
@@ -328,6 +330,6 @@ impl SerializeStructVariant for JsonValueCompound {
 
 /// Creates one privacy-safe compound-state failure.
 #[inline(always)]
-fn invalid_state(reason: JsonSerializerStateError) -> JsonValueEncodeError {
-    JsonValueEncodeError::new(JsonValueEncodeErrorKind::InvalidSerializerState { reason })
+fn invalid_state(reason: JsonSerializerStateError) -> JsonSerializationError {
+    JsonSerializationError::new(JsonSerializationErrorKind::InvalidSerializerState { reason })
 }

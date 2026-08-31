@@ -22,6 +22,8 @@ use super::super::output::JsonOutputAccounting;
 use super::budgeted_display_collector::BudgetedDisplayCollector;
 use super::display_budget_kind::DisplayBudgetKind;
 use crate::decode::JsonSyntaxError;
+use crate::encode::JsonSerializationError;
+use crate::encode::JsonSerializationErrorKind;
 use crate::lexical::JsonLexicalError;
 use crate::lexical::JsonLexicalScanner;
 
@@ -45,6 +47,17 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Records a structured serialization failure before returning the
+    /// serializer-specific interruption error.
+    pub(super) fn serialization_error<E>(&mut self, kind: JsonSerializationErrorKind) -> E
+    where
+        E: Error,
+    {
+        let error = JsonSerializationError::new(kind);
+        self.output.borrow_mut().record_serialization_error(error);
+        E::custom(error)
+    }
+
     /// Records one failed check before converting it into a Serde error.
     pub(super) fn record<E>(&mut self, result: Result<(), MeasuredBudgetError<R, Q>>) -> Result<(), E>
     where
@@ -132,7 +145,11 @@ where
         T: Display + ?Sized,
     {
         let mut collector = BudgetedDisplayCollector::new(context);
-        write!(&mut collector, "{value}").map_err(|_| E::custom("JSON display text budget exceeded"))?;
+        write!(&mut collector, "{value}").map_err(|_| {
+            context
+                .borrow_mut()
+                .serialization_error(JsonSerializationErrorKind::DisplayFormattingFailed)
+        })?;
         let text = collector.text;
         {
             let mut context = collector.context.borrow_mut();
