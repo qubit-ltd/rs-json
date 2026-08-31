@@ -96,8 +96,13 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 ## 进阶用法
 
 只有在边界明确允许时才使用 `NormalizingJsonDecoder`，并通过策略选择 BOM、外围空白、一层
-JSON Markdown 围栏或控制字符转义。规范化策略不携带 `JsonDecodeLimits`；`owned` 显式接收
-限制，`new` 显式接收会话。
+JSON Markdown 围栏或控制字符转义。规范化策略不携带 `JsonDecodeLimits`；请使用
+`NormalizingJsonDecoder::with_limits(policy, limits)` 显式传入限制，或把
+`JsonDecodeSession` 传给 `NormalizingJsonDecoder::new(policy, session)`。
+
+严格解码器和规范化解码器当前都接收完整的 `&str` 或 `&[u8]`。输入字节限制只负责准入调用方
+已经提供的切片，不能追溯限制 HTTP body 聚合器或其他传输层已经分配的内存。向解码器交付完整
+输入前，应先在外层传输边界设置有界读取或 body 聚合上限。
 
 ### 已准备的规范化文档
 

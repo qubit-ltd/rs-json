@@ -258,6 +258,10 @@ hiding its cost in one aggregate result.
 - Set finite limits at every untrusted boundary. Use `unlimited()` only for
   trusted input or data already admitted by another layer; an outer output
   bound cannot replace input and structural admission before parsing.
+- The strict and normalizing decoders consume complete `&str` or `&[u8]`
+  inputs. Their input-byte limit admits the supplied slice; it does not cap
+  memory already allocated by an HTTP body aggregator or another transport
+  layer. Apply a bounded read or body-aggregation limit before decoding.
 - Diagnostics are redacted by default. Configure a strict decoder with
   `JsonDecoder::with_diagnostic_policy`, or a normalizing decoder through its
   normalization policy. Enable `DiagnosticPolicy::Detailed` only where
@@ -269,6 +273,8 @@ hiding its cost in one aggregate result.
   [中文用户手册](doc/user_guide.zh_CN.md)
 - [JSON number contract](doc/number_contract.md) ·
   [JSON 数字契约](doc/number_contract.zh_CN.md)
+- [Design documents](doc/json_design.md) ·
+  [设计文档](doc/json_design.zh_CN.md)
 - [API documentation](https://docs.rs/qubit-json/0.8.0/qubit_json/)
 
 ## Testing

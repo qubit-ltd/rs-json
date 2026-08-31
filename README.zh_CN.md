@@ -242,6 +242,9 @@ cargo bench --bench tree_bench
   更宽的整数以及不能接受二进制舍入的精确十进制值，应使用字符串或领域类型。
 - 所有不可信边界都应设置有限资源上限。`unlimited()` 只应用于可信输入，或已由其他层完成
   准入的数据；外层输出上限不能替代解析前的输入与结构准入。
+- 严格解码器和规范化解码器当前接收完整的 `&str` 或 `&[u8]`。输入字节限制只负责准入调用方
+  已经提供的切片，不能限制 HTTP body 聚合器或其他传输层已经分配的内存。交给解码器之前，
+  应先在外层传输边界设置有界读取或 body 聚合上限。
 - 诊断信息默认脱敏。严格解码器通过 `JsonDecoder::with_diagnostic_policy` 配置，规范化
   解码器通过其规范化策略配置。只有在输入派生信息可以安全保留和记录时，才启用
   `DiagnosticPolicy::Detailed`。
@@ -252,6 +255,8 @@ cargo bench --bench tree_bench
   [English user guide](doc/user_guide.md)
 - [JSON 数字契约](doc/number_contract.zh_CN.md) ·
   [JSON number contract](doc/number_contract.md)
+- [设计文档](doc/json_design.zh_CN.md) ·
+  [Design documents](doc/json_design.md)
 - [API 文档](https://docs.rs/qubit-json/0.8.0/qubit_json/)
 
 ## 测试
