@@ -149,6 +149,7 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 | `decode::NormalizedJsonDocument` | 保存规范化后的文本，便于检查、借用式反序列化或重复解码，后续解码不会再次收取输入资源 |
 | `decode::JsonDecodeError` 及诊断枚举 | 提供稳定的错误类别、处理阶段、顶层类型要求和语法原因，调用方无需解析错误消息 |
 | `encode::JsonEncoder` | 将值序列化为严格、紧凑的 JSON 字节或写入 writer，同时限制输出和编码值所消耗的资源 |
+| `encode::JsonSerializationError` 及分类枚举 | 为文本编码和值构造提供同一套隐私安全的序列化原因，不保留第三方自定义诊断文本 |
 | `value::JsonValueEncoder` | 不生成文本、不执行资源记账，直接把任意 `Serialize` 值投影为严格的 `serde_json::Value`；失败时提供粗粒度类别、精确原因和隐私安全的类型化细节 |
 | `value::AccountingJsonValueSeed` | 从任意 Serde 反序列化器构造 `serde_json::Value`，并把解码值用量暂存到调用方持有的事务中 |
 | `value::DuplicateKeyRejectingJsonValue` / `DuplicateKeyRejectingJsonValueSeed` | 构造 JSON 值时递归拒绝对象中的重复键 |
@@ -178,18 +179,18 @@ assert_eq!(bytes, br#"{"ok":true}"#);
 处理值构造失败时，无需解析展示文本：
 
 ```rust
-use qubit_json::value::JsonIntegerSignedness;
-use qubit_json::value::JsonValueEncodeErrorCategory;
-use qubit_json::value::JsonValueEncodeErrorKind;
+use qubit_json::encode::JsonIntegerSignedness;
+use qubit_json::encode::JsonSerializationErrorCategory;
+use qubit_json::encode::JsonSerializationErrorKind;
 use qubit_json::value::JsonValueEncoder;
 
 let error = JsonValueEncoder::new()
     .encode(&u128::MAX)
     .expect_err("u128::MAX 超出严格 JSON 整数范围");
-assert_eq!(error.category(), JsonValueEncodeErrorCategory::Number);
+assert_eq!(error.category(), JsonSerializationErrorCategory::Number);
 assert_eq!(
     error.kind(),
-    JsonValueEncodeErrorKind::IntegerOutOfRange {
+    JsonSerializationErrorKind::IntegerOutOfRange {
         signedness: JsonIntegerSignedness::Unsigned,
     },
 );

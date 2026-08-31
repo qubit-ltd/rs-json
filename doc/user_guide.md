@@ -247,8 +247,9 @@ Branch on the stable category returned by `kind()`:
 | `UnexpectedTopLevel` | An object/array-specific API received the wrong root kind | `expected_top_level()`, `actual_top_level()` |
 | `Deserialize` | An admitted document could not materialize as the requested type | `line()`, `column()`, and a detailed source when enabled |
 
-`JsonValueEncoder` uses a separate, privacy-safe error model. Use
-`JsonValueEncodeError::category()` for recovery policy and `kind()` when the
+`JsonValueEncoder` and `JsonEncoder` share the privacy-safe
+`JsonSerializationError` model. Use
+`JsonSerializationError::category()` for recovery policy and `kind()` when the
 exact reason matters. Convenience predicates cover the common groups, while
 typed accessors expose only applicable details:
 
@@ -278,7 +279,8 @@ Configure strict decoding with
 `JsonDecoder::with_diagnostic_policy(DiagnosticPolicy::Detailed)`; configure
 normalizing decoding through `NormalizingJsonDecodePolicyBuilder`. Enable
 detailed diagnostics only at trusted boundaries and keep untrusted logs
-redacted. The other domains expose `JsonEncodeError`, `JsonSyntaxError`,
+redacted. Encoding never retains arbitrary third-party `Serialize::custom`
+text. The other domains expose `JsonEncodeError`, `JsonSyntaxError`,
 `JsonTreeProcessError`, and `JsonTreeMutateError`.
 
 The numeric contract is independent from resource limits: negative integers fit
