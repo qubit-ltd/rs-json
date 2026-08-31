@@ -2,8 +2,8 @@
 
 [中文版](error_performance_redaction_design.zh_CN.md)
 
-This document records the design decisions for the post-`qubit-json 0.8`
-breaking-change window. It covers value-encoding errors and hot paths in
+This document records the design decisions for the pre-release `qubit-json
+0.8` breaking-change window. It covers serialization errors and hot paths in
 `rs-json`, as well as contracts consumed directly by `rs-budget`, `rs-value`,
 and `rs-redact`.
 
@@ -21,10 +21,11 @@ and `rs-redact`.
   stable improvement of at least 5% and primary existing scenarios do not
   regress unstably by more than 3%.
 
-## Value-encoding error model
+## Serialization error model
 
-`JsonValueEncodeError` contains only `JsonValueEncodeErrorKind`. The precise
-kinds cover:
+Text encoding and materialized-value encoding share
+`JsonSerializationError`, which contains only `JsonSerializationErrorKind`.
+The precise kinds cover:
 
 - signed or unsigned integer overflow, non-finite floats, and invalid number
   representations;
@@ -41,6 +42,11 @@ choose a policy from `category()`. Convenience accessors expose only safe
 details such as signedness, key shape, collection kind, or serializer-state
 reason. The enums are intentionally not `non_exhaustive`; a new variant is an
 explicit breaking change.
+
+`JsonEncodeError` keeps operation-level budget, invalid `RawValue`,
+serialization, and writer failures distinct. Arbitrary third-party
+`Serialize::custom` text becomes `CustomSerialization` and is never retained
+in public display, debug, or source chains.
 
 ## Performance model and experiment boundary
 
@@ -64,6 +70,9 @@ The current experiment decision is:
 4. `RawValue` must be fully validated before external output can be safely
    committed. Coupling scanner and output-copy state would increase state and
    partial-output risk, so it is not adopted without stronger evidence.
+5. A bounded owned buffer caches operation-local remaining output capacity.
+   Successful writes avoid shared `RefCell` budget checks; failures fall back
+   to the cumulative check so quantity and budget error semantics stay exact.
 
 See the [benchmark baseline](benchmark_baseline.zh_CN.md) for reproducible
 measurements. Benchmarks describe same-machine facts and do not promise

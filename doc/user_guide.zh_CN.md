@@ -219,8 +219,8 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 | `UnexpectedTopLevel` | 仅接受对象或数组的方法收到错误的根类型 | `expected_top_level()`、`actual_top_level()` |
 | `Deserialize` | 已准入文档无法构造为请求的 Rust 类型 | `line()`、`column()`，启用详细诊断后还可读取来源错误 |
 
-`JsonValueEncoder` 使用独立且隐私安全的错误模型。恢复策略应读取
-`JsonValueEncodeError::category()`，需要精确原因时读取 `kind()`。常用错误组有便捷谓词，
+`JsonValueEncoder` 与 `JsonEncoder` 共用隐私安全的 `JsonSerializationError` 错误模型。恢复策略应读取
+`JsonSerializationError::category()`，需要精确原因时读取 `kind()`。常用错误组有便捷谓词，
 仅在适用时返回细节的访问器则避免调用方解析文本：
 
 | 类别 | 代表性精确原因 | 便捷方法/细节 |
@@ -247,7 +247,8 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 只有 `DiagnosticPolicy::Detailed` 会保留由输入产生的来源错误。严格解码通过
 `JsonDecoder::with_diagnostic_policy(DiagnosticPolicy::Detailed)` 配置，规范化解码通过
 `NormalizingJsonDecodePolicyBuilder` 配置。详细诊断只应在可信边界启用，不可信日志应保持
-默认脱敏。其他领域还提供 `JsonEncodeError`、`JsonSyntaxError`、
+默认脱敏。编码错误不会保留第三方 `Serialize::custom` 提供的任意文本。其他领域还提供
+`JsonEncodeError`、`JsonSyntaxError`、
 `JsonTreeProcessError` 和 `JsonTreeMutateError`。
 
 数字契约独立于资源限制：负整数装入 `i64`，非负整数装入 `u64`，小数/指数必须是有限 `f64`。

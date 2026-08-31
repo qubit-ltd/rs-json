@@ -2,8 +2,8 @@
 
 [English](error_performance_redaction_design.md)
 
-本文记录 `qubit-json 0.8` 之后这轮允许破坏性变更的整体设计决策。它覆盖
-`rs-json` 的值编码错误与热路径，也覆盖直接依赖这些契约的 `rs-budget`、
+本文记录 `qubit-json 0.8` 首次发布前这轮允许破坏性变更的整体设计决策。它覆盖
+`rs-json` 的序列化错误与热路径，也覆盖直接依赖这些契约的 `rs-budget`、
 `rs-value` 和 `rs-redact`。
 
 ## 设计原则
@@ -16,9 +16,10 @@
   完整树之前同时受到输入字节和结构预算约束。
 - 实验性实现只有在目标场景稳定提升至少 5%、主要既有场景不稳定退化超过 3% 时才保留。
 
-## 值编码错误模型
+## 序列化错误模型
 
-`JsonValueEncodeError` 是只持有 `JsonValueEncodeErrorKind` 的值对象。精确 kind 覆盖：
+文本编码与物化值编码共用 `JsonSerializationError`，该值对象只持有
+`JsonSerializationErrorKind`。精确 kind 覆盖：
 
 - 有符号或无符号整数越界、非有限浮点和无效数字表示；
 - 不支持的 map-key Serde shape 和规范化后的重复对象键；
@@ -32,6 +33,10 @@
 `SerializerContract` 和 `Custom`。下游既可穷举 `kind()`，也可按 `category()` 制定策略；
 辅助访问器只返回不敏感的 signedness、key shape、collection kind 或 serializer-state reason。
 这些枚举不使用 `non_exhaustive`，新增变体是明确的破坏性变更。
+
+`JsonEncodeError` 继续区分操作层的预算、无效 `RawValue`、序列化和 writer 错误。
+第三方 `Serialize::custom` 提供的任意文本统一映射为 `CustomSerialization`，不会进入公开的
+display、debug 或错误来源链。
 
 ## 性能模型与实验边界
 
@@ -49,6 +54,9 @@ owned/reused session、incremental writer，以及 numeric、string、object 和
    当前主机禁止 perf 采样，且 benchmark 没有提供足够证据，因此不增加该复杂度。
 4. `RawValue` 必须先完整验证才能安全提交外部输出。把 scanner 与复制强耦合会增加状态机和
    partial-output 风险，现有数据不足以支持实施。
+5. 有 output limit 的 owned buffer 缓存本次操作的剩余额度。成功写入不再借用共享
+   `RefCell` 执行完整预算检查；失败时仍回退到累计长度检查，保持 quantity 与 budget
+   错误语义不变。
 
 完整数据和复现命令见 [benchmark 基线](benchmark_baseline.zh_CN.md)。
 

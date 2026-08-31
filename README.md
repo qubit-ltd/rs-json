@@ -159,6 +159,7 @@ construction, and traversal.
 | `decode::NormalizedJsonDocument` | Retains normalized text for inspection, borrowed deserialization, or repeated decoding without charging the input a second time |
 | `decode::JsonDecodeError` and diagnostic enums | Exposes stable error kind, processing stage, root expectation, and syntax reason without requiring callers to parse messages |
 | `encode::JsonEncoder` | Serializes strict compact JSON to a byte vector or writer while enforcing output and encoded-value limits |
+| `encode::JsonSerializationError` and classification enums | Provides the shared privacy-safe serialization reason used by text and materialized-value encoders without retaining third-party custom diagnostics |
 | `value::JsonValueEncoder` | Projects any `Serialize` value into a strict `serde_json::Value`; failures expose a broad category, a precise reason, and privacy-safe typed details |
 | `value::AccountingJsonValueSeed` | Builds a `serde_json::Value` from any Serde deserializer while staging decoded-value charges in a caller-owned transaction |
 | `value::DuplicateKeyRejectingJsonValue` / `DuplicateKeyRejectingJsonValueSeed` | Materializes JSON while rejecting duplicate object keys recursively |
@@ -188,18 +189,18 @@ assert_eq!(bytes, br#"{"ok":true}"#);
 Handle materialized-value encoding failures without parsing display text:
 
 ```rust
-use qubit_json::value::JsonIntegerSignedness;
-use qubit_json::value::JsonValueEncodeErrorCategory;
-use qubit_json::value::JsonValueEncodeErrorKind;
+use qubit_json::encode::JsonIntegerSignedness;
+use qubit_json::encode::JsonSerializationErrorCategory;
+use qubit_json::encode::JsonSerializationErrorKind;
 use qubit_json::value::JsonValueEncoder;
 
 let error = JsonValueEncoder::new()
     .encode(&u128::MAX)
     .expect_err("u128::MAX is outside the strict JSON integer range");
-assert_eq!(error.category(), JsonValueEncodeErrorCategory::Number);
+assert_eq!(error.category(), JsonSerializationErrorCategory::Number);
 assert_eq!(
     error.kind(),
-    JsonValueEncodeErrorKind::IntegerOutOfRange {
+    JsonSerializationErrorKind::IntegerOutOfRange {
         signedness: JsonIntegerSignedness::Unsigned,
     },
 );
