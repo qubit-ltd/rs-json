@@ -11,44 +11,151 @@ use std::fmt::Display;
 
 use thiserror::Error;
 
-/// Stable diagnostic emitted by Serde adapters for rejected non-finite values.
-const NON_FINITE_FLOAT_MESSAGE: &str = "non-finite floating-point value";
+use super::JsonCollectionKind;
+use super::JsonIntegerSignedness;
+use super::JsonMapKeyKind;
+use super::JsonSerializerStateError;
+use super::JsonValueEncodeErrorCategory;
+use super::JsonValueEncodeErrorKind;
 
-/// Failure produced while projecting a serializable value into strict JSON.
+/// Privacy-safe failure produced while projecting a serializable value into
+/// strict JSON.
 ///
-/// The error intentionally exposes stable categories instead of retaining
-/// third-party diagnostic text. This keeps callers independent from Serde and
-/// serde_json wording changes.
+/// The error exposes exact stable kinds and broad handling categories without
+/// retaining input values, object keys, or arbitrary third-party diagnostics.
 ///
 /// # Examples
 ///
 /// ```
-/// use qubit_json::value::JsonValueEncodeError;
+/// use qubit_json::value::JsonIntegerSignedness;
+/// use qubit_json::value::JsonValueEncodeErrorKind;
+/// use qubit_json::value::JsonValueEncoder;
 ///
-/// let error = JsonValueEncodeError::NonFiniteFloat;
-/// assert_eq!(error.to_string(), "non-finite float");
+/// let error = JsonValueEncoder::new()
+///     .encode(&u128::MAX)
+///     .expect_err("wide integer must be rejected");
+/// assert_eq!(
+///     error.kind(),
+///     JsonValueEncodeErrorKind::IntegerOutOfRange {
+///         signedness: JsonIntegerSignedness::Unsigned,
+///     },
+/// );
 /// ```
 #[must_use]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
-pub enum JsonValueEncodeError {
-    /// A direct or nested floating-point value was not finite.
-    #[error("non-finite float")]
-    NonFiniteFloat,
-    /// The Serde representation could not be expressed as a strict JSON value.
-    #[error("JSON value serialization failed")]
-    Serialization,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
+#[error("{kind}")]
+pub struct JsonValueEncodeError {
+    /// Exact privacy-safe classification.
+    kind: JsonValueEncodeErrorKind,
+}
+
+impl JsonValueEncodeError {
+    /// Creates one internal error from its stable public kind.
+    #[inline(always)]
+    pub(crate) const fn new(kind: JsonValueEncodeErrorKind) -> Self {
+        Self { kind }
+    }
+
+    /// Returns the exact stable failure classification.
+    #[must_use]
+    #[inline(always)]
+    pub const fn kind(&self) -> JsonValueEncodeErrorKind {
+        self.kind
+    }
+
+    /// Returns the broad downstream handling category.
+    #[must_use]
+    pub const fn category(&self) -> JsonValueEncodeErrorCategory {
+        match self.kind {
+            JsonValueEncodeErrorKind::IntegerOutOfRange { .. }
+            | JsonValueEncodeErrorKind::NonFiniteFloat
+            | JsonValueEncodeErrorKind::InvalidNumberRepresentation => JsonValueEncodeErrorCategory::Number,
+            JsonValueEncodeErrorKind::UnsupportedMapKey { .. } | JsonValueEncodeErrorKind::DuplicateObjectKey => {
+                JsonValueEncodeErrorCategory::ObjectKey
+            }
+            JsonValueEncodeErrorKind::InvalidRawValue => JsonValueEncodeErrorCategory::RawValue,
+            JsonValueEncodeErrorKind::CollectionLengthOverflow { .. } => JsonValueEncodeErrorCategory::Capacity,
+            JsonValueEncodeErrorKind::InvalidSerializerState { .. }
+            | JsonValueEncodeErrorKind::DisplayFormattingFailed => JsonValueEncodeErrorCategory::SerializerContract,
+            JsonValueEncodeErrorKind::CustomSerialization => JsonValueEncodeErrorCategory::Custom,
+        }
+    }
+
+    /// Reports whether this failure belongs to the strict number contract.
+    #[must_use]
+    #[inline(always)]
+    pub const fn is_number_error(&self) -> bool {
+        matches!(self.category(), JsonValueEncodeErrorCategory::Number)
+    }
+
+    /// Reports whether this failure concerns JSON object-key representation.
+    #[must_use]
+    #[inline(always)]
+    pub const fn is_map_key_error(&self) -> bool {
+        matches!(self.category(), JsonValueEncodeErrorCategory::ObjectKey)
+    }
+
+    /// Reports whether this failure concerns a RawValue payload.
+    #[must_use]
+    #[inline(always)]
+    pub const fn is_raw_value_error(&self) -> bool {
+        matches!(self.category(), JsonValueEncodeErrorCategory::RawValue)
+    }
+
+    /// Reports whether a hand-written serializer violated a protocol contract.
+    #[must_use]
+    #[inline(always)]
+    pub const fn is_serializer_contract_error(&self) -> bool {
+        matches!(self.category(), JsonValueEncodeErrorCategory::SerializerContract)
+    }
+
+    /// Returns the signedness of an out-of-range integer, when applicable.
+    #[must_use]
+    #[inline(always)]
+    pub const fn integer_signedness(&self) -> Option<JsonIntegerSignedness> {
+        match self.kind {
+            JsonValueEncodeErrorKind::IntegerOutOfRange { signedness } => Some(signedness),
+            _ => None,
+        }
+    }
+
+    /// Returns the rejected map-key shape, when applicable.
+    #[must_use]
+    #[inline(always)]
+    pub const fn map_key_kind(&self) -> Option<JsonMapKeyKind> {
+        match self.kind {
+            JsonValueEncodeErrorKind::UnsupportedMapKey { kind } => Some(kind),
+            _ => None,
+        }
+    }
+
+    /// Returns the collection whose count overflowed, when applicable.
+    #[must_use]
+    #[inline(always)]
+    pub const fn collection_kind(&self) -> Option<JsonCollectionKind> {
+        match self.kind {
+            JsonValueEncodeErrorKind::CollectionLengthOverflow { kind } => Some(kind),
+            _ => None,
+        }
+    }
+
+    /// Returns the exact invalid serializer state, when applicable.
+    #[must_use]
+    #[inline(always)]
+    pub const fn serializer_state_error(&self) -> Option<JsonSerializerStateError> {
+        match self.kind {
+            JsonValueEncodeErrorKind::InvalidSerializerState { reason } => Some(reason),
+            _ => None,
+        }
+    }
 }
 
 impl serde::ser::Error for JsonValueEncodeError {
-    /// Classifies a custom Serde diagnostic into a stable public category.
-    fn custom<T>(message: T) -> Self
+    /// Converts arbitrary custom serializer text into one opaque, stable kind.
+    fn custom<T>(_message: T) -> Self
     where
         T: Display,
     {
-        if message.to_string() == NON_FINITE_FLOAT_MESSAGE {
-            Self::NonFiniteFloat
-        } else {
-            Self::Serialization
-        }
+        Self::new(JsonValueEncodeErrorKind::CustomSerialization)
     }
 }

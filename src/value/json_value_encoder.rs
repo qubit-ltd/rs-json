@@ -69,10 +69,9 @@ impl JsonValueEncoder {
     ///
     /// # Errors
     ///
-    /// Returns [`JsonValueEncodeError::NonFiniteFloat`] for any direct or
-    /// nested non-finite float. Returns
-    /// [`JsonValueEncodeError::Serialization`] for unsupported Serde shapes,
-    /// out-of-range numeric values, invalid raw JSON, or duplicate object keys.
+    /// Returns a strict value error whose precise kind distinguishes number,
+    /// object-key, RawValue, capacity, serializer-contract, and opaque custom
+    /// failures without retaining arbitrary diagnostic text.
     pub fn encode<T>(&self, value: &T) -> Result<Value, JsonValueEncodeError>
     where
         T: Serialize + ?Sized,

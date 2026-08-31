@@ -10,7 +10,10 @@
 use std::fmt;
 
 use qubit_json::encode::JsonEncoder;
-use qubit_json::value::JsonValueEncodeError;
+use qubit_json::value::JsonIntegerSignedness;
+use qubit_json::value::JsonMapKeyKind;
+use qubit_json::value::JsonValueEncodeErrorCategory;
+use qubit_json::value::JsonValueEncodeErrorKind;
 use qubit_json::value::JsonValueEncoder;
 use serde::Serialize;
 use serde::Serializer;
@@ -188,16 +191,58 @@ impl Serialize for ContractMapKeyContainer {
     }
 }
 
-/// Reports the stable nested non-finite-float diagnostic.
+/// Reports text that used to be mistaken for an internal float diagnostic.
 struct NestedNonFiniteProbe;
 
 impl Serialize for NestedNonFiniteProbe {
-    /// Returns the same custom diagnostic used by finite-float adapters.
+    /// Returns custom text that must remain an opaque custom failure.
     fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         Err(SerializeError::custom("non-finite floating-point value"))
+    }
+}
+
+/// Display implementation that deliberately rejects formatting.
+struct FailingDisplayProbe;
+
+impl fmt::Display for FailingDisplayProbe {
+    /// Rejects the formatting request without writing text.
+    fn fmt(&self, _formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Err(fmt::Error)
+    }
+}
+
+impl Serialize for FailingDisplayProbe {
+    /// Exercises the serializer's fallible `collect_str` implementation.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+/// Selects one invalid split-map call sequence.
+struct InvalidMapStateProbe(u8);
+
+impl Serialize for InvalidMapStateProbe {
+    /// Violates one Serde map compound-state rule.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        match self.0 {
+            0 => map.serialize_value(&true)?,
+            1 => {
+                map.serialize_key("first")?;
+                map.serialize_key("second")?;
+            }
+            _ => map.serialize_key("pending")?,
+        }
+        map.end()
     }
 }
 
@@ -308,8 +353,23 @@ fn test_json_value_encoder_preserves_integer_boundaries() {
 #[test]
 fn test_json_value_encoder_rejects_wide_integers() {
     let encoder = JsonValueEncoder::new();
-    assert_eq!(encoder.encode(&i128::MAX), Err(JsonValueEncodeError::Serialization));
-    assert_eq!(encoder.encode(&u128::MAX), Err(JsonValueEncodeError::Serialization));
+    let signed = encoder.encode(&i128::MAX).expect_err("wide signed integer must fail");
+    let unsigned = encoder.encode(&u128::MAX).expect_err("wide unsigned integer must fail");
+    assert_eq!(
+        signed.kind(),
+        JsonValueEncodeErrorKind::IntegerOutOfRange {
+            signedness: JsonIntegerSignedness::Signed,
+        }
+    );
+    assert_eq!(signed.category(), JsonValueEncodeErrorCategory::Number);
+    assert!(signed.is_number_error());
+    assert_eq!(signed.integer_signedness(), Some(JsonIntegerSignedness::Signed));
+    assert_eq!(
+        unsigned.kind(),
+        JsonValueEncodeErrorKind::IntegerOutOfRange {
+            signedness: JsonIntegerSignedness::Unsigned,
+        }
+    );
 }
 
 /// Classifies direct and nested non-finite floating-point failures.
@@ -317,12 +377,15 @@ fn test_json_value_encoder_rejects_wide_integers() {
 fn test_json_value_encoder_rejects_non_finite_floats() {
     let encoder = JsonValueEncoder::new();
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        assert_eq!(encoder.encode(&value), Err(JsonValueEncodeError::NonFiniteFloat));
+        let error = encoder.encode(&value).expect_err("non-finite float must fail");
+        assert_eq!(error.kind(), JsonValueEncodeErrorKind::NonFiniteFloat);
     }
-    assert_eq!(
-        encoder.encode(&NestedNonFiniteProbe),
-        Err(JsonValueEncodeError::NonFiniteFloat)
-    );
+    let custom = encoder
+        .encode(&NestedNonFiniteProbe)
+        .expect_err("custom serializer failure must remain custom");
+    assert_eq!(custom.kind(), JsonValueEncodeErrorKind::CustomSerialization);
+    assert_eq!(custom.category(), JsonValueEncodeErrorCategory::Custom);
+    assert!(!custom.to_string().contains("non-finite floating-point value"));
 }
 
 /// Keeps f32 serialization short enough to round-trip as the original f32.
@@ -396,10 +459,10 @@ fn test_json_value_encoder_matches_text_encoder_wide_and_wrapped_map_keys() {
 /// Classifies non-finite map keys as non-finite float failures.
 #[test]
 fn test_json_value_encoder_rejects_non_finite_float_map_key() {
-    assert_eq!(
-        JsonValueEncoder::new().encode(&FloatKeyProbe(f64::NAN)),
-        Err(JsonValueEncodeError::NonFiniteFloat),
-    );
+    let error = JsonValueEncoder::new()
+        .encode(&FloatKeyProbe(f64::NAN))
+        .expect_err("non-finite map key must fail");
+    assert_eq!(error.kind(), JsonValueEncodeErrorKind::NonFiniteFloat);
 }
 
 /// Covers every scalar key representation accepted by strict value encoding.
@@ -431,12 +494,34 @@ fn test_json_value_encoder_rejects_unsupported_map_key_entry_points() {
     let unsupported_indices = (15_u8..=16).chain(18..=19).chain(22..=29);
 
     for index in unsupported_indices {
-        assert_eq!(
-            encoder.encode(&MapKeyContainer(index)),
-            Err(JsonValueEncodeError::Serialization),
-            "entry point {index} must not produce a JSON object key",
+        let error = encoder
+            .encode(&MapKeyContainer(index))
+            .expect_err("unsupported entry point must not produce a JSON object key");
+        assert!(matches!(
+            error.kind(),
+            JsonValueEncodeErrorKind::UnsupportedMapKey { .. }
+        ));
+        assert_eq!(error.category(), JsonValueEncodeErrorCategory::ObjectKey);
+        assert!(error.is_map_key_error());
+        assert!(
+            error.map_key_kind().is_some(),
+            "missing map-key kind for entry point {index}"
         );
     }
+    assert_eq!(
+        encoder
+            .encode(&MapKeyContainer(15))
+            .expect_err("byte key must fail")
+            .map_key_kind(),
+        Some(JsonMapKeyKind::Bytes)
+    );
+    assert_eq!(
+        encoder
+            .encode(&MapKeyContainer(23))
+            .expect_err("sequence key must fail")
+            .map_key_kind(),
+        Some(JsonMapKeyKind::Sequence)
+    );
 }
 
 /// Classifies non-finite map keys consistently for both float widths.
@@ -444,9 +529,12 @@ fn test_json_value_encoder_rejects_unsupported_map_key_entry_points() {
 fn test_json_value_encoder_rejects_non_finite_map_key_entry_points() {
     let encoder = JsonValueEncoder::new();
     for index in [31, 32] {
+        let error = encoder
+            .encode(&MapKeyContainer(index))
+            .expect_err("non-finite map key must fail");
         assert_eq!(
-            encoder.encode(&MapKeyContainer(index)),
-            Err(JsonValueEncodeError::NonFiniteFloat),
+            error.kind(),
+            JsonValueEncodeErrorKind::NonFiniteFloat,
             "entry point {index} must preserve the non-finite classification",
         );
     }
@@ -455,10 +543,11 @@ fn test_json_value_encoder_rejects_non_finite_map_key_entry_points() {
 /// Rejects object keys that collide after JSON key conversion.
 #[test]
 fn test_json_value_encoder_rejects_duplicate_object_key() {
-    assert_eq!(
-        JsonValueEncoder::new().encode(&DuplicateKeyProbe),
-        Err(JsonValueEncodeError::Serialization)
-    );
+    let error = JsonValueEncoder::new()
+        .encode(&DuplicateKeyProbe)
+        .expect_err("duplicate key must fail");
+    assert_eq!(error.kind(), JsonValueEncodeErrorKind::DuplicateObjectKey);
+    assert_eq!(error.category(), JsonValueEncodeErrorCategory::ObjectKey);
 }
 
 /// Materializes a strict RawValue payload into its represented JSON value.
@@ -477,10 +566,47 @@ fn test_json_value_encoder_materializes_raw_value() {
 fn test_json_value_encoder_rejects_wide_raw_value_number() {
     let raw = RawValue::from_string(String::from("18446744073709551616"))
         .expect("serde_json RawValue accepts syntactically valid wide integers");
-    assert_eq!(
-        JsonValueEncoder::new().encode(&raw),
-        Err(JsonValueEncodeError::Serialization)
-    );
+    let error = JsonValueEncoder::new()
+        .encode(&raw)
+        .expect_err("wide RawValue number must fail");
+    assert_eq!(error.kind(), JsonValueEncodeErrorKind::InvalidRawValue);
+    assert_eq!(error.category(), JsonValueEncodeErrorCategory::RawValue);
+    assert!(error.is_raw_value_error());
+}
+
+/// Converts display-formatting failures into a stable error instead of
+/// panicking.
+#[test]
+fn test_json_value_encoder_classifies_display_formatting_failure() {
+    let error = JsonValueEncoder::new()
+        .encode(&FailingDisplayProbe)
+        .expect_err("failing Display must produce an error");
+    assert_eq!(error.kind(), JsonValueEncodeErrorKind::DisplayFormattingFailed);
+    assert_eq!(error.category(), JsonValueEncodeErrorCategory::SerializerContract);
+}
+
+/// Classifies each externally reachable invalid map call sequence.
+#[test]
+fn test_json_value_encoder_classifies_invalid_map_states() {
+    use qubit_json::value::JsonSerializerStateError;
+
+    let encoder = JsonValueEncoder::new();
+    let expected = [
+        JsonSerializerStateError::MapValueWithoutKey,
+        JsonSerializerStateError::MapKeyAlreadyPending,
+        JsonSerializerStateError::MapEndedWithPendingKey,
+    ];
+    for (index, reason) in expected.into_iter().enumerate() {
+        let error = encoder
+            .encode(&InvalidMapStateProbe(index as u8))
+            .expect_err("invalid map state must fail");
+        assert_eq!(
+            error.kind(),
+            JsonValueEncodeErrorKind::InvalidSerializerState { reason }
+        );
+        assert!(error.is_serializer_contract_error());
+        assert_eq!(error.serializer_state_error(), Some(reason));
+    }
 }
 
 /// Treats serde_json's former number marker as an ordinary object key.

@@ -1,0 +1,26 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
+//! Defines broad handling categories for strict JSON value encoding failures.
+
+/// Stable strategy category for a strict JSON value encoding failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum JsonValueEncodeErrorCategory {
+    /// A numeric value violated the strict JSON number contract.
+    Number,
+    /// A JSON object key could not be represented unambiguously.
+    ObjectKey,
+    /// A RawValue payload violated the strict materialization contract.
+    RawValue,
+    /// A collection count exceeded the platform quantity representation.
+    Capacity,
+    /// A hand-written serializer or display implementation violated its
+    /// contract.
+    SerializerContract,
+    /// A serializer returned an opaque custom failure.
+    Custom,
+}
