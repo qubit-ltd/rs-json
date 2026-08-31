@@ -423,3 +423,26 @@ taskset -c 3 cargo bench --bench tree_bench -- --noplot
 large object、deep tree 分别为 169.53 µs、1.4316 ms、28.51 µs；四种限制组合也均完成采样。
 受保护路径与同一实现的先前 quick 样本存在正负波动，但大尺寸差异不显著，未发现稳定超过
 3% 的回退；行为测试同时确认 unlimited 与 bounded reader 的回调序列一致。
+
+## 2026-08-31 budgeted encode 当前热点 A/B 复测
+
+本轮使用当前工作树执行 `cargo bench --bench budgeted_serde_json -- encode --quick`，并用同一
+fixture 的 `strict-only`、`value-only`、`output-only`、`full` 及增量 writer 对照拆分成本。
+1 MiB 中位时间如下；`serde_json` 与 `incremental-serde-json` 是同形态直接实现对照：
+
+| 路径 | 中位时间 | 相对 `serde_json` |
+| --- | ---: | ---: |
+| `serde_json` | 1.1144 ms | 1.00× |
+| `strict-only` | 996.43 µs | 0.89× |
+| `value-only` | 1.7374 ms | 1.56× |
+| `output-only` | 3.1972 ms | 2.87× |
+| `full` | 4.2207 ms | 3.79× |
+| `incremental-serde-json` | 423.93 µs | 0.38× |
+| `incremental-writer` | 1.7001 ms | 1.53× |
+| `incremental-output-only` | 2.3780 ms | 2.13× |
+
+这个 A/B 矩阵确认当前主要成本集中在输出记账和 materialized-value 记账；session 构造不是
+主要差异。Criterion 与已保存基线的变化区间没有形成稳定的 5% 改善候选，且输出记账必须
+保留逐次边界检查和 partial-output 契约。因此本轮不提交新的 encode 热路径优化；后续若要继续
+改动，应先取得固定 CPU 的 profiler 证据，再单独 A/B 输出 writer 或 admission plan，并同时
+验证预算、I/O 和增量输出语义。
