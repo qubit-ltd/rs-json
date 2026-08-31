@@ -12,7 +12,6 @@
 use libfuzzer_sys::fuzz_target;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
-use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
 use qubit_json_fuzz::json_number_contract::numbers_fit_contract;
 use serde_json::Value;
