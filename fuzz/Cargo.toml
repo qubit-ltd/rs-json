@@ -12,7 +12,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ["cfg(fuzzing)"] }
 
 [dependencies]
 libfuzzer-sys = "0.4"
-qubit-budget = { version = "0.4", path = "../../rs-budget", features = ["json"] }
+qubit-budget = { version = "0.4", features = ["json"] }
 qubit-json = { path = ".." }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
