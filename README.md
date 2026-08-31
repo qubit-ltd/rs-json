@@ -141,7 +141,7 @@ commit boundaries explicit through `qubit-budget` sessions and transactions.
 | Domain | Use it for | Boundary |
 | --- | --- | --- |
 | `decode` | Strict JSON admission or explicitly configured text normalization | Normalization applies only configured transformations; it never invents missing JSON syntax |
-| `encode` | Budgeted strict JSON output | Buffered accounting commits after a complete write, although an I/O failure can still leave bytes in the external writer |
+| `encode` | Budgeted strict JSON output | Value accounting commits after complete serialization; an I/O failure can still leave bytes in an external writer |
 | `value` | Building budgeted `serde_json::Value` trees from Serde events | A seed cannot inspect original number text or enforce text-level range rules |
 | `value::traverse` | Iterative reads or in-place mutations of materialized values | Mutation is incremental; visitor and output-budget failures do not roll back prior changes |
 
@@ -159,7 +159,7 @@ construction, and traversal.
 | `decode::NormalizedJsonDocument` | Retains normalized text for inspection, borrowed deserialization, or repeated decoding without charging the input a second time |
 | `decode::JsonDecodeError` and diagnostic enums | Exposes stable error kind, processing stage, root expectation, and syntax reason without requiring callers to parse messages |
 | `encode::JsonEncoder` | Serializes strict compact JSON to a byte vector or writer while enforcing output and encoded-value limits |
-| `value::JsonValueEncoder` | Projects any `Serialize` value into a strict `serde_json::Value` without text output or resource accounting |
+| `value::JsonValueEncoder` | Projects any `Serialize` value into a strict `serde_json::Value`; failures expose a broad category, a precise reason, and privacy-safe typed details |
 | `value::AccountingJsonValueSeed` | Builds a `serde_json::Value` from any Serde deserializer while staging decoded-value charges in a caller-owned transaction |
 | `value::DuplicateKeyRejectingJsonValue` / `DuplicateKeyRejectingJsonValueSeed` | Materializes JSON while rejecting duplicate object keys recursively |
 | `value::traverse::JsonTreeBudgetTracker` | Accounts a complete materialized tree with a reusable, internally owned value budget |
@@ -183,6 +183,27 @@ let bytes = encoder
     .to_vec(&serde_json::json!({"ok": true}))
     .expect("the value fits the configured limits");
 assert_eq!(bytes, br#"{"ok":true}"#);
+```
+
+Handle materialized-value encoding failures without parsing display text:
+
+```rust
+use qubit_json::value::JsonIntegerSignedness;
+use qubit_json::value::JsonValueEncodeErrorCategory;
+use qubit_json::value::JsonValueEncodeErrorKind;
+use qubit_json::value::JsonValueEncoder;
+
+let error = JsonValueEncoder::new()
+    .encode(&u128::MAX)
+    .expect_err("u128::MAX is outside the strict JSON integer range");
+assert_eq!(error.category(), JsonValueEncodeErrorCategory::Number);
+assert_eq!(
+    error.kind(),
+    JsonValueEncodeErrorKind::IntegerOutOfRange {
+        signedness: JsonIntegerSignedness::Unsigned,
+    },
+);
+assert!(error.is_number_error());
 ```
 
 Reject ambiguous objects and account an already materialized tree:
@@ -209,6 +230,23 @@ tracker
     .expect("the complete tree fits the configured limits");
 ```
 
+## Performance model
+
+Resource checks are paid only where they can change the result. Encoding
+without an output limit serializes directly into its owned byte vector while
+retaining value accounting. Tree traversal with an unlimited value transaction
+skips admission work; bounded traversal keeps the same checks and error
+semantics. The Criterion suites keep both sides visible:
+
+```bash
+cargo bench --bench budgeted_serde_json
+cargo bench --bench tree_bench
+```
+
+`tree_bench` reports unlimited and bounded read/mutation cases separately, so
+future fast-path changes can be checked against the protected path rather than
+hiding its cost in one aggregate result.
+
 ## Explicit boundaries
 
 - Strict admission validates JSON syntax and the documented numeric range; it
@@ -217,8 +255,9 @@ tracker
 - Negative integers fit `i64`, non-negative integers fit `u64`, and fractional
   or exponential values must be finite `f64`. Use strings or domain types for
   wider integers or exact decimals that must avoid binary rounding.
-- Set finite limits at every untrusted boundary. Unlimited sessions are an
-  explicit opt-out, not a safe default for request handling.
+- Set finite limits at every untrusted boundary. Use `unlimited()` only for
+  trusted input or data already admitted by another layer; an outer output
+  bound cannot replace input and structural admission before parsing.
 - Diagnostics are redacted by default. Configure a strict decoder with
   `JsonDecoder::with_diagnostic_policy`, or a normalizing decoder through its
   normalization policy. Enable `DiagnosticPolicy::Detailed` only where

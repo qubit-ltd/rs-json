@@ -214,6 +214,19 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 | `UnexpectedTopLevel` | 仅接受对象或数组的方法收到错误的根类型 | `expected_top_level()`、`actual_top_level()` |
 | `Deserialize` | 已准入文档无法构造为请求的 Rust 类型 | `line()`、`column()`，启用详细诊断后还可读取来源错误 |
 
+`JsonValueEncoder` 使用独立且隐私安全的错误模型。恢复策略应读取
+`JsonValueEncodeError::category()`，需要精确原因时读取 `kind()`。常用错误组有便捷谓词，
+仅在适用时返回细节的访问器则避免调用方解析文本：
+
+| 类别 | 代表性精确原因 | 便捷方法/细节 |
+| --- | --- | --- |
+| `Number` | `IntegerOutOfRange`、`NonFiniteFloat`、`InvalidNumberRepresentation` | `is_number_error()`、`integer_signedness()` |
+| `ObjectKey` | `UnsupportedMapKey`、`DuplicateObjectKey` | `is_map_key_error()`、`map_key_kind()` |
+| `RawValue` | `InvalidRawValue` | `is_raw_value_error()` |
+| `Capacity` | `CollectionLengthOverflow` | `collection_kind()` |
+| `SerializerContract` | `InvalidSerializerState`、`DisplayFormattingFailed` | `is_serializer_contract_error()`、`serializer_state_error()` |
+| `Custom` | `CustomSerialization` | 有意保持不透明：不保留序列化器提供的任意文本 |
+
 `stage()` 会准确指出公开处理边界：
 
 | `JsonDecodeStage` | 处理边界 |

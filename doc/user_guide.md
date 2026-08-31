@@ -239,6 +239,20 @@ Branch on the stable category returned by `kind()`:
 | `UnexpectedTopLevel` | An object/array-specific API received the wrong root kind | `expected_top_level()`, `actual_top_level()` |
 | `Deserialize` | An admitted document could not materialize as the requested type | `line()`, `column()`, and a detailed source when enabled |
 
+`JsonValueEncoder` uses a separate, privacy-safe error model. Use
+`JsonValueEncodeError::category()` for recovery policy and `kind()` when the
+exact reason matters. Convenience predicates cover the common groups, while
+typed accessors expose only applicable details:
+
+| Category | Representative kinds | Convenience/details |
+| --- | --- | --- |
+| `Number` | `IntegerOutOfRange`, `NonFiniteFloat`, `InvalidNumberRepresentation` | `is_number_error()`, `integer_signedness()` |
+| `ObjectKey` | `UnsupportedMapKey`, `DuplicateObjectKey` | `is_map_key_error()`, `map_key_kind()` |
+| `RawValue` | `InvalidRawValue` | `is_raw_value_error()` |
+| `Capacity` | `CollectionLengthOverflow` | `collection_kind()` |
+| `SerializerContract` | `InvalidSerializerState`, `DisplayFormattingFailed` | `is_serializer_contract_error()`, `serializer_state_error()` |
+| `Custom` | `CustomSerialization` | Opaque by design: arbitrary serializer text is not retained |
+
 `stage()` identifies the public processing boundary precisely:
 
 | `JsonDecodeStage` | Boundary |
