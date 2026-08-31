@@ -1,5 +1,7 @@
 # JSON 依赖维护
 
+[English](dependency_maintenance.md)
+
 `qubit-json` 使用 `serde_json = "1.0.151"` 的常规 caret 约束。`1.0.151` 是当前
 兼容测试覆盖的最低版本，不是唯一允许版本。严格编码器需要识别 `serde_json` 的
 RawValue Serde 私有协议，因此不能只依赖版本号推断兼容性。
