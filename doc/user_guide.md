@@ -112,7 +112,15 @@ tree processing.
 Use `NormalizingJsonDecoder` only when the boundary explicitly permits the
 configured transformations (BOM, surrounding whitespace, one JSON Markdown
 fence, or control-character escaping). Its policy is independent from
-`JsonDecodeLimits`; pass limits to `owned` or a session to `new`.
+`JsonDecodeLimits`; pass them to `NormalizingJsonDecoder::with_limits(policy,
+limits)`, or pass a `JsonDecodeSession` to `NormalizingJsonDecoder::new(policy,
+session)`.
+
+The strict and normalizing decoders currently consume a complete `&str` or
+`&[u8]` input. Their input-byte limit admits the supplied slice; it does not
+retroactively limit memory already allocated by an HTTP body aggregator or
+other transport. Apply a bounded read or body-aggregation limit at that outer
+boundary before passing the complete input to a decoder.
 
 ### Prepared normalized documents
 
