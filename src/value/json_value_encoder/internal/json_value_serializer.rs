@@ -8,6 +8,7 @@
 //! Root Serde serializer for strict materialized JSON values.
 
 use std::fmt::Display;
+use std::fmt::Write as _;
 use std::str::FromStr;
 
 use serde::Serialize;
@@ -19,7 +20,10 @@ use serde_json::Value;
 use super::JsonValueCompound;
 use crate::decode::JsonDecoder;
 use crate::value::DuplicateKeyRejectingJsonValue;
+use crate::value::JsonIntegerSignedness;
+use crate::value::JsonSerializerStateError;
 use crate::value::JsonValueEncodeError;
+use crate::value::JsonValueEncodeErrorKind;
 
 /// Maximum compound capacity reserved from an untrusted Serde length hint.
 const MAX_PREALLOCATED_ITEMS: usize = 1_024;
@@ -39,7 +43,7 @@ fn preallocated_capacity(len: Option<usize>) -> usize {
 pub(in crate::value::json_value_encoder) fn decode_raw_value(text: &str) -> Result<Value, JsonValueEncodeError> {
     let value = JsonDecoder::unlimited()
         .decode_str::<DuplicateKeyRejectingJsonValue>(text)
-        .map_err(|_| JsonValueEncodeError::Serialization)?;
+        .map_err(|_| JsonValueEncodeError::new(JsonValueEncodeErrorKind::InvalidRawValue))?;
     Ok(value.into_inner())
 }
 
@@ -95,7 +99,9 @@ impl Serializer for JsonValueSerializer {
         } else if let Ok(value) = u64::try_from(value) {
             self.serialize_u64(value)
         } else {
-            Err(JsonValueEncodeError::Serialization)
+            Err(JsonValueEncodeError::new(JsonValueEncodeErrorKind::IntegerOutOfRange {
+                signedness: JsonIntegerSignedness::Signed,
+            }))
         }
     }
 
@@ -126,25 +132,29 @@ impl Serializer for JsonValueSerializer {
     /// Serializes an unsigned wide integer within the strict 64-bit range.
     fn serialize_u128(self, value: u128) -> Result<Value, Self::Error> {
         u64::try_from(value)
-            .map_err(|_| JsonValueEncodeError::Serialization)
+            .map_err(|_| {
+                JsonValueEncodeError::new(JsonValueEncodeErrorKind::IntegerOutOfRange {
+                    signedness: JsonIntegerSignedness::Unsigned,
+                })
+            })
             .and_then(|value| self.serialize_u64(value))
     }
 
     /// Serializes a finite f32 without widening its display representation.
     fn serialize_f32(self, value: f32) -> Result<Value, Self::Error> {
         if !value.is_finite() {
-            return Err(JsonValueEncodeError::NonFiniteFloat);
+            return Err(JsonValueEncodeError::new(JsonValueEncodeErrorKind::NonFiniteFloat));
         }
         Number::from_str(&value.to_string())
             .map(Value::Number)
-            .map_err(|_| JsonValueEncodeError::Serialization)
+            .map_err(|_| JsonValueEncodeError::new(JsonValueEncodeErrorKind::InvalidNumberRepresentation))
     }
 
     /// Serializes a finite 64-bit floating-point number.
     fn serialize_f64(self, value: f64) -> Result<Value, Self::Error> {
         Number::from_f64(value)
             .map(Value::Number)
-            .ok_or(JsonValueEncodeError::NonFiniteFloat)
+            .ok_or_else(|| JsonValueEncodeError::new(JsonValueEncodeErrorKind::NonFiniteFloat))
     }
 
     /// Serializes a character as a JSON string.
@@ -214,7 +224,11 @@ impl Serializer for JsonValueSerializer {
             return Ok(value);
         }
         let Value::String(text) = value else {
-            return Err(JsonValueEncodeError::Serialization);
+            return Err(JsonValueEncodeError::new(
+                JsonValueEncodeErrorKind::InvalidSerializerState {
+                    reason: JsonSerializerStateError::InvalidRawValueProtocol,
+                },
+            ));
         };
         decode_raw_value(&text)
     }
@@ -303,6 +317,9 @@ impl Serializer for JsonValueSerializer {
     where
         T: Display + ?Sized,
     {
-        self.serialize_str(&value.to_string())
+        let mut text = String::new();
+        write!(&mut text, "{value}")
+            .map_err(|_| JsonValueEncodeError::new(JsonValueEncodeErrorKind::DisplayFormattingFailed))?;
+        self.serialize_str(&text)
     }
 }

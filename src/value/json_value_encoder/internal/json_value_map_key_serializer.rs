@@ -8,6 +8,7 @@
 //! Serde serializer for strict JSON object keys.
 
 use std::fmt::Display;
+use std::fmt::Write as _;
 use std::str::FromStr;
 
 use serde::Serialize;
@@ -16,7 +17,9 @@ use serde::ser::Impossible;
 use serde_json::Number;
 
 use crate::internal::JsonMapKey;
+use crate::value::JsonMapKeyKind;
 use crate::value::JsonValueEncodeError;
+use crate::value::JsonValueEncodeErrorKind;
 
 /// Converts supported scalar map keys into JSON object key strings.
 #[derive(Debug, Clone, Copy)]
@@ -73,18 +76,18 @@ impl Serializer for JsonValueMapKeySerializer {
     /// Serializes a finite 32-bit floating-point key.
     fn serialize_f32(self, value: f32) -> Result<String, Self::Error> {
         if !value.is_finite() {
-            return Err(JsonValueEncodeError::NonFiniteFloat);
+            return Err(JsonValueEncodeError::new(JsonValueEncodeErrorKind::NonFiniteFloat));
         }
         Number::from_str(&value.to_string())
             .map(|number| number.to_string())
-            .map_err(|_| JsonValueEncodeError::Serialization)
+            .map_err(|_| JsonValueEncodeError::new(JsonValueEncodeErrorKind::InvalidNumberRepresentation))
     }
 
     /// Serializes a finite 64-bit floating-point key.
     fn serialize_f64(self, value: f64) -> Result<String, Self::Error> {
         Number::from_f64(value)
             .map(|number| number.to_string())
-            .ok_or(JsonValueEncodeError::NonFiniteFloat)
+            .ok_or_else(|| JsonValueEncodeError::new(JsonValueEncodeErrorKind::NonFiniteFloat))
     }
 
     /// Serializes a character key.
@@ -101,12 +104,12 @@ impl Serializer for JsonValueMapKeySerializer {
 
     /// Rejects byte sequences as object keys.
     fn serialize_bytes(self, _value: &[u8]) -> Result<String, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::Bytes))
     }
 
     /// Rejects absent optional keys.
     fn serialize_none(self) -> Result<String, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::None))
     }
 
     /// Delegates a present optional key to its wrapped value.
@@ -119,12 +122,12 @@ impl Serializer for JsonValueMapKeySerializer {
 
     /// Rejects unit keys.
     fn serialize_unit(self) -> Result<String, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::Unit))
     }
 
     /// Rejects unit-struct keys.
     fn serialize_unit_struct(self, _name: &'static str) -> Result<String, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::UnitStruct))
     }
 
     /// Serializes a unit variant through its variant name.
@@ -156,17 +159,17 @@ impl Serializer for JsonValueMapKeySerializer {
     where
         T: Serialize + ?Sized,
     {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::NewtypeVariant))
     }
 
     /// Rejects sequence keys.
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::Sequence))
     }
 
     /// Rejects tuple keys.
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::Tuple))
     }
 
     /// Rejects tuple-struct keys.
@@ -175,7 +178,7 @@ impl Serializer for JsonValueMapKeySerializer {
         _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::TupleStruct))
     }
 
     /// Rejects tuple-variant keys.
@@ -186,17 +189,17 @@ impl Serializer for JsonValueMapKeySerializer {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::TupleVariant))
     }
 
     /// Rejects map keys.
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::Map))
     }
 
     /// Rejects struct keys.
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::Struct))
     }
 
     /// Rejects struct-variant keys.
@@ -207,7 +210,7 @@ impl Serializer for JsonValueMapKeySerializer {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        Err(JsonValueEncodeError::Serialization)
+        Err(unsupported_key(JsonMapKeyKind::StructVariant))
     }
 
     /// Serializes a displayable key through its textual representation.
@@ -215,6 +218,15 @@ impl Serializer for JsonValueMapKeySerializer {
     where
         T: Display + ?Sized,
     {
-        Ok(value.to_string())
+        let mut text = String::new();
+        write!(&mut text, "{value}")
+            .map_err(|_| JsonValueEncodeError::new(JsonValueEncodeErrorKind::DisplayFormattingFailed))?;
+        Ok(text)
     }
+}
+
+/// Creates a stable unsupported-key failure without retaining key data.
+#[inline(always)]
+fn unsupported_key(kind: JsonMapKeyKind) -> JsonValueEncodeError {
+    JsonValueEncodeError::new(JsonValueEncodeErrorKind::UnsupportedMapKey { kind })
 }
