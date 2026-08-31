@@ -364,3 +364,62 @@ taskset -c 3 cargo bench --bench budgeted_serde_json -- \
 预算模式下都先拒绝非有限浮点数。修改前测试稳定失败，修正后完整 JSON text encode 测试
 通过；该分支在修改前后 quick 主矩阵中没有产生可复现的 5% 以上回退。它属于契约修复，
 不作为性能候选或 10% 改善声明。
+
+## 2026-08-31 unlimited 编码与 tree 快路径实验
+
+本轮先按第一性原理拆分必需成本和可删除成本：严格 Serde 遍历、数字/键校验与字节生成是
+必需工作；没有 output limit 时仍经过 output buffer/accounting，以及没有 value limits 时
+仍进行 tree measurement/admission，属于不能改变结果的额外工作。quick 筛选固定在 CPU 3；
+它只用于决定是否进入完整采样。
+
+编码的 1 MiB object-array quick 中位数如下：
+
+| 路径 | 修改前 | E1 后 | 结论 |
+| --- | ---: | ---: | --- |
+| `serde_json` | 1.0228 ms | 同一对照 | 参考 |
+| `strict-only` | 2.3252 ms | 1.0620 ms | 约 -54%，保留 E1 |
+| `value-only` | 3.1161 ms | 1.8543 ms | 约 -40%，保留 E1 |
+| `output-only` | 2.9761 ms | 3.2209 ms | 未走 E1；quick 噪声，完整采样复核 |
+| `full` | 3.7308 ms | 3.9392 ms | 未走 E1；quick 噪声，完整采样复核 |
+
+E1 让无 output limit 的 owned-buffer 直接写入 `Vec<u8>`，仍保留 value transaction 和
+`RawValue` 失败传播。优化后 strict-only 相对直接 `serde_json` 只剩约 4% 差距，已低于复制
+一套无 value-budget serializer 的 5% 理论收益上限，故否决 E2。E3 所需的 perf 证据无法取得：
+主机 `kernel.perf_event_paranoid=4`，未修改系统权限；benchmark 也没有指向 admission-plan
+复杂化的充分证据。E4 会把完整 `RawValue` 扫描与输出状态机耦合，且增量 writer 在验证完成前
+不能写出，因此不实施。string-heavy、owned/reused session 和 `RawValue` 对照保留在基准中。
+
+tree quick A/B 的代表性中位数如下：
+
+| unlimited 场景 | 修改前 | 快路径后 | 变化 |
+| --- | ---: | ---: | ---: |
+| reader array / 1K | 16.2 µs | 8.22 µs | 约 -49% |
+| reader array / 16K | 252 µs | 156.85 µs | 约 -38% |
+| reader object / 256 | 15.5 µs | 10.09 µs | 约 -35% |
+| reader object / 4096 | 269 µs | 164.87 µs | 约 -39% |
+| reader deep tree | 8.66 µs | 5.87 µs | 约 -32% |
+| mutator large array | 669 µs | 157.8 µs | 约 -76% |
+| mutator large object | 1.97 ms | 1.49 ms | 约 -24% |
+| mutator deep tree | 48.5 µs | 30.97 µs | 约 -36% |
+
+快路径达到保留门槛；bounded 场景继续执行原检查，quick 波动由完整 Criterion 采样复核。
+最终复现命令为：
+
+```bash
+taskset -c 3 cargo bench --bench budgeted_serde_json -- --noplot
+taskset -c 3 cargo bench --bench tree_bench -- --noplot
+```
+
+两套命令随后以 Criterion 默认的 3 秒预热、5 秒测量和 100 个样本完整运行并成功退出。
+最终 1 MiB 编码中位数为：`serde_json` 1.1117 ms、`strict-only` 0.9944 ms、
+`value-only` 1.7384 ms、`output-only` 3.2153 ms、`full` 4.0015 ms。
+`output-only` 相对相邻基线的变化区间跨过零，未检测到回退；`value-only` 的完整采样变化为
+-5.87%，与 E1 方向一致。严格路径在该 fixture 上已经到达直接对照的同一量级，所以不再增加
+第二套 serializer。
+
+最终 tree 中位数再次确认快路径的绝对成本：reader unlimited 的 array 1K/16K、object
+256/4096、deep tree 分别为 9.93 µs、157.05 µs、9.87 µs、161.64 µs、5.74 µs；对应 bounded
+为 17.96 µs、281.65 µs、16.51 µs、270.58 µs、9.24 µs。mutator unlimited 的 large array、
+large object、deep tree 分别为 169.53 µs、1.4316 ms、28.51 µs；四种限制组合也均完成采样。
+受保护路径与同一实现的先前 quick 样本存在正负波动，但大尺寸差异不显著，未发现稳定超过
+3% 的回退；行为测试同时确认 unlimited 与 bounded reader 的回调序列一致。

@@ -132,7 +132,7 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 | 领域 | 适用场景 | 明确边界 |
 | --- | --- | --- |
 | `decode` | 严格准入 JSON，或按显式配置规范化文本 | 只执行配置允许的转换，不会补齐缺失的 JSON 语法 |
-| `encode` | 生成受预算约束的严格 JSON | 缓冲写入完整成功后才提交资源用量，但 I/O 失败仍可能在外部写入器中留下部分字节 |
+| `encode` | 生成受预算约束的严格 JSON | 完整序列化成功后才提交值资源用量，但 I/O 失败仍可能在外部写入器中留下部分字节 |
 | `value` | 从 Serde 事件构造受预算约束的 `serde_json::Value` | Serde seed 看不到数字的原始文本，也不能执行文本级数值范围检查 |
 | `value::traverse` | 迭代读取或原地修改已构造的值树 | 修改按步骤生效；访问器或输出预算失败不会回滚此前的改动 |
 
@@ -149,7 +149,7 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 | `decode::NormalizedJsonDocument` | 保存规范化后的文本，便于检查、借用式反序列化或重复解码，后续解码不会再次收取输入资源 |
 | `decode::JsonDecodeError` 及诊断枚举 | 提供稳定的错误类别、处理阶段、顶层类型要求和语法原因，调用方无需解析错误消息 |
 | `encode::JsonEncoder` | 将值序列化为严格、紧凑的 JSON 字节或写入 writer，同时限制输出和编码值所消耗的资源 |
-| `value::JsonValueEncoder` | 不生成文本、不执行资源记账，直接把任意 `Serialize` 值投影为严格的 `serde_json::Value` |
+| `value::JsonValueEncoder` | 不生成文本、不执行资源记账，直接把任意 `Serialize` 值投影为严格的 `serde_json::Value`；失败时提供粗粒度类别、精确原因和隐私安全的类型化细节 |
 | `value::AccountingJsonValueSeed` | 从任意 Serde 反序列化器构造 `serde_json::Value`，并把解码值用量暂存到调用方持有的事务中 |
 | `value::DuplicateKeyRejectingJsonValue` / `DuplicateKeyRejectingJsonValueSeed` | 构造 JSON 值时递归拒绝对象中的重复键 |
 | `value::traverse::JsonTreeBudgetTracker` | 使用内部持有且可复用的值预算，对完整的已构造 JSON 树执行资源记账 |
@@ -173,6 +173,27 @@ let bytes = encoder
     .to_vec(&serde_json::json!({"ok": true}))
     .expect("该值应满足配置的资源限制");
 assert_eq!(bytes, br#"{"ok":true}"#);
+```
+
+处理值构造失败时，无需解析展示文本：
+
+```rust
+use qubit_json::value::JsonIntegerSignedness;
+use qubit_json::value::JsonValueEncodeErrorCategory;
+use qubit_json::value::JsonValueEncodeErrorKind;
+use qubit_json::value::JsonValueEncoder;
+
+let error = JsonValueEncoder::new()
+    .encode(&u128::MAX)
+    .expect_err("u128::MAX 超出严格 JSON 整数范围");
+assert_eq!(error.category(), JsonValueEncodeErrorCategory::Number);
+assert_eq!(
+    error.kind(),
+    JsonValueEncodeErrorKind::IntegerOutOfRange {
+        signedness: JsonIntegerSignedness::Unsigned,
+    },
+);
+assert!(error.is_number_error());
 ```
 
 拒绝有歧义的重复键，并对已经构造的 JSON 树记账：
@@ -199,14 +220,28 @@ tracker
     .expect("完整 JSON 树应满足配置的资源限制");
 ```
 
+## 性能模型
+
+只有资源检查可能改变结果时才支付其成本。未设置输出限制时，编码器直接写入自有字节向量，
+同时保留值资源记账；值事务完全无限制时，树遍历跳过准入工作；有限事务仍执行原有检查并保持
+错误语义。Criterion 基准分别覆盖这些路径：
+
+```bash
+cargo bench --bench budgeted_serde_json
+cargo bench --bench tree_bench
+```
+
+`tree_bench` 会分别报告 unlimited 与 bounded 的只读和修改场景，使后续快路径改动可以同时核对
+无保护路径的收益和受保护路径的成本，而不会被单个汇总结果掩盖。
+
 ## 明确边界
 
 - 严格准入会检查 JSON 语法和文档规定的数字范围，但不会自动要求对象键唯一。若唯一性属于
   输入契约，应选择 `DuplicateKeyRejectingJsonValue` 等目标类型。
 - 负整数须能装入 `i64`，非负整数须能装入 `u64`，小数或指数形式须能表示为有限 `f64`。
   更宽的整数以及不能接受二进制舍入的精确十进制值，应使用字符串或领域类型。
-- 所有不可信边界都应设置有限资源上限。无限会话是调用方显式放弃保护的选择，不适合作为
-  请求处理的默认配置。
+- 所有不可信边界都应设置有限资源上限。`unlimited()` 只应用于可信输入，或已由其他层完成
+  准入的数据；外层输出上限不能替代解析前的输入与结构准入。
 - 诊断信息默认脱敏。严格解码器通过 `JsonDecoder::with_diagnostic_policy` 配置，规范化
   解码器通过其规范化策略配置。只有在输入派生信息可以安全保留和记录时，才启用
   `DiagnosticPolicy::Detailed`。
