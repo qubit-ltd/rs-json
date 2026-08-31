@@ -1,5 +1,7 @@
 # `qubit-json` 64 位数字收敛设计
 
+[English](number_contract_design.md)
+
 ## 背景
 
 历史实现启用 serde_json `arbitrary_precision`，并识别其未公开的 Number Serde marker。这使合法

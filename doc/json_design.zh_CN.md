@@ -1,5 +1,7 @@
 # `qubit-json` 0.8 设计
 
+[English](json_design.md)
+
 ## 目标与边界
 
 `qubit-json` 为 JSON 输入、文本、value 和 tree 提供资源感知基础设施。它不定义新的 JSON
@@ -122,3 +124,14 @@ key 进行准入。
 5. `value::traverse::JsonTreeMutateError`
 
 每种错误只暴露其领域能稳定提供的上下文；没有根级错误聚合或兼容别名。
+
+## 相关设计文档
+
+- [产品需求](json_prd.zh_CN.md) · [Product requirements](json_prd.md)
+- [数字契约](number_contract.zh_CN.md) · [Number contract](number_contract.md)
+- [64 位数字收敛设计](number_contract_design.zh_CN.md) ·
+  [Number contract design](number_contract_design.md)
+- [错误、性能与下游安全边界](error_performance_redaction_design.zh_CN.md) ·
+  [Error, performance, and downstream safety](error_performance_redaction_design.md)
+- [依赖维护](dependency_maintenance.zh_CN.md) ·
+  [Dependency maintenance](dependency_maintenance.md)

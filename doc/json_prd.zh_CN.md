@@ -1,5 +1,7 @@
 # `qubit-json` 产品需求
 
+[English](json_prd.md)
+
 ## 问题
 
 Rust 服务需要处理两类 JSON：来自受控协议的严格字节流，以及来自文本通道、可能带围栏或

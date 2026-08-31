@@ -1,5 +1,7 @@
 # JSON 错误、性能与下游安全边界设计
 
+[English](error_performance_redaction_design.md)
+
 本文记录 `qubit-json 0.8` 之后这轮允许破坏性变更的整体设计决策。它覆盖
 `rs-json` 的值编码错误与热路径，也覆盖直接依赖这些契约的 `rs-budget`、
 `rs-value` 和 `rs-redact`。
