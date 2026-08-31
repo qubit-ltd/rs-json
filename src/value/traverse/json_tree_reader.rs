@@ -57,6 +57,8 @@ where
 {
     /// Transaction receiving staged node and payload charges.
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    /// Whether any admission check can reject this traversal.
+    enforce_limits: bool,
 }
 
 impl<'transaction, 'budget, R, Q> JsonTreeReader<'transaction, 'budget, R, Q>
@@ -76,7 +78,11 @@ where
     #[inline(always)]
     #[must_use]
     pub fn new(transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>) -> Self {
-        Self { transaction }
+        let enforce_limits = transaction.has_limits();
+        Self {
+            transaction,
+            enforce_limits,
+        }
     }
 
     /// Processes every node in depth-first order without Rust recursion.
@@ -114,10 +120,12 @@ where
                 ReadFrameState::Enter => {
                     let value = frame.value;
                     let context = frame.context;
-                    if let JsonTreeLocation::ObjectValue { key } = context.location {
-                        self.transaction.try_admit(JsonMeasurement::Key { bytes: key.len() })?;
+                    if self.enforce_limits {
+                        if let JsonTreeLocation::ObjectValue { key } = context.location {
+                            self.transaction.try_admit(JsonMeasurement::Key { bytes: key.len() })?;
+                        }
+                        self.admit(value, context.depth)?;
                     }
-                    self.admit(value, context.depth)?;
                     visitor.enter(value, context).map_err(JsonTreeProcessError::Visitor)?;
                     frame.state = ReadFrameState::Children(ChildCursor::new(value, context.depth));
                 }
@@ -153,6 +161,9 @@ where
     /// Returns the first measured budget rejection encountered during the
     /// traversal.
     pub fn account(&mut self, value: &Value) -> Result<(), MeasuredBudgetError<R, Q>> {
+        if !self.enforce_limits {
+            return Ok(());
+        }
         match self.process(value, &mut NoopVisitor) {
             Ok(()) => Ok(()),
             Err(JsonTreeProcessError::Budget(error)) => Err(error),

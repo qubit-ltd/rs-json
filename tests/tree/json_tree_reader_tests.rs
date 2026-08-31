@@ -76,6 +76,33 @@ fn test_process_visits_depth_first_with_root_and_key_locations() {
     );
 }
 
+/// Verifies the unlimited fast path preserves every visitor callback emitted
+/// by bounded traversal.
+#[test]
+fn test_unlimited_and_bounded_process_emit_identical_callbacks() {
+    let value = json!({"a": [true, {"b": null}]});
+    let mut unlimited_budget = JsonValueLimits::<JsonResource, usize>::new().budget();
+    let mut unlimited_transaction = unlimited_budget.transaction();
+    let mut unlimited_visitor = RecordingVisitor { events: Vec::new() };
+    JsonTreeReader::new(&mut unlimited_transaction)
+        .process(&value, &mut unlimited_visitor)
+        .expect("unlimited traversal succeeds");
+
+    let mut bounded_budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(8)
+        .build()
+        .budget();
+    let mut bounded_transaction = bounded_budget.transaction();
+    let mut bounded_visitor = RecordingVisitor { events: Vec::new() };
+    JsonTreeReader::new(&mut bounded_transaction)
+        .process(&value, &mut bounded_visitor)
+        .expect("bounded traversal succeeds");
+
+    assert_eq!(unlimited_visitor.events, bounded_visitor.events);
+    assert_eq!(unlimited_transaction.used_nodes(), None);
+    assert_eq!(bounded_transaction.used_nodes(), Some(5));
+}
+
 /// Verifies that a processor can outlive each JSON value it processes.
 #[test]
 fn test_process_accepts_value_borrowed_shorter_than_budget() {
