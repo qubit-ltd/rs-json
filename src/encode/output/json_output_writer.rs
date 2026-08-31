@@ -66,7 +66,11 @@ where
         if let Some(error) = self.io_error {
             return Err(JsonEncodeError::Write(error));
         }
-        result.map_err(JsonEncodeError::Serialize)
+        if result.is_err() {
+            let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
+            return Err(JsonEncodeError::Serialize(error));
+        }
+        Ok(())
     }
 }
 

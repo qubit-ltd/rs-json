@@ -19,11 +19,11 @@ use serde_json::Value;
 
 use super::JsonValueCompound;
 use crate::decode::JsonDecoder;
+use crate::encode::JsonIntegerSignedness;
+use crate::encode::JsonSerializationError;
+use crate::encode::JsonSerializationErrorKind;
+use crate::encode::JsonSerializerStateError;
 use crate::value::DuplicateKeyRejectingJsonValue;
-use crate::value::JsonIntegerSignedness;
-use crate::value::JsonSerializerStateError;
-use crate::value::JsonValueEncodeError;
-use crate::value::JsonValueEncodeErrorKind;
 
 /// Maximum compound capacity reserved from an untrusted Serde length hint.
 const MAX_PREALLOCATED_ITEMS: usize = 1_024;
@@ -40,10 +40,10 @@ fn preallocated_capacity(len: Option<usize>) -> usize {
 }
 
 /// Strictly admits and materializes one RawValue text payload.
-pub(in crate::value::json_value_encoder) fn decode_raw_value(text: &str) -> Result<Value, JsonValueEncodeError> {
+pub(in crate::value::json_value_encoder) fn decode_raw_value(text: &str) -> Result<Value, JsonSerializationError> {
     let value = JsonDecoder::unlimited()
         .decode_str::<DuplicateKeyRejectingJsonValue>(text)
-        .map_err(|_| JsonValueEncodeError::new(JsonValueEncodeErrorKind::InvalidRawValue))?;
+        .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue))?;
     Ok(value.into_inner())
 }
 
@@ -53,7 +53,7 @@ pub(in crate::value::json_value_encoder) struct JsonValueSerializer;
 
 impl Serializer for JsonValueSerializer {
     type Ok = Value;
-    type Error = JsonValueEncodeError;
+    type Error = JsonSerializationError;
     type SerializeSeq = JsonValueCompound;
     type SerializeTuple = JsonValueCompound;
     type SerializeTupleStruct = JsonValueCompound;
@@ -99,9 +99,11 @@ impl Serializer for JsonValueSerializer {
         } else if let Ok(value) = u64::try_from(value) {
             self.serialize_u64(value)
         } else {
-            Err(JsonValueEncodeError::new(JsonValueEncodeErrorKind::IntegerOutOfRange {
-                signedness: JsonIntegerSignedness::Signed,
-            }))
+            Err(JsonSerializationError::new(
+                JsonSerializationErrorKind::IntegerOutOfRange {
+                    signedness: JsonIntegerSignedness::Signed,
+                },
+            ))
         }
     }
 
@@ -133,7 +135,7 @@ impl Serializer for JsonValueSerializer {
     fn serialize_u128(self, value: u128) -> Result<Value, Self::Error> {
         u64::try_from(value)
             .map_err(|_| {
-                JsonValueEncodeError::new(JsonValueEncodeErrorKind::IntegerOutOfRange {
+                JsonSerializationError::new(JsonSerializationErrorKind::IntegerOutOfRange {
                     signedness: JsonIntegerSignedness::Unsigned,
                 })
             })
@@ -143,18 +145,18 @@ impl Serializer for JsonValueSerializer {
     /// Serializes a finite f32 without widening its display representation.
     fn serialize_f32(self, value: f32) -> Result<Value, Self::Error> {
         if !value.is_finite() {
-            return Err(JsonValueEncodeError::new(JsonValueEncodeErrorKind::NonFiniteFloat));
+            return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
         }
         Number::from_str(&value.to_string())
             .map(Value::Number)
-            .map_err(|_| JsonValueEncodeError::new(JsonValueEncodeErrorKind::InvalidNumberRepresentation))
+            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))
     }
 
     /// Serializes a finite 64-bit floating-point number.
     fn serialize_f64(self, value: f64) -> Result<Value, Self::Error> {
         Number::from_f64(value)
             .map(Value::Number)
-            .ok_or_else(|| JsonValueEncodeError::new(JsonValueEncodeErrorKind::NonFiniteFloat))
+            .ok_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat))
     }
 
     /// Serializes a character as a JSON string.
@@ -224,8 +226,8 @@ impl Serializer for JsonValueSerializer {
             return Ok(value);
         }
         let Value::String(text) = value else {
-            return Err(JsonValueEncodeError::new(
-                JsonValueEncodeErrorKind::InvalidSerializerState {
+            return Err(JsonSerializationError::new(
+                JsonSerializationErrorKind::InvalidSerializerState {
                     reason: JsonSerializerStateError::InvalidRawValueProtocol,
                 },
             ));
@@ -319,7 +321,7 @@ impl Serializer for JsonValueSerializer {
     {
         let mut text = String::new();
         write!(&mut text, "{value}")
-            .map_err(|_| JsonValueEncodeError::new(JsonValueEncodeErrorKind::DisplayFormattingFailed))?;
+            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
         self.serialize_str(&text)
     }
 }

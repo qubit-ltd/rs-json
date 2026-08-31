@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Defines stable errors returned by strict JSON value encoding.
+//! Defines stable, privacy-safe JSON serialization failures.
 
 use std::fmt::Display;
 
@@ -14,12 +14,11 @@ use thiserror::Error;
 use super::JsonCollectionKind;
 use super::JsonIntegerSignedness;
 use super::JsonMapKeyKind;
+use super::JsonSerializationErrorCategory;
+use super::JsonSerializationErrorKind;
 use super::JsonSerializerStateError;
-use super::JsonValueEncodeErrorCategory;
-use super::JsonValueEncodeErrorKind;
 
-/// Privacy-safe failure produced while projecting a serializable value into
-/// strict JSON.
+/// Privacy-safe failure produced while serializing a value as strict JSON.
 ///
 /// The error exposes exact stable kinds and broad handling categories without
 /// retaining input values, object keys, or arbitrary third-party diagnostics.
@@ -27,8 +26,8 @@ use super::JsonValueEncodeErrorKind;
 /// # Examples
 ///
 /// ```
-/// use qubit_json::value::JsonIntegerSignedness;
-/// use qubit_json::value::JsonValueEncodeErrorKind;
+/// use qubit_json::encode::JsonIntegerSignedness;
+/// use qubit_json::encode::JsonSerializationErrorKind;
 /// use qubit_json::value::JsonValueEncoder;
 ///
 /// let error = JsonValueEncoder::new()
@@ -36,7 +35,7 @@ use super::JsonValueEncodeErrorKind;
 ///     .expect_err("wide integer must be rejected");
 /// assert_eq!(
 ///     error.kind(),
-///     JsonValueEncodeErrorKind::IntegerOutOfRange {
+///     JsonSerializationErrorKind::IntegerOutOfRange {
 ///         signedness: JsonIntegerSignedness::Unsigned,
 ///     },
 /// );
@@ -44,40 +43,48 @@ use super::JsonValueEncodeErrorKind;
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
 #[error("{kind}")]
-pub struct JsonValueEncodeError {
+pub struct JsonSerializationError {
     /// Exact privacy-safe classification.
-    kind: JsonValueEncodeErrorKind,
+    kind: JsonSerializationErrorKind,
 }
 
-impl JsonValueEncodeError {
-    /// Creates one internal error from its stable public kind.
+impl JsonSerializationError {
+    /// Creates an error from its stable public kind.
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - Exact privacy-safe serialization failure.
+    ///
+    /// # Returns
+    ///
+    /// A serialization error retaining only `kind`.
     #[inline(always)]
-    pub(crate) const fn new(kind: JsonValueEncodeErrorKind) -> Self {
+    pub const fn new(kind: JsonSerializationErrorKind) -> Self {
         Self { kind }
     }
 
     /// Returns the exact stable failure classification.
     #[must_use]
     #[inline(always)]
-    pub const fn kind(&self) -> JsonValueEncodeErrorKind {
+    pub const fn kind(&self) -> JsonSerializationErrorKind {
         self.kind
     }
 
     /// Returns the broad downstream handling category.
     #[must_use]
-    pub const fn category(&self) -> JsonValueEncodeErrorCategory {
+    pub const fn category(&self) -> JsonSerializationErrorCategory {
         match self.kind {
-            JsonValueEncodeErrorKind::IntegerOutOfRange { .. }
-            | JsonValueEncodeErrorKind::NonFiniteFloat
-            | JsonValueEncodeErrorKind::InvalidNumberRepresentation => JsonValueEncodeErrorCategory::Number,
-            JsonValueEncodeErrorKind::UnsupportedMapKey { .. } | JsonValueEncodeErrorKind::DuplicateObjectKey => {
-                JsonValueEncodeErrorCategory::ObjectKey
+            JsonSerializationErrorKind::IntegerOutOfRange { .. }
+            | JsonSerializationErrorKind::NonFiniteFloat
+            | JsonSerializationErrorKind::InvalidNumberRepresentation => JsonSerializationErrorCategory::Number,
+            JsonSerializationErrorKind::UnsupportedMapKey { .. } | JsonSerializationErrorKind::DuplicateObjectKey => {
+                JsonSerializationErrorCategory::ObjectKey
             }
-            JsonValueEncodeErrorKind::InvalidRawValue => JsonValueEncodeErrorCategory::RawValue,
-            JsonValueEncodeErrorKind::CollectionLengthOverflow { .. } => JsonValueEncodeErrorCategory::Capacity,
-            JsonValueEncodeErrorKind::InvalidSerializerState { .. }
-            | JsonValueEncodeErrorKind::DisplayFormattingFailed => JsonValueEncodeErrorCategory::SerializerContract,
-            JsonValueEncodeErrorKind::CustomSerialization => JsonValueEncodeErrorCategory::Custom,
+            JsonSerializationErrorKind::InvalidRawValue => JsonSerializationErrorCategory::RawValue,
+            JsonSerializationErrorKind::CollectionLengthOverflow { .. } => JsonSerializationErrorCategory::Capacity,
+            JsonSerializationErrorKind::InvalidSerializerState { .. }
+            | JsonSerializationErrorKind::DisplayFormattingFailed => JsonSerializationErrorCategory::SerializerContract,
+            JsonSerializationErrorKind::CustomSerialization => JsonSerializationErrorCategory::Custom,
         }
     }
 
@@ -85,28 +92,28 @@ impl JsonValueEncodeError {
     #[must_use]
     #[inline(always)]
     pub const fn is_number_error(&self) -> bool {
-        matches!(self.category(), JsonValueEncodeErrorCategory::Number)
+        matches!(self.category(), JsonSerializationErrorCategory::Number)
     }
 
     /// Reports whether this failure concerns JSON object-key representation.
     #[must_use]
     #[inline(always)]
     pub const fn is_map_key_error(&self) -> bool {
-        matches!(self.category(), JsonValueEncodeErrorCategory::ObjectKey)
+        matches!(self.category(), JsonSerializationErrorCategory::ObjectKey)
     }
 
     /// Reports whether this failure concerns a RawValue payload.
     #[must_use]
     #[inline(always)]
     pub const fn is_raw_value_error(&self) -> bool {
-        matches!(self.category(), JsonValueEncodeErrorCategory::RawValue)
+        matches!(self.category(), JsonSerializationErrorCategory::RawValue)
     }
 
     /// Reports whether a hand-written serializer violated a protocol contract.
     #[must_use]
     #[inline(always)]
     pub const fn is_serializer_contract_error(&self) -> bool {
-        matches!(self.category(), JsonValueEncodeErrorCategory::SerializerContract)
+        matches!(self.category(), JsonSerializationErrorCategory::SerializerContract)
     }
 
     /// Returns the signedness of an out-of-range integer, when applicable.
@@ -114,7 +121,7 @@ impl JsonValueEncodeError {
     #[inline(always)]
     pub const fn integer_signedness(&self) -> Option<JsonIntegerSignedness> {
         match self.kind {
-            JsonValueEncodeErrorKind::IntegerOutOfRange { signedness } => Some(signedness),
+            JsonSerializationErrorKind::IntegerOutOfRange { signedness } => Some(signedness),
             _ => None,
         }
     }
@@ -124,7 +131,7 @@ impl JsonValueEncodeError {
     #[inline(always)]
     pub const fn map_key_kind(&self) -> Option<JsonMapKeyKind> {
         match self.kind {
-            JsonValueEncodeErrorKind::UnsupportedMapKey { kind } => Some(kind),
+            JsonSerializationErrorKind::UnsupportedMapKey { kind } => Some(kind),
             _ => None,
         }
     }
@@ -134,7 +141,7 @@ impl JsonValueEncodeError {
     #[inline(always)]
     pub const fn collection_kind(&self) -> Option<JsonCollectionKind> {
         match self.kind {
-            JsonValueEncodeErrorKind::CollectionLengthOverflow { kind } => Some(kind),
+            JsonSerializationErrorKind::CollectionLengthOverflow { kind } => Some(kind),
             _ => None,
         }
     }
@@ -144,18 +151,18 @@ impl JsonValueEncodeError {
     #[inline(always)]
     pub const fn serializer_state_error(&self) -> Option<JsonSerializerStateError> {
         match self.kind {
-            JsonValueEncodeErrorKind::InvalidSerializerState { reason } => Some(reason),
+            JsonSerializationErrorKind::InvalidSerializerState { reason } => Some(reason),
             _ => None,
         }
     }
 }
 
-impl serde::ser::Error for JsonValueEncodeError {
+impl serde::ser::Error for JsonSerializationError {
     /// Converts arbitrary custom serializer text into one opaque, stable kind.
     fn custom<T>(_message: T) -> Self
     where
         T: Display,
     {
-        Self::new(JsonValueEncodeErrorKind::CustomSerialization)
+        Self::new(JsonSerializationErrorKind::CustomSerialization)
     }
 }

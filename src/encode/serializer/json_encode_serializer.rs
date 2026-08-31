@@ -26,6 +26,8 @@ use super::budgeted_value::BudgetedValue;
 use super::display_budget_kind::DisplayBudgetKind;
 use super::json_encode_compound::JsonEncodeCompound;
 use super::json_encode_context::JsonEncodeContext;
+use crate::encode::JsonIntegerSignedness;
+use crate::encode::JsonSerializationErrorKind;
 use crate::internal::JsonLexemeLength;
 
 /// Decorates one Serde serializer with eager JSON budget checks.
@@ -154,6 +156,15 @@ where
     {
         self.admit(JsonMeasurement::Key { bytes: key.len() })
     }
+
+    /// Creates one serializer interruption after retaining its stable kind.
+    #[inline]
+    fn serialization_error<E>(&self, kind: JsonSerializationErrorKind) -> E
+    where
+        E: Error,
+    {
+        self.context.borrow_mut().serialization_error(kind)
+    }
 }
 
 macro_rules! serialize_integer {
@@ -222,9 +233,9 @@ where
         } else if let Ok(value) = u64::try_from(value) {
             JsonLexemeLength::unsigned_integer(value.into())
         } else {
-            return Err(Self::Error::custom(
-                "JSON integer is outside the supported 64-bit range",
-            ));
+            return Err(self.serialization_error(JsonSerializationErrorKind::IntegerOutOfRange {
+                signedness: JsonIntegerSignedness::Signed,
+            }));
         };
         if VALUE_LIMITS {
             self.number(bytes)?;
@@ -234,8 +245,11 @@ where
 
     /// Charges and delegates a `u128` representable as `u64`.
     fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
-        let value64 = u64::try_from(value)
-            .map_err(|_| Self::Error::custom("JSON integer is outside the supported 64-bit range"))?;
+        let value64 = u64::try_from(value).map_err(|_| {
+            self.serialization_error(JsonSerializationErrorKind::IntegerOutOfRange {
+                signedness: JsonIntegerSignedness::Unsigned,
+            })
+        })?;
         if VALUE_LIMITS {
             self.number(JsonLexemeLength::unsigned_integer(value64.into()))?;
         }
@@ -245,7 +259,7 @@ where
     /// Charges and delegates one finite floating-point number.
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
         if !value.is_finite() {
-            return Err(Self::Error::custom("JSON floating-point value must be finite"));
+            return Err(self.serialization_error(JsonSerializationErrorKind::NonFiniteFloat));
         }
         if VALUE_LIMITS {
             self.number(JsonLexemeLength::finite_f32(value))?;
@@ -256,7 +270,7 @@ where
     /// Charges and delegates one finite floating-point number.
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
         if !value.is_finite() {
-            return Err(Self::Error::custom("JSON floating-point value must be finite"));
+            return Err(self.serialization_error(JsonSerializationErrorKind::NonFiniteFloat));
         }
         if VALUE_LIMITS {
             self.number(JsonLexemeLength::finite_f64(value))?;
@@ -456,9 +470,6 @@ where
     where
         T: Display + ?Sized,
     {
-        if !VALUE_LIMITS {
-            return self.inner.collect_str(value);
-        }
         let text = JsonEncodeContext::collect_display::<S::Error, _>(
             self.context,
             value,

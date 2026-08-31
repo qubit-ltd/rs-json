@@ -30,6 +30,8 @@ use super::budgeted_key::BudgetedKey;
 use super::budgeted_private_value::BudgetedPrivateValue;
 use super::budgeted_value::BudgetedValue;
 use super::json_encode_context::JsonEncodeContext;
+use crate::encode::JsonSerializationErrorKind;
+use crate::encode::JsonSerializerStateError;
 
 /// Wraps a Serde compound serializer and checks container operations before
 /// delegating them.
@@ -48,6 +50,9 @@ where
 
     /// Number of sequence items or map entries observed so far.
     observed: usize,
+
+    /// Whether a map key has been accepted without its corresponding value.
+    map_key_pending: bool,
 
     /// Private serde_json encoding represented by this compound.
     private_kind: Option<PrivateStructKind>,
@@ -71,6 +76,7 @@ where
             context,
             child_depth,
             observed: 0,
+            map_key_pending: false,
             private_kind: None,
         }
     }
@@ -86,6 +92,7 @@ where
             context,
             child_depth: depth,
             observed: 0,
+            map_key_pending: false,
             private_kind: Some(PrivateStructKind::RawValue),
         }
     }
@@ -143,7 +150,20 @@ where
     where
         E: Error,
     {
+        if self.map_key_pending {
+            return Err(self.serialization_error(JsonSerializerStateError::MapEndedWithPendingKey));
+        }
         Ok(())
+    }
+
+    /// Records and returns one invalid map serializer state.
+    fn serialization_error<E>(&self, reason: JsonSerializerStateError) -> E
+    where
+        E: Error,
+    {
+        self.context
+            .borrow_mut()
+            .serialization_error(JsonSerializationErrorKind::InvalidSerializerState { reason })
     }
 }
 
@@ -271,9 +291,14 @@ where
     where
         T: Serialize + ?Sized,
     {
+        if self.map_key_pending {
+            return Err(self.serialization_error(JsonSerializerStateError::MapKeyAlreadyPending));
+        }
         self.next_map_entry()?;
         let key = BudgetedKey::<_, _, _, VALUE_LIMITS>::new(key, self.context);
-        self.inner.serialize_key(&key)
+        self.inner.serialize_key(&key)?;
+        self.map_key_pending = true;
+        Ok(())
     }
 
     /// Serializes one map value through a child budget decorator.
@@ -281,8 +306,13 @@ where
     where
         T: Serialize + ?Sized,
     {
+        if !self.map_key_pending {
+            return Err(self.serialization_error(JsonSerializerStateError::MapValueWithoutKey));
+        }
         let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
-        self.inner.serialize_value(&value)
+        self.inner.serialize_value(&value)?;
+        self.map_key_pending = false;
+        Ok(())
     }
 
     /// Checks and serializes one complete map entry.

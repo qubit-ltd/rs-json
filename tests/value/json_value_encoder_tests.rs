@@ -10,10 +10,10 @@
 use std::fmt;
 
 use qubit_json::encode::JsonEncoder;
-use qubit_json::value::JsonIntegerSignedness;
-use qubit_json::value::JsonMapKeyKind;
-use qubit_json::value::JsonValueEncodeErrorCategory;
-use qubit_json::value::JsonValueEncodeErrorKind;
+use qubit_json::encode::JsonIntegerSignedness;
+use qubit_json::encode::JsonMapKeyKind;
+use qubit_json::encode::JsonSerializationErrorCategory;
+use qubit_json::encode::JsonSerializationErrorKind;
 use qubit_json::value::JsonValueEncoder;
 use serde::Serialize;
 use serde::Serializer;
@@ -357,16 +357,16 @@ fn test_json_value_encoder_rejects_wide_integers() {
     let unsigned = encoder.encode(&u128::MAX).expect_err("wide unsigned integer must fail");
     assert_eq!(
         signed.kind(),
-        JsonValueEncodeErrorKind::IntegerOutOfRange {
+        JsonSerializationErrorKind::IntegerOutOfRange {
             signedness: JsonIntegerSignedness::Signed,
         }
     );
-    assert_eq!(signed.category(), JsonValueEncodeErrorCategory::Number);
+    assert_eq!(signed.category(), JsonSerializationErrorCategory::Number);
     assert!(signed.is_number_error());
     assert_eq!(signed.integer_signedness(), Some(JsonIntegerSignedness::Signed));
     assert_eq!(
         unsigned.kind(),
-        JsonValueEncodeErrorKind::IntegerOutOfRange {
+        JsonSerializationErrorKind::IntegerOutOfRange {
             signedness: JsonIntegerSignedness::Unsigned,
         }
     );
@@ -378,13 +378,13 @@ fn test_json_value_encoder_rejects_non_finite_floats() {
     let encoder = JsonValueEncoder::new();
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
         let error = encoder.encode(&value).expect_err("non-finite float must fail");
-        assert_eq!(error.kind(), JsonValueEncodeErrorKind::NonFiniteFloat);
+        assert_eq!(error.kind(), JsonSerializationErrorKind::NonFiniteFloat);
     }
     let custom = encoder
         .encode(&NestedNonFiniteProbe)
         .expect_err("custom serializer failure must remain custom");
-    assert_eq!(custom.kind(), JsonValueEncodeErrorKind::CustomSerialization);
-    assert_eq!(custom.category(), JsonValueEncodeErrorCategory::Custom);
+    assert_eq!(custom.kind(), JsonSerializationErrorKind::CustomSerialization);
+    assert_eq!(custom.category(), JsonSerializationErrorCategory::Custom);
     assert!(!custom.to_string().contains("non-finite floating-point value"));
 }
 
@@ -462,7 +462,7 @@ fn test_json_value_encoder_rejects_non_finite_float_map_key() {
     let error = JsonValueEncoder::new()
         .encode(&FloatKeyProbe(f64::NAN))
         .expect_err("non-finite map key must fail");
-    assert_eq!(error.kind(), JsonValueEncodeErrorKind::NonFiniteFloat);
+    assert_eq!(error.kind(), JsonSerializationErrorKind::NonFiniteFloat);
 }
 
 /// Covers every scalar key representation accepted by strict value encoding.
@@ -499,9 +499,9 @@ fn test_json_value_encoder_rejects_unsupported_map_key_entry_points() {
             .expect_err("unsupported entry point must not produce a JSON object key");
         assert!(matches!(
             error.kind(),
-            JsonValueEncodeErrorKind::UnsupportedMapKey { .. }
+            JsonSerializationErrorKind::UnsupportedMapKey { .. }
         ));
-        assert_eq!(error.category(), JsonValueEncodeErrorCategory::ObjectKey);
+        assert_eq!(error.category(), JsonSerializationErrorCategory::ObjectKey);
         assert!(error.is_map_key_error());
         assert!(
             error.map_key_kind().is_some(),
@@ -534,7 +534,7 @@ fn test_json_value_encoder_rejects_non_finite_map_key_entry_points() {
             .expect_err("non-finite map key must fail");
         assert_eq!(
             error.kind(),
-            JsonValueEncodeErrorKind::NonFiniteFloat,
+            JsonSerializationErrorKind::NonFiniteFloat,
             "entry point {index} must preserve the non-finite classification",
         );
     }
@@ -546,8 +546,8 @@ fn test_json_value_encoder_rejects_duplicate_object_key() {
     let error = JsonValueEncoder::new()
         .encode(&DuplicateKeyProbe)
         .expect_err("duplicate key must fail");
-    assert_eq!(error.kind(), JsonValueEncodeErrorKind::DuplicateObjectKey);
-    assert_eq!(error.category(), JsonValueEncodeErrorCategory::ObjectKey);
+    assert_eq!(error.kind(), JsonSerializationErrorKind::DuplicateObjectKey);
+    assert_eq!(error.category(), JsonSerializationErrorCategory::ObjectKey);
 }
 
 /// Materializes a strict RawValue payload into its represented JSON value.
@@ -569,8 +569,8 @@ fn test_json_value_encoder_rejects_wide_raw_value_number() {
     let error = JsonValueEncoder::new()
         .encode(&raw)
         .expect_err("wide RawValue number must fail");
-    assert_eq!(error.kind(), JsonValueEncodeErrorKind::InvalidRawValue);
-    assert_eq!(error.category(), JsonValueEncodeErrorCategory::RawValue);
+    assert_eq!(error.kind(), JsonSerializationErrorKind::InvalidRawValue);
+    assert_eq!(error.category(), JsonSerializationErrorCategory::RawValue);
     assert!(error.is_raw_value_error());
 }
 
@@ -581,14 +581,14 @@ fn test_json_value_encoder_classifies_display_formatting_failure() {
     let error = JsonValueEncoder::new()
         .encode(&FailingDisplayProbe)
         .expect_err("failing Display must produce an error");
-    assert_eq!(error.kind(), JsonValueEncodeErrorKind::DisplayFormattingFailed);
-    assert_eq!(error.category(), JsonValueEncodeErrorCategory::SerializerContract);
+    assert_eq!(error.kind(), JsonSerializationErrorKind::DisplayFormattingFailed);
+    assert_eq!(error.category(), JsonSerializationErrorCategory::SerializerContract);
 }
 
 /// Classifies each externally reachable invalid map call sequence.
 #[test]
 fn test_json_value_encoder_classifies_invalid_map_states() {
-    use qubit_json::value::JsonSerializerStateError;
+    use qubit_json::encode::JsonSerializerStateError;
 
     let encoder = JsonValueEncoder::new();
     let expected = [
@@ -602,7 +602,7 @@ fn test_json_value_encoder_classifies_invalid_map_states() {
             .expect_err("invalid map state must fail");
         assert_eq!(
             error.kind(),
-            JsonValueEncodeErrorKind::InvalidSerializerState { reason }
+            JsonSerializationErrorKind::InvalidSerializerState { reason }
         );
         assert!(error.is_serializer_contract_error());
         assert_eq!(error.serializer_state_error(), Some(reason));

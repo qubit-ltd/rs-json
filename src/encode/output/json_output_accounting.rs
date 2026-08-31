@@ -12,6 +12,8 @@ use qubit_budget::ResourceBudget;
 use qubit_budget::ResourceQuantity;
 
 use crate::decode::JsonSyntaxError;
+use crate::encode::JsonSerializationError;
+use crate::encode::JsonSerializationErrorKind;
 
 /// Tracks the output budget and the first erased budget violation.
 pub(in crate::encode) struct JsonOutputAccounting<'a, R, Q>
@@ -26,6 +28,9 @@ where
 
     /// First raw JSON syntax failure hidden behind a Serde error.
     syntax_error: Option<JsonSyntaxError>,
+
+    /// First structured serialization failure hidden behind a Serde error.
+    serialization_error: Option<JsonSerializationError>,
 }
 
 impl<'a, R, Q> JsonOutputAccounting<'a, R, Q>
@@ -39,6 +44,7 @@ where
             output,
             violation: None,
             syntax_error: None,
+            serialization_error: None,
         }
     }
 
@@ -47,6 +53,15 @@ where
     #[inline(always)]
     pub(in crate::encode) const fn has_output_budget(&self) -> bool {
         self.output.is_some()
+    }
+
+    /// Returns the operation-local output capacity still available.
+    ///
+    /// `None` means output bytes are not bounded for this operation.
+    #[must_use]
+    #[inline(always)]
+    pub(in crate::encode) fn remaining(&self) -> Option<Q> {
+        self.output.as_deref().map(ResourceBudget::remaining)
     }
 
     /// Checks an output lower bound without consuming capacity.
@@ -99,5 +114,26 @@ where
     #[inline(always)]
     pub(in crate::encode) fn take_syntax_error(&mut self) -> Option<JsonSyntaxError> {
         self.syntax_error.take()
+    }
+
+    /// Records the first structured serialization failure.
+    pub(in crate::encode) fn record_serialization_error(&mut self, error: JsonSerializationError) {
+        if self.serialization_error.is_none() {
+            self.serialization_error = Some(error);
+        }
+    }
+
+    /// Takes the first structured serialization failure, if one exists.
+    #[must_use]
+    #[inline(always)]
+    pub(in crate::encode) fn take_serialization_error(&mut self) -> Option<JsonSerializationError> {
+        self.serialization_error.take()
+    }
+
+    /// Takes the recorded serialization failure or returns the opaque fallback
+    /// used for arbitrary third-party Serde errors.
+    pub(in crate::encode) fn take_serialization_error_or_custom(&mut self) -> JsonSerializationError {
+        self.take_serialization_error()
+            .unwrap_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization))
     }
 }

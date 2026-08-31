@@ -10,14 +10,15 @@ use std::error::Error;
 use qubit_json::decode::JsonSyntaxError;
 use qubit_json::decode::JsonSyntaxErrorReason;
 use qubit_json::encode::JsonEncodeError;
-use serde_json::Value;
-use serde_json::from_str;
+use qubit_json::encode::JsonSerializationError;
+use qubit_json::encode::JsonSerializationErrorCategory;
+use qubit_json::encode::JsonSerializationErrorKind;
 
 /// Verifies that Serde failures retain the encoding error category.
 #[test]
 fn test_serialize_error_variant_is_distinct() {
-    let error = from_str::<Value>("not-json").expect_err("fixture must be invalid JSON");
-    let error = JsonEncodeError::<(), usize>::Serialize(error);
+    let source = JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization);
+    let error = JsonEncodeError::<(), usize>::Serialize(source);
 
     assert!(matches!(error, JsonEncodeError::Serialize(_)));
 }
@@ -37,12 +38,15 @@ fn test_invalid_raw_json_preserves_syntax_error_details() {
     assert_eq!(syntax_error.column(), 7);
 }
 
-/// Verifies Serde custom failures are preserved as serialization errors.
+/// Verifies Serde custom failures discard arbitrary diagnostic text.
 #[test]
-fn test_serde_custom_error_preserves_message() {
-    let error = <JsonEncodeError<(), usize> as serde::ser::Error>::custom("fixture failure");
+fn test_serde_custom_error_redacts_message() {
+    const SECRET: &str = "SERIALIZATION_SECRET";
+    let error = <JsonSerializationError as serde::ser::Error>::custom(SECRET);
 
-    assert!(matches!(error, JsonEncodeError::Serialize(_)));
-    assert_eq!(error.to_string(), "JSON serialization failed: fixture failure");
-    assert!(error.source().is_some());
+    assert_eq!(error.kind(), JsonSerializationErrorKind::CustomSerialization);
+    assert_eq!(error.category(), JsonSerializationErrorCategory::Custom);
+    assert!(!error.to_string().contains(SECRET));
+    assert!(!format!("{error:?}").contains(SECRET));
+    assert!(error.source().is_none());
 }

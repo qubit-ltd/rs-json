@@ -18,6 +18,8 @@ use serde::Serializer;
 
 use super::super::display_budget_kind::DisplayBudgetKind;
 use super::super::json_encode_context::JsonEncodeContext;
+use crate::encode::JsonMapKeyKind;
+use crate::encode::JsonSerializationErrorKind;
 use crate::internal::JsonLexemeLength;
 use crate::internal::JsonMapKey;
 
@@ -53,6 +55,20 @@ where
             return Ok(());
         }
         self.context.borrow_mut().admit(JsonMeasurement::Key { bytes })
+    }
+
+    /// Rejects one unsupported key shape through the shared stable error.
+    fn unsupported(&self, kind: JsonMapKeyKind) -> S::Error {
+        self.context
+            .borrow_mut()
+            .serialization_error(JsonSerializationErrorKind::UnsupportedMapKey { kind })
+    }
+
+    /// Rejects one non-finite key through the shared numeric error.
+    fn non_finite(&self) -> S::Error {
+        self.context
+            .borrow_mut()
+            .serialization_error(JsonSerializationErrorKind::NonFiniteFloat)
     }
 }
 
@@ -129,7 +145,10 @@ where
 
     /// Checks a finite `f32` key length before forwarding it.
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
-        if VALUE_LIMITS && value.is_finite() {
+        if !value.is_finite() {
+            return Err(self.non_finite());
+        }
+        if VALUE_LIMITS {
             self.check(JsonLexemeLength::finite_f32(value))?;
         }
         self.inner.serialize_f32(value)
@@ -137,7 +156,10 @@ where
 
     /// Checks a finite `f64` key length before forwarding it.
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
-        if VALUE_LIMITS && value.is_finite() {
+        if !value.is_finite() {
+            return Err(self.non_finite());
+        }
+        if VALUE_LIMITS {
             self.check(JsonLexemeLength::finite_f64(value))?;
         }
         self.inner.serialize_f64(value)
@@ -160,13 +182,13 @@ where
     }
 
     /// Forwards byte keys to the underlying serializer.
-    fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
-        self.inner.serialize_bytes(value)
+    fn serialize_bytes(self, _value: &[u8]) -> Result<Self::Ok, Self::Error> {
+        Err(self.unsupported(JsonMapKeyKind::Bytes))
     }
 
     /// Forwards an absent optional key without additional accounting.
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        self.inner.serialize_none()
+        Err(self.unsupported(JsonMapKeyKind::None))
     }
 
     /// Serializes a present optional key through this decorator.
@@ -179,12 +201,12 @@ where
 
     /// Forwards a unit key without additional accounting.
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        self.inner.serialize_unit()
+        Err(self.unsupported(JsonMapKeyKind::Unit))
     }
 
     /// Forwards a unit-struct key without additional accounting.
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
-        self.inner.serialize_unit_struct(name)
+    fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
+        Err(self.unsupported(JsonMapKeyKind::UnitStruct))
     }
 
     /// Checks a unit-variant key name before forwarding it.
@@ -211,63 +233,66 @@ where
     /// Forwards a newtype-variant key and its payload.
     fn serialize_newtype_variant<T>(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
-        value: &T,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        self.inner
-            .serialize_newtype_variant(name, variant_index, variant, value)
+        Err(self.unsupported(JsonMapKeyKind::NewtypeVariant))
     }
 
     /// Creates a sequence serializer through the underlying serializer.
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        self.inner.serialize_seq(len)
+    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        Err(self.unsupported(JsonMapKeyKind::Sequence))
     }
 
     /// Creates a tuple serializer through the underlying serializer.
-    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        self.inner.serialize_tuple(len)
+    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        Err(self.unsupported(JsonMapKeyKind::Tuple))
     }
 
     /// Creates a tuple-struct serializer through the underlying serializer.
-    fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        self.inner.serialize_tuple_struct(name, len)
+    fn serialize_tuple_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        Err(self.unsupported(JsonMapKeyKind::TupleStruct))
     }
 
     /// Creates a tuple-variant serializer through the underlying serializer.
     fn serialize_tuple_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
-        len: usize,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        self.inner.serialize_tuple_variant(name, variant_index, variant, len)
+        Err(self.unsupported(JsonMapKeyKind::TupleVariant))
     }
 
     /// Creates a map serializer through the underlying serializer.
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        self.inner.serialize_map(len)
+    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        Err(self.unsupported(JsonMapKeyKind::Map))
     }
 
     /// Creates a struct serializer through the underlying serializer.
-    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
-        self.inner.serialize_struct(name, len)
+    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+        Err(self.unsupported(JsonMapKeyKind::Struct))
     }
 
     /// Creates a struct-variant serializer through the underlying serializer.
     fn serialize_struct_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
-        len: usize,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        self.inner.serialize_struct_variant(name, variant_index, variant, len)
+        Err(self.unsupported(JsonMapKeyKind::StructVariant))
     }
 
     /// Formats, accounts, and forwards a display-based key.
@@ -275,9 +300,6 @@ where
     where
         T: Display + ?Sized,
     {
-        if !VALUE_LIMITS {
-            return self.inner.collect_str(value);
-        }
         let text = JsonEncodeContext::collect_display::<S::Error, _>(self.context, value, DisplayBudgetKind::Key, 1)?;
         self.inner.serialize_str(&text)
     }

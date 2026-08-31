@@ -16,10 +16,10 @@ use serde::Serializer;
 use serde::ser::Impossible;
 use serde_json::Number;
 
+use crate::encode::JsonMapKeyKind;
+use crate::encode::JsonSerializationError;
+use crate::encode::JsonSerializationErrorKind;
 use crate::internal::JsonMapKey;
-use crate::value::JsonMapKeyKind;
-use crate::value::JsonValueEncodeError;
-use crate::value::JsonValueEncodeErrorKind;
 
 /// Converts supported scalar map keys into JSON object key strings.
 #[derive(Debug, Clone, Copy)]
@@ -38,14 +38,14 @@ macro_rules! serialize_key_integer {
 
 impl Serializer for JsonValueMapKeySerializer {
     type Ok = String;
-    type Error = JsonValueEncodeError;
-    type SerializeSeq = Impossible<String, JsonValueEncodeError>;
-    type SerializeTuple = Impossible<String, JsonValueEncodeError>;
-    type SerializeTupleStruct = Impossible<String, JsonValueEncodeError>;
-    type SerializeTupleVariant = Impossible<String, JsonValueEncodeError>;
-    type SerializeMap = Impossible<String, JsonValueEncodeError>;
-    type SerializeStruct = Impossible<String, JsonValueEncodeError>;
-    type SerializeStructVariant = Impossible<String, JsonValueEncodeError>;
+    type Error = JsonSerializationError;
+    type SerializeSeq = Impossible<String, JsonSerializationError>;
+    type SerializeTuple = Impossible<String, JsonSerializationError>;
+    type SerializeTupleStruct = Impossible<String, JsonSerializationError>;
+    type SerializeTupleVariant = Impossible<String, JsonSerializationError>;
+    type SerializeMap = Impossible<String, JsonSerializationError>;
+    type SerializeStruct = Impossible<String, JsonSerializationError>;
+    type SerializeStructVariant = Impossible<String, JsonSerializationError>;
 
     /// Serializes a Boolean key through its JSON text.
     fn serialize_bool(self, value: bool) -> Result<String, Self::Error> {
@@ -76,18 +76,18 @@ impl Serializer for JsonValueMapKeySerializer {
     /// Serializes a finite 32-bit floating-point key.
     fn serialize_f32(self, value: f32) -> Result<String, Self::Error> {
         if !value.is_finite() {
-            return Err(JsonValueEncodeError::new(JsonValueEncodeErrorKind::NonFiniteFloat));
+            return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
         }
         Number::from_str(&value.to_string())
             .map(|number| number.to_string())
-            .map_err(|_| JsonValueEncodeError::new(JsonValueEncodeErrorKind::InvalidNumberRepresentation))
+            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))
     }
 
     /// Serializes a finite 64-bit floating-point key.
     fn serialize_f64(self, value: f64) -> Result<String, Self::Error> {
         Number::from_f64(value)
             .map(|number| number.to_string())
-            .ok_or_else(|| JsonValueEncodeError::new(JsonValueEncodeErrorKind::NonFiniteFloat))
+            .ok_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat))
     }
 
     /// Serializes a character key.
@@ -220,13 +220,13 @@ impl Serializer for JsonValueMapKeySerializer {
     {
         let mut text = String::new();
         write!(&mut text, "{value}")
-            .map_err(|_| JsonValueEncodeError::new(JsonValueEncodeErrorKind::DisplayFormattingFailed))?;
+            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
         Ok(text)
     }
 }
 
 /// Creates a stable unsupported-key failure without retaining key data.
 #[inline(always)]
-fn unsupported_key(kind: JsonMapKeyKind) -> JsonValueEncodeError {
-    JsonValueEncodeError::new(JsonValueEncodeErrorKind::UnsupportedMapKey { kind })
+fn unsupported_key(kind: JsonMapKeyKind) -> JsonSerializationError {
+    JsonSerializationError::new(JsonSerializationErrorKind::UnsupportedMapKey { kind })
 }

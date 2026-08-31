@@ -11,10 +11,9 @@ use std::fmt::Debug;
 use std::io::Error as IoError;
 
 use qubit_budget::MeasuredBudgetError;
-use qubit_budget::ResourceQuantity;
-use serde_json::Error as JsonError;
 use thiserror::Error;
 
+use super::JsonSerializationError;
 use crate::decode::JsonSyntaxError;
 
 /// Failure produced while encoding one JSON document.
@@ -34,10 +33,12 @@ use crate::decode::JsonSyntaxError;
 /// ```
 /// use qubit_budget::json::JsonResource;
 /// use qubit_json::encode::JsonEncodeError;
-/// use serde::ser::Error;
+/// use qubit_json::encode::JsonSerializationError;
+/// use qubit_json::encode::JsonSerializationErrorKind;
 ///
-/// let error: JsonEncodeError<JsonResource> =
-///     <JsonEncodeError<JsonResource> as Error>::custom("example failure");
+/// let error: JsonEncodeError<JsonResource> = JsonEncodeError::Serialize(
+///     JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization),
+/// );
 /// assert!(matches!(error, JsonEncodeError::Serialize(_)));
 /// ```
 #[must_use]
@@ -63,9 +64,9 @@ where
     /// Serde could not serialize the source value.
     #[error("JSON serialization failed: {0}")]
     Serialize(
-        /// Serde error raised while serializing the source value.
+        /// Stable, privacy-safe reason serialization failed.
         #[source]
-        JsonError,
+        JsonSerializationError,
     ),
     /// The external destination writer rejected output bytes.
     #[error("JSON output writer failed: {0}")]
@@ -74,18 +75,4 @@ where
         #[source]
         IoError,
     ),
-}
-
-impl<R, Q> serde::ser::Error for JsonEncodeError<R, Q>
-where
-    R: Debug,
-    Q: ResourceQuantity,
-{
-    /// Converts a custom Serde failure into the encode-specific error.
-    fn custom<T>(message: T) -> Self
-    where
-        T: std::fmt::Display,
-    {
-        Self::Serialize(<JsonError as serde::ser::Error>::custom(message))
-    }
 }

@@ -29,8 +29,8 @@ where
     /// Accounting shared with the online serializer checks.
     accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
 
-    /// Whether writes must check an output-byte budget.
-    has_output_budget: bool,
+    /// Operation-local capacity used by the successful write hot path.
+    remaining: Option<Q>,
 }
 
 impl<'a, R, Q> JsonOutputBuffer<'a, R, Q>
@@ -51,7 +51,7 @@ where
         Self {
             bytes: Vec::new(),
             accounting,
-            has_output_budget: accounting.borrow().has_output_budget(),
+            remaining: accounting.borrow().remaining(),
         }
     }
 
@@ -81,7 +81,10 @@ where
         if let Some(error) = syntax_error {
             return Err(JsonEncodeError::InvalidRawJson(error));
         }
-        result.map_err(JsonEncodeError::Serialize)?;
+        if result.is_err() {
+            let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
+            return Err(JsonEncodeError::Serialize(error));
+        }
         Ok(self.bytes)
     }
 }
@@ -103,13 +106,21 @@ where
                 return Err(io::Error::other("JSON output length overflow"));
             }
         };
-        if self.has_output_budget {
-            let accounting = self.accounting.borrow();
-            if let Err(error) = accounting.check_available(next) {
-                drop(accounting);
-                let mut accounting = self.accounting.borrow_mut();
-                accounting.record_violation(error);
-                return Err(io::Error::other("JSON output budget exceeded"));
+        if let Some(remaining) = self.remaining {
+            let amount = Q::try_from_usize(input.len());
+            match amount {
+                Ok(amount) if amount <= remaining => {
+                    self.remaining = Some(remaining - amount);
+                }
+                Ok(_) | Err(_) => {
+                    let error = self
+                        .accounting
+                        .borrow()
+                        .check_available(next)
+                        .expect_err("the local output capacity already rejected this write");
+                    self.accounting.borrow_mut().record_violation(error);
+                    return Err(io::Error::other("JSON output budget exceeded"));
+                }
             }
         }
         self.bytes.extend_from_slice(input);

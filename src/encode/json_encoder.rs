@@ -183,9 +183,6 @@ where
         let mut attempt = self.session.begin_value();
         let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits)?;
         attempt
-            .check_output_bytes(bytes.len())
-            .map_err(JsonEncodeError::Budget)?;
-        attempt
             .try_consume_output_bytes(bytes.len())
             .map_err(JsonEncodeError::Budget)?;
         attempt.commit().map_err(JsonEncodeError::Budget)?;
@@ -316,7 +313,10 @@ where
             if let Some(error) = accounting.borrow_mut().take_syntax_error() {
                 return Err(JsonEncodeError::InvalidRawJson(error));
             }
-            result.map_err(JsonEncodeError::Serialize)?;
+            if result.is_err() {
+                let error = accounting.borrow_mut().take_serialization_error_or_custom();
+                return Err(JsonEncodeError::Serialize(error));
+            }
             return Ok(bytes);
         }
         let accounting = RefCell::new(JsonOutputAccounting::new(output_budget));

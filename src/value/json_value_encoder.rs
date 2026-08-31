@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use self::internal::JsonValueSerializer;
-use super::JsonValueEncodeError;
+use crate::encode::JsonSerializationError;
 
 mod internal;
 
@@ -32,7 +32,7 @@ mod internal;
 /// let encoder = JsonValueEncoder::new();
 /// let value = encoder.encode(&json!({"ok": true}))?;
 /// assert_eq!(value, json!({"ok": true}));
-/// # Ok::<(), qubit_json::value::JsonValueEncodeError>(())
+/// # Ok::<(), qubit_json::encode::JsonSerializationError>(())
 /// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub struct JsonValueEncoder {
@@ -72,7 +72,7 @@ impl JsonValueEncoder {
     /// Returns a strict value error whose precise kind distinguishes number,
     /// object-key, RawValue, capacity, serializer-contract, and opaque custom
     /// failures without retaining arbitrary diagnostic text.
-    pub fn encode<T>(&self, value: &T) -> Result<Value, JsonValueEncodeError>
+    pub fn encode<T>(&self, value: &T) -> Result<Value, JsonSerializationError>
     where
         T: Serialize + ?Sized,
     {
