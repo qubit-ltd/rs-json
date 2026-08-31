@@ -247,6 +247,7 @@ fn encode(criterion: &mut Criterion) {
             RawValue::from_string(String::from_utf8(document.clone()).expect("benchmark document must be valid UTF-8"))
                 .expect("benchmark document must be valid raw JSON");
         let numeric_fixture = vec![1.234_567_890_123_f64; target_bytes / 18];
+        let string_fixture = vec!["benchmark-string-payload"; target_bytes / 27];
         group.throughput(Throughput::Bytes(document.len() as u64));
 
         group.bench_with_input(
@@ -263,6 +264,19 @@ fn encode(criterion: &mut Criterion) {
             &fixture,
             |bencher, fixture| {
                 bencher.iter(|| black_box(reused_encoder.to_vec(black_box(fixture)).expect("fixture must encode")));
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("encode/strict-owned", size),
+            &fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    black_box(
+                        JsonEncoder::unlimited()
+                            .to_vec(black_box(fixture))
+                            .expect("fixture must encode"),
+                    )
+                });
             },
         );
         group.bench_with_input(
@@ -366,6 +380,30 @@ fn encode(criterion: &mut Criterion) {
                         JsonEncoder::unlimited()
                             .to_vec(black_box(fixture))
                             .expect("numeric fixture must encode"),
+                    )
+                });
+            },
+        );
+        let string_size = serde_json::to_vec(&string_fixture)
+            .expect("string fixture must encode")
+            .len();
+        group.throughput(Throughput::Bytes(string_size as u64));
+        group.bench_with_input(
+            BenchmarkId::new("encode/string-serde-json", string_size),
+            &string_fixture,
+            |bencher, fixture| {
+                bencher.iter(|| black_box(serde_json::to_vec(black_box(fixture)).expect("string fixture must encode")));
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("encode/string", string_size),
+            &string_fixture,
+            |bencher, fixture| {
+                bencher.iter(|| {
+                    black_box(
+                        JsonEncoder::unlimited()
+                            .to_vec(black_box(fixture))
+                            .expect("string fixture must encode"),
                     )
                 });
             },
