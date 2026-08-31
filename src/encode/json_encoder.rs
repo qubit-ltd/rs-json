@@ -294,6 +294,31 @@ where
         T: Serialize + ?Sized,
     {
         let (output_budget, transaction) = attempt.split_mut();
+        if output_budget.is_none() {
+            let accounting = RefCell::new(JsonOutputAccounting::new(None));
+            let mut bytes = Vec::new();
+            let result = {
+                let mut inner = JsonSerializer::new(&mut bytes);
+                let context = RefCell::new(JsonEncodeContext {
+                    transaction,
+                    output: &accounting,
+                    has_value_limits,
+                });
+                if has_value_limits {
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
+                } else {
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(&mut inner, &context))
+                }
+            };
+            if let Some(error) = accounting.borrow_mut().take_violation() {
+                return Err(JsonEncodeError::Budget(error));
+            }
+            if let Some(error) = accounting.borrow_mut().take_syntax_error() {
+                return Err(JsonEncodeError::InvalidRawJson(error));
+            }
+            result.map_err(JsonEncodeError::Serialize)?;
+            return Ok(bytes);
+        }
         let accounting = RefCell::new(JsonOutputAccounting::new(output_budget));
         let mut output = JsonOutputBuffer::new(&accounting);
         let result = {
