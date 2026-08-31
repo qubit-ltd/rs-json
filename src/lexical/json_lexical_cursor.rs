@@ -191,17 +191,15 @@ where
                         byte: self.peek().unwrap_or_default(),
                     }));
                 }
-                let items = items
-                    .checked_add(1)
-                    .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
+                let Some(items) = items.checked_add(1) else {
+                    return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
+                };
                 self.check_container_count(JsonContainerKind::Sequence, items)?;
                 stack.push(JsonLexicalContainerFrame::ArrayDelimiter { depth, items });
-                self.value(
-                    depth
-                        .checked_add(1)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?,
-                    stack,
-                )
+                let Some(child_depth) = depth.checked_add(1) else {
+                    return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
+                };
+                self.value(child_depth, stack)
             }
             JsonLexicalContainerFrame::ArrayDelimiter { depth, items } => {
                 self.skip_whitespace();
@@ -233,9 +231,9 @@ where
                 if self.peek() != Some(b'"') {
                     return Err(self.syntax(JsonLexicalErrorReason::ExpectedObjectKey));
                 }
-                let entries = entries
-                    .checked_add(1)
-                    .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
+                let Some(entries) = entries.checked_add(1) else {
+                    return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
+                };
                 self.check_container_count(JsonContainerKind::Map, entries)?;
                 let bytes = self.string_bytes()?;
                 self.admit(JsonMeasurement::Key { bytes })?;
@@ -248,12 +246,10 @@ where
                 }
                 self.offset += 1;
                 stack.push(JsonLexicalContainerFrame::ObjectDelimiter { depth, entries });
-                self.value(
-                    depth
-                        .checked_add(1)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?,
-                    stack,
-                )
+                let Some(child_depth) = depth.checked_add(1) else {
+                    return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
+                };
+                self.value(child_depth, stack)
             }
             JsonLexicalContainerFrame::ObjectDelimiter { depth, entries } => {
                 self.skip_whitespace();
@@ -300,9 +296,10 @@ where
                             return Err(self.syntax(JsonLexicalErrorReason::InvalidEscape));
                         }
                     };
-                    decoded = decoded
-                        .checked_add(bytes)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
+                    let Some(next_decoded) = decoded.checked_add(bytes) else {
+                        return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
+                    };
+                    decoded = next_decoded;
                 }
                 Some(0x20..=0x7F) => {
                     let start = self.offset;
@@ -313,30 +310,33 @@ where
                     {
                         self.offset += 1;
                     }
-                    decoded = decoded
-                        .checked_add(self.offset - start)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
+                    let Some(next_decoded) = decoded.checked_add(self.offset - start) else {
+                        return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
+                    };
+                    decoded = next_decoded;
                 }
                 Some(byte) if byte >= 0x80 => {
-                    let width =
-                        Self::utf8_width(byte).ok_or_else(|| self.syntax(JsonLexicalErrorReason::InvalidUtf8))?;
-                    let end = self
-                        .offset
-                        .checked_add(width)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
-                    let text = self
-                        .input
-                        .get(self.offset..end)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::UnexpectedEnd))?;
-                    let character = std::str::from_utf8(text)
+                    let Some(width) = Self::utf8_width(byte) else {
+                        return Err(self.syntax(JsonLexicalErrorReason::InvalidUtf8));
+                    };
+                    let Some(end) = self.offset.checked_add(width) else {
+                        return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
+                    };
+                    let Some(text) = self.input.get(self.offset..end) else {
+                        return Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd));
+                    };
+                    let Some(character) = std::str::from_utf8(text)
                         .ok()
                         .and_then(|text| text.chars().next())
                         .filter(|character| character.len_utf8() == width)
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::InvalidUtf8))?;
+                    else {
+                        return Err(self.syntax(JsonLexicalErrorReason::InvalidUtf8));
+                    };
                     self.offset = end;
-                    decoded = decoded
-                        .checked_add(character.len_utf8())
-                        .ok_or_else(|| self.syntax(JsonLexicalErrorReason::NestingOverflow))?;
+                    let Some(next_decoded) = decoded.checked_add(character.len_utf8()) else {
+                        return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
+                    };
+                    decoded = next_decoded;
                 }
                 None => {
                     return Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd));
@@ -372,9 +372,10 @@ where
             }
             u32::from(first)
         };
-        char::from_u32(scalar)
-            .map(char::len_utf8)
-            .ok_or_else(|| self.syntax(JsonLexicalErrorReason::UnpairedSurrogate))
+        let Some(character) = char::from_u32(scalar) else {
+            return Err(self.syntax(JsonLexicalErrorReason::UnpairedSurrogate));
+        };
+        Ok(character.len_utf8())
     }
 
     /// Consumes four hexadecimal digits from a Unicode escape.
@@ -439,23 +440,24 @@ where
     /// Validates one syntactically complete number against the supported
     /// integer and floating-point representation ranges.
     fn validate_number_range(&self, start: usize, end: usize) -> Result<(), JsonLexicalError<R, Q>> {
-        let token = std::str::from_utf8(&self.input[start..end])
-            .map_err(|_| self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber))?;
+        let Ok(token) = std::str::from_utf8(&self.input[start..end]) else {
+            return Err(self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber));
+        };
         if token.contains(['.', 'e', 'E']) {
-            let value = token
-                .parse::<f64>()
-                .map_err(|_| self.syntax_at(start, JsonLexicalErrorReason::FloatOutOfRange))?;
+            let Ok(value) = token.parse::<f64>() else {
+                return Err(self.syntax_at(start, JsonLexicalErrorReason::FloatOutOfRange));
+            };
             if !value.is_finite() {
                 return Err(self.syntax_at(start, JsonLexicalErrorReason::FloatOutOfRange));
             }
         } else if token.starts_with('-') {
-            token
-                .parse::<i64>()
-                .map_err(|_| self.syntax_at(start, JsonLexicalErrorReason::IntegerOutOfRange))?;
+            if token.parse::<i64>().is_err() {
+                return Err(self.syntax_at(start, JsonLexicalErrorReason::IntegerOutOfRange));
+            }
         } else {
-            token
-                .parse::<u64>()
-                .map_err(|_| self.syntax_at(start, JsonLexicalErrorReason::IntegerOutOfRange))?;
+            if token.parse::<u64>().is_err() {
+                return Err(self.syntax_at(start, JsonLexicalErrorReason::IntegerOutOfRange));
+            }
         }
         Ok(())
     }

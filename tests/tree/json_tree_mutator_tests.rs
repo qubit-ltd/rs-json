@@ -339,6 +339,49 @@ fn test_process_continues_after_nested_child_structure_replacement() {
     assert!(visitor.visited_root_sibling);
 }
 
+/// Verifies nested structural mutations remain observable when output
+/// accounting rejects the completed result.
+#[test]
+fn test_process_retains_nested_mutations_after_output_budget_failure() {
+    let mut input_budget = measured_limits().budget();
+    let mut output_budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(5)
+        .max_payload_bytes(1_024)
+        .build()
+        .budget();
+    let mut input = input_budget.transaction();
+    let mut output = output_budget.transaction();
+    let mut value = json!({
+        "first": {"replace_object": true, "after_object": 1},
+        "middle": [{"replace_array": true}, "after array"],
+        "last": "after root",
+    });
+    let mut visitor = StructuralReplacementVisitor::default();
+
+    let error = JsonTreeMutator::new(&mut input, &mut output)
+        .process(&mut value, &mut visitor)
+        .expect_err("the expanded result must exceed the output node budget");
+
+    assert!(matches!(
+        error,
+        JsonTreeMutateError::OutputBudget(error)
+            if error.resource() == &JsonResource::Nodes
+    ));
+    assert_eq!(
+        value,
+        json!({
+            "first": {"replace_object": ["object replacement child"], "after_object": 1},
+            "middle": [{"array replacement child": null}, "after array"],
+            "last": "after root",
+        }),
+    );
+    assert!(visitor.visited_object_replacement_child);
+    assert!(visitor.visited_array_replacement_child);
+    assert!(visitor.visited_object_sibling);
+    assert!(visitor.visited_array_sibling);
+    assert!(visitor.visited_root_sibling);
+}
+
 /// Verifies both accounting passes and mutable callbacks avoid Rust recursion.
 #[test]
 fn test_process_handles_deep_tree_without_rust_recursion() {

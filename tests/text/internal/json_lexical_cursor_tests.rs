@@ -104,3 +104,43 @@ fn test_cursor_rejects_invalid_utf8_inside_string() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
     assert_eq!(error.utf8_valid_up_to(), Some(1));
 }
+
+/// Verifies the cursor exercises value, container, key, and payload admission
+/// when finite decode limits are enabled.
+#[test]
+fn test_cursor_admits_finite_value_limits() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(128)
+        .max_normalized_input_bytes(128)
+        .max_depth(8)
+        .max_nodes(8)
+        .max_sequence_items(4)
+        .max_map_entries(4)
+        .max_key_bytes(8)
+        .max_string_bytes(16)
+        .max_number_bytes(8)
+        .max_payload_bytes(32)
+        .build();
+    let session = JsonDecodeSession::from_limits(limits);
+    let value = JsonDecoder::new(session)
+        .decode_utf8::<serde_json::Value>(r#"{"a":[true,-2.5e1],"b":"é"}"#.as_bytes())
+        .expect("a finite resource budget should admit the complete value");
+
+    assert_eq!(value["a"][1], -25.0);
+    assert_eq!(value["b"], "é");
+}
+
+/// Verifies malformed surrogate pairs and number forms remain classified at
+/// the lexical boundary when the scanner has already entered a string/value.
+#[test]
+fn test_cursor_reports_additional_scalar_boundary_errors() {
+    let cases: &[&[u8]] = &[br#""\uD800x""#, b"-", b"1e", b"1e+ "];
+
+    for input in cases {
+        let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+        let error = JsonDecoder::new(session)
+            .decode_utf8::<serde_json::Value>(input)
+            .expect_err("malformed scalar input should be rejected");
+        assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson, "input: {input:?}");
+    }
+}
