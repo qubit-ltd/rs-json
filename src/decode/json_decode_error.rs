@@ -430,7 +430,9 @@ where
                 None => formatter.write_str("Failed to decode JSON input as UTF-8"),
             },
             JsonDecodeFailure::InvalidJson { syntax, source, .. } => match source {
-                Some(source) => write!(formatter, "Failed to parse JSON: {source}"),
+                Some(source) => {
+                    write!(formatter, "Failed to parse JSON: {source}")
+                }
                 None => write!(formatter, "Failed to parse JSON: {syntax}"),
             },
             JsonDecodeFailure::UnexpectedTopLevel { expected, actual, .. } => {
