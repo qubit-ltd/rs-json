@@ -38,7 +38,7 @@ use std::borrow::Cow;
 /// assert_eq!(document.as_str(), r#"{"ok":true}"#);
 /// assert_eq!(document.raw_input_bytes(), input.len());
 /// assert_eq!(document.normalized_input_bytes(), document.as_str().len());
-/// let value = decoder.decode_document::<Value>(&document)?;
+/// let value = decoder.decode_precharged_document::<Value>(&document)?;
 /// assert_eq!(value["ok"], true);
 /// # Ok::<(), qubit_json::decode::JsonDecodeError>(())
 /// ```
