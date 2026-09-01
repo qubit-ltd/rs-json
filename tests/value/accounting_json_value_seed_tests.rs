@@ -25,7 +25,7 @@ use serde_json::Deserializer;
 use serde_json::json;
 
 #[test]
-fn accounting_json_value_seed_rejects_decoded_nodes_incrementally() {
+fn test_accounting_json_value_seed_rejects_decoded_nodes_incrementally() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)))
         .build();
@@ -65,7 +65,7 @@ fn test_accounting_json_value_seed_admits_containers_before_descending() {
 }
 
 #[test]
-fn accounting_json_value_seed_returns_the_admitted_value() {
+fn test_accounting_json_value_seed_returns_the_admitted_value() {
     let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"{"key":[true]}"#);
