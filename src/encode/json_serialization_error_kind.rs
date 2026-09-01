@@ -15,6 +15,24 @@ use super::JsonMapKeyKind;
 use super::JsonSerializerStateError;
 
 /// Precise reason why a Serde value could not become strict JSON.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::encode::JsonIntegerSignedness;
+/// use qubit_json::encode::JsonSerializationErrorKind;
+/// use qubit_json::value::JsonValueEncoder;
+///
+/// let error = JsonValueEncoder::new()
+///     .encode(&u128::MAX)
+///     .expect_err("wide integer must be rejected");
+/// assert_eq!(
+///     error.kind(),
+///     JsonSerializationErrorKind::IntegerOutOfRange {
+///         signedness: JsonIntegerSignedness::Unsigned,
+///     },
+/// );
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
 pub enum JsonSerializationErrorKind {
     /// A signed or unsigned integer exceeded the strict 64-bit union range.

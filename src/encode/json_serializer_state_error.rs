@@ -8,6 +8,22 @@
 //! Defines violations of the Serde compound-serialization protocol.
 
 /// Invalid state produced by a malformed hand-written Serde implementation.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::encode::JsonSerializationError;
+/// use qubit_json::encode::JsonSerializationErrorKind;
+/// use qubit_json::encode::JsonSerializerStateError;
+///
+/// let error = JsonSerializationError::new(JsonSerializationErrorKind::InvalidSerializerState {
+///     reason: JsonSerializerStateError::MapValueWithoutKey,
+/// });
+/// assert_eq!(
+///     error.serializer_state_error(),
+///     Some(JsonSerializerStateError::MapValueWithoutKey),
+/// );
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonSerializerStateError {
     /// A compound callback was used with the wrong compound state.

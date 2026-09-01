@@ -8,6 +8,19 @@
 //! Defines unsupported Serde shapes used as JSON object keys.
 
 /// Serde value shape that cannot be represented as a JSON object key.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::encode::JsonMapKeyKind;
+/// use qubit_json::encode::JsonSerializationError;
+/// use qubit_json::encode::JsonSerializationErrorKind;
+///
+/// let error = JsonSerializationError::new(JsonSerializationErrorKind::UnsupportedMapKey {
+///     kind: JsonMapKeyKind::Map,
+/// });
+/// assert_eq!(error.map_key_kind(), Some(JsonMapKeyKind::Map));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonMapKeyKind {
     /// A byte sequence.
