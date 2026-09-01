@@ -20,9 +20,7 @@ impl SerdeJsonCompat {
     ///
     /// Returns the RawValue shape for serde_json's token, or `None` when
     /// `name` is an ordinary Serde struct name.
-    pub(in crate::encode) fn classify_private_struct(
-        name: &'static str,
-    ) -> Option<PrivateStructKind> {
+    pub(in crate::encode) fn classify_private_struct(name: &'static str) -> Option<PrivateStructKind> {
         (name == Self::RAW_VALUE_TOKEN).then_some(PrivateStructKind::RawValue)
     }
 }

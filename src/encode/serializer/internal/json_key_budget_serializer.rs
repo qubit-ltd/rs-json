@@ -39,8 +39,7 @@ pub(in crate::encode::serializer) struct JsonKeyBudgetSerializer<
     pub(in crate::encode::serializer) inner: S,
 
     /// Shared traversal context.
-    pub(in crate::encode::serializer) context:
-        &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+    pub(in crate::encode::serializer) context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 }
 
 impl<S, R, Q, const VALUE_LIMITS: bool> JsonKeyBudgetSerializer<'_, '_, '_, S, R, Q, VALUE_LIMITS>
@@ -55,9 +54,7 @@ where
         if !VALUE_LIMITS {
             return Ok(());
         }
-        self.context
-            .borrow_mut()
-            .admit(JsonMeasurement::Key { bytes })
+        self.context.borrow_mut().admit(JsonMeasurement::Key { bytes })
     }
 
     /// Rejects one unsupported key shape through the shared stable error.
@@ -222,16 +219,11 @@ where
         if VALUE_LIMITS {
             self.check(variant.len())?;
         }
-        self.inner
-            .serialize_unit_variant(name, variant_index, variant)
+        self.inner.serialize_unit_variant(name, variant_index, variant)
     }
 
     /// Serializes a newtype key through this decorator.
-    fn serialize_newtype_struct<T>(
-        self,
-        _name: &'static str,
-        value: &T,
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -288,11 +280,7 @@ where
     }
 
     /// Creates a struct serializer through the underlying serializer.
-    fn serialize_struct(
-        self,
-        _name: &'static str,
-        _len: usize,
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         Err(self.unsupported(JsonMapKeyKind::Struct))
     }
 
@@ -312,12 +300,7 @@ where
     where
         T: Display + ?Sized,
     {
-        let text = JsonEncodeContext::collect_display::<S::Error, _>(
-            self.context,
-            value,
-            DisplayBudgetKind::Key,
-            1,
-        )?;
+        let text = JsonEncodeContext::collect_display::<S::Error, _>(self.context, value, DisplayBudgetKind::Key, 1)?;
         self.inner.serialize_str(&text)
     }
 

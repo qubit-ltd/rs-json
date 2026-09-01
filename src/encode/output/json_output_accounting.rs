@@ -65,38 +65,26 @@ where
     }
 
     /// Checks an output lower bound without consuming capacity.
-    pub(in crate::encode) fn check_available(
-        &self,
-        amount: usize,
-    ) -> Result<(), MeasuredBudgetError<R, Q>>
+    pub(in crate::encode) fn check_available(&self, amount: usize) -> Result<(), MeasuredBudgetError<R, Q>>
     where
         R: Clone,
     {
         self.output.as_deref().map_or(Ok(()), |output| {
-            let amount = Q::try_from_usize(amount).map_err(|source| {
-                MeasuredBudgetError::quantity(output.resource().clone(), source)
-            })?;
-            output
-                .check_available(amount)
-                .map_err(MeasuredBudgetError::from)
+            let amount = Q::try_from_usize(amount)
+                .map_err(|source| MeasuredBudgetError::quantity(output.resource().clone(), source))?;
+            output.check_available(amount).map_err(MeasuredBudgetError::from)
         })
     }
 
     /// Consumes bytes accepted by the output destination.
-    pub(in crate::encode) fn consume(
-        &mut self,
-        amount: usize,
-    ) -> Result<(), MeasuredBudgetError<R, Q>>
+    pub(in crate::encode) fn consume(&mut self, amount: usize) -> Result<(), MeasuredBudgetError<R, Q>>
     where
         R: Clone,
     {
         self.output.as_deref_mut().map_or(Ok(()), |output| {
-            let amount = Q::try_from_usize(amount).map_err(|source| {
-                MeasuredBudgetError::quantity(output.resource().clone(), source)
-            })?;
-            output
-                .try_consume(amount)
-                .map_err(MeasuredBudgetError::from)
+            let amount = Q::try_from_usize(amount)
+                .map_err(|source| MeasuredBudgetError::quantity(output.resource().clone(), source))?;
+            output.try_consume(amount).map_err(MeasuredBudgetError::from)
         })
     }
 
@@ -144,11 +132,8 @@ where
 
     /// Takes the recorded serialization failure or returns the opaque fallback
     /// used for arbitrary third-party Serde errors.
-    pub(in crate::encode) fn take_serialization_error_or_custom(
-        &mut self,
-    ) -> JsonSerializationError {
-        self.take_serialization_error().unwrap_or_else(|| {
-            JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization)
-        })
+    pub(in crate::encode) fn take_serialization_error_or_custom(&mut self) -> JsonSerializationError {
+        self.take_serialization_error()
+            .unwrap_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization))
     }
 }

@@ -39,8 +39,7 @@ impl Serialize for ForgedPrivateKey {
 /// Verifies scalar serialization uses the wrapped JSON serializer.
 #[test]
 fn test_json_encode_serializer_serializes_scalar_values() {
-    let mut session =
-        JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
 
     assert_eq!(
         encode(&true, &mut session).expect("scalar JSON should serialize"),
@@ -56,8 +55,8 @@ fn test_json_encode_serializer_rejects_forged_private_key_as_regular_map() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let error = encode(&ForgedPrivateKey, &mut session)
-        .expect_err("the ordinary struct field must consume a map entry");
+    let error =
+        encode(&ForgedPrivateKey, &mut session).expect_err("the ordinary struct field must consume a map entry");
     let JsonEncodeError::Budget(error) = error else {
         panic!("expected a budget error, got {error:?}");
     };
