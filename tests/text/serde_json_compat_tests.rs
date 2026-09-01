@@ -30,8 +30,7 @@ impl Serialize for InvalidRawValue {
     where
         S: Serializer,
     {
-        let mut state = serializer
-            .serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
+        let mut state = serializer.serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
         state.serialize_field(concat!("$", "serde_json", ":", ":private::RawValue"), "[")?;
         state.end()
     }
@@ -41,8 +40,7 @@ impl Serialize for InvalidRawValue {
 #[test]
 fn test_encoder_preserves_private_raw_value_protocol() {
     let raw = RawValue::from_string("{\"ok\":true}".to_owned()).expect("valid raw JSON");
-    let session =
-        JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let bytes = JsonEncoder::new(session)
         .to_vec(&raw)
         .expect("serde_json RawValue should encode");
@@ -52,8 +50,7 @@ fn test_encoder_preserves_private_raw_value_protocol() {
 /// Reports invalid private raw text as a syntax-specific encode error.
 #[test]
 fn test_encoder_reports_invalid_private_raw_value_as_syntax_error() {
-    let session =
-        JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let error = JsonEncoder::new(session)
         .to_vec(&InvalidRawValue)
         .expect_err("invalid private raw JSON must fail");
