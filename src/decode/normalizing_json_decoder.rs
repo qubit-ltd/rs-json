@@ -213,7 +213,10 @@ where
         self.engine.prepare_utf8(&self.normalizer, input)
     }
 
-    /// Decodes one prepared document and permits results borrowing it.
+    /// Decodes one precharged document and permits results borrowing it.
+    ///
+    /// Preparing the document has already committed its raw and normalized
+    /// input usage. This method commits only the decoded-value usage.
     ///
     /// # Type Parameters
     ///
@@ -221,8 +224,8 @@ where
     ///
     /// # Parameters
     ///
-    /// * `document` - Previously prepared normalized document that outlives the
-    ///   returned value.
+    /// * `document` - Precharged normalized document that outlives the returned
+    ///   value.
     ///
     /// # Returns
     ///
@@ -232,17 +235,20 @@ where
     ///
     /// Returns a structured error when decoded-value accounting, parsing, or
     /// deserialization fails.
-    pub fn decode_document<'de, T>(
+    pub fn decode_precharged_document<'de, T>(
         &mut self,
         document: &'de NormalizedJsonDocument<'_>,
     ) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {
-        self.decode_document_seed(document, TypedSeed::new())
+        self.decode_precharged_document_seed(document, TypedSeed::new())
     }
 
-    /// Decodes one prepared document through a caller-provided Serde seed.
+    /// Decodes one precharged document through a caller-provided Serde seed.
+    ///
+    /// Preparing the document has already committed its raw and normalized
+    /// input usage. This method commits only the decoded-value usage.
     ///
     /// # Type Parameters
     ///
@@ -250,7 +256,7 @@ where
     ///
     /// # Parameters
     ///
-    /// * `document` - Previously prepared normalized document.
+    /// * `document` - Precharged normalized document.
     /// * `seed` - Serde seed used to deserialize the document.
     ///
     /// # Returns
@@ -261,7 +267,7 @@ where
     ///
     /// Returns a structured error when decoded-value accounting, parsing, or
     /// seeded deserialization fails.
-    pub fn decode_document_seed<'de, S>(
+    pub fn decode_precharged_document_seed<'de, S>(
         &mut self,
         document: &'de NormalizedJsonDocument<'_>,
         seed: S,
@@ -273,7 +279,10 @@ where
             .decode_document_seed(document, seed, self.policy().diagnostic_policy(), None)
     }
 
-    /// Decodes one prepared document while requiring a top-level object.
+    /// Decodes one precharged document while requiring a top-level object.
+    ///
+    /// Preparing the document has already committed its raw and normalized
+    /// input usage. This method commits only the decoded-value usage.
     ///
     /// # Type Parameters
     ///
@@ -281,7 +290,7 @@ where
     ///
     /// # Parameters
     ///
-    /// * `document` - Prepared document that outlives the returned value.
+    /// * `document` - Precharged document that outlives the returned value.
     ///
     /// # Returns
     ///
@@ -291,7 +300,7 @@ where
     ///
     /// Returns a structured error for accounting, parsing, top-level-kind, or
     /// deserialization failures.
-    pub fn decode_object_document<'de, T>(
+    pub fn decode_precharged_object_document<'de, T>(
         &mut self,
         document: &'de NormalizedJsonDocument<'_>,
     ) -> Result<T, JsonDecodeError<R, Q>>
@@ -306,7 +315,10 @@ where
         )
     }
 
-    /// Decodes one prepared document while requiring a top-level array.
+    /// Decodes one precharged document while requiring a top-level array.
+    ///
+    /// Preparing the document has already committed its raw and normalized
+    /// input usage. This method commits only the decoded-value usage.
     ///
     /// # Type Parameters
     ///
@@ -314,7 +326,7 @@ where
     ///
     /// # Parameters
     ///
-    /// * `document` - Prepared document that outlives the returned elements.
+    /// * `document` - Precharged document that outlives the returned elements.
     ///
     /// # Returns
     ///
@@ -324,7 +336,7 @@ where
     ///
     /// Returns a structured error for accounting, parsing, top-level-kind, or
     /// deserialization failures.
-    pub fn decode_array_document<'de, T>(
+    pub fn decode_precharged_array_document<'de, T>(
         &mut self,
         document: &'de NormalizedJsonDocument<'_>,
     ) -> Result<Vec<T>, JsonDecodeError<R, Q>>
@@ -339,17 +351,23 @@ where
         )
     }
 
-    /// Validates a prepared document and commits its decoded-value usage.
+    /// Validates a precharged document and commits its decoded-value usage.
+    ///
+    /// Preparing the document has already committed its raw and normalized
+    /// input usage. This method commits only the decoded-value usage.
     ///
     /// # Parameters
     ///
-    /// * `document` - Prepared document whose JSON syntax is validated.
+    /// * `document` - Precharged document whose JSON syntax is validated.
     ///
     /// # Errors
     ///
     /// Returns a structured error when decoded-value accounting or JSON
     /// validation fails.
-    pub fn validate_document(&mut self, document: &NormalizedJsonDocument<'_>) -> Result<(), JsonDecodeError<R, Q>> {
+    pub fn validate_precharged_document(
+        &mut self,
+        document: &NormalizedJsonDocument<'_>,
+    ) -> Result<(), JsonDecodeError<R, Q>> {
         self.engine
             .validate_document(document, self.policy().diagnostic_policy(), None)
     }
@@ -377,7 +395,7 @@ where
         T: DeserializeOwned,
     {
         let document = self.prepare_str(input)?;
-        self.decode_document(&document)
+        self.decode_precharged_document(&document)
     }
 
     /// Normalizes and decodes one UTF-8 byte slice into an owned target value.
@@ -403,7 +421,7 @@ where
         T: DeserializeOwned,
     {
         let document = self.prepare_utf8(input)?;
-        self.decode_document(&document)
+        self.decode_precharged_document(&document)
     }
 
     /// Normalizes and decodes one string while requiring a top-level object.
@@ -425,7 +443,7 @@ where
         T: DeserializeOwned,
     {
         let document = self.prepare_str(input)?;
-        self.decode_object_document(&document)
+        self.decode_precharged_object_document(&document)
     }
 
     /// Normalizes and decodes one UTF-8 byte slice while requiring a top-level
@@ -448,7 +466,7 @@ where
         T: DeserializeOwned,
     {
         let document = self.prepare_utf8(input)?;
-        self.decode_object_document(&document)
+        self.decode_precharged_object_document(&document)
     }
 
     /// Normalizes and decodes one string while requiring a top-level array.
@@ -470,7 +488,7 @@ where
         T: DeserializeOwned,
     {
         let document = self.prepare_str(input)?;
-        self.decode_array_document(&document)
+        self.decode_precharged_array_document(&document)
     }
 
     /// Normalizes and decodes one UTF-8 byte slice while requiring a top-level
@@ -493,7 +511,7 @@ where
         T: DeserializeOwned,
     {
         let document = self.prepare_utf8(input)?;
-        self.decode_array_document(&document)
+        self.decode_precharged_array_document(&document)
     }
 
     /// Normalizes and decodes one string into a dynamic JSON value.

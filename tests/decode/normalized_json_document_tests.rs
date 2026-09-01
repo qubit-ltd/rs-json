@@ -51,10 +51,10 @@ fn test_normalized_json_document_supports_borrowing_and_seed() {
         .expect("normalization must succeed");
 
     let typed: &str = decoder
-        .decode_document(&document)
+        .decode_precharged_document(&document)
         .expect("typed document decoding must borrow");
     let seeded = decoder
-        .decode_document_seed(&document, BorrowedStrSeed)
+        .decode_precharged_document_seed(&document, BorrowedStrSeed)
         .expect("seeded document decoding must borrow");
 
     assert_eq!(typed, "borrowed");
@@ -76,7 +76,7 @@ fn test_normalized_json_document_owns_repaired_text() {
         .prepare_str("\"line\nfeed\"")
         .expect("control-character escaping must succeed");
     let value: String = decoder
-        .decode_document(&document)
+        .decode_precharged_document(&document)
         .expect("repaired document must support owned decoding");
 
     assert_eq!(value, "line\nfeed");
@@ -95,8 +95,12 @@ fn test_normalized_json_document_separates_input_and_value_accounting() {
     let mut decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
     let document = decoder.prepare_str("\"x\"").expect("prepare must fit");
 
-    let _: &str = decoder.decode_document(&document).expect("first decode must fit");
-    let _: &str = decoder.decode_document(&document).expect("second decode must fit");
+    let _: &str = decoder
+        .decode_precharged_document(&document)
+        .expect("first decode must fit");
+    let _: &str = decoder
+        .decode_precharged_document(&document)
+        .expect("second decode must fit");
 
     assert_eq!(decoder.session().input_budget().expect("input budget").used(), 3);
     assert_eq!(
@@ -140,10 +144,14 @@ fn test_normalized_json_document_supports_typed_root_checks_and_validation() {
     let object = decoder.prepare_str(" {\"value\":1} ").expect("object prepare");
     let array = decoder.prepare_str(" [1,2] ").expect("array prepare");
 
-    let object_value: Value = decoder.decode_object_document(&object).expect("object document decode");
-    let array_value: Vec<u8> = decoder.decode_array_document(&array).expect("array document decode");
+    let object_value: Value = decoder
+        .decode_precharged_object_document(&object)
+        .expect("object document decode");
+    let array_value: Vec<u8> = decoder
+        .decode_precharged_array_document(&array)
+        .expect("array document decode");
     decoder
-        .validate_document(&object)
+        .validate_precharged_document(&object)
         .expect("prepared document validation");
 
     assert_eq!(object_value["value"], 1);
@@ -164,7 +172,7 @@ fn test_normalized_json_document_failure_rolls_back_only_value_usage() {
     let document = decoder.prepare_str(input).expect("prepare must succeed");
 
     let _ = decoder
-        .decode_document::<std::collections::HashMap<String, bool>>(&document)
+        .decode_precharged_document::<std::collections::HashMap<String, bool>>(&document)
         .expect_err("number must not deserialize as bool");
 
     assert_eq!(
