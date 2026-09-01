@@ -8,6 +8,18 @@
 //! Defines the signedness of a rejected wide JSON integer.
 
 /// Signedness retained by an integer-range encoding failure.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::encode::JsonIntegerSignedness;
+/// use qubit_json::value::JsonValueEncoder;
+///
+/// let error = JsonValueEncoder::new()
+///     .encode(&u128::MAX)
+///     .expect_err("wide integer must be rejected");
+/// assert_eq!(error.integer_signedness(), Some(JsonIntegerSignedness::Unsigned));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonIntegerSignedness {
     /// The source was serialized through a signed integer entry point.
