@@ -822,7 +822,9 @@ fn test_write_incremental_rejects_zero_length_destination_write() {
         .expect_err("a destination must not accept zero bytes for non-empty output");
 
     match error {
-        JsonEncodeError::Write(error) => assert_eq!(error.kind(), io::ErrorKind::WriteZero),
+        JsonEncodeError::Write(error) => {
+            assert_eq!(error.kind(), io::ErrorKind::WriteZero)
+        }
         other => panic!("expected a write error, got {other:?}"),
     }
 }
