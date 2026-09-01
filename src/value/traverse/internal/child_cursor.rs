@@ -53,9 +53,7 @@ impl<'value> ChildCursor<'value> {
     }
 
     /// Returns the next child, its location, and its root-inclusive depth.
-    pub(in crate::value::traverse) fn next(
-        &mut self,
-    ) -> Option<(&'value Value, JsonTreeLocation<'value>, usize)> {
+    pub(in crate::value::traverse) fn next(&mut self) -> Option<(&'value Value, JsonTreeLocation<'value>, usize)> {
         match self {
             Self::Array { iter, depth } => iter
                 .next()

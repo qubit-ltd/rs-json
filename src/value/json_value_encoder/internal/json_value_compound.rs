@@ -82,10 +82,7 @@ impl JsonValueCompound {
     /// Creates a tuple variant with reserved field storage.
     #[inline]
     #[must_use]
-    pub(in crate::value::json_value_encoder) fn tuple_variant(
-        variant: &str,
-        capacity: usize,
-    ) -> Self {
+    pub(in crate::value::json_value_encoder) fn tuple_variant(variant: &str, capacity: usize) -> Self {
         Self::TupleVariant {
             variant: variant.to_owned(),
             values: Vec::with_capacity(capacity),
@@ -95,10 +92,7 @@ impl JsonValueCompound {
     /// Creates a struct variant with reserved field storage.
     #[inline]
     #[must_use]
-    pub(in crate::value::json_value_encoder) fn struct_variant(
-        variant: &str,
-        capacity: usize,
-    ) -> Self {
+    pub(in crate::value::json_value_encoder) fn struct_variant(variant: &str, capacity: usize) -> Self {
         Self::StructVariant {
             variant: variant.to_owned(),
             values: Map::with_capacity(capacity),
@@ -113,11 +107,7 @@ impl JsonValueCompound {
     }
 
     /// Inserts one unique object entry into the supplied map.
-    fn insert(
-        values: &mut Map<String, Value>,
-        key: String,
-        value: Value,
-    ) -> Result<(), JsonSerializationError> {
+    fn insert(values: &mut Map<String, Value>, key: String, value: Value) -> Result<(), JsonSerializationError> {
         if values.contains_key(&key) {
             return Err(JsonSerializationError::new(
                 JsonSerializationErrorKind::DuplicateObjectKey,
@@ -233,9 +223,7 @@ impl SerializeMap for JsonValueCompound {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
         };
         if next_key.is_some() {
-            return Err(invalid_state(
-                JsonSerializerStateError::MapKeyAlreadyPending,
-            ));
+            return Err(invalid_state(JsonSerializerStateError::MapKeyAlreadyPending));
         }
         *next_key = Some(key.serialize(JsonValueMapKeySerializer)?);
         Ok(())
@@ -261,9 +249,7 @@ impl SerializeMap for JsonValueCompound {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
         };
         if next_key.is_some() {
-            return Err(invalid_state(
-                JsonSerializerStateError::MapEndedWithPendingKey,
-            ));
+            return Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey));
         }
         Ok(Value::Object(values))
     }
@@ -281,26 +267,16 @@ impl SerializeStruct for JsonValueCompound {
         match self {
             Self::Map { values, next_key } => {
                 if next_key.is_some() {
-                    return Err(invalid_state(
-                        JsonSerializerStateError::MapKeyAlreadyPending,
-                    ));
+                    return Err(invalid_state(JsonSerializerStateError::MapKeyAlreadyPending));
                 }
-                Self::insert(
-                    values,
-                    key.to_owned(),
-                    value.serialize(JsonValueSerializer)?,
-                )
+                Self::insert(values, key.to_owned(), value.serialize(JsonValueSerializer)?)
             }
             Self::RawValue { text } => {
                 if key != RAW_VALUE_TOKEN || text.is_some() {
-                    return Err(invalid_state(
-                        JsonSerializerStateError::InvalidRawValueProtocol,
-                    ));
+                    return Err(invalid_state(JsonSerializerStateError::InvalidRawValueProtocol));
                 }
                 let Value::String(value) = value.serialize(JsonValueSerializer)? else {
-                    return Err(invalid_state(
-                        JsonSerializerStateError::InvalidRawValueProtocol,
-                    ));
+                    return Err(invalid_state(JsonSerializerStateError::InvalidRawValueProtocol));
                 };
                 *text = Some(value);
                 Ok(())
@@ -315,16 +291,12 @@ impl SerializeStruct for JsonValueCompound {
         match self {
             Self::Map { values, next_key } => {
                 if next_key.is_some() {
-                    return Err(invalid_state(
-                        JsonSerializerStateError::MapEndedWithPendingKey,
-                    ));
+                    return Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey));
                 }
                 Ok(Value::Object(values))
             }
             Self::RawValue { text: Some(text) } => decode_raw_value(&text),
-            Self::RawValue { .. } => Err(invalid_state(
-                JsonSerializerStateError::InvalidRawValueProtocol,
-            )),
+            Self::RawValue { .. } => Err(invalid_state(JsonSerializerStateError::InvalidRawValueProtocol)),
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         }
     }
@@ -342,11 +314,7 @@ impl SerializeStructVariant for JsonValueCompound {
         let Self::StructVariant { values, .. } = self else {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
         };
-        Self::insert(
-            values,
-            key.to_owned(),
-            value.serialize(JsonValueSerializer)?,
-        )
+        Self::insert(values, key.to_owned(), value.serialize(JsonValueSerializer)?)
     }
 
     /// Returns the struct variant as a nested single-key object.

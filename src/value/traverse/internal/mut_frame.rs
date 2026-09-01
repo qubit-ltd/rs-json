@@ -45,11 +45,7 @@ impl MutFrame {
     }
     /// Creates one child frame retaining the parent-derived value pointer.
     #[inline(always)]
-    pub(in crate::value::traverse) fn child(
-        location: OwnedLocation,
-        depth: usize,
-        value: &mut Value,
-    ) -> Self {
+    pub(in crate::value::traverse) fn child(location: OwnedLocation, depth: usize, value: &mut Value) -> Self {
         Self {
             location,
             depth,
@@ -64,9 +60,7 @@ impl MutFrame {
         if self.finished {
             return None;
         }
-        let cursor = self
-            .cursor
-            .get_or_insert_with(|| MutChildCursor::new(self.value));
+        let cursor = self.cursor.get_or_insert_with(|| MutChildCursor::new(self.value));
         cursor.next(self.depth)
     }
 }

@@ -18,8 +18,7 @@ use serde_json::json;
 #[test]
 fn test_duplicate_key_rejecting_json_value_decodes_unique_nested_keys() {
     let value: DuplicateKeyRejectingJsonValue =
-        from_str(r#"{"outer":{"inner":1},"items":[true,null]}"#)
-            .expect("unique object keys must decode");
+        from_str(r#"{"outer":{"inner":1},"items":[true,null]}"#).expect("unique object keys must decode");
 
     assert_eq!(
         value.into_inner(),

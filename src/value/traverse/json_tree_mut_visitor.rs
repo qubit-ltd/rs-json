@@ -50,9 +50,5 @@ pub trait JsonTreeMutVisitor {
     /// # Returns
     ///
     /// The traversal control decision for descendant callbacks.
-    fn visit(
-        &mut self,
-        value: &mut Value,
-        context: JsonTreeContext<'_>,
-    ) -> Result<JsonTreeControl, Self::Error>;
+    fn visit(&mut self, value: &mut Value, context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error>;
 }
