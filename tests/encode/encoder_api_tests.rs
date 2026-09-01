@@ -22,10 +22,7 @@ fn test_json_encoder_owned_uses_explicit_limits() {
     let encoder = JsonEncoder::with_limits(limits);
 
     assert_eq!(encoder.session().max_output_bytes(), Some(8));
-    assert_eq!(
-        encoder.session().value_budget().limits().max_nodes(),
-        Some(2)
-    );
+    assert_eq!(encoder.session().value_budget().limits().max_nodes(), Some(2));
 }
 
 /// Verifies unlimited construction is explicit and leaves every budget

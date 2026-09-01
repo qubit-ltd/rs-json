@@ -41,10 +41,7 @@ where
 {
     /// Creates an incremental writer over shared output accounting.
     #[inline]
-    pub(in crate::encode) fn new(
-        writer: W,
-        accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
-    ) -> Self {
+    pub(in crate::encode) fn new(writer: W, accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>) -> Self {
         Self {
             writer,
             accounting,
@@ -70,10 +67,7 @@ where
             return Err(JsonEncodeError::Write(error));
         }
         if result.is_err() {
-            let error = self
-                .accounting
-                .borrow_mut()
-                .take_serialization_error_or_custom();
+            let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
             return Err(JsonEncodeError::Serialize(error));
         }
         Ok(())
@@ -101,10 +95,7 @@ where
         match self.writer.write(input) {
             Ok(written) => {
                 if written == 0 && !input.is_empty() {
-                    let error = io::Error::new(
-                        io::ErrorKind::WriteZero,
-                        "JSON output writer accepted no bytes",
-                    );
+                    let error = io::Error::new(io::ErrorKind::WriteZero, "JSON output writer accepted no bytes");
                     self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
                     return Err(error);
                 }

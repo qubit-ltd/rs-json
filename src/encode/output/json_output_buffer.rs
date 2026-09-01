@@ -82,10 +82,7 @@ where
             return Err(JsonEncodeError::InvalidRawJson(error));
         }
         if result.is_err() {
-            let error = self
-                .accounting
-                .borrow_mut()
-                .take_serialization_error_or_custom();
+            let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
             return Err(JsonEncodeError::Serialize(error));
         }
         Ok(self.bytes)
