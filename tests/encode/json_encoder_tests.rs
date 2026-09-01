@@ -21,7 +21,7 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::encode::JsonEncodeError;
+use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
 use qubit_json::encode::JsonIntegerSignedness;
 use qubit_json::encode::JsonMapKeyKind;
@@ -71,20 +71,26 @@ fn test_json_text_encoder_enforces_64_bit_integer_range() {
     );
     let signed = encoder.to_vec(&i128::MAX).expect_err("wide signed integer must fail");
     let unsigned = encoder.to_vec(&u128::MAX).expect_err("wide unsigned integer must fail");
-    assert!(matches!(
-        signed,
-        JsonEncodeError::Serialize(error)
-            if error.kind() == (JsonSerializationErrorKind::IntegerOutOfRange {
-                signedness: JsonIntegerSignedness::Signed,
-            })
-    ));
-    assert!(matches!(
-        unsigned,
-        JsonEncodeError::Serialize(error)
-            if error.kind() == (JsonSerializationErrorKind::IntegerOutOfRange {
-                signedness: JsonIntegerSignedness::Unsigned,
-            })
-    ));
+    assert_eq!(signed.kind(), JsonEncodeErrorKind::Serialize);
+    assert_eq!(
+        signed
+            .serialization_error()
+            .expect("wide signed integer must retain its serialization error")
+            .kind(),
+        JsonSerializationErrorKind::IntegerOutOfRange {
+            signedness: JsonIntegerSignedness::Signed,
+        },
+    );
+    assert_eq!(unsigned.kind(), JsonEncodeErrorKind::Serialize);
+    assert_eq!(
+        unsigned
+            .serialization_error()
+            .expect("wide unsigned integer must retain its serialization error")
+            .kind(),
+        JsonSerializationErrorKind::IntegerOutOfRange {
+            signedness: JsonIntegerSignedness::Unsigned,
+        },
+    );
 }
 
 /// Verifies strict encoding rejects every non-finite floating-point value
@@ -440,9 +446,7 @@ fn assert_online_rejection<T>(
 {
     let mut session = limits.encode_session();
     let error = encode(value, &mut session).expect_err("the first value must be rejected online");
-    let JsonEncodeError::Budget(error) = error else {
-        panic!("expected a budget error, got {error:?}");
-    };
+    let error = error.into_budget_error().expect("expected a budget error");
     assert_eq!(
         error
             .budget_error()
@@ -470,7 +474,7 @@ fn test_write_buffered_failure_does_not_touch_external_writer() {
     let error = write_buffered(&mut output, &"long", &mut session)
         .expect_err("the encoded string must exceed the output budget");
 
-    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert!(output.is_empty());
     assert_eq!(
         session
@@ -527,7 +531,7 @@ fn test_write_buffered_serde_failure_does_not_touch_external_writer() {
     let error =
         write_buffered(&mut output, &FailsAfterPrefix, &mut session).expect_err("the custom serializer must fail");
 
-    assert!(matches!(error, JsonEncodeError::Serialize(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
     assert!(output.is_empty());
 }
 
@@ -552,9 +556,7 @@ fn test_json_text_encoder_redacts_custom_serde_diagnostic() {
     let error = JsonEncoder::unlimited()
         .to_vec(&SecretFailure)
         .expect_err("the injected serializer must fail");
-    let JsonEncodeError::Serialize(source) = &error else {
-        panic!("expected a serialization error, got {error:?}");
-    };
+    let source = error.serialization_error().expect("expected a serialization error");
 
     assert_eq!(source.kind(), JsonSerializationErrorKind::CustomSerialization);
     assert!(!error.to_string().contains(SECRET));
@@ -570,9 +572,9 @@ fn test_json_text_encoder_classifies_unsupported_map_key() {
     let error = JsonEncoder::unlimited()
         .to_vec(&UnsupportedByteKeyMap)
         .expect_err("byte-shaped object keys must fail");
-    let JsonEncodeError::Serialize(error) = error else {
-        panic!("expected a serialization error");
-    };
+    let error = error
+        .into_serialization_error()
+        .expect("expected a serialization error");
 
     assert_eq!(
         error.kind(),
@@ -596,9 +598,9 @@ fn test_json_text_encoder_classifies_invalid_map_states() {
         let error = JsonEncoder::unlimited()
             .to_vec(&InvalidTextMapStateProbe(index as u8))
             .expect_err("the invalid map state must fail");
-        let JsonEncodeError::Serialize(error) = error else {
-            panic!("expected a serialization error");
-        };
+        let error = error
+            .into_serialization_error()
+            .expect("expected a serialization error");
         assert_eq!(
             error.kind(),
             JsonSerializationErrorKind::InvalidSerializerState { reason },
@@ -612,9 +614,9 @@ fn test_json_text_encoder_classifies_display_formatting_failure() {
     let error = JsonEncoder::unlimited()
         .to_vec(&FailingTextDisplay)
         .expect_err("the failing display implementation must be rejected");
-    let JsonEncodeError::Serialize(error) = error else {
-        panic!("expected a serialization error");
-    };
+    let error = error
+        .into_serialization_error()
+        .expect("expected a serialization error");
 
     assert_eq!(error.kind(), JsonSerializationErrorKind::DisplayFormattingFailed,);
     assert!(error.is_serializer_contract_error());
@@ -633,7 +635,7 @@ fn test_encode_serde_failure_rolls_back_borrowed_budgets() {
         let mut session = JsonEncodeSession::borrowing_output(&mut output, &mut value);
         let error = encode(&FailsAfterPrefix, &mut session).expect_err("the custom serializer must fail");
 
-        assert!(matches!(error, JsonEncodeError::Serialize(_)));
+        assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
     }
     assert_eq!(output.used(), 0);
     assert_eq!(value.used_nodes(), Some(0));
@@ -654,7 +656,7 @@ fn test_encode_output_budget_rejection_rolls_back_borrowed_budgets() {
         let error =
             encode(&[1_u8, 2_u8], &mut session).expect_err("the complete output must exceed the configured limit");
 
-        assert!(matches!(error, JsonEncodeError::Budget(_)));
+        assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     }
     assert_eq!(output.used(), 0);
     assert_eq!(value.used_nodes(), Some(0));
@@ -713,7 +715,7 @@ fn test_encode_output_limit_stops_before_source_tail() {
 
     let error = encode(&value, &mut session).expect_err("the output budget must reject the long sequence");
 
-    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert!(serialized.get() < value.len);
 }
 
@@ -736,7 +738,7 @@ fn test_write_buffered_io_failure_can_leave_partial_output() {
         let error = write_buffered(&mut writer, &[1_u8, 2_u8], &mut session)
             .expect_err("the destination writer must fail during final commit");
 
-        assert!(matches!(error, JsonEncodeError::Write(_)));
+        assert_eq!(error.kind(), JsonEncodeErrorKind::Write);
         assert_eq!(writer.accepted, b"[1");
     }
     assert_eq!(output.used(), writer.accepted.len());
@@ -775,7 +777,7 @@ fn test_write_incremental_preserves_partial_output_on_budget_error() {
     let error = write_incremental(&mut output, &json!([1, 2, 3]), &mut session)
         .expect_err("the output limit must reject the document");
 
-    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert_eq!(output, b"[1,2");
     assert_eq!(
         session
@@ -806,7 +808,7 @@ fn test_write_incremental_preserves_partial_output_on_io_error() {
         let error = write_incremental(&mut writer, &[1_u8, 2_u8], &mut session)
             .expect_err("the destination writer must fail incrementally");
 
-        assert!(matches!(error, JsonEncodeError::Write(_)));
+        assert_eq!(error.kind(), JsonEncodeErrorKind::Write);
         assert_eq!(writer.accepted, b"[1");
     }
     assert_eq!(output.used(), writer.accepted.len());
@@ -821,12 +823,8 @@ fn test_write_incremental_rejects_zero_length_destination_write() {
     let error = write_incremental(ZeroWriter, &true, &mut session)
         .expect_err("a destination must not accept zero bytes for non-empty output");
 
-    match error {
-        JsonEncodeError::Write(error) => {
-            assert_eq!(error.kind(), io::ErrorKind::WriteZero)
-        }
-        other => panic!("expected a write error, got {other:?}"),
-    }
+    let error = error.into_write_error().expect("expected a write error");
+    assert_eq!(error.kind(), io::ErrorKind::WriteZero);
 }
 
 /// Preserves accepted output accounting when incremental finalization fails.
@@ -841,7 +839,7 @@ fn test_write_incremental_maps_flush_failure_to_write_error() {
     let error = write_incremental(&mut writer, &true, &mut session)
         .expect_err("the destination flush failure must be preserved");
 
-    assert!(matches!(error, JsonEncodeError::Write(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Write);
     assert_eq!(writer.accepted, b"true");
     assert_eq!(
         session
@@ -869,7 +867,7 @@ fn test_write_incremental_preserves_partial_output_on_serde_error() {
     let error = write_incremental(&mut output, &FailsAfterPrefix, &mut session)
         .expect_err("the custom serializer must fail after its prefix");
 
-    assert!(matches!(error, JsonEncodeError::Serialize(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
     assert_eq!(output, b"[1");
     assert_eq!(
         session
@@ -963,7 +961,7 @@ fn test_encode_node_limit_stops_before_source_tail() {
 
     let error = encode(&value, &mut session).expect_err("the node budget must reject the long sequence");
 
-    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert!(serialized.get() < value.len);
 }
 
@@ -982,7 +980,7 @@ fn test_encode_depth_limit_checks_complete_source_depth() {
 
     let error = encode(&value, &mut session).expect_err("the depth budget must reject recursive serialization");
 
-    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert!(serialized.get() < SOURCE_DEPTH);
 }
 

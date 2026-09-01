@@ -7,8 +7,10 @@
 // =============================================================================
 //! Strict JSON encoding APIs and their budget-aware serializer internals.
 
+mod internal;
 mod json_collection_kind;
 mod json_encode_error;
+mod json_encode_error_kind;
 mod json_encoder;
 mod json_integer_signedness;
 mod json_map_key_kind;
@@ -22,6 +24,7 @@ mod serializer;
 
 pub use json_collection_kind::JsonCollectionKind;
 pub use json_encode_error::JsonEncodeError;
+pub use json_encode_error_kind::JsonEncodeErrorKind;
 pub use json_encoder::JsonEncoder;
 pub use json_integer_signedness::JsonIntegerSignedness;
 pub use json_map_key_kind::JsonMapKeyKind;
