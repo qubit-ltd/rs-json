@@ -133,17 +133,20 @@ fn main() -> Result<(), JsonDecodeError> {
         limits,
     );
     let document = decoder.prepare_str("  \"borrowed\"  ")?;
-    let first: &str = decoder.decode_document(&document)?;
-    let second: &str = decoder.decode_document(&document)?;
+    let first: &str = decoder.decode_precharged_document(&document)?;
+    let second: &str = decoder.decode_precharged_document(&document)?;
     assert_eq!((first, second), ("borrowed", "borrowed"));
     Ok(())
 }
 ```
 
-`prepare_str` 和 `prepare_utf8` 会立即提交原始输入与规范化输入的用量。每次成功调用
-`decode_document`、`decode_document_seed`、带顶层类型约束的文档解码方法或
-`validate_document`，都会分别提交一份值资源用量；构造结果失败时，只回滚本次尝试暂存的
-值资源。准备后的文档不依赖创建它的解码器，可以交给预算类型兼容的另一个解码器。借用规则
+`prepare_str` 和 `prepare_utf8` 会立即提交原始输入与规范化输入的用量。
+`decode_precharged_*` 与 `validate_precharged_document` 的名称明确表达了这个输入计量
+前置条件。每次成功调用 `decode_precharged_document`、
+`decode_precharged_document_seed`、`decode_precharged_object_document`、
+`decode_precharged_array_document` 或 `validate_precharged_document`，都会分别提交一份值资源
+用量；构造结果失败时，只回滚本次尝试暂存的值资源。准备后的文档不依赖创建它的解码器，可以交给
+预算类型兼容的另一个解码器。借用规则
 遵循 Serde 的表示方式：未转义的 JSON 字符串可以借用文档内容，包含转义的字符串则必须构造
 自有数据。
 

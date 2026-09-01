@@ -139,14 +139,16 @@ fn test_json_decode_error_model_representative_matrix() {
     );
     let document = decoder.prepare_str("null").expect("prepare scalar");
     let error = decoder
-        .decode_object_document::<serde_json::Value>(&document)
+        .decode_precharged_object_document::<serde_json::Value>(&document)
         .expect_err("object contract");
     assert_eq!(
         (error.kind(), error.stage()),
         (JsonDecodeErrorKind::UnexpectedTopLevel, JsonDecodeStage::TopLevelCheck,),
     );
 
-    let error = decoder.decode_document::<bool>(&document).expect_err("target mismatch");
+    let error = decoder
+        .decode_precharged_document::<bool>(&document)
+        .expect_err("target mismatch");
     assert_eq!(
         (error.kind(), error.stage()),
         (JsonDecodeErrorKind::Deserialize, JsonDecodeStage::Deserialize,),

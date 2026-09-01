@@ -64,6 +64,10 @@ impl JsonSerializationError {
     }
 
     /// Returns the exact stable failure classification.
+    ///
+    /// # Returns
+    ///
+    /// The precise serialization failure kind retained by this error.
     #[must_use]
     #[inline(always)]
     pub const fn kind(&self) -> JsonSerializationErrorKind {
@@ -71,6 +75,11 @@ impl JsonSerializationError {
     }
 
     /// Returns the broad downstream handling category.
+    ///
+    /// # Returns
+    ///
+    /// The broad category that determines which class of serialization
+    /// failure occurred.
     #[must_use]
     pub const fn category(&self) -> JsonSerializationErrorCategory {
         match self.kind {
@@ -89,6 +98,10 @@ impl JsonSerializationError {
     }
 
     /// Reports whether this failure belongs to the strict number contract.
+    ///
+    /// # Returns
+    ///
+    /// `true` when the failure concerns a JSON number; otherwise, `false`.
     #[must_use]
     #[inline(always)]
     pub const fn is_number_error(&self) -> bool {
@@ -96,6 +109,10 @@ impl JsonSerializationError {
     }
 
     /// Reports whether this failure concerns JSON object-key representation.
+    ///
+    /// # Returns
+    ///
+    /// `true` when the failure concerns an object key; otherwise, `false`.
     #[must_use]
     #[inline(always)]
     pub const fn is_map_key_error(&self) -> bool {
@@ -103,6 +120,11 @@ impl JsonSerializationError {
     }
 
     /// Reports whether this failure concerns a RawValue payload.
+    ///
+    /// # Returns
+    ///
+    /// `true` when the failure concerns a `RawValue` payload; otherwise,
+    /// `false`.
     #[must_use]
     #[inline(always)]
     pub const fn is_raw_value_error(&self) -> bool {
@@ -110,6 +132,11 @@ impl JsonSerializationError {
     }
 
     /// Reports whether a hand-written serializer violated a protocol contract.
+    ///
+    /// # Returns
+    ///
+    /// `true` when a serializer or display implementation violated the
+    /// compound protocol; otherwise, `false`.
     #[must_use]
     #[inline(always)]
     pub const fn is_serializer_contract_error(&self) -> bool {
@@ -117,6 +144,11 @@ impl JsonSerializationError {
     }
 
     /// Returns the signedness of an out-of-range integer, when applicable.
+    ///
+    /// # Returns
+    ///
+    /// `Some(signedness)` for an out-of-range integer, or `None` for every
+    /// other serialization failure.
     #[must_use]
     #[inline(always)]
     pub const fn integer_signedness(&self) -> Option<JsonIntegerSignedness> {
