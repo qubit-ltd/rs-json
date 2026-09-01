@@ -29,6 +29,7 @@ pub(in crate::value::json_value_encoder) struct JsonValueMapKeySerializer;
 macro_rules! serialize_key_integer {
     ($($method:ident($type:ty)),+ $(,)?) => {
         $(
+            #[doc = "Serializes an integer key as canonical decimal text."]
             fn $method(self, value: $type) -> Result<String, Self::Error> {
                 Ok(value.to_string())
             }
