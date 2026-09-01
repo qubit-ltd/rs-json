@@ -7,3 +7,12 @@
 // =============================================================================
 
 mod encoder_api_tests;
+mod json_encode_error_tests;
+mod json_encode_session_tests;
+mod json_encoder_tests;
+mod output;
+mod serde_compat;
+mod serializer;
+mod support;
+
+pub(crate) use support::json_encode_test_support;

@@ -123,6 +123,24 @@ fn test_json_decoder_unlimited_has_no_limits() {
     assert_eq!(decoder.session().value_budget().limits().max_nodes(), None);
 }
 
+/// Verifies mutable access and ownership transfer preserve strict decoder
+/// accounting state.
+#[test]
+fn test_json_decoder_session_mut_and_into_session_preserve_usage() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut attempt = decoder.session_mut().begin_value();
+    attempt
+        .try_consume_input_bytes(1)
+        .expect("the direct session charge should fit");
+    attempt.commit().expect("the empty value transaction should commit");
+
+    let session = decoder.into_session();
+    assert_eq!(session.input_budget().expect("configured input budget").used(), 1);
+}
+
 /// Verifies that normalizing string decoding returns an owned target.
 #[test]
 fn test_normalizing_decoder_decode_str_returns_owned_value() {
@@ -162,6 +180,57 @@ fn test_normalizing_decoder_decode_utf8_returns_owned_value() {
         .expect("normalizing UTF-8 decoding should succeed");
 
     assert_eq!(value, "owned");
+}
+
+/// Verifies the normalizing UTF-8 root helpers enforce object and array
+/// contracts without changing owned deserialization semantics.
+#[test]
+fn test_normalizing_decoder_utf8_root_entry_points() {
+    let mut decoder = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::lenient(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
+    );
+
+    let object: serde_json::Value = decoder
+        .decode_object_utf8(br#" {"ok":true} "#)
+        .expect("object bytes should decode");
+    let array: Vec<u8> = decoder.decode_array_utf8(b"[1,2]").expect("array bytes should decode");
+    let error = decoder
+        .decode_array_utf8::<u8>(b"{}")
+        .expect_err("an object must not satisfy the array contract");
+
+    assert_eq!(object["ok"], true);
+    assert_eq!(array, [1, 2]);
+    assert_eq!(error.kind(), JsonDecodeErrorKind::UnexpectedTopLevel);
+}
+
+/// Verifies mutable access to the normalizing decoder's session preserves raw
+/// and normalized input charges when ownership is transferred.
+#[test]
+fn test_normalizing_decoder_session_mut_and_into_session_preserve_usage() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4)
+        .max_normalized_input_bytes(4)
+        .build();
+    let mut decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
+    let mut attempt = decoder.session_mut().begin_value();
+    attempt
+        .try_consume_input_bytes(1)
+        .expect("the direct raw-input charge should fit");
+    attempt
+        .try_consume_normalized_input_bytes(1)
+        .expect("the direct normalized-input charge should fit");
+    attempt.commit().expect("the empty value transaction should commit");
+
+    let session = decoder.into_session();
+    assert_eq!(session.input_budget().expect("configured input budget").used(), 1);
+    assert_eq!(
+        session
+            .normalized_input_budget()
+            .expect("configured normalized-input budget")
+            .used(),
+        1,
+    );
 }
 
 /// Verifies that an owned decoder takes raw and normalized limits only from

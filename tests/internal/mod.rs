@@ -5,11 +5,5 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Integration test entry point for `qubit-json`.
 
-mod decode;
-mod encode;
-mod fixtures;
-mod internal;
-mod lexical;
-mod value;
+mod json_lexeme_length_tests;
