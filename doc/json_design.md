@@ -167,5 +167,7 @@ no root-level error aggregate or compatibility alias.
   [数字收敛设计](number_contract_design.zh_CN.md)
 - [Error, performance, and downstream safety](error_performance_redaction_design.md) ·
   [错误、性能与下游安全边界](error_performance_redaction_design.zh_CN.md)
+- [Performance evidence log](benchmark_baseline.md) ·
+  [性能证据日志](benchmark_baseline.zh_CN.md)
 - [Dependency maintenance](dependency_maintenance.md) ·
   [依赖维护](dependency_maintenance.zh_CN.md)
