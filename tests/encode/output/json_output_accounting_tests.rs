@@ -10,7 +10,7 @@
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::encode::JsonEncodeError;
+use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
 
 /// Verifies output accounting returns a typed budget violation.
@@ -25,5 +25,5 @@ fn test_json_output_accounting_reports_output_budget() {
         .to_vec(&"ok")
         .expect_err("encoded string exceeds one output byte");
 
-    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
 }

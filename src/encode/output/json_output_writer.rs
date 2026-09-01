@@ -57,18 +57,18 @@ where
     ) -> Result<(), JsonEncodeError<R, Q>> {
         let violation = self.accounting.borrow_mut().take_violation();
         if let Some(error) = violation {
-            return Err(JsonEncodeError::Budget(error));
+            return Err(JsonEncodeError::<R, Q>::budget(error));
         }
         let syntax_error = self.accounting.borrow_mut().take_syntax_error();
         if let Some(error) = syntax_error {
-            return Err(JsonEncodeError::InvalidRawJson(error));
+            return Err(JsonEncodeError::<R, Q>::invalid_raw_json(error));
         }
         if let Some(error) = self.io_error {
-            return Err(JsonEncodeError::Write(error));
+            return Err(JsonEncodeError::<R, Q>::write(error));
         }
         if result.is_err() {
             let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
-            return Err(JsonEncodeError::Serialize(error));
+            return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         Ok(())
     }

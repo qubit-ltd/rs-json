@@ -66,24 +66,24 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`JsonEncodeError::Budget`] for a recorded output violation,
+    /// Returns [`JsonEncodeErrorKind::Budget`](crate::encode::JsonEncodeErrorKind::Budget) for a recorded output violation,
     /// taking precedence over its erased I/O representation. Otherwise returns
-    /// [`JsonEncodeError::Serialize`] for the serializer failure.
+    /// [`JsonEncodeErrorKind::Serialize`](crate::encode::JsonEncodeErrorKind::Serialize) for the serializer failure.
     pub(in crate::encode) fn into_result(
         self,
         result: Result<(), serde_json::Error>,
     ) -> Result<Vec<u8>, JsonEncodeError<R, Q>> {
         let violation = self.accounting.borrow_mut().take_violation();
         if let Some(error) = violation {
-            return Err(JsonEncodeError::Budget(error));
+            return Err(JsonEncodeError::<R, Q>::budget(error));
         }
         let syntax_error = self.accounting.borrow_mut().take_syntax_error();
         if let Some(error) = syntax_error {
-            return Err(JsonEncodeError::InvalidRawJson(error));
+            return Err(JsonEncodeError::<R, Q>::invalid_raw_json(error));
         }
         if result.is_err() {
             let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
-            return Err(JsonEncodeError::Serialize(error));
+            return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         Ok(self.bytes)
     }

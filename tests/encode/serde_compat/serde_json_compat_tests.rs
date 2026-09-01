@@ -14,7 +14,7 @@ mod json_private_tests;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::encode::JsonEncodeError;
+use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
 use serde::Serialize;
 use serde::Serializer;
@@ -55,5 +55,5 @@ fn test_encoder_reports_invalid_private_raw_value_as_syntax_error() {
         .to_vec(&InvalidRawValue)
         .expect_err("invalid private raw JSON must fail");
 
-    assert!(matches!(error, JsonEncodeError::InvalidRawJson(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::InvalidRawJson);
 }
