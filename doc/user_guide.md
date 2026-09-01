@@ -152,18 +152,21 @@ fn main() -> Result<(), JsonDecodeError> {
         limits,
     );
     let document = decoder.prepare_str("  \"borrowed\"  ")?;
-    let first: &str = decoder.decode_document(&document)?;
-    let second: &str = decoder.decode_document(&document)?;
+    let first: &str = decoder.decode_precharged_document(&document)?;
+    let second: &str = decoder.decode_precharged_document(&document)?;
     assert_eq!((first, second), ("borrowed", "borrowed"));
     Ok(())
 }
 ```
 
 `prepare_str`/`prepare_utf8` immediately commit raw and normalized input
-charges. Each successful `decode_document`, `decode_document_seed`, root-typed
-document decode, or `validate_document` commits a separate value charge; a
-failed materialization rolls back only that attempt's value charges. The
-document is detached and may be decoded by another compatible decoder.
+charges. The `decode_precharged_*` and `validate_precharged_document` names
+make that input-accounting precondition explicit. Each successful
+`decode_precharged_document`, `decode_precharged_document_seed`,
+`decode_precharged_object_document`, `decode_precharged_array_document`, or
+`validate_precharged_document` commits a separate value charge; a failed
+materialization rolls back only that attempt's value charges. The document is
+detached and may be decoded by another compatible decoder.
 Borrowing follows Serde's representation rules: unescaped JSON strings can
 borrow from the document, while escaped strings require owned targets.
 
