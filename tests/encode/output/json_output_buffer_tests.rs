@@ -11,7 +11,7 @@ use qubit_budget::ResourceLimit;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::encode::JsonEncodeError;
+use qubit_json::encode::JsonEncodeErrorKind;
 
 use crate::encode::json_encode_test_support::encode;
 use crate::encode::json_encode_test_support::write_incremental;
@@ -27,7 +27,7 @@ fn test_json_output_buffer_rejects_quantity_conversion_overflow() {
     let value = "x".repeat(300);
     let error = encode(&value, &mut session).expect_err("output larger than u8 should reject quantity conversion");
 
-    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
 }
 
 /// Verifies incremental output accounting rejects a narrow quantity while the
@@ -43,7 +43,7 @@ fn test_json_output_writer_rejects_quantity_conversion_overflow() {
     let error = write_incremental(&mut output, &value, &mut session)
         .expect_err("output larger than u8 should reject quantity conversion");
 
-    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert!(!output.is_empty());
 }
 
@@ -56,7 +56,7 @@ fn test_json_output_buffer_rejects_excess_output() {
     let mut session = JsonEncodeSession::from_limits(limits);
     let error = encode(&"long", &mut session).expect_err("output should exceed the configured budget");
 
-    assert!(matches!(error, JsonEncodeError::Budget(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
 }
 
 /// Verifies successful buffered output records its complete byte count.
