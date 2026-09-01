@@ -252,9 +252,7 @@ fn test_decode_value_reports_empty_input_when_only_bom_is_present() {
 #[test]
 fn test_decode_value_can_leave_utf8_bom_when_disabled() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
-        NormalizingJsonDecodePolicy::builder()
-            .strip_utf8_bom(false)
-            .build(),
+        NormalizingJsonDecodePolicy::builder().strip_utf8_bom(false).build(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
@@ -274,9 +272,9 @@ fn test_decode_value_trims_surrounding_whitespace_by_default() {
         NormalizingJsonDecodePolicy::default(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
-    let value = decoder.decode_value("\n{\"text\":\"abc\"}\n").expect(
-        "leading and trailing control characters outside strings should be trimmed by default",
-    );
+    let value = decoder
+        .decode_value("\n{\"text\":\"abc\"}\n")
+        .expect("leading and trailing control characters outside strings should be trimmed by default");
     assert_eq!(value, json!({"text": "abc"}));
 }
 
@@ -328,9 +326,7 @@ fn test_decode_value_accepts_terminal_unicode_whitespace_when_trimming_enabled()
 #[test]
 fn test_decode_value_rejects_terminal_unicode_whitespace_when_trimming_disabled() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
-        NormalizingJsonDecodePolicy::builder()
-            .trim_whitespace(false)
-            .build(),
+        NormalizingJsonDecodePolicy::builder().trim_whitespace(false).build(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
@@ -373,14 +369,11 @@ fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid() 
     for _ in 0..3000 {
         let input = generate_noisy_json_candidate(&mut seed);
         for decoder in &mut decoders {
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                decoder.decode_value(&input)
-            }));
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| decoder.decode_value(&input)));
             assert!(result.is_ok(), "decoder panicked on input: {input:?}");
 
             if let Ok(value) = result.expect("catch_unwind returned no result") {
-                let canonical =
-                    to_string(&value).expect("serializing a decoded JSON value should not fail");
+                let canonical = to_string(&value).expect("serializing a decoded JSON value should not fail");
                 let reparsed = decoder
                     .decode_value(&canonical)
                     .expect("canonical JSON should be decodable by the same decoder");
@@ -402,8 +395,8 @@ fn test_decode_value_randomized_inputs_do_not_panic_and_round_trip_when_valid() 
 /// malformed syntax.
 fn generate_noisy_json_candidate(seed: &mut u64) -> String {
     const ALPHABET: &[char] = &[
-        '{', '}', '[', ']', ':', ',', '"', '\\', '`', ' ', '\t', '\n', '\r', 'a', 'b', 'c', 'x',
-        'y', 'z', '0', '1', '2', '9', '-', '.', 't', 'f', 'n', '\u{0000}', '\u{0008}', '\u{001f}',
+        '{', '}', '[', ']', ':', ',', '"', '\\', '`', ' ', '\t', '\n', '\r', 'a', 'b', 'c', 'x', 'y', 'z', '0', '1',
+        '2', '9', '-', '.', 't', 'f', 'n', '\u{0000}', '\u{0008}', '\u{001f}',
     ];
 
     let len = (next_u64(seed) % 48) as usize;
@@ -431,9 +424,7 @@ fn generate_noisy_json_candidate(seed: &mut u64) -> String {
 ///
 /// The next deterministic pseudo-random value.
 fn next_u64(seed: &mut u64) -> u64 {
-    *seed = seed
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(1442695040888963407);
+    *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     *seed
 }
 

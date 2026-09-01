@@ -17,8 +17,5 @@ fn test_json_syntax_error_exposes_location_and_reason() {
     assert_eq!(error.line(), 2);
     assert_eq!(error.column(), 3);
     assert_eq!(error.reason(), JsonSyntaxErrorReason::ExpectedColon);
-    assert_eq!(
-        error.to_string(),
-        "expected ':' at line 2 column 3 (byte offset 7)",
-    );
+    assert_eq!(error.to_string(), "expected ':' at line 2 column 3 (byte offset 7)",);
 }

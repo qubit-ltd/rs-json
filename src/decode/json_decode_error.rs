@@ -172,8 +172,8 @@ where
     ) -> Self {
         let line = source.line();
         let column = source.column();
-        let source = (diagnostic_policy == DiagnosticPolicy::Detailed)
-            .then(|| Arc::new(source) as Arc<dyn Error + Send + Sync>);
+        let source =
+            (diagnostic_policy == DiagnosticPolicy::Detailed).then(|| Arc::new(source) as Arc<dyn Error + Send + Sync>);
         Self {
             diagnostic_policy,
             failure: JsonDecodeFailure::Deserialize {
@@ -213,8 +213,7 @@ where
     #[inline(always)]
     pub const fn stage(&self) -> JsonDecodeStage {
         match self.failure {
-            JsonDecodeFailure::Budget { stage, .. }
-            | JsonDecodeFailure::EmptyInput { stage, .. } => stage,
+            JsonDecodeFailure::Budget { stage, .. } | JsonDecodeFailure::EmptyInput { stage, .. } => stage,
             JsonDecodeFailure::InvalidUtf8 { .. } => JsonDecodeStage::DecodeText,
             JsonDecodeFailure::InvalidJson { .. } => JsonDecodeStage::Parse,
             JsonDecodeFailure::UnexpectedTopLevel { .. } => JsonDecodeStage::TopLevelCheck,
@@ -242,24 +241,12 @@ where
     #[inline(always)]
     pub const fn raw_input_bytes(&self) -> usize {
         match self.failure {
-            JsonDecodeFailure::Budget {
-                raw_input_bytes, ..
-            }
-            | JsonDecodeFailure::EmptyInput {
-                raw_input_bytes, ..
-            }
-            | JsonDecodeFailure::InvalidUtf8 {
-                raw_input_bytes, ..
-            }
-            | JsonDecodeFailure::InvalidJson {
-                raw_input_bytes, ..
-            }
-            | JsonDecodeFailure::UnexpectedTopLevel {
-                raw_input_bytes, ..
-            }
-            | JsonDecodeFailure::Deserialize {
-                raw_input_bytes, ..
-            } => raw_input_bytes,
+            JsonDecodeFailure::Budget { raw_input_bytes, .. }
+            | JsonDecodeFailure::EmptyInput { raw_input_bytes, .. }
+            | JsonDecodeFailure::InvalidUtf8 { raw_input_bytes, .. }
+            | JsonDecodeFailure::InvalidJson { raw_input_bytes, .. }
+            | JsonDecodeFailure::UnexpectedTopLevel { raw_input_bytes, .. }
+            | JsonDecodeFailure::Deserialize { raw_input_bytes, .. } => raw_input_bytes,
         }
     }
 
@@ -274,24 +261,19 @@ where
     pub const fn normalized_input_bytes(&self) -> Option<usize> {
         match self.failure {
             JsonDecodeFailure::Budget {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             }
             | JsonDecodeFailure::EmptyInput {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             }
             | JsonDecodeFailure::InvalidJson {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             }
             | JsonDecodeFailure::UnexpectedTopLevel {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             }
             | JsonDecodeFailure::Deserialize {
-                normalized_input_bytes,
-                ..
+                normalized_input_bytes, ..
             } => normalized_input_bytes,
             JsonDecodeFailure::InvalidUtf8 { .. } => None,
         }
@@ -442,9 +424,7 @@ where
             JsonDecodeFailure::Budget { source, .. } => {
                 write!(formatter, "JSON resource budget rejected input: {source}")
             }
-            JsonDecodeFailure::EmptyInput { .. } => {
-                formatter.write_str("JSON input is empty after normalization")
-            }
+            JsonDecodeFailure::EmptyInput { .. } => formatter.write_str("JSON input is empty after normalization"),
             JsonDecodeFailure::InvalidUtf8 { source, .. } => match source {
                 Some(source) => write!(formatter, "Failed to decode JSON input as UTF-8: {source}"),
                 None => formatter.write_str("Failed to decode JSON input as UTF-8"),
@@ -453,9 +433,7 @@ where
                 Some(source) => write!(formatter, "Failed to parse JSON: {source}"),
                 None => write!(formatter, "Failed to parse JSON: {syntax}"),
             },
-            JsonDecodeFailure::UnexpectedTopLevel {
-                expected, actual, ..
-            } => {
+            JsonDecodeFailure::UnexpectedTopLevel { expected, actual, .. } => {
                 write!(
                     formatter,
                     "Unexpected JSON top-level type: expected {expected}, got {actual}"
@@ -493,16 +471,13 @@ where
         match &self.failure {
             JsonDecodeFailure::Budget { source, .. } => Some(source),
             JsonDecodeFailure::InvalidUtf8 {
-                source: Some(source),
-                ..
+                source: Some(source), ..
             } => Some(source),
             JsonDecodeFailure::InvalidJson {
-                source: Some(source),
-                ..
+                source: Some(source), ..
             } => Some(source.as_ref()),
             JsonDecodeFailure::Deserialize {
-                source: Some(source),
-                ..
+                source: Some(source), ..
             } => Some(source.as_ref()),
             _ => None,
         }

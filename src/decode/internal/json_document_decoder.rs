@@ -61,10 +61,7 @@ where
 /// # Panics
 ///
 /// Panics raised by the seed's visitor propagate to the caller.
-pub(in crate::decode) fn deserialize_json_document<'de, S>(
-    seed: S,
-    input: &'de [u8],
-) -> Result<S::Value, Error>
+pub(in crate::decode) fn deserialize_json_document<'de, S>(seed: S, input: &'de [u8]) -> Result<S::Value, Error>
 where
     S: DeserializeSeed<'de>,
 {
