@@ -133,5 +133,7 @@ key 进行准入。
   [Number contract design](number_contract_design.md)
 - [错误、性能与下游安全边界](error_performance_redaction_design.zh_CN.md) ·
   [Error, performance, and downstream safety](error_performance_redaction_design.md)
+- [性能证据日志](benchmark_baseline.zh_CN.md) ·
+  [Performance evidence log](benchmark_baseline.md)
 - [依赖维护](dependency_maintenance.zh_CN.md) ·
   [Dependency maintenance](dependency_maintenance.md)

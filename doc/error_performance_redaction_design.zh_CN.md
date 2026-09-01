@@ -58,7 +58,7 @@ owned/reused session、incremental writer，以及 numeric、string、object 和
    `RefCell` 执行完整预算检查；失败时仍回退到累计长度检查，保持 quantity 与 budget
    错误语义不变。
 
-完整数据和复现命令见 [benchmark 基线](benchmark_baseline.zh_CN.md)。
+完整数据和复现命令见 [JSON 性能证据日志](benchmark_baseline.zh_CN.md)。
 
 ## Tree 快路径
 

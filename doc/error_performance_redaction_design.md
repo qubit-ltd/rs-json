@@ -74,9 +74,10 @@ The current experiment decision is:
    Successful writes avoid shared `RefCell` budget checks; failures fall back
    to the cumulative check so quantity and budget error semantics stay exact.
 
-See the [benchmark baseline](benchmark_baseline.zh_CN.md) for reproducible
-measurements. Benchmarks describe same-machine facts and do not promise
-cross-machine ratios.
+See the [performance evidence log](benchmark_baseline.md) for the current
+conclusions, reproduction commands, and the complete measurement history.
+Benchmarks describe same-machine facts and do not promise cross-machine
+ratios.
 
 ## Tree fast path
 
