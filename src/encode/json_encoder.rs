@@ -173,7 +173,7 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`JsonEncodeError::Budget`] when accounting rejects the value
+    /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects the value
     /// or output, or a serialization error when Serde rejects `value`.
     pub fn to_vec<T>(&mut self, value: &T) -> Result<Vec<u8>, JsonEncodeError<R, Q>>
     where
@@ -184,8 +184,8 @@ where
         let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits)?;
         attempt
             .try_consume_output_bytes(bytes.len())
-            .map_err(JsonEncodeError::Budget)?;
-        attempt.commit().map_err(JsonEncodeError::Budget)?;
+            .map_err(JsonEncodeError::<R, Q>::budget)?;
+        attempt.commit().map_err(JsonEncodeError::<R, Q>::budget)?;
         Ok(bytes)
     }
 
@@ -208,7 +208,7 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`JsonEncodeError::Budget`] when accounting rejects the value
+    /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects the value
     /// or output, or a serialization/writer error on failure.
     pub fn write_buffered<W, T>(&mut self, writer: W, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
@@ -220,9 +220,9 @@ where
         let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits)?;
         attempt
             .check_output_bytes(bytes.len())
-            .map_err(JsonEncodeError::Budget)?;
+            .map_err(JsonEncodeError::<R, Q>::budget)?;
         Self::write_buffer(writer, &bytes, &mut attempt)?;
-        attempt.commit().map_err(JsonEncodeError::Budget)?;
+        attempt.commit().map_err(JsonEncodeError::<R, Q>::budget)?;
         Ok(())
     }
 
@@ -244,7 +244,7 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`JsonEncodeError::Budget`] when accounting rejects output,
+    /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects output,
     /// or a serialization/writer error on failure. Accepted output prefixes
     /// remain written when a later operation fails.
     pub fn write_incremental<W, T>(&mut self, writer: W, value: &T) -> Result<(), JsonEncodeError<R, Q>>
@@ -277,7 +277,7 @@ where
             output.into_result(result)
         };
         result?;
-        attempt.commit().map_err(JsonEncodeError::Budget)?;
+        attempt.commit().map_err(JsonEncodeError::<R, Q>::budget)?;
         Ok(())
     }
 
@@ -308,14 +308,14 @@ where
                 }
             };
             if let Some(error) = accounting.borrow_mut().take_violation() {
-                return Err(JsonEncodeError::Budget(error));
+                return Err(JsonEncodeError::<R, Q>::budget(error));
             }
             if let Some(error) = accounting.borrow_mut().take_syntax_error() {
-                return Err(JsonEncodeError::InvalidRawJson(error));
+                return Err(JsonEncodeError::<R, Q>::invalid_raw_json(error));
             }
             if result.is_err() {
                 let error = accounting.borrow_mut().take_serialization_error_or_custom();
-                return Err(JsonEncodeError::Serialize(error));
+                return Err(JsonEncodeError::<R, Q>::serialization(error));
             }
             return Ok(bytes);
         }

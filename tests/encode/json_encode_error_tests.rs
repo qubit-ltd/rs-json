@@ -7,10 +7,9 @@
 // =============================================================================
 use std::error::Error;
 
-use qubit_json::decode::JsonSyntaxError;
-use qubit_json::decode::JsonSyntaxErrorReason;
 use qubit_json::encode::JsonCollectionKind;
-use qubit_json::encode::JsonEncodeError;
+use qubit_json::encode::JsonEncodeErrorKind;
+use qubit_json::encode::JsonEncoder;
 use qubit_json::encode::JsonIntegerSignedness;
 use qubit_json::encode::JsonMapKeyKind;
 use qubit_json::encode::JsonSerializationError;
@@ -18,28 +17,40 @@ use qubit_json::encode::JsonSerializationErrorCategory;
 use qubit_json::encode::JsonSerializationErrorKind;
 use qubit_json::encode::JsonSerializerStateError;
 
-/// Verifies that Serde failures retain the encoding error category.
+/// Verifies that opaque encoding failures expose their stable kind and
+/// matching source without revealing their representation.
 #[test]
-fn test_serialize_error_variant_is_distinct() {
-    let source = JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization);
-    let error = JsonEncodeError::<(), usize>::Serialize(source);
+fn test_encode_error_exposes_serialize_kind_and_source() {
+    let mut encoder = JsonEncoder::unlimited();
+    let error = encoder
+        .to_vec(&u128::MAX)
+        .expect_err("wide integer must fail strict JSON serialization");
 
-    assert!(matches!(error, JsonEncodeError::Serialize(_)));
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
+    assert_eq!(
+        error
+            .serialization_error()
+            .expect("serialize error must retain its stable source")
+            .kind(),
+        JsonSerializationErrorKind::IntegerOutOfRange {
+            signedness: JsonIntegerSignedness::Unsigned,
+        },
+    );
+    assert!(error.budget_error().is_none());
+    assert!(error.syntax_error().is_none());
+    assert!(error.write_error().is_none());
+    assert!(error.source().is_some());
 }
 
-/// Verifies that invalid raw JSON retains stable lexical diagnostics.
+/// Verifies stable encoding error kinds round-trip through their textual form.
 #[test]
-fn test_invalid_raw_json_preserves_syntax_error_details() {
-    let syntax_error = JsonSyntaxError::new(19, 3, 7, JsonSyntaxErrorReason::InvalidEscape);
-    let error = JsonEncodeError::<(), usize>::InvalidRawJson(syntax_error);
-    let JsonEncodeError::InvalidRawJson(syntax_error) = error else {
-        panic!("expected an invalid raw JSON error");
-    };
+fn test_encode_error_kind_parses_stable_name() {
+    let kind = "invalid_raw_json"
+        .parse::<JsonEncodeErrorKind>()
+        .expect("stable kind name must parse");
 
-    assert_eq!(syntax_error.reason(), JsonSyntaxErrorReason::InvalidEscape);
-    assert_eq!(syntax_error.offset(), 19);
-    assert_eq!(syntax_error.line(), 3);
-    assert_eq!(syntax_error.column(), 7);
+    assert_eq!(kind, JsonEncodeErrorKind::InvalidRawJson);
+    assert_eq!(kind.to_string(), "invalid_raw_json");
 }
 
 /// Verifies Serde custom failures discard arbitrary diagnostic text.
