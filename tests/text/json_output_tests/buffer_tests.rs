@@ -25,7 +25,8 @@ fn test_json_output_buffer_rejects_quantity_conversion_overflow() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
     let value = "x".repeat(300);
-    let error = encode(&value, &mut session).expect_err("output larger than u8 should reject quantity conversion");
+    let error = encode(&value, &mut session)
+        .expect_err("output larger than u8 should reject quantity conversion");
 
     assert!(matches!(error, JsonEncodeError::Budget(_)));
 }
@@ -54,7 +55,8 @@ fn test_json_output_buffer_rejects_excess_output() {
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 3))
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
-    let error = encode(&"long", &mut session).expect_err("output should exceed the configured budget");
+    let error =
+        encode(&"long", &mut session).expect_err("output should exceed the configured budget");
 
     assert!(matches!(error, JsonEncodeError::Budget(_)));
 }

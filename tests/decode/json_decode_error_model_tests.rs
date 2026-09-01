@@ -50,7 +50,9 @@ fn test_json_decode_error_reports_normalization_failure() {
         NormalizingJsonDecodePolicy::lenient(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
-    let error = decoder.decode_value("").expect_err("empty normalized input must fail");
+    let error = decoder
+        .decode_value("")
+        .expect_err("empty normalized input must fail");
 
     assert_eq!(error.kind(), JsonDecodeErrorKind::EmptyInput);
     assert_eq!(error.stage(), JsonDecodeStage::Normalize);
@@ -67,7 +69,9 @@ fn test_decoder_facades_share_error_classification() {
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
 
-    let strict_syntax = strict.decode_str::<serde_json::Value>("{").expect_err("syntax error");
+    let strict_syntax = strict
+        .decode_str::<serde_json::Value>("{")
+        .expect_err("syntax error");
     let normalizing_syntax = normalizing
         .decode_str::<serde_json::Value>("{")
         .expect_err("syntax error");
@@ -75,7 +79,9 @@ fn test_decoder_facades_share_error_classification() {
     assert_eq!(strict_syntax.stage(), normalizing_syntax.stage());
 
     let strict_target = strict.decode_str::<bool>("1").expect_err("target error");
-    let normalizing_target = normalizing.decode_str::<bool>("1").expect_err("target error");
+    let normalizing_target = normalizing
+        .decode_str::<bool>("1")
+        .expect_err("target error");
     assert_eq!(strict_target.kind(), normalizing_target.kind());
     assert_eq!(strict_target.stage(), normalizing_target.stage());
 
@@ -83,7 +89,9 @@ fn test_decoder_facades_share_error_classification() {
     let mut strict = JsonDecoder::with_limits(limits);
     let mut normalizing = NormalizingJsonDecoder::with_limits(no_normalization_policy(), limits);
     let strict_budget = strict.decode_str::<bool>("true").expect_err("input budget");
-    let normalizing_budget = normalizing.decode_str::<bool>("true").expect_err("input budget");
+    let normalizing_budget = normalizing
+        .decode_str::<bool>("true")
+        .expect_err("input budget");
     assert_eq!(strict_budget.kind(), normalizing_budget.kind());
     assert_eq!(strict_budget.stage(), normalizing_budget.stage());
 }
@@ -96,7 +104,10 @@ fn test_json_decode_error_kind_and_stage_round_trip() {
         (JsonDecodeErrorKind::EmptyInput, "empty_input"),
         (JsonDecodeErrorKind::InvalidUtf8, "invalid_utf8"),
         (JsonDecodeErrorKind::InvalidJson, "invalid_json"),
-        (JsonDecodeErrorKind::UnexpectedTopLevel, "unexpected_top_level"),
+        (
+            JsonDecodeErrorKind::UnexpectedTopLevel,
+            "unexpected_top_level",
+        ),
         (JsonDecodeErrorKind::Deserialize, "deserialize"),
     ];
     for (kind, text) in kinds {
@@ -126,10 +137,15 @@ fn test_json_decode_error_kind_and_stage_round_trip() {
 #[test]
 fn test_json_decode_error_model_representative_matrix() {
     let mut invalid_utf8 = JsonDecoder::unlimited();
-    let error = invalid_utf8.validate_utf8(&[0xff]).expect_err("invalid UTF-8");
+    let error = invalid_utf8
+        .validate_utf8(&[0xff])
+        .expect_err("invalid UTF-8");
     assert_eq!(
         (error.kind(), error.stage()),
-        (JsonDecodeErrorKind::InvalidUtf8, JsonDecodeStage::DecodeText),
+        (
+            JsonDecodeErrorKind::InvalidUtf8,
+            JsonDecodeStage::DecodeText
+        ),
     );
     assert_eq!(error.utf8_valid_up_to(), Some(0));
 
@@ -143,12 +159,20 @@ fn test_json_decode_error_model_representative_matrix() {
         .expect_err("object contract");
     assert_eq!(
         (error.kind(), error.stage()),
-        (JsonDecodeErrorKind::UnexpectedTopLevel, JsonDecodeStage::TopLevelCheck,),
+        (
+            JsonDecodeErrorKind::UnexpectedTopLevel,
+            JsonDecodeStage::TopLevelCheck,
+        ),
     );
 
-    let error = decoder.decode_document::<bool>(&document).expect_err("target mismatch");
+    let error = decoder
+        .decode_document::<bool>(&document)
+        .expect_err("target mismatch");
     assert_eq!(
         (error.kind(), error.stage()),
-        (JsonDecodeErrorKind::Deserialize, JsonDecodeStage::Deserialize,),
+        (
+            JsonDecodeErrorKind::Deserialize,
+            JsonDecodeStage::Deserialize,
+        ),
     );
 }

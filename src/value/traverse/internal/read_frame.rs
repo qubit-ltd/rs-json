@@ -25,7 +25,10 @@ pub(in crate::value::traverse) struct ReadFrame<'value> {
 impl<'value> ReadFrame<'value> {
     /// Creates a frame that will enter `value` before scheduling children.
     #[inline(always)]
-    pub(in crate::value::traverse) fn enter(value: &'value Value, context: JsonTreeContext<'value>) -> Self {
+    pub(in crate::value::traverse) fn enter(
+        value: &'value Value,
+        context: JsonTreeContext<'value>,
+    ) -> Self {
         Self {
             value,
             context,

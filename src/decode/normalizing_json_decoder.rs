@@ -77,7 +77,10 @@ where
     /// A decoder whose accounting starts empty and is constrained by `limits`.
     #[inline]
     #[must_use]
-    pub fn with_limits(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits<R, Q>) -> Self {
+    pub fn with_limits(
+        policy: NormalizingJsonDecodePolicy,
+        limits: JsonDecodeLimits<R, Q>,
+    ) -> Self {
         Self::new(policy, JsonDecodeSession::from_limits(limits))
     }
 }
@@ -102,7 +105,10 @@ where
     /// [`Self::into_session`].
     #[inline]
     #[must_use]
-    pub const fn new(policy: NormalizingJsonDecodePolicy, session: JsonDecodeSession<'budget, R, Q>) -> Self {
+    pub const fn new(
+        policy: NormalizingJsonDecodePolicy,
+        session: JsonDecodeSession<'budget, R, Q>,
+    ) -> Self {
         Self {
             normalizer: JsonNormalizer::new(policy),
             engine: JsonDecodeEngine::new(session),
@@ -349,7 +355,10 @@ where
     ///
     /// Returns a structured error when decoded-value accounting or JSON
     /// validation fails.
-    pub fn validate_document(&mut self, document: &NormalizedJsonDocument<'_>) -> Result<(), JsonDecodeError<R, Q>> {
+    pub fn validate_document(
+        &mut self,
+        document: &NormalizedJsonDocument<'_>,
+    ) -> Result<(), JsonDecodeError<R, Q>> {
         self.engine
             .validate_document(document, self.policy().diagnostic_policy(), None)
     }

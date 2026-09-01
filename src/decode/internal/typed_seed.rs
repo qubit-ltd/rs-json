@@ -24,7 +24,9 @@ impl<T> TypedSeed<T> {
     /// Creates a zero-sized seed that delegates to `T::deserialize`.
     #[inline(always)]
     pub(in crate::decode) const fn new() -> Self {
-        Self { marker: PhantomData }
+        Self {
+            marker: PhantomData,
+        }
     }
 }
 

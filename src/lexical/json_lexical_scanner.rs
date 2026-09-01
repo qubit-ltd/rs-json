@@ -68,7 +68,8 @@ where
     /// or [`JsonLexicalError::Syntax`] when `input` is not one complete JSON
     /// value. All value measurements remain staged in the caller's transaction.
     pub(crate) fn scan(&mut self, input: &[u8]) -> Result<(), JsonLexicalError<R, Q>> {
-        let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
+        let mut cursor =
+            JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         let mut stack: Vec<JsonLexicalContainerFrame> = Vec::new();
         cursor.skip_whitespace();
         cursor.value(self.root_depth, &mut stack)?;

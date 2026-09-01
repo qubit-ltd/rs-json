@@ -17,14 +17,20 @@ use crate::internal::JsonLexemeLength;
 /// value model and performs no allocation.
 pub(crate) fn json_number_lexeme_length(number: &Number) -> usize {
     if number.is_i64() {
-        let value = number.as_i64().expect("an i64-classified JSON number must expose i64");
+        let value = number
+            .as_i64()
+            .expect("an i64-classified JSON number must expose i64");
         let sign = usize::from(value.is_negative());
         return sign + JsonLexemeLength::unsigned_integer(value.unsigned_abs().into());
     }
     if number.is_u64() {
-        let value = number.as_u64().expect("a u64-classified JSON number must expose u64");
+        let value = number
+            .as_u64()
+            .expect("a u64-classified JSON number must expose u64");
         return JsonLexemeLength::unsigned_integer(value.into());
     }
-    let value = number.as_f64().expect("a finite JSON number must expose f64");
+    let value = number
+        .as_f64()
+        .expect("a finite JSON number must expose f64");
     JsonLexemeLength::finite_f64(value)
 }

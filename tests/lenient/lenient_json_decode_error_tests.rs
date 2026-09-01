@@ -35,7 +35,10 @@ fn run_with_session<'a, T>(
 where
     T: DeserializeOwned,
 {
-    let owned_session = std::mem::replace(session, JsonDecodeSession::from_limits(JsonDecodeLimits::new()));
+    let owned_session = std::mem::replace(
+        session,
+        JsonDecodeSession::from_limits(JsonDecodeLimits::new()),
+    );
     let mut stateful = NormalizingJsonDecoder::new(decoder.policy().clone(), owned_session);
     let result = stateful.decode_str(input);
     *session = stateful.into_session();
@@ -165,7 +168,8 @@ fn test_error_source_for_invalid_json_preserves_serde_error() {
     let error = decoder
         .decode_value("{")
         .expect_err("invalid JSON should preserve the parser source error");
-    let source = std::error::Error::source(&error).expect("invalid JSON errors should expose the serde_json source");
+    let source = std::error::Error::source(&error)
+        .expect("invalid JSON errors should expose the serde_json source");
     assert!(source.to_string().contains("EOF"));
 }
 
@@ -215,7 +219,8 @@ fn test_detailed_error_privacy_preserves_input_derived_serde_details() {
     assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Detailed);
     assert!(error.to_string().contains(SECRET));
     assert!(format!("{error:?}").contains(SECRET));
-    let source = std::error::Error::source(&error).expect("detailed errors should retain the serde_json source");
+    let source = std::error::Error::source(&error)
+        .expect("detailed errors should retain the serde_json source");
     assert!(source.to_string().contains(SECRET));
 }
 
@@ -375,7 +380,10 @@ fn test_cloned_error_preserves_public_diagnostics() {
     assert_eq!(cloned.stage(), first.stage());
     assert_eq!(cloned.diagnostic_policy(), first.diagnostic_policy());
     assert_eq!(cloned.raw_input_bytes(), first.raw_input_bytes());
-    assert_eq!(cloned.normalized_input_bytes(), first.normalized_input_bytes());
+    assert_eq!(
+        cloned.normalized_input_bytes(),
+        first.normalized_input_bytes()
+    );
     assert_eq!(cloned.line(), first.line());
     assert_eq!(cloned.column(), first.column());
 }

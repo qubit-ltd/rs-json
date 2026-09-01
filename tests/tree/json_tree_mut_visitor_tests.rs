@@ -16,7 +16,11 @@ struct Visitor;
 impl JsonTreeMutVisitor for Visitor {
     type Error = ();
 
-    fn visit(&mut self, _value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(
+        &mut self,
+        _value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
         Ok(JsonTreeControl::SkipSubtree)
     }
 }

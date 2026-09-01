@@ -19,7 +19,10 @@ use serde_json::Deserializer;
 #[test]
 fn test_json_key_seed_checks_prospective_object_entry() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)))
+        .structure_limits(
+            StructureLimits::builder()
+                .map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)),
+        )
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();

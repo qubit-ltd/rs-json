@@ -59,7 +59,10 @@ where
     }
 
     /// Records one failed check before converting it into a Serde error.
-    pub(super) fn record<E>(&mut self, result: Result<(), MeasuredBudgetError<R, Q>>) -> Result<(), E>
+    pub(super) fn record<E>(
+        &mut self,
+        result: Result<(), MeasuredBudgetError<R, Q>>,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -82,7 +85,11 @@ where
     }
 
     /// Checks and charges a container before requesting its Serde compound.
-    pub(super) fn enter_container<E>(&mut self, kind: JsonContainerKind, depth: usize) -> Result<(), E>
+    pub(super) fn enter_container<E>(
+        &mut self,
+        kind: JsonContainerKind,
+        depth: usize,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -94,7 +101,11 @@ where
     }
 
     /// Checks one prospective container count without charging value usage.
-    pub(super) fn check_container_count<E>(&mut self, kind: JsonContainerKind, prospective: usize) -> Result<(), E>
+    pub(super) fn check_container_count<E>(
+        &mut self,
+        kind: JsonContainerKind,
+        prospective: usize,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -118,7 +129,8 @@ where
         let output = self.output.borrow().check_available(value.len());
         self.record(output)?;
         let result = {
-            let mut scanner = JsonLexicalScanner::at_depth(&mut *self.transaction, depth, self.has_value_limits);
+            let mut scanner =
+                JsonLexicalScanner::at_depth(&mut *self.transaction, depth, self.has_value_limits);
             scanner.scan(value.as_bytes())
         };
         match result {

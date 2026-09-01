@@ -74,7 +74,10 @@ fn run_with_session<'a, T>(
 where
     T: DeserializeOwned,
 {
-    let owned_session = std::mem::replace(session, JsonDecodeSession::from_limits(JsonDecodeLimits::new()));
+    let owned_session = std::mem::replace(
+        session,
+        JsonDecodeSession::from_limits(JsonDecodeLimits::new()),
+    );
     let mut stateful = NormalizingJsonDecoder::new(decoder.policy().clone(), owned_session);
     let result = stateful.decode_str(input);
     *session = stateful.into_session();
@@ -91,8 +94,10 @@ fn test_owned_exposes_configured_policy() {
     let policy = NormalizingJsonDecodePolicy::builder()
         .markdown_fence_policy(MarkdownFencePolicy::Disabled)
         .build();
-    let decoder =
-        NormalizingJsonDecoder::with_limits(policy.clone(), JsonDecodeLimits::<JsonResource, usize>::default());
+    let decoder = NormalizingJsonDecoder::with_limits(
+        policy.clone(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
+    );
     assert_eq!(decoder.policy(), &policy);
 }
 
@@ -132,7 +137,11 @@ fn test_decode_with_value_limits_rejects_excessive_depth() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().build(),
         JsonDecodeLimits::<JsonResource, usize>::builder()
-            .value_limits(JsonValueLimits::<JsonResource, usize>::builder().max_depth(1).build())
+            .value_limits(
+                JsonValueLimits::<JsonResource, usize>::builder()
+                    .max_depth(1)
+                    .build(),
+            )
             .build(),
     );
     let error = decoder
@@ -149,7 +158,11 @@ fn test_decode_value_with_value_limits_rejects_excessive_nodes() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder().build(),
         JsonDecodeLimits::<JsonResource, usize>::builder()
-            .value_limits(JsonValueLimits::<JsonResource, usize>::builder().max_nodes(1).build())
+            .value_limits(
+                JsonValueLimits::<JsonResource, usize>::builder()
+                    .max_nodes(1)
+                    .build(),
+            )
             .build(),
     );
     let error = decoder
@@ -171,8 +184,8 @@ fn test_stateful_decoder_charges_caller_owned_input_budget() {
     let mut value = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().build());
     let mut session = JsonDecodeSession::borrowing_input(&mut input, &mut value);
 
-    let decoded: Value =
-        run_with_session(&decoder, "{\"ok\":true}", &mut session).expect("caller-owned session must be accepted");
+    let decoded: Value = run_with_session(&decoder, "{\"ok\":true}", &mut session)
+        .expect("caller-owned session must be accepted");
 
     assert_eq!(decoded, json!({"ok": true}));
     assert_eq!(input.used(), 11);
@@ -226,7 +239,8 @@ fn test_strict_decode_exercises_lexical_error_shapes() {
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     for input in ["false", "[]", "{}"] {
-        let mut session = value_budget_session(JsonValueLimits::<JsonResource, usize>::builder().build());
+        let mut session =
+            value_budget_session(JsonValueLimits::<JsonResource, usize>::builder().build());
         run_with_session::<Value>(&decoder, input, &mut session)
             .expect("strict scalar and empty containers are valid JSON");
     }
@@ -244,7 +258,8 @@ fn test_strict_decode_exercises_lexical_error_shapes() {
         "01",
         "1e",
     ] {
-        let mut session = value_budget_session(JsonValueLimits::<JsonResource, usize>::builder().build());
+        let mut session =
+            value_budget_session(JsonValueLimits::<JsonResource, usize>::builder().build());
         assert!(
             run_with_session::<Value>(&decoder, input, &mut session).is_err(),
             "strict input should be rejected: {input:?}",
@@ -312,13 +327,17 @@ fn test_stateful_decoder_classifies_each_value_budget_rejection() {
             "number budget must reject the lexical representation",
         ),
         (
-            JsonValueLimits::<JsonResource, usize>::builder().max_nodes(1).build(),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_nodes(1)
+                .build(),
             "[null]",
             JsonResource::Nodes,
             "node budget must reject the child value",
         ),
         (
-            JsonValueLimits::<JsonResource, usize>::builder().max_depth(1).build(),
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_depth(1)
+                .build(),
             "[null]",
             JsonResource::Depth,
             "depth budget must reject the nested value",
@@ -335,7 +354,8 @@ fn test_stateful_decoder_classifies_each_value_budget_rejection() {
 
     for (limits, input, expected_resource, expectation) in cases {
         let mut session = value_budget_session(limits);
-        let error = run_with_session::<Value>(&decoder, input, &mut session).expect_err(expectation);
+        let error =
+            run_with_session::<Value>(&decoder, input, &mut session).expect_err(expectation);
         assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
         assert_eq!(error.stage(), JsonDecodeStage::Admission);
         assert_eq!(
@@ -407,7 +427,8 @@ fn test_stateful_decoder_accounts_normalized_fenced_value() {
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let mut input_budget = ResourceBudget::new(JsonResource::InputBytes, INPUT.len());
-    let mut normalized_budget = ResourceBudget::new(JsonResource::NormalizedInputBytes, NORMALIZED.len());
+    let mut normalized_budget =
+        ResourceBudget::new(JsonResource::NormalizedInputBytes, NORMALIZED.len());
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .max_depth(2)
         .max_nodes(3)
@@ -418,16 +439,26 @@ fn test_stateful_decoder_accounts_normalized_fenced_value() {
         .max_payload_bytes(20)
         .build();
     let mut value_budget = JsonValueBudget::new(limits);
-    let mut session = JsonDecodeSession::borrowing_all(&mut input_budget, &mut normalized_budget, &mut value_budget);
+    let mut session = JsonDecodeSession::borrowing_all(
+        &mut input_budget,
+        &mut normalized_budget,
+        &mut value_budget,
+    );
 
-    let value: Value =
-        run_with_session(&decoder, INPUT, &mut session).expect("normalized fenced JSON must fit its exact budgets");
+    let value: Value = run_with_session(&decoder, INPUT, &mut session)
+        .expect("normalized fenced JSON must fit its exact budgets");
 
     assert_eq!(value["escaped"], json!("中"));
     assert_eq!(value["number"].as_f64(), Some(1_000.0));
-    assert_eq!(session.input_budget().expect("raw budget").used(), INPUT.len());
     assert_eq!(
-        session.normalized_input_budget().expect("normalized budget").used(),
+        session.input_budget().expect("raw budget").used(),
+        INPUT.len()
+    );
+    assert_eq!(
+        session
+            .normalized_input_budget()
+            .expect("normalized budget")
+            .used(),
         NORMALIZED.len(),
     );
     assert_eq!(session.value_budget().used_nodes(), Some(3));
@@ -490,7 +521,10 @@ fn test_stateful_decoder_syntax_failure_retains_input_and_reuses_value_budget() 
         .expect_err("malformed normalized JSON must be rejected");
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
     assert_eq!(
-        session.input_budget().expect("configured raw budget").used(),
+        session
+            .input_budget()
+            .expect("configured raw budget")
+            .used(),
         rejected.len()
     );
     assert_eq!(
@@ -508,7 +542,10 @@ fn test_stateful_decoder_syntax_failure_retains_input_and_reuses_value_budget() 
         Value::Null
     );
     assert_eq!(
-        session.input_budget().expect("configured raw budget").used(),
+        session
+            .input_budget()
+            .expect("configured raw budget")
+            .used(),
         rejected.len() + accepted.len()
     );
     assert_eq!(
@@ -542,7 +579,10 @@ fn test_stateful_decoder_budget_rejection_rolls_back_value() {
         .expect_err("two nodes must exceed the one-node value budget");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     assert_eq!(
-        session.input_budget().expect("configured raw budget").used(),
+        session
+            .input_budget()
+            .expect("configured raw budget")
+            .used(),
         input.len()
     );
     assert_eq!(
@@ -563,7 +603,11 @@ fn test_stateful_decoder_budget_rejection_rolls_back_value() {
 /// Panics when lexical admission replaces serde's stable syntax position.
 #[test]
 fn test_stateful_decoder_preserves_serde_syntax_position() {
-    let mut session = value_budget_session(JsonValueLimits::<JsonResource, usize>::builder().max_nodes(2).build());
+    let mut session = value_budget_session(
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .max_nodes(2)
+            .build(),
+    );
     let decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::builder()
             .diagnostic_policy(DiagnosticPolicy::Detailed)
@@ -577,7 +621,8 @@ fn test_stateful_decoder_preserves_serde_syntax_position() {
     assert_eq!(error.stage(), JsonDecodeStage::Parse);
     assert_eq!(error.line(), Some(1));
     assert_eq!(error.column(), Some(2));
-    let source = std::error::Error::source(&error).expect("detailed ordinary syntax errors must retain their source");
+    let source = std::error::Error::source(&error)
+        .expect("detailed ordinary syntax errors must retain their source");
     assert!(source.downcast_ref::<JsonError>().is_some());
 }
 
@@ -591,7 +636,9 @@ fn test_stateful_decoder_preserves_serde_syntax_position() {
 #[test]
 fn test_stateful_decoder_rejects_unpaired_surrogate_without_panicking() {
     const INPUT: &str = r#""\ud800""#;
-    let limits = JsonValueLimits::<JsonResource, usize>::builder().max_nodes(2).build();
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(2)
+        .build();
 
     let mut string_session = value_budget_session(limits);
     let string_decoder = NormalizingJsonDecoder::with_limits(
@@ -617,14 +664,18 @@ fn test_stateful_decoder_rejects_unpaired_surrogate_without_panicking() {
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let mut raw_value_session = value_budget_session(limits);
-    let raw_value_error = run_with_session::<Box<RawValue>>(&decoder, INPUT, &mut raw_value_session)
-        .expect_err("RawValue must not bypass lexical surrogate rejection");
+    let raw_value_error =
+        run_with_session::<Box<RawValue>>(&decoder, INPUT, &mut raw_value_session)
+            .expect_err("RawValue must not bypass lexical surrogate rejection");
     assert_eq!(raw_value_error.kind(), JsonDecodeErrorKind::InvalidJson);
     assert_eq!(raw_value_error.stage(), JsonDecodeStage::Parse);
-    assert_eq!(raw_value_error.diagnostic_policy(), DiagnosticPolicy::Detailed);
+    assert_eq!(
+        raw_value_error.diagnostic_policy(),
+        DiagnosticPolicy::Detailed
+    );
     assert!(raw_value_error.budget_error().is_none());
-    let source =
-        std::error::Error::source(&raw_value_error).expect("detailed lexical errors must retain their stable source");
+    let source = std::error::Error::source(&raw_value_error)
+        .expect("detailed lexical errors must retain their stable source");
     assert!(source.to_string().contains("unpaired Unicode surrogate"));
     assert_eq!(raw_value_session.value_budget().used_nodes(), Some(0),);
 }
@@ -1318,7 +1369,9 @@ fn test_decoders_with_different_configs_do_not_share_state() {
 #[test]
 fn test_decoder_keeps_trim_whitespace_setting_for_empty_text() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
-        NormalizingJsonDecodePolicy::builder().trim_whitespace(false).build(),
+        NormalizingJsonDecodePolicy::builder()
+            .trim_whitespace(false)
+            .build(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder

@@ -57,11 +57,17 @@ where
         if !self.has_value_limits {
             return Ok(());
         }
-        self.transaction.try_admit(measurement).map_err(JsonLexicalError::from)
+        self.transaction
+            .try_admit(measurement)
+            .map_err(JsonLexicalError::from)
     }
 
     /// Enters one container when value limits are configured.
-    fn enter_container(&mut self, kind: JsonContainerKind, depth: usize) -> Result<(), JsonLexicalError<R, Q>> {
+    fn enter_container(
+        &mut self,
+        kind: JsonContainerKind,
+        depth: usize,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.has_value_limits {
             return Ok(());
         }
@@ -71,7 +77,11 @@ where
     }
 
     /// Checks one observed container count when value limits are configured.
-    fn check_container_count(&mut self, kind: JsonContainerKind, count: usize) -> Result<(), JsonLexicalError<R, Q>> {
+    fn check_container_count(
+        &mut self,
+        kind: JsonContainerKind,
+        count: usize,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.has_value_limits {
             return Ok(());
         }
@@ -154,7 +164,11 @@ where
     }
 
     /// Charges and consumes one scalar literal.
-    fn literal(&mut self, literal: &[u8], measurement: JsonMeasurement) -> Result<(), JsonLexicalError<R, Q>> {
+    fn literal(
+        &mut self,
+        literal: &[u8],
+        measurement: JsonMeasurement,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.input[self.offset..].starts_with(literal) {
             return Err(match self.peek() {
                 None => self.syntax(JsonLexicalErrorReason::UnexpectedEnd),
@@ -439,7 +453,11 @@ where
 
     /// Validates one syntactically complete number against the supported
     /// integer and floating-point representation ranges.
-    fn validate_number_range(&self, start: usize, end: usize) -> Result<(), JsonLexicalError<R, Q>> {
+    fn validate_number_range(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         let Ok(token) = std::str::from_utf8(&self.input[start..end]) else {
             return Err(self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber));
         };
@@ -475,7 +493,10 @@ where
 
     /// Tests whether the next byte can follow a complete JSON scalar value.
     const fn is_value_delimiter(byte: Option<u8>) -> bool {
-        matches!(byte, None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}'))
+        matches!(
+            byte,
+            None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}')
+        )
     }
 
     /// Returns the UTF-8 width encoded by one valid leading byte.

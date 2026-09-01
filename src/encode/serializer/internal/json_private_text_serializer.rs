@@ -20,15 +20,22 @@ use super::super::json_encode_context::JsonEncodeContext;
 use super::PrivateTextKind;
 
 /// Checks the string token emitted by a serde_json private serializer.
-pub(in crate::encode::serializer) struct JsonPrivateTextSerializer<'context, 'transaction, 'budget, S, R, Q>
-where
+pub(in crate::encode::serializer) struct JsonPrivateTextSerializer<
+    'context,
+    'transaction,
+    'budget,
+    S,
+    R,
+    Q,
+> where
     Q: ResourceQuantity,
 {
     /// serde_json private string emitter.
     pub(in crate::encode::serializer) inner: S,
 
     /// Shared traversal context.
-    pub(in crate::encode::serializer) context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+    pub(in crate::encode::serializer) context:
+        &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 
     /// Budget semantics represented by the emitted text.
     pub(in crate::encode::serializer) kind: PrivateTextKind,
@@ -117,11 +124,16 @@ where
         variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        self.inner.serialize_unit_variant(name, variant_index, variant)
+        self.inner
+            .serialize_unit_variant(name, variant_index, variant)
     }
 
     /// Forwards a newtype-struct payload unchanged.
-    fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T>(
+        self,
+        name: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -154,7 +166,11 @@ where
     }
 
     /// Creates a tuple-struct serializer through the underlying serializer.
-    fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    fn serialize_tuple_struct(
+        self,
+        name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.inner.serialize_tuple_struct(name, len)
     }
 
@@ -166,7 +182,8 @@ where
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        self.inner.serialize_tuple_variant(name, variant_index, variant, len)
+        self.inner
+            .serialize_tuple_variant(name, variant_index, variant, len)
     }
 
     /// Creates a map serializer through the underlying serializer.
@@ -175,7 +192,11 @@ where
     }
 
     /// Creates a struct serializer through the underlying serializer.
-    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(
+        self,
+        name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
         self.inner.serialize_struct(name, len)
     }
 
@@ -187,7 +208,8 @@ where
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        self.inner.serialize_struct_variant(name, variant_index, variant, len)
+        self.inner
+            .serialize_struct_variant(name, variant_index, variant, len)
     }
 
     /// Formats, preflights, and forwards a display-based raw payload.

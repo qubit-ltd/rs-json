@@ -79,7 +79,10 @@ fn test_json_lexical_preflight_charges_each_value_node() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
-                .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)))
+                .structure_limits(
+                    StructureLimits::builder()
+                        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)),
+                )
                 .build(),
         )
         .build();
@@ -156,7 +159,8 @@ fn test_json_lexical_preflight_checks_sequence_items() {
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(
-                    StructureLimits::builder().sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, 1)),
+                    StructureLimits::builder()
+                        .sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, 1)),
                 )
                 .build(),
         )
@@ -183,7 +187,8 @@ fn test_json_lexical_preflight_counts_duplicate_map_entries() {
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(
-                    StructureLimits::builder().map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)),
+                    StructureLimits::builder()
+                        .map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)),
                 )
                 .build(),
         )
@@ -211,9 +216,11 @@ fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
-                .structure_limits(StructureLimits::<JsonResource, usize>::builder().key_bytes_limit(
-                    ResourceLimit::new(JsonResource::KeyBytes, PRIVATE_NUMBER_TOKEN.len() - 1),
-                ))
+                .structure_limits(
+                    StructureLimits::<JsonResource, usize>::builder().key_bytes_limit(
+                        ResourceLimit::new(JsonResource::KeyBytes, PRIVATE_NUMBER_TOKEN.len() - 1),
+                    ),
+                )
                 .build(),
         )
         .build();
