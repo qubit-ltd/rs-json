@@ -83,7 +83,9 @@ impl Serialize for PrivateScalar {
             Self::UnitStruct => serializer.serialize_unit_struct("Value"),
             Self::UnitVariant => serializer.serialize_unit_variant("Value", 0, "Unit"),
             Self::Newtype => serializer.serialize_newtype_struct("Value", &"text"),
-            Self::NewtypeVariant => serializer.serialize_newtype_variant("Value", 0, "Variant", &"text"),
+            Self::NewtypeVariant => {
+                serializer.serialize_newtype_variant("Value", 0, "Variant", &"text")
+            }
             Self::Seq => serializer.serialize_seq(Some(0)).and_then(|seq| seq.end()),
             Self::Tuple => serializer.serialize_tuple(0).and_then(|tuple| tuple.end()),
             Self::TupleStruct => serializer
@@ -93,7 +95,9 @@ impl Serialize for PrivateScalar {
                 .serialize_tuple_variant("Value", 0, "Tuple", 0)
                 .and_then(|tuple| tuple.end()),
             Self::Map => serializer.serialize_map(Some(0)).and_then(|map| map.end()),
-            Self::Struct => serializer.serialize_struct("Value", 0).and_then(|value| value.end()),
+            Self::Struct => serializer
+                .serialize_struct("Value", 0)
+                .and_then(|value| value.end()),
             Self::StructVariant => serializer
                 .serialize_struct_variant("Value", 0, "Struct", 0)
                 .and_then(|value| value.end()),
@@ -158,7 +162,9 @@ fn test_budgeted_private_value_delegates_scalar_serializer_paths() {
         PrivateScalar::HumanReadable,
     ];
     for value in values {
-        let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+        let mut session = JsonEncodeSession::from_limits(
+            JsonEncodeLimits::<JsonResource, usize>::builder().build(),
+        );
         let _ = encode(&PrivateShape { value }, &mut session);
     }
 }

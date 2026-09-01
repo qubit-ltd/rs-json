@@ -35,7 +35,9 @@ fn test_json_decoder_detailed_diagnostics_preserve_sources() {
     assert_eq!(invalid_utf8.diagnostic_policy(), DiagnosticPolicy::Detailed);
     assert!(invalid_utf8.source().is_some());
 
-    let invalid_json = decoder.validate_str("{").expect_err("incomplete JSON must be rejected");
+    let invalid_json = decoder
+        .validate_str("{")
+        .expect_err("incomplete JSON must be rejected");
     assert_eq!(invalid_json.diagnostic_policy(), DiagnosticPolicy::Detailed);
     assert!(invalid_json.source().is_some());
 
@@ -65,8 +67,11 @@ fn test_json_decoder_detailed_diagnostics_cover_typed_root_checks() {
 /// Verifies that strict text decoding uses the operation-specific error API.
 #[test]
 fn test_decoder_decodes_valid_slice() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().max_nodes(4).build());
+    let session = JsonDecodeSession::from_limits(
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_nodes(4)
+            .build(),
+    );
     let value: bool = JsonDecoder::new(session)
         .decode_utf8(b"true")
         .expect("valid JSON decodes");
@@ -76,7 +81,8 @@ fn test_decoder_decodes_valid_slice() {
 /// Verifies that strict typed failures do not expose serde input fragments.
 #[test]
 fn test_decoder_returns_safe_deserialize_metadata() {
-    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session =
+        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     let error = JsonDecoder::new(session)
         .decode_utf8::<u64>(br#""TOP_SECRET""#)
         .expect_err("a JSON string cannot deserialize into u64");
@@ -131,8 +137,11 @@ fn test_decoder_typed_failure_rolls_back_value_and_reuses_session() {
 /// input without constructing a typed value.
 #[test]
 fn test_validate_accounts_document() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().max_nodes(4).build());
+    let session = JsonDecodeSession::from_limits(
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_nodes(4)
+            .build(),
+    );
     let mut decoder = JsonDecoder::new(session);
     decoder
         .validate_utf8(br#"{"ok":true}"#)

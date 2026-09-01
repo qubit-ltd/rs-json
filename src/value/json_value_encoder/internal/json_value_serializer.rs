@@ -40,7 +40,9 @@ fn preallocated_capacity(len: Option<usize>) -> usize {
 }
 
 /// Strictly admits and materializes one RawValue text payload.
-pub(in crate::value::json_value_encoder) fn decode_raw_value(text: &str) -> Result<Value, JsonSerializationError> {
+pub(in crate::value::json_value_encoder) fn decode_raw_value(
+    text: &str,
+) -> Result<Value, JsonSerializationError> {
     let value = JsonDecoder::unlimited()
         .decode_str::<DuplicateKeyRejectingJsonValue>(text)
         .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue))?;
@@ -145,11 +147,15 @@ impl Serializer for JsonValueSerializer {
     /// Serializes a finite f32 without widening its display representation.
     fn serialize_f32(self, value: f32) -> Result<Value, Self::Error> {
         if !value.is_finite() {
-            return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
+            return Err(JsonSerializationError::new(
+                JsonSerializationErrorKind::NonFiniteFloat,
+            ));
         }
         Number::from_str(&value.to_string())
             .map(Value::Number)
-            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))
+            .map_err(|_| {
+                JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation)
+            })
     }
 
     /// Serializes a finite 64-bit floating-point number.
@@ -174,7 +180,10 @@ impl Serializer for JsonValueSerializer {
     /// Serializes bytes as an array of unsigned integer values.
     fn serialize_bytes(self, value: &[u8]) -> Result<Value, Self::Error> {
         Ok(Value::Array(
-            value.iter().map(|value| Value::Number((*value).into())).collect(),
+            value
+                .iter()
+                .map(|value| Value::Number((*value).into()))
+                .collect(),
         ))
     }
 
@@ -217,7 +226,11 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Delegates ordinary newtype structs and materializes RawValue payloads.
-    fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Value, Self::Error>
+    fn serialize_newtype_struct<T>(
+        self,
+        name: &'static str,
+        value: &T,
+    ) -> Result<Value, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -292,7 +305,11 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Creates a struct serializer with a bounded initial capacity.
-    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(
+        self,
+        name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
         if name == RAW_VALUE_TOKEN {
             Ok(JsonValueCompound::raw_value())
         } else {
@@ -320,8 +337,9 @@ impl Serializer for JsonValueSerializer {
         T: Display + ?Sized,
     {
         let mut text = String::new();
-        write!(&mut text, "{value}")
-            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
+        write!(&mut text, "{value}").map_err(|_| {
+            JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed)
+        })?;
         self.serialize_str(&text)
     }
 }

@@ -64,8 +64,12 @@ impl fmt::Display for JsonLexicalErrorReason {
             Self::UnpairedSurrogate => formatter.write_str("unpaired Unicode surrogate"),
             Self::InvalidUtf8 => formatter.write_str("invalid UTF-8"),
             Self::InvalidNumber => formatter.write_str("invalid JSON number"),
-            Self::IntegerOutOfRange => formatter.write_str("JSON integer is outside the supported 64-bit range"),
-            Self::FloatOutOfRange => formatter.write_str("JSON number is outside the finite f64 range"),
+            Self::IntegerOutOfRange => {
+                formatter.write_str("JSON integer is outside the supported 64-bit range")
+            }
+            Self::FloatOutOfRange => {
+                formatter.write_str("JSON number is outside the finite f64 range")
+            }
             Self::TrailingCharacters => formatter.write_str("trailing characters"),
             Self::NestingOverflow => formatter.write_str("JSON nesting overflow"),
         }

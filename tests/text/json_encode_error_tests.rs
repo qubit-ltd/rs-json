@@ -44,7 +44,10 @@ fn test_serde_custom_error_redacts_message() {
     const SECRET: &str = "SERIALIZATION_SECRET";
     let error = <JsonSerializationError as serde::ser::Error>::custom(SECRET);
 
-    assert_eq!(error.kind(), JsonSerializationErrorKind::CustomSerialization);
+    assert_eq!(
+        error.kind(),
+        JsonSerializationErrorKind::CustomSerialization
+    );
     assert_eq!(error.category(), JsonSerializationErrorCategory::Custom);
     assert!(!error.to_string().contains(SECRET));
     assert!(!format!("{error:?}").contains(SECRET));

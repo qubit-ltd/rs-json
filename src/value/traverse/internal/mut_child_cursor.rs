@@ -68,11 +68,15 @@ impl MutChildCursor {
                 let index = *next;
                 let child = values.get_mut(index)?;
                 *next = next.checked_add(1)?;
-                Some(MutFrame::child(OwnedLocation::ArrayElement(index), depth, child))
+                Some(MutFrame::child(
+                    OwnedLocation::ArrayElement(index),
+                    depth,
+                    child,
+                ))
             }
-            Self::Object { iter } => iter
-                .next()
-                .map(|(key, child)| MutFrame::child(OwnedLocation::ObjectValue(key.clone()), depth, child)),
+            Self::Object { iter } => iter.next().map(|(key, child)| {
+                MutFrame::child(OwnedLocation::ObjectValue(key.clone()), depth, child)
+            }),
             Self::Empty => None,
         }
     }

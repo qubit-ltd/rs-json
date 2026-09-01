@@ -36,7 +36,8 @@ fn test_budget_tracker_accounts_a_materialized_tree() {
 /// Verifies that tracker budget accessors expose and transfer state.
 #[test]
 fn test_budget_tracker_exposes_and_transfers_budget_state() {
-    let mut tracker = JsonTreeBudgetTracker::new(JsonValueLimits::<JsonResource, usize>::builder().build());
+    let mut tracker =
+        JsonTreeBudgetTracker::new(JsonValueLimits::<JsonResource, usize>::builder().build());
     assert_eq!(tracker.budget().used_nodes(), None);
     tracker
         .account(&json!({"key": true}))
@@ -50,8 +51,11 @@ fn test_budget_tracker_exposes_and_transfers_budget_state() {
 /// Verifies failed accounting rolls back and reset clears prior admissions.
 #[test]
 fn test_budget_tracker_rolls_back_rejection_and_resets() {
-    let mut tracker =
-        JsonTreeBudgetTracker::new(JsonValueLimits::<JsonResource, usize>::builder().max_nodes(1).build());
+    let mut tracker = JsonTreeBudgetTracker::new(
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .max_nodes(1)
+            .build(),
+    );
 
     tracker.account(&json!(true)).expect("one node should fit");
     assert!(tracker.account(&json!([true])).is_err());

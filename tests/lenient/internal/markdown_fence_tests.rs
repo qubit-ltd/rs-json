@@ -184,7 +184,9 @@ fn test_decode_value_strips_deeply_indented_opening_fence_after_trimming() {
 #[test]
 fn test_decode_value_strips_indented_code_fence_when_trimming_disabled() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
-        NormalizingJsonDecodePolicy::builder().trim_whitespace(false).build(),
+        NormalizingJsonDecodePolicy::builder()
+            .trim_whitespace(false)
+            .build(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let value = decoder
@@ -202,7 +204,9 @@ fn test_decode_value_strips_indented_code_fence_when_trimming_disabled() {
 #[test]
 fn test_decode_value_rejects_deeply_indented_code_fence_when_trimming_disabled() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
-        NormalizingJsonDecodePolicy::builder().trim_whitespace(false).build(),
+        NormalizingJsonDecodePolicy::builder()
+            .trim_whitespace(false)
+            .build(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder
@@ -361,9 +365,9 @@ fn test_decode_value_can_require_closing_code_fence() {
             .build(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
-    let error = decoder
-        .decode_value("```json\n{\"a\":1}")
-        .expect_err("opening fence without closing fence should be rejected when strict mode is enabled");
+    let error = decoder.decode_value("```json\n{\"a\":1}").expect_err(
+        "opening fence without closing fence should be rejected when strict mode is enabled",
+    );
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
@@ -518,7 +522,9 @@ fn test_decode_value_does_not_accept_inline_closing_ticks_as_fence_end() {
 #[test]
 fn test_decode_value_reports_invalid_json_for_code_fence_without_newline() {
     let mut decoder = NormalizingJsonDecoder::with_limits(
-        NormalizingJsonDecodePolicy::builder().trim_whitespace(false).build(),
+        NormalizingJsonDecodePolicy::builder()
+            .trim_whitespace(false)
+            .build(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     let error = decoder

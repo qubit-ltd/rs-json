@@ -26,13 +26,16 @@ where
     pub(super) context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 }
 
-impl<'context, 'transaction, 'budget, R, Q> BudgetedDisplayCollector<'context, 'transaction, 'budget, R, Q>
+impl<'context, 'transaction, 'budget, R, Q>
+    BudgetedDisplayCollector<'context, 'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
     /// Creates an empty collector bound to the shared encode context.
     #[inline]
-    pub(super) fn new(context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>) -> Self {
+    pub(super) fn new(
+        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+    ) -> Self {
         Self {
             text: String::new(),
             context,
@@ -49,7 +52,9 @@ where
     fn write_str(&mut self, value: &str) -> fmt::Result {
         let next = self.text.len().checked_add(value.len()).ok_or(fmt::Error)?;
         let output_result = self.context.borrow().output.borrow().check_available(next);
-        self.context.borrow_mut().record::<fmt::Error>(output_result)?;
+        self.context
+            .borrow_mut()
+            .record::<fmt::Error>(output_result)?;
         self.text.push_str(value);
         Ok(())
     }

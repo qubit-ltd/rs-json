@@ -36,7 +36,8 @@ where
     kind: PrivateTextKind,
 }
 
-impl<'a, 'transaction, 'budget, 'context, T, R, Q> BudgetedPrivateValue<'a, 'transaction, 'budget, 'context, T, R, Q>
+impl<'a, 'transaction, 'budget, 'context, T, R, Q>
+    BudgetedPrivateValue<'a, 'transaction, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,

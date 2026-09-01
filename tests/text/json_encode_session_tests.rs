@@ -110,7 +110,9 @@ fn test_encode_attempt_consumes_output_bytes_atomically() {
     );
 
     let mut attempt = session.begin_value();
-    attempt.try_consume_output_bytes(3).expect("exact output fits");
+    attempt
+        .try_consume_output_bytes(3)
+        .expect("exact output fits");
     let error = attempt
         .try_consume_output_bytes(1)
         .expect_err("output budget is exhausted");
@@ -123,7 +125,9 @@ fn test_encode_attempt_preserves_embedded_value_limits() {
     let value_limits = JsonValueLimits::<JsonResource, usize>::builder()
         .string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2))
         .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
-        .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)))
+        .structure_limits(
+            StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+        )
         .build();
     let mut session = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
@@ -139,7 +143,9 @@ fn test_encode_attempt_preserves_embedded_value_limits() {
         .try_admit(JsonMeasurement::String { depth: 1, bytes: 3 })
         .expect_err("overlong string poisons the attempt");
     assert_eq!(string_error.resource(), &JsonResource::StringBytes);
-    let commit_error = attempt.commit().expect_err("poisoned string attempt cannot commit");
+    let commit_error = attempt
+        .commit()
+        .expect_err("poisoned string attempt cannot commit");
     assert_eq!(commit_error.resource(), string_error.resource());
 
     let mut attempt = session.begin_value();
@@ -153,7 +159,9 @@ fn test_encode_attempt_preserves_embedded_value_limits() {
         .try_admit(JsonMeasurement::Key { bytes: 1 })
         .expect_err("exhausted payload poisons the attempt");
     assert_eq!(payload_error.resource(), &JsonResource::PayloadBytes);
-    let commit_error = attempt.commit().expect_err("poisoned payload attempt cannot commit");
+    let commit_error = attempt
+        .commit()
+        .expect_err("poisoned payload attempt cannot commit");
     assert_eq!(commit_error.resource(), payload_error.resource());
 
     let mut attempt = session.begin_value();
@@ -167,7 +175,9 @@ fn test_encode_attempt_preserves_embedded_value_limits() {
         .try_admit(JsonMeasurement::Null { depth: 1 })
         .expect_err("exhausted node budget poisons the attempt");
     assert_eq!(node_error.resource(), &JsonResource::Nodes);
-    let commit_error = attempt.commit().expect_err("poisoned node attempt cannot commit");
+    let commit_error = attempt
+        .commit()
+        .expect_err("poisoned node attempt cannot commit");
     assert_eq!(commit_error.resource(), node_error.resource());
     assert_eq!(session.value_budget().used_nodes(), Some(0));
     assert_eq!(session.value_budget().used_payload_bytes(), Some(0));
@@ -178,7 +188,9 @@ fn test_encode_session_borrows_output_and_value_budgets() {
     let mut output = ResourceBudget::new(JsonResource::OutputBytes, 32);
     let mut value = JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
-            .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)))
+            .structure_limits(
+                StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+            )
             .build(),
     );
     let mut session = JsonEncodeSession::borrowing_output(&mut output, &mut value);
@@ -188,7 +200,12 @@ fn test_encode_session_borrows_output_and_value_budgets() {
 
     assert_eq!(encoded, br#"{"name":"qubit"}"#);
     assert_eq!(output.used(), encoded.len());
-    assert!(value.used_nodes().expect("nodes limit should be configured") > 0);
+    assert!(
+        value
+            .used_nodes()
+            .expect("nodes limit should be configured")
+            > 0
+    );
 }
 
 /// Verifies buffered vector serialization publishes neither output nor value
@@ -245,7 +262,10 @@ fn test_incremental_stream_failure_keeps_prefix_and_rolls_back_value() {
 
     assert!(write_incremental(&mut writer, &FailsAfterPrefix, &mut session).is_err());
     assert!(!writer.is_empty());
-    assert_eq!(session.output_budget().expect("output budget").used(), writer.len(),);
+    assert_eq!(
+        session.output_budget().expect("output budget").used(),
+        writer.len(),
+    );
     assert_eq!(session.value_budget().used_nodes(), Some(0));
 }
 
@@ -267,7 +287,10 @@ fn test_incremental_panic_keeps_prefix_and_reuses_value_capacity() {
 
     assert!(result.is_err());
     assert!(!writer.is_empty());
-    assert_eq!(session.output_budget().expect("output budget").used(), writer.len(),);
+    assert_eq!(
+        session.output_budget().expect("output budget").used(),
+        writer.len(),
+    );
     assert_eq!(session.value_budget().used_nodes(), Some(0));
     encode(&true, &mut session).expect("panic must leave value capacity for the next encode");
     assert_eq!(session.value_budget().used_nodes(), Some(1));

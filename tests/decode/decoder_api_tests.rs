@@ -73,7 +73,9 @@ fn test_json_decoder_validation_entry_points() {
 fn test_json_decoder_typed_root_entry_points() {
     let mut decoder = JsonDecoder::unlimited();
 
-    let object: serde_json::Value = decoder.decode_object_str("{\"ok\":true}").expect("object string");
+    let object: serde_json::Value = decoder
+        .decode_object_str("{\"ok\":true}")
+        .expect("object string");
     let array: Vec<u8> = decoder.decode_array_utf8(b"[1,2]").expect("array bytes");
     let error = decoder
         .decode_object_utf8::<serde_json::Value>(b"[]")
@@ -110,7 +112,10 @@ fn test_json_decoder_owned_uses_explicit_limits() {
     let decoder = JsonDecoder::with_limits(limits);
 
     assert_eq!(decoder.session().max_input_bytes(), Some(8));
-    assert_eq!(decoder.session().value_budget().limits().max_nodes(), Some(2));
+    assert_eq!(
+        decoder.session().value_budget().limits().max_nodes(),
+        Some(2)
+    );
 }
 
 /// Verifies unlimited construction is explicit and leaves every budget
@@ -179,7 +184,10 @@ fn test_normalizing_decoder_owned_separates_policy_and_limits() {
     assert_eq!(decoder.policy(), &policy);
     assert_eq!(decoder.session().max_input_bytes(), Some(8));
     assert_eq!(decoder.session().max_normalized_input_bytes(), Some(6));
-    assert_eq!(decoder.session().value_budget().limits().max_nodes(), Some(1));
+    assert_eq!(
+        decoder.session().value_budget().limits().max_nodes(),
+        Some(1)
+    );
 }
 
 /// Verifies that a caller-provided session remains the decoder's sole source
@@ -200,7 +208,10 @@ fn test_normalizing_decoder_new_preserves_session() {
 /// limits.
 #[test]
 fn test_normalizing_decoder_policies_do_not_change_session_limits() {
-    for policy in [no_normalization_policy(), NormalizingJsonDecodePolicy::lenient()] {
+    for policy in [
+        no_normalization_policy(),
+        NormalizingJsonDecodePolicy::lenient(),
+    ] {
         let session = JsonDecodeSession::from_limits(
             JsonDecodeLimits::<JsonResource, usize>::builder()
                 .max_input_bytes(7)
@@ -212,7 +223,10 @@ fn test_normalizing_decoder_policies_do_not_change_session_limits() {
 
         assert_eq!(decoder.session().max_input_bytes(), Some(7));
         assert_eq!(decoder.session().max_normalized_input_bytes(), Some(5));
-        assert_eq!(decoder.session().value_budget().limits().max_nodes(), Some(2));
+        assert_eq!(
+            decoder.session().value_budget().limits().max_nodes(),
+            Some(2)
+        );
     }
 }
 
@@ -232,7 +246,13 @@ fn test_normalizing_decoder_typed_failure_keeps_input_and_rolls_back_value() {
         .decode_str::<std::collections::HashMap<String, bool>>(input)
         .expect_err("number should not deserialize as bool");
 
-    assert_eq!(decoder.session().input_budget().unwrap().used(), input.len());
-    assert_eq!(decoder.session().normalized_input_budget().unwrap().used(), input.len());
+    assert_eq!(
+        decoder.session().input_budget().unwrap().used(),
+        input.len()
+    );
+    assert_eq!(
+        decoder.session().normalized_input_budget().unwrap().used(),
+        input.len()
+    );
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 }

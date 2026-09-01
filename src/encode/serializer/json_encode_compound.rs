@@ -35,8 +35,15 @@ use crate::encode::JsonSerializerStateError;
 
 /// Wraps a Serde compound serializer and checks container operations before
 /// delegating them.
-pub(in crate::encode) struct JsonEncodeCompound<'transaction, 'budget, 'context, C, R, Q, const VALUE_LIMITS: bool>
-where
+pub(in crate::encode) struct JsonEncodeCompound<
+    'transaction,
+    'budget,
+    'context,
+    C,
+    R,
+    Q,
+    const VALUE_LIMITS: bool,
+> where
     Q: ResourceQuantity,
 {
     /// Underlying Serde compound serializer.
@@ -167,7 +174,8 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeSeq for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeSeq
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeSeq,
     R: Clone,
@@ -183,7 +191,8 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_element(&value)
     }
 
@@ -195,7 +204,8 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTuple for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTuple
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeTuple,
     R: Clone,
@@ -211,7 +221,8 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_element(&value)
     }
 
@@ -223,7 +234,8 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleStruct for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleStruct
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeTupleStruct,
     R: Clone,
@@ -238,7 +250,8 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(&value)
     }
 
@@ -250,7 +263,8 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleVariant for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleVariant
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeTupleVariant,
     R: Clone,
@@ -265,7 +279,8 @@ where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(&value)
     }
 
@@ -277,7 +292,8 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeMap for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeMap
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeMap,
     R: Clone,
@@ -309,7 +325,8 @@ where
         if !self.map_key_pending {
             return Err(self.serialization_error(JsonSerializerStateError::MapValueWithoutKey));
         }
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_value(&value)?;
         self.map_key_pending = false;
         Ok(())
@@ -333,7 +350,8 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStruct for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStruct
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeStruct,
     R: Clone,
@@ -360,7 +378,8 @@ where
                 .borrow_mut()
                 .admit(JsonMeasurement::Key { bytes: key.len() })?;
         }
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(key, &value)
     }
 
@@ -380,7 +399,8 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStructVariant for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStructVariant
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeStructVariant,
     R: Clone,
@@ -400,7 +420,8 @@ where
                 .borrow_mut()
                 .admit(JsonMeasurement::Key { bytes: key.len() })?;
         }
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(key, &value)
     }
 
