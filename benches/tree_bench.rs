@@ -64,11 +64,7 @@ impl JsonTreeMutVisitor for RedactionShapeVisitor {
 
     /// Removes the synthetic secret field and descends into the remaining
     /// tree.
-    fn visit(
-        &mut self,
-        value: &mut Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
         if let Value::Object(entries) = value {
             entries.remove("secret");
         }
@@ -123,9 +119,7 @@ fn visitor_floor(root: &Value) -> usize {
                 pending.push(Frame::Leave(value));
                 match value {
                     Value::Array(values) => pending.extend(values.iter().rev().map(Frame::Enter)),
-                    Value::Object(entries) => {
-                        pending.extend(entries.values().rev().map(Frame::Enter))
-                    }
+                    Value::Object(entries) => pending.extend(entries.values().rev().map(Frame::Enter)),
                     Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
                 }
             }
@@ -252,10 +246,8 @@ fn benchmark_mut(c: &mut Criterion) {
                     bencher.iter_batched(
                         || value.clone(),
                         |mut value| {
-                            let mut input_budget =
-                                JsonValueBudget::new(traversal_limits(input_bounded));
-                            let mut output_budget =
-                                JsonValueBudget::new(traversal_limits(output_bounded));
+                            let mut input_budget = JsonValueBudget::new(traversal_limits(input_bounded));
+                            let mut output_budget = JsonValueBudget::new(traversal_limits(output_bounded));
                             let mut input = input_budget.transaction();
                             let mut output = output_budget.transaction();
                             let mut visitor = RedactionShapeVisitor;

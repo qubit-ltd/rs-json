@@ -30,10 +30,6 @@ fn test_visitor_default_leave_succeeds() {
         location: JsonTreeLocation::Root,
     };
 
-    visitor
-        .enter(&value, context)
-        .expect("enter should succeed");
-    visitor
-        .leave(&value, context)
-        .expect("default leave should succeed");
+    visitor.enter(&value, context).expect("enter should succeed");
+    visitor.leave(&value, context).expect("default leave should succeed");
 }

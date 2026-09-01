@@ -353,12 +353,8 @@ fn test_json_value_encoder_preserves_integer_boundaries() {
 #[test]
 fn test_json_value_encoder_rejects_wide_integers() {
     let encoder = JsonValueEncoder::new();
-    let signed = encoder
-        .encode(&i128::MAX)
-        .expect_err("wide signed integer must fail");
-    let unsigned = encoder
-        .encode(&u128::MAX)
-        .expect_err("wide unsigned integer must fail");
+    let signed = encoder.encode(&i128::MAX).expect_err("wide signed integer must fail");
+    let unsigned = encoder.encode(&u128::MAX).expect_err("wide unsigned integer must fail");
     assert_eq!(
         signed.kind(),
         JsonSerializationErrorKind::IntegerOutOfRange {
@@ -367,10 +363,7 @@ fn test_json_value_encoder_rejects_wide_integers() {
     );
     assert_eq!(signed.category(), JsonSerializationErrorCategory::Number);
     assert!(signed.is_number_error());
-    assert_eq!(
-        signed.integer_signedness(),
-        Some(JsonIntegerSignedness::Signed)
-    );
+    assert_eq!(signed.integer_signedness(), Some(JsonIntegerSignedness::Signed));
     assert_eq!(
         unsigned.kind(),
         JsonSerializationErrorKind::IntegerOutOfRange {
@@ -384,24 +377,15 @@ fn test_json_value_encoder_rejects_wide_integers() {
 fn test_json_value_encoder_rejects_non_finite_floats() {
     let encoder = JsonValueEncoder::new();
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        let error = encoder
-            .encode(&value)
-            .expect_err("non-finite float must fail");
+        let error = encoder.encode(&value).expect_err("non-finite float must fail");
         assert_eq!(error.kind(), JsonSerializationErrorKind::NonFiniteFloat);
     }
     let custom = encoder
         .encode(&NestedNonFiniteProbe)
         .expect_err("custom serializer failure must remain custom");
-    assert_eq!(
-        custom.kind(),
-        JsonSerializationErrorKind::CustomSerialization
-    );
+    assert_eq!(custom.kind(), JsonSerializationErrorKind::CustomSerialization);
     assert_eq!(custom.category(), JsonSerializationErrorCategory::Custom);
-    assert!(
-        !custom
-            .to_string()
-            .contains("non-finite floating-point value")
-    );
+    assert!(!custom.to_string().contains("non-finite floating-point value"));
 }
 
 /// Keeps f32 serialization short enough to round-trip as the original f32.
@@ -416,10 +400,7 @@ fn test_json_value_encoder_preserves_float32_semantics() {
         from_value::<f32>(projected).expect("projected f32 should decode"),
         source
     );
-    assert_ne!(
-        text,
-        to_string(&widened).expect("widened number should render")
-    );
+    assert_ne!(text, to_string(&widened).expect("widened number should render"));
 }
 
 /// Accepts finite map keys using the same text as the strict text encoder.
@@ -438,13 +419,9 @@ fn test_json_value_encoder_matches_text_encoder_float_map_keys() {
     let mut text_encoder = JsonEncoder::unlimited();
     for key in [-0.0, 1.0, 1.5, f64::MIN_POSITIVE, f64::MAX] {
         let probe = FloatKeyProbe(key);
-        let value = value_encoder
-            .encode(&probe)
-            .expect("finite key should encode");
+        let value = value_encoder.encode(&probe).expect("finite key should encode");
         let value_text = to_vec(&value).expect("JSON value should render");
-        let direct_text = text_encoder
-            .to_vec(&probe)
-            .expect("finite key should encode as text");
+        let direct_text = text_encoder.to_vec(&probe).expect("finite key should encode as text");
 
         assert_eq!(value_text, direct_text, "map key differs for {key}");
     }
@@ -492,8 +469,8 @@ fn test_json_value_encoder_rejects_non_finite_float_map_key() {
 #[test]
 fn test_json_value_encoder_supports_scalar_map_key_entry_points() {
     const EXPECTED_KEYS: [&str; 19] = [
-        "true", "-8", "-16", "-32", "-64", "-128", "8", "16", "32", "64", "128", "1.5", "2.5", "x",
-        "text", "1", "Unit", "-1", "display",
+        "true", "-8", "-16", "-32", "-64", "-128", "8", "16", "32", "64", "128", "1.5", "2.5", "x", "text", "1",
+        "Unit", "-1", "display",
     ];
     let encoder = JsonValueEncoder::new();
     let supported_indices = (0_u8..=14).chain([17, 20, 21, 30]);
@@ -576,8 +553,8 @@ fn test_json_value_encoder_rejects_duplicate_object_key() {
 /// Materializes a strict RawValue payload into its represented JSON value.
 #[test]
 fn test_json_value_encoder_materializes_raw_value() {
-    let raw = RawValue::from_string(String::from(r#"{"ok":true,"values":[1,2]}"#))
-        .expect("fixture should be valid raw JSON");
+    let raw =
+        RawValue::from_string(String::from(r#"{"ok":true,"values":[1,2]}"#)).expect("fixture should be valid raw JSON");
     let actual = JsonValueEncoder::new()
         .encode(&raw)
         .expect("strict RawValue should materialize");
@@ -604,14 +581,8 @@ fn test_json_value_encoder_classifies_display_formatting_failure() {
     let error = JsonValueEncoder::new()
         .encode(&FailingDisplayProbe)
         .expect_err("failing Display must produce an error");
-    assert_eq!(
-        error.kind(),
-        JsonSerializationErrorKind::DisplayFormattingFailed
-    );
-    assert_eq!(
-        error.category(),
-        JsonSerializationErrorCategory::SerializerContract
-    );
+    assert_eq!(error.kind(), JsonSerializationErrorKind::DisplayFormattingFailed);
+    assert_eq!(error.category(), JsonSerializationErrorCategory::SerializerContract);
 }
 
 /// Classifies each externally reachable invalid map call sequence.

@@ -76,15 +76,11 @@ impl Serializer for JsonValueMapKeySerializer {
     /// Serializes a finite 32-bit floating-point key.
     fn serialize_f32(self, value: f32) -> Result<String, Self::Error> {
         if !value.is_finite() {
-            return Err(JsonSerializationError::new(
-                JsonSerializationErrorKind::NonFiniteFloat,
-            ));
+            return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
         }
         Number::from_str(&value.to_string())
             .map(|number| number.to_string())
-            .map_err(|_| {
-                JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation)
-            })
+            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))
     }
 
     /// Serializes a finite 64-bit floating-point key.
@@ -145,11 +141,7 @@ impl Serializer for JsonValueMapKeySerializer {
     }
 
     /// Delegates a newtype-struct key to its wrapped value.
-    fn serialize_newtype_struct<T>(
-        self,
-        _name: &'static str,
-        value: &T,
-    ) -> Result<String, Self::Error>
+    fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<String, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -206,11 +198,7 @@ impl Serializer for JsonValueMapKeySerializer {
     }
 
     /// Rejects struct keys.
-    fn serialize_struct(
-        self,
-        _name: &'static str,
-        _len: usize,
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         Err(unsupported_key(JsonMapKeyKind::Struct))
     }
 
@@ -231,9 +219,8 @@ impl Serializer for JsonValueMapKeySerializer {
         T: Display + ?Sized,
     {
         let mut text = String::new();
-        write!(&mut text, "{value}").map_err(|_| {
-            JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed)
-        })?;
+        write!(&mut text, "{value}")
+            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
         Ok(text)
     }
 }

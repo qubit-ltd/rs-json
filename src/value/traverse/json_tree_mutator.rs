@@ -55,14 +55,8 @@ use super::internal::MutFrame;
 /// let mut value = Value::Null;
 /// assert!(mutator.process(&mut value, &mut Visitor).is_ok());
 /// ```
-pub struct JsonTreeMutator<
-    'input_transaction,
-    'input_budget,
-    'output_transaction,
-    'output_budget,
-    R,
-    Q,
-> where
+pub struct JsonTreeMutator<'input_transaction, 'input_budget, 'output_transaction, 'output_budget, R, Q>
+where
     Q: ResourceQuantity,
 {
     /// Transaction receiving the complete original-tree charges.
@@ -124,11 +118,7 @@ where
     /// callback failure, or [`JsonTreeMutateError::OutputBudget`] after a
     /// complete mutation whose result is rejected. Visitor and output failures
     /// retain mutations already made to `root`.
-    pub fn process<V>(
-        &mut self,
-        root: &mut Value,
-        visitor: &mut V,
-    ) -> Result<(), JsonTreeMutateError<R, Q, V::Error>>
+    pub fn process<V>(&mut self, root: &mut Value, visitor: &mut V) -> Result<(), JsonTreeMutateError<R, Q, V::Error>>
     where
         V: JsonTreeMutVisitor,
     {
