@@ -10,7 +10,6 @@
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_json::encode::JsonEncodeError;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeStruct;
@@ -57,9 +56,7 @@ fn test_json_encode_serializer_rejects_forged_private_key_as_regular_map() {
 
     let error =
         encode(&ForgedPrivateKey, &mut session).expect_err("the ordinary struct field must consume a map entry");
-    let JsonEncodeError::Budget(error) = error else {
-        panic!("expected a budget error, got {error:?}");
-    };
+    let error = error.into_budget_error().expect("expected a budget error");
 
     assert_eq!(
         error

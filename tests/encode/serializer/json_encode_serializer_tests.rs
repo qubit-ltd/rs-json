@@ -13,9 +13,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use qubit_budget::BudgetError;
+use qubit_budget::MeasuredBudgetError;
 use qubit_budget::Observation;
 use qubit_budget::json::JsonResource;
-use qubit_json::encode::JsonEncodeError;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeMap;
@@ -297,9 +297,7 @@ where
 {
     let mut budget = limits.encode_session();
     let error = encode(value, &mut budget).expect_err("the configured JSON limit must reject the value");
-    let JsonEncodeError::Budget(error) = error else {
-        panic!("expected a budget error, got {error:?}");
-    };
+    let error = error.into_budget_error().expect("expected a budget error");
     assert_eq!(
         error
             .budget_error()
@@ -332,9 +330,7 @@ where
         .max_nodes(nodes.saturating_sub(1))
         .encode_session();
     let error = encode(value, &mut insufficient).expect_err("one fewer node must reject the value");
-    let JsonEncodeError::Budget(error) = error else {
-        panic!("expected a budget error, got {error:?}");
-    };
+    let error = error.into_budget_error().expect("expected a budget error");
     assert_eq!(
         error
             .budget_error()
@@ -696,16 +692,12 @@ fn test_raw_value_charges_single_number_token_object_as_object() {
     let error = encode(&raw, &mut budget).expect_err("the raw object's key must consume the key budget");
 
     assert!(matches!(
-        error,
-        JsonEncodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::LimitExceeded {
-                    resource: JsonResource::KeyBytes,
-                    observed: Observation::Exact(actual),
-                    maximum: 0,
-                }) if *actual == JSON_NUMBER_TOKEN.len()
-            )
+        error.budget_error(),
+        Some(MeasuredBudgetError::Budget(BudgetError::LimitExceeded {
+            resource: JsonResource::KeyBytes,
+            observed: Observation::Exact(actual),
+            maximum: 0,
+        })) if *actual == JSON_NUMBER_TOKEN.len()
     ));
 }
 
@@ -1024,17 +1016,13 @@ fn test_json_encode_serializer_checks_raw_output_remaining_in_reused_session() {
     let error = encode(&raw, &mut session).expect_err("the raw fragment must exceed live remaining output");
 
     assert!(matches!(
-        error,
-        JsonEncodeError::Budget(error)
-            if matches!(
-                error.budget_error(),
-                Some(BudgetError::Insufficient {
-                    resource: JsonResource::OutputBytes,
-                    limit: 8,
-                    remaining: 4,
-                    requested: 6,
-                })
-            )
+        error.budget_error(),
+        Some(MeasuredBudgetError::Budget(BudgetError::Insufficient {
+            resource: JsonResource::OutputBytes,
+            limit: 8,
+            remaining: 4,
+            requested: 6,
+        }))
     ));
     let output = session.output_budget().expect("the test configures output accounting");
     assert_eq!(output.used(), 4);
