@@ -92,25 +92,13 @@ fn test_normalized_json_document_separates_input_and_value_accounting() {
         .max_normalized_input_bytes(3_usize)
         .max_nodes(2_usize)
         .build();
-    let mut decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
+    let mut decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
     let document = decoder.prepare_str("\"x\"").expect("prepare must fit");
 
-    let _: &str = decoder
-        .decode_document(&document)
-        .expect("first decode must fit");
-    let _: &str = decoder
-        .decode_document(&document)
-        .expect("second decode must fit");
+    let _: &str = decoder.decode_document(&document).expect("first decode must fit");
+    let _: &str = decoder.decode_document(&document).expect("second decode must fit");
 
-    assert_eq!(
-        decoder
-            .session()
-            .input_budget()
-            .expect("input budget")
-            .used(),
-        3
-    );
+    assert_eq!(decoder.session().input_budget().expect("input budget").used(), 3);
     assert_eq!(
         decoder
             .session()
@@ -129,8 +117,7 @@ fn test_normalizing_decoder_supports_custom_resource_and_quantity_types() {
     let limits = JsonDecodeLimits::<CustomResource, u64>::builder()
         .input_bytes_limit(ResourceLimit::new(CustomResource::InputBytes, 2_u64))
         .build();
-    let mut decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
+    let mut decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
 
     let error = decoder
         .prepare_str("\"x\"")
@@ -150,17 +137,11 @@ fn test_normalized_json_document_supports_typed_root_checks_and_validation() {
         NormalizingJsonDecodePolicy::lenient(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
-    let object = decoder
-        .prepare_str(" {\"value\":1} ")
-        .expect("object prepare");
+    let object = decoder.prepare_str(" {\"value\":1} ").expect("object prepare");
     let array = decoder.prepare_str(" [1,2] ").expect("array prepare");
 
-    let object_value: Value = decoder
-        .decode_object_document(&object)
-        .expect("object document decode");
-    let array_value: Vec<u8> = decoder
-        .decode_array_document(&array)
-        .expect("array document decode");
+    let object_value: Value = decoder.decode_object_document(&object).expect("object document decode");
+    let array_value: Vec<u8> = decoder.decode_array_document(&array).expect("array document decode");
     decoder
         .validate_document(&object)
         .expect("prepared document validation");
@@ -179,8 +160,7 @@ fn test_normalized_json_document_failure_rolls_back_only_value_usage() {
         .max_normalized_input_bytes(input.len())
         .max_nodes(2_usize)
         .build();
-    let mut decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
+    let mut decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
     let document = decoder.prepare_str(input).expect("prepare must succeed");
 
     let _ = decoder
@@ -188,11 +168,7 @@ fn test_normalized_json_document_failure_rolls_back_only_value_usage() {
         .expect_err("number must not deserialize as bool");
 
     assert_eq!(
-        decoder
-            .session()
-            .input_budget()
-            .expect("input budget")
-            .used(),
+        decoder.session().input_budget().expect("input budget").used(),
         input.len()
     );
     assert_eq!(

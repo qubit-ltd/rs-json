@@ -51,12 +51,7 @@ impl JsonSyntaxError {
     /// A syntax error containing the supplied location and classification.
     #[inline]
     #[must_use = "return or inspect the constructed syntax error"]
-    pub const fn new(
-        offset: usize,
-        line: usize,
-        column: usize,
-        reason: JsonSyntaxErrorReason,
-    ) -> Self {
+    pub const fn new(offset: usize, line: usize, column: usize, reason: JsonSyntaxErrorReason) -> Self {
         Self {
             offset,
             line,
@@ -67,12 +62,7 @@ impl JsonSyntaxError {
 
     /// Converts one crate-private lexical failure at the text-domain boundary.
     pub(crate) fn from_lexical(failure: JsonLexicalFailure) -> Self {
-        Self::new(
-            failure.offset,
-            failure.line,
-            failure.column,
-            failure.reason.into(),
-        )
+        Self::new(failure.offset, failure.line, failure.column, failure.reason.into())
     }
 
     /// Returns the zero-based byte offset.

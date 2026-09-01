@@ -32,10 +32,7 @@ fn test_default_enables_all_mvp_rules() {
     );
     assert!(policy.escape_control_chars_in_strings());
     assert_eq!(policy.diagnostic_policy(), DiagnosticPolicy::Redacted,);
-    assert_eq!(
-        NormalizingJsonDecodePolicyBuilder::default().build(),
-        policy,
-    );
+    assert_eq!(NormalizingJsonDecodePolicyBuilder::default().build(), policy,);
 }
 
 /// Verifies that lenient matches default policy.
@@ -68,10 +65,7 @@ fn test_builder_configures_policy_and_consumes_itself() {
 
     assert!(!policy.trim_whitespace());
     assert!(!policy.strip_utf8_bom());
-    assert_eq!(
-        policy.markdown_fence_policy(),
-        &MarkdownFencePolicy::Disabled,
-    );
+    assert_eq!(policy.markdown_fence_policy(), &MarkdownFencePolicy::Disabled,);
     assert!(!policy.escape_control_chars_in_strings());
     assert_eq!(policy.diagnostic_policy(), DiagnosticPolicy::Detailed);
 }

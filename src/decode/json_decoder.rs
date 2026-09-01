@@ -253,11 +253,7 @@ where
     ///
     /// Returns a structured error when accounting, parsing, or seeded
     /// deserialization fails.
-    pub fn decode_seed_str<'de, S>(
-        &mut self,
-        seed: S,
-        input: &'de str,
-    ) -> Result<S::Value, JsonDecodeError<R, Q>>
+    pub fn decode_seed_str<'de, S>(&mut self, seed: S, input: &'de str) -> Result<S::Value, JsonDecodeError<R, Q>>
     where
         S: DeserializeSeed<'de>,
     {
@@ -283,16 +279,11 @@ where
     ///
     /// Returns a structured error when accounting, UTF-8 validation, parsing,
     /// or seeded deserialization fails.
-    pub fn decode_seed_utf8<'de, S>(
-        &mut self,
-        seed: S,
-        input: &'de [u8],
-    ) -> Result<S::Value, JsonDecodeError<R, Q>>
+    pub fn decode_seed_utf8<'de, S>(&mut self, seed: S, input: &'de [u8]) -> Result<S::Value, JsonDecodeError<R, Q>>
     where
         S: DeserializeSeed<'de>,
     {
-        self.engine
-            .decode_seed_utf8(seed, input, self.diagnostic_policy)
+        self.engine.decode_seed_utf8(seed, input, self.diagnostic_policy)
     }
 
     /// Decodes a complete JSON string while requiring a top-level object.
@@ -345,10 +336,7 @@ where
     ///
     /// Returns a structured error for accounting, UTF-8 validation, parsing,
     /// top-level-kind, or deserialization failures.
-    pub fn decode_object_utf8<'de, T>(
-        &mut self,
-        input: &'de [u8],
-    ) -> Result<T, JsonDecodeError<R, Q>>
+    pub fn decode_object_utf8<'de, T>(&mut self, input: &'de [u8]) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {
@@ -378,10 +366,7 @@ where
     ///
     /// Returns a structured error for accounting, parsing, top-level-kind, or
     /// deserialization failures.
-    pub fn decode_array_str<'de, T>(
-        &mut self,
-        input: &'de str,
-    ) -> Result<Vec<T>, JsonDecodeError<R, Q>>
+    pub fn decode_array_str<'de, T>(&mut self, input: &'de str) -> Result<Vec<T>, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {
@@ -407,10 +392,7 @@ where
     ///
     /// Returns a structured error for accounting, UTF-8 validation, parsing,
     /// top-level-kind, or deserialization failures.
-    pub fn decode_array_utf8<'de, T>(
-        &mut self,
-        input: &'de [u8],
-    ) -> Result<Vec<T>, JsonDecodeError<R, Q>>
+    pub fn decode_array_utf8<'de, T>(&mut self, input: &'de [u8]) -> Result<Vec<T>, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {

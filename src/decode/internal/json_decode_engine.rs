@@ -96,20 +96,11 @@ where
         let raw_input_bytes = input.len();
         let diagnostic_policy = normalizer.policy().diagnostic_policy();
         let mut attempt = self.session.begin_value();
-        attempt
-            .try_consume_input_bytes(raw_input_bytes)
-            .map_err(|source| {
-                JsonDecodeError::budget(
-                    source,
-                    JsonDecodeStage::Input,
-                    raw_input_bytes,
-                    None,
-                    diagnostic_policy,
-                )
-            })?;
-        let input = std::str::from_utf8(input).map_err(|source| {
-            JsonDecodeError::invalid_utf8(source, raw_input_bytes, diagnostic_policy)
+        attempt.try_consume_input_bytes(raw_input_bytes).map_err(|source| {
+            JsonDecodeError::budget(source, JsonDecodeStage::Input, raw_input_bytes, None, diagnostic_policy)
         })?;
+        let input = std::str::from_utf8(input)
+            .map_err(|source| JsonDecodeError::invalid_utf8(source, raw_input_bytes, diagnostic_policy))?;
         let normalized = normalizer.normalize_after_raw_charge(input, &mut attempt)?;
         Ok(NormalizedJsonDocument::new(normalized, raw_input_bytes))
     }
@@ -163,13 +154,7 @@ where
             normalized_input_bytes: Some(document.normalized_input_bytes()),
             diagnostic_policy,
         };
-        self.decode_seed(
-            seed,
-            document.as_str().as_bytes(),
-            metadata,
-            false,
-            expected,
-        )
+        self.decode_seed(seed, document.as_str().as_bytes(), metadata, false, expected)
     }
 
     /// Strictly validates one complete byte document and commits value usage.
@@ -216,13 +201,7 @@ where
     {
         let has_value_limits = self.session.value_budget().limits().has_limits();
         let mut attempt = self.session.begin_value();
-        Self::prepare_attempt(
-            &mut attempt,
-            input,
-            metadata,
-            charge_raw_input,
-            has_value_limits,
-        )?;
+        Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
         Self::check_top_level(input, metadata, expected)?;
         let value = deserialize_json_document(seed, input).map_err(|source| {
             JsonDecodeError::deserialize(
@@ -255,13 +234,7 @@ where
     ) -> Result<(), JsonDecodeError<R, Q>> {
         let has_value_limits = self.session.value_budget().limits().has_limits();
         let mut attempt = self.session.begin_value();
-        Self::prepare_attempt(
-            &mut attempt,
-            input,
-            metadata,
-            charge_raw_input,
-            has_value_limits,
-        )?;
+        Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
         Self::check_top_level(input, metadata, expected)?;
         attempt.commit().map_err(|source| {
             JsonDecodeError::budget(
@@ -297,11 +270,7 @@ where
                 })?;
         }
         std::str::from_utf8(input).map_err(|source| {
-            JsonDecodeError::invalid_utf8(
-                source,
-                metadata.raw_input_bytes,
-                metadata.diagnostic_policy,
-            )
+            JsonDecodeError::invalid_utf8(source, metadata.raw_input_bytes, metadata.diagnostic_policy)
         })?;
         admit_json_document(attempt, input, has_value_limits).map_err(|error| match error {
             JsonLexicalError::Budget(source) => JsonDecodeError::budget(
@@ -312,13 +281,12 @@ where
                 metadata.diagnostic_policy,
             ),
             JsonLexicalError::Syntax(source) => {
-                let detailed_source = (metadata.diagnostic_policy == DiagnosticPolicy::Detailed)
-                    .then(|| {
-                        from_slice::<&RawValue>(input).err().map_or_else(
-                            || Arc::new(source) as Arc<dyn Error + Send + Sync>,
-                            |error| Arc::new(error) as Arc<dyn Error + Send + Sync>,
-                        )
-                    });
+                let detailed_source = (metadata.diagnostic_policy == DiagnosticPolicy::Detailed).then(|| {
+                    from_slice::<&RawValue>(input).err().map_or_else(
+                        || Arc::new(source) as Arc<dyn Error + Send + Sync>,
+                        |error| Arc::new(error) as Arc<dyn Error + Send + Sync>,
+                    )
+                });
                 JsonDecodeError::invalid_json(
                     source,
                     detailed_source,

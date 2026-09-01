@@ -49,18 +49,13 @@ impl<'de> DeserializeSeed<'de> for NonConsumingSeed {
 
 /// Builds one scalar nested inside `container_depth` JSON arrays.
 fn nested_array(container_depth: usize) -> String {
-    format!(
-        "{}0{}",
-        "[".repeat(container_depth),
-        "]".repeat(container_depth)
-    )
+    format!("{}0{}", "[".repeat(container_depth), "]".repeat(container_depth))
 }
 
 /// Verifies a decoder returns a typed value for one complete document.
 #[test]
 fn test_json_text_decoder_decodes_typed_value() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     let value = JsonDecoder::new(session)
         .decode_utf8::<bool>(b"true")
         .expect("JSON boolean should decode");
@@ -71,8 +66,7 @@ fn test_json_text_decoder_decodes_typed_value() {
 /// Verifies validation accounts a complete document without deserializing it.
 #[test]
 fn test_json_text_decoder_validates_complete_document() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     JsonDecoder::new(session)
         .validate_utf8(br#"{"ok":[true,null]}"#)
         .expect("a complete JSON document should validate");
@@ -81,8 +75,7 @@ fn test_json_text_decoder_validates_complete_document() {
 /// Verifies seed deserialization failures retain safe Serde metadata.
 #[test]
 fn test_json_text_decoder_maps_seed_failure() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     assert!(
         JsonDecoder::new(session)
             .decode_seed_utf8(FailingSeed, b"true")
@@ -93,8 +86,7 @@ fn test_json_text_decoder_maps_seed_failure() {
 /// Verifies a seed that leaves input unread is rejected by the final check.
 #[test]
 fn test_json_text_decoder_rejects_unconsumed_seed_input() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     assert!(
         JsonDecoder::new(session)
             .decode_seed_utf8(NonConsumingSeed, b"true")
@@ -129,11 +121,7 @@ fn test_json_text_decoder_rejects_integer_above_u64() {
         .decode_utf8::<Value>(b"18446744073709551616")
         .expect_err("an integer above u64 must be rejected");
 
-    assert!(
-        error
-            .to_string()
-            .contains("outside the supported 64-bit range")
-    );
+    assert!(error.to_string().contains("outside the supported 64-bit range"));
 }
 
 /// Verifies the complete signed and unsigned 64-bit integer boundaries.
@@ -141,21 +129,14 @@ fn test_json_text_decoder_rejects_integer_above_u64() {
 fn test_json_text_decoder_enforces_integer_boundaries() {
     let mut decoder = JsonDecoder::unlimited();
     assert_eq!(
-        decoder
-            .decode_utf8::<Value>(b"-9223372036854775808")
-            .unwrap(),
+        decoder.decode_utf8::<Value>(b"-9223372036854775808").unwrap(),
         json!(i64::MIN),
     );
     assert_eq!(
-        decoder
-            .decode_utf8::<Value>(b"18446744073709551615")
-            .unwrap(),
+        decoder.decode_utf8::<Value>(b"18446744073709551615").unwrap(),
         json!(u64::MAX),
     );
-    for input in [
-        b"-9223372036854775809".as_slice(),
-        b"18446744073709551616".as_slice(),
-    ] {
+    for input in [b"-9223372036854775809".as_slice(), b"18446744073709551616".as_slice()] {
         let error = decoder
             .decode_utf8::<Value>(input)
             .expect_err("an integer outside the supported range must fail");
@@ -185,10 +166,7 @@ fn test_json_text_decoder_prioritizes_number_budget_over_range() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::builder()
-                .number_bytes_limit(ResourceLimit::new(
-                    JsonResource::NumberBytes,
-                    input.len() - 1,
-                ))
+                .number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, input.len() - 1))
                 .build(),
         )
         .build();
