@@ -42,12 +42,12 @@ then handing only admitted data to application validation.
 
 ### Installation and minimal configuration
 
-This guide describes the unreleased `0.8` branch API. Use a Git revision in a
-reproducible build, or replace `git` with a local `path` while developing:
+Use the current `0.8` release from crates.io, or replace the version with a
+local `path` while developing:
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.8", git = "https://github.com/qubit-ltd/rs-json.git", branch = "main" }
+qubit-json = "0.8"
 qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```
@@ -99,11 +99,39 @@ input length without committing a decoded value. This lets an HTTP adapter map
 stable error categories to responses without matching private parser details.
 
 For output, create `JsonEncoder::with_limits(JsonEncodeLimits::...)` and call
-`to_vec`, `write_buffered`, or `write_incremental`. Buffered mode finishes
-serialization and budget checks before touching the writer, and commits
-accounting only after the complete write succeeds; an I/O failure can still
-leave partial bytes in the external writer. Incremental mode retains accepted
-prefixes when a later serialization, budget, or writer operation fails.
+`to_vec`, `write_buffered`, or `write_incremental`:
+
+```rust
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_json::encode::JsonEncodeErrorKind;
+use qubit_json::encode::JsonEncoder;
+use serde_json::json;
+
+let value = json!({"status": "ok"});
+let mut buffered = JsonEncoder::with_limits(
+    JsonEncodeLimits::builder().max_output_bytes(64).build(),
+);
+assert_eq!(buffered.to_vec(&value)?, br#"{"status":"ok"}"#);
+
+let mut incremental = JsonEncoder::with_limits(
+    JsonEncodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        .max_output_bytes(4)
+        .build(),
+);
+let mut output = Vec::new();
+let error = incremental
+    .write_incremental(&mut output, &[1, 2, 3])
+    .expect_err("four output bytes cannot hold the complete array");
+assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
+assert_eq!(output, b"[1,2");
+# Ok::<(), qubit_json::encode::JsonEncodeError<qubit_budget::json::JsonResource>>(())
+```
+
+Buffered mode finishes serialization and budget checks before touching the
+writer, and commits accounting only after the complete write succeeds; an I/O
+failure can still leave partial bytes in the external writer. Incremental mode
+retains accepted prefixes when a later serialization, budget, or writer
+operation fails, as the example shows.
 
 The next step is to deserialize the admitted document into an application type
 and apply schema, authorization, and identifier rules. Continue below when the
@@ -233,7 +261,53 @@ for a caller-owned Serde deserializer.
 For an existing value, `JsonTreeReader::account` stages complete-tree charges
 in the caller's transaction without invoking a visitor. `JsonTreeMutator`
 first admits the original tree, then runs in-place visitor callbacks, and
-finally admits the mutated tree. Its errors are
+finally admits the mutated tree:
+
+```rust
+use std::convert::Infallible;
+
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::value::traverse::{
+    JsonTreeContext, JsonTreeControl, JsonTreeMutVisitor, JsonTreeMutator,
+};
+use serde_json::{Value, json};
+
+struct RemoveSecrets;
+
+impl JsonTreeMutVisitor for RemoveSecrets {
+    type Error = Infallible;
+
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
+        if let Value::Object(entries) = value {
+            entries.remove("secret");
+        }
+        Ok(JsonTreeControl::Descend)
+    }
+}
+
+let limits = JsonValueLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    .max_nodes(32)
+    .max_payload_bytes(256)
+    .build();
+let mut input_budget = limits.budget();
+let mut output_budget = limits.budget();
+let mut input = input_budget.transaction();
+let mut output = output_budget.transaction();
+let mut value = json!({"name": "qubit", "secret": "remove me"});
+
+JsonTreeMutator::new(&mut input, &mut output)
+    .process(&mut value, &mut RemoveSecrets)
+    .expect("both trees fit the configured budgets");
+input.commit().expect("input accounting commits");
+output.commit().expect("output accounting commits");
+assert_eq!(value, json!({"name": "qubit"}));
+```
+
+Its errors are
 `JsonTreeMutateError::InputBudget`, `::Visitor`, and `::OutputBudget`; visitor
 and output failures retain mutations already made to the value. A visitor can
 return `JsonTreeControl::SkipSubtree` to skip descendant callbacks, but final
@@ -252,6 +326,9 @@ Branch on the stable category returned by `kind()`:
 | `InvalidJson` | Syntax or the numeric contract was invalid | `syntax_error()`, `line()`, `column()` |
 | `UnexpectedTopLevel` | An object/array-specific API received the wrong root kind | `expected_top_level()`, `actual_top_level()` |
 | `Deserialize` | An admitted document could not materialize as the requested type | `line()`, `column()`, and a detailed source when enabled |
+
+Adapters that own the error can instead call `into_source()` and exhaustively
+match `JsonDecodeErrorSource` without cloning budget or syntax details.
 
 `JsonValueEncoder` and `JsonEncoder` share the privacy-safe
 `JsonSerializationError` model. Use

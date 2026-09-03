@@ -2,19 +2,17 @@
 
 [English](migration_0_3_to_0_8.md)
 
-0.8 是尚未发布的重新设计，不是可直接替换的升级。它把严格 JSON 准入、受控文本规范化、
-编码、物化值和遍历拆分为不同领域，并要求在信任边界显式配置预算。
+0.8 经过重新设计，不是可直接替换的升级。它把严格 JSON 准入、受控文本规范化、编码、
+物化值和遍历拆分为不同领域，并要求在信任边界显式配置预算。
 
-## 开发期依赖
+## 依赖
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.8", git = "https://github.com/qubit-ltd/rs-json.git", branch = "main" }
+qubit-json = "0.8"
 qubit-budget = { version = "0.4", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 ```
-
-可复现构建应使用 `rev` 固定提交，而不是跟随 `branch`。
 
 ## 重命名与模块映射
 
@@ -71,7 +69,9 @@ assert_eq!(value["ok"], true);
 ## 错误
 
 解码错误对资源与数量类型使用泛型，并公开稳定的 `kind`、`stage`、预算、语法、位置和诊断
-策略信息。诊断默认脱敏；只有显式选择 `DiagnosticPolicy::Detailed` 才保留详细 Serde 来源。
+策略信息。适配层取得错误所有权后，可以调用 `JsonDecodeError::into_source()`，再穷举匹配
+`JsonDecodeErrorSource`。诊断默认脱敏；只有显式选择 `DiagnosticPolicy::Detailed` 才保留
+详细 Serde 来源。
 
 编码使用 `JsonEncodeError`。需要把错误移入其他错误模型的调用方，应穷尽匹配
 `JsonEncodeError::into_source()`，不要再把 `kind()` 与可选 `into_*` 提取器组合使用。
@@ -85,4 +85,3 @@ assert_eq!(value["ok"], true);
 
 迁移安全敏感边界前，请阅读[用户手册](user_guide.zh_CN.md)、
 [数字契约](number_contract.zh_CN.md)和[设计文档](json_design.zh_CN.md)。
-

@@ -76,7 +76,8 @@ Both decoder facades return the same generic `JsonDecodeError<R, Q>` and do
 not expose a legacy compatibility layer. Public errors belong to their
 domains:
 
-1. `JsonDecodeError`, with stable kind, stage, and accessors.
+1. `JsonDecodeError`, with stable kind, stage, accessors, and an exhaustive
+   owned `JsonDecodeErrorSource` returned by `into_source()`.
 2. `JsonEncodeError`, for strict budget, raw JSON, serialization, and writing.
 3. `JsonSyntaxError`, for stable syntax reasons and positions.
 4. `JsonTreeProcessError`, for reader budget and visitor failures.

@@ -63,7 +63,8 @@ tree 独立计量和准入，但不承诺回滚已提交的业务变更。
 两个 decoder facade 返回统一的 `JsonDecodeError<R, Q>`，不提供旧错误兼容层。公开错误和诊断
 类型按领域归属：
 
-1. `JsonDecodeError`：严格和规范化解码，通过 kind/stage/accessor 暴露稳定结构。
+1. `JsonDecodeError`：严格和规范化解码，通过 kind/stage/accessor 暴露稳定结构，并由
+   `into_source()` 返回可穷举的 owned `JsonDecodeErrorSource`。
 2. `JsonEncodeError`：严格预算、原始 JSON、序列化、写入。
 3. `JsonSyntaxError`：稳定的语法原因和位置。
 4. `JsonTreeProcessError`：reader tree 的预算和 visitor 错误。

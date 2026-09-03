@@ -2,8 +2,8 @@
 
 [English](error_performance_redaction_design.md)
 
-本文记录 `qubit-json 0.8` 首次发布前这轮允许破坏性变更的整体设计决策。它覆盖
-`rs-json` 的序列化错误与热路径，也覆盖直接依赖这些契约的 `rs-budget`、
+本文记录 `qubit-json 0.8` 破坏性变更窗口中的整体设计决策。它覆盖 `rs-json` 的结构化错误与
+热路径，也覆盖直接依赖这些契约的 `rs-budget`、
 `rs-value` 和 `rs-redact`。
 
 ## 设计原则
@@ -16,6 +16,13 @@
   完整树之前同时受到输入字节和结构预算约束。
 - 实验性实现只有在目标场景稳定提升至少 5%，且主要既有场景没有出现超过 3% 的不稳定
   退化时才保留。
+
+## 解码错误模型
+
+`JsonDecodeError` 维持六类解码失败互斥，并提供稳定的借用访问器。适配层取得错误所有权后，
+调用 `into_source()` 穷举匹配 `JsonDecodeErrorSource`，无需克隆即可移动预算、语法、位置、
+顶层类型与保留的详细来源数据。source 枚举保持原有隐私边界：只有显式选择
+`DiagnosticPolicy::Detailed` 才会携带 parser 或 Serde 来源。
 
 ## 序列化错误模型
 
