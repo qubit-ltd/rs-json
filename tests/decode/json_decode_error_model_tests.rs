@@ -17,6 +17,7 @@ use qubit_json::decode::JsonDecodeErrorSource;
 use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonRootKind;
+use qubit_json::decode::JsonSyntaxErrorReason;
 use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
@@ -44,6 +45,23 @@ fn test_json_decode_error_reports_strict_parse_failure() {
     assert_eq!(error.raw_input_bytes(), 1);
     assert!(error.syntax_error().is_some());
     assert!(error.budget_error().is_none());
+}
+
+/// Verifies default diagnostics classify an unexpected byte without retaining
+/// that byte in their structured or formatted public representation.
+#[test]
+fn test_redacted_syntax_diagnostics_do_not_reveal_unexpected_input_bytes() {
+    let mut decoder = JsonDecoder::unlimited();
+    let error = decoder
+        .validate_utf8(b"@")
+        .expect_err("an unexpected byte must fail validation");
+    let syntax = error.syntax_error().expect("expected a syntax error");
+
+    assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
+    assert_eq!(syntax.reason(), JsonSyntaxErrorReason::UnexpectedByte);
+    assert_eq!(syntax.to_string(), "unexpected byte at line 1 column 1 (byte offset 0)");
+    assert!(!format!("{error:?}").contains("0x40"));
+    assert!(std::error::Error::source(&error).is_none());
 }
 
 /// Verifies normalizing failures use the same public kind and stage types.

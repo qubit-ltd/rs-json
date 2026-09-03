@@ -22,18 +22,18 @@ use crate::lexical::JsonLexicalErrorReason;
 /// ```
 /// use qubit_json::decode::JsonSyntaxErrorReason;
 ///
-/// let reason = JsonSyntaxErrorReason::UnexpectedByte { byte: b'?' };
-/// assert_eq!(reason.to_string(), "unexpected byte 0x3f");
+/// let reason = JsonSyntaxErrorReason::UnexpectedByte;
+/// assert_eq!(reason.to_string(), "unexpected byte");
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JsonSyntaxErrorReason {
     /// The document ended before a complete token or container was found.
     UnexpectedEnd,
     /// A byte is not valid at the current JSON position.
-    UnexpectedByte {
-        /// The unexpected byte.
-        byte: u8,
-    },
+    ///
+    /// The byte itself is intentionally not retained, so default structured
+    /// diagnostics never expose input content.
+    UnexpectedByte,
     /// An object key was not followed by a colon.
     ExpectedColon,
     /// An array value was not followed by a comma or closing bracket.
@@ -68,7 +68,7 @@ impl From<JsonLexicalErrorReason> for JsonSyntaxErrorReason {
     fn from(reason: JsonLexicalErrorReason) -> Self {
         match reason {
             JsonLexicalErrorReason::UnexpectedEnd => Self::UnexpectedEnd,
-            JsonLexicalErrorReason::UnexpectedByte { byte } => Self::UnexpectedByte { byte },
+            JsonLexicalErrorReason::UnexpectedByte => Self::UnexpectedByte,
             JsonLexicalErrorReason::ExpectedColon => Self::ExpectedColon,
             JsonLexicalErrorReason::ExpectedCommaOrArrayEnd => Self::ExpectedCommaOrArrayEnd,
             JsonLexicalErrorReason::ExpectedCommaOrObjectEnd => Self::ExpectedCommaOrObjectEnd,
@@ -91,9 +91,7 @@ impl fmt::Display for JsonSyntaxErrorReason {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnexpectedEnd => formatter.write_str("unexpected end of input"),
-            Self::UnexpectedByte { byte } => {
-                write!(formatter, "unexpected byte 0x{byte:02x}")
-            }
+            Self::UnexpectedByte => formatter.write_str("unexpected byte"),
             Self::ExpectedColon => formatter.write_str("expected ':'"),
             Self::ExpectedCommaOrArrayEnd => formatter.write_str("expected ',' or ']' in array"),
             Self::ExpectedCommaOrObjectEnd => formatter.write_str("expected ',' or '}' in object"),

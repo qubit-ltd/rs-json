@@ -15,10 +15,7 @@ pub(crate) enum JsonLexicalErrorReason {
     /// The document ended before a complete token or container was found.
     UnexpectedEnd,
     /// A byte is not valid at the current JSON position.
-    UnexpectedByte {
-        /// The unexpected byte.
-        byte: u8,
-    },
+    UnexpectedByte,
     /// An object key was not followed by a colon.
     ExpectedColon,
     /// An array value was not followed by a comma or closing bracket.
@@ -52,9 +49,7 @@ impl fmt::Display for JsonLexicalErrorReason {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnexpectedEnd => formatter.write_str("unexpected end of input"),
-            Self::UnexpectedByte { byte } => {
-                write!(formatter, "unexpected byte 0x{byte:02x}")
-            }
+            Self::UnexpectedByte => formatter.write_str("unexpected byte"),
             Self::ExpectedColon => formatter.write_str("expected ':'"),
             Self::ExpectedCommaOrArrayEnd => formatter.write_str("expected ',' or ']' in array"),
             Self::ExpectedCommaOrObjectEnd => formatter.write_str("expected ',' or '}' in object"),
@@ -82,10 +77,7 @@ mod tests {
     fn test_json_lexical_error_reason_formats_every_variant() {
         let cases = [
             (JsonLexicalErrorReason::UnexpectedEnd, "unexpected end of input"),
-            (
-                JsonLexicalErrorReason::UnexpectedByte { byte: 0x1f },
-                "unexpected byte 0x1f",
-            ),
+            (JsonLexicalErrorReason::UnexpectedByte, "unexpected byte"),
             (JsonLexicalErrorReason::ExpectedColon, "expected ':'"),
             (
                 JsonLexicalErrorReason::ExpectedCommaOrArrayEnd,

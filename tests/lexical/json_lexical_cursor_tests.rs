@@ -31,16 +31,16 @@ fn test_cursor_skips_json_whitespace() {
 fn test_cursor_reports_scalar_and_container_syntax_errors() {
     let cases: &[(&[u8], JsonSyntaxErrorReason)] = &[
         (b"", JsonSyntaxErrorReason::UnexpectedEnd),
-        (b"@", JsonSyntaxErrorReason::UnexpectedByte { byte: b'@' }),
-        (b"truex", JsonSyntaxErrorReason::UnexpectedByte { byte: b'x' }),
+        (b"@", JsonSyntaxErrorReason::UnexpectedByte),
+        (b"truex", JsonSyntaxErrorReason::UnexpectedByte),
         (b"true false", JsonSyntaxErrorReason::TrailingCharacters),
         (b"[1 2]", JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd),
-        (b"[1,]", JsonSyntaxErrorReason::UnexpectedByte { byte: b']' }),
+        (b"[1,]", JsonSyntaxErrorReason::UnexpectedByte),
         (b"[1", JsonSyntaxErrorReason::UnexpectedEnd),
         (b"{1:2}", JsonSyntaxErrorReason::ExpectedObjectKey),
         (br#"{"a" 1}"#, JsonSyntaxErrorReason::ExpectedColon),
         (br#"{"a":1 "b":2}"#, JsonSyntaxErrorReason::ExpectedCommaOrObjectEnd),
-        (br#"{"a":1,}"#, JsonSyntaxErrorReason::UnexpectedByte { byte: b'}' }),
+        (br#"{"a":1,}"#, JsonSyntaxErrorReason::UnexpectedByte),
         (br#"{"a":1"#, JsonSyntaxErrorReason::UnexpectedEnd),
         (br#""\q""#, JsonSyntaxErrorReason::InvalidEscape),
         (br#""\u12"#, JsonSyntaxErrorReason::UnexpectedEnd),
@@ -71,7 +71,7 @@ fn test_cursor_reports_the_invalid_literal_delimiter_location() {
         .expect_err("a literal must end at a JSON value delimiter");
     let error = error.syntax_error().expect("expected a syntax error");
 
-    assert_eq!(error.reason(), JsonSyntaxErrorReason::UnexpectedByte { byte: b'x' });
+    assert_eq!(error.reason(), JsonSyntaxErrorReason::UnexpectedByte);
     assert_eq!(error.line(), 1);
     assert_eq!(error.column(), 5);
 }
