@@ -357,14 +357,18 @@ typed accessors expose only applicable details:
 | `TopLevelCheck` | Enforce an object or array root |
 | `Deserialize` | Materialize the requested Rust type |
 
+Redacted diagnostics retain stable classifications and source coordinates, but
+never an offending byte, token/key/value text, or a parser/Serde source.
 Input-derived sources are retained only by `DiagnosticPolicy::Detailed`.
 Configure strict decoding with
 `JsonDecoder::with_diagnostic_policy(DiagnosticPolicy::Detailed)`; configure
 normalizing decoding through `NormalizingJsonDecodePolicyBuilder`. Enable
 detailed diagnostics only at trusted boundaries and keep untrusted logs
-redacted. Encoding never retains arbitrary third-party `Serialize::custom`
-text. The other domains expose `JsonEncodeError`, `JsonSyntaxError`,
-`JsonTreeProcessError`, and `JsonTreeMutateError`.
+redacted. If a trusted caller needs the exact byte, it should inspect its
+original input using the stable offset; the error does not retain it. Encoding
+never retains arbitrary third-party `Serialize::custom` text. The other
+domains expose `JsonEncodeError`, `JsonSyntaxError`, `JsonTreeProcessError`,
+and `JsonTreeMutateError`.
 
 The numeric contract is independent from resource limits: negative integers fit
 `i64`, non-negative integers fit `u64`, and fractional/exponential values must

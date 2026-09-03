@@ -14,6 +14,8 @@ semantic versioning for published releases.
 - Defined the signed-`i64`, unsigned-`u64`, and finite-`f64` number contract.
 - Added structured, privacy-aware decode and encode error models, including the
   owned `JsonDecodeErrorSource` and `JsonEncodeErrorSource` mapping APIs.
+- Finalized redacted syntax diagnostics so `UnexpectedByte` never retains
+  input content.
 - Added fuzz, Miri, documentation-example, compatibility, and benchmark suites.
 
 See the [0.3 to 0.8 migration guide](doc/migration_0_3_to_0_8.md).

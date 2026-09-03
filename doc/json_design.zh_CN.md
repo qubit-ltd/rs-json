@@ -82,9 +82,10 @@ transaction 只在完整成功时提交。
 严格 decode 与 normalizing decode 都返回同一个泛型 `JsonDecodeError<R, Q>`。调用方通过稳定的
 `JsonDecodeErrorKind`、`JsonDecodeStage` 以及 budget、syntax、UTF-8、top-level accessor 获取
 互斥的结构化信息；取得错误所有权后，也可以调用 `into_source()` 穷举匹配
-`JsonDecodeErrorSource`，无需克隆结构化数据。默认 `DiagnosticPolicy::Redacted` 不保留输入派生
-source；严格 decoder 通过 `with_diagnostic_policy` 显式选择 `Detailed`，normalizing decoder
-则从 `NormalizingJsonDecodePolicy` 读取该设置。严格 encode 只返回 `JsonEncodeError`：`Budget`、`InvalidRawJson`、
+`JsonDecodeErrorSource`，无需克隆结构化数据。默认 `DiagnosticPolicy::Redacted` 只保留稳定
+错误分类和源坐标，不保留意外字节或其他输入内容；严格 decoder 通过
+`with_diagnostic_policy` 显式选择 `Detailed`，normalizing decoder 则从
+`NormalizingJsonDecodePolicy` 读取该设置。严格 encode 只返回 `JsonEncodeError`：`Budget`、`InvalidRawJson`、
 `Serialize` 或 `Write`。`JsonSyntaxError` 单独持有稳定的语法原因、偏移、行和列。
 
 ### 数字表示

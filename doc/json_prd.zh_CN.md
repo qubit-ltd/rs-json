@@ -27,7 +27,8 @@ Rust 服务需要处理两类 JSON：来自受控协议的严格字节流，以�
 
 用户通过 `NormalizingJsonDecodePolicy` 配置允许的规范化，并把预算作为独立的
 `JsonDecodeLimits` 或 `JsonDecodeSession` 显式交给 `NormalizingJsonDecoder`。policy 不得携带预算，
-decoder 不提供隐式默认预算。默认错误脱敏；只有明确请求 `Detailed` 才保留可能包含输入的信息。
+decoder 不提供隐式默认预算。默认错误脱敏，只保留稳定分类和源坐标，不保留意外字节或其他
+输入内容；只有明确请求 `Detailed` 才保留可能包含输入的来源。
 带 session 的调用必须保留原始与规范化输入消耗，并仅在完整类型解码后提交 value 消耗。
 一次性规范化解码面向 owned 目标；借用、seed 和重复物化通过
 `NormalizedJsonDocument` 两阶段接口完成。prepare 只记一次输入，每次 document decode 独立记账并提交 value。
@@ -42,7 +43,8 @@ decoder 接收完整的 `&str` 或 `&[u8]`。对该切片设置输入上限，�
 `to_vec`、`write_buffered` 和 `write_incremental`。严格
 输入不经过任何修复；每个 document 的记账边界由相应 session transaction 定义。
 `JsonDecoder` 默认使用 `DiagnosticPolicy::Redacted`，调用方只能通过显式调用
-`with_diagnostic_policy(DiagnosticPolicy::Detailed)` 保留输入派生来源错误。
+`with_diagnostic_policy(DiagnosticPolicy::Detailed)` 保留输入派生来源错误。可信调用方如需
+精确意外字节，应通过报告的 offset 检查自己保有的输入。
 
 JSON 数字的产品边界为：负整数 `i64`、非负整数 `u64`、小数/指数有限 `f64`。超过
 JavaScript 安全整数但仍在 64 位范围内的标识符允许作为 number 传输，前端必须使用保持整数
