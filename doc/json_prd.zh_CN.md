@@ -32,6 +32,9 @@ decoder 不提供隐式默认预算。默认错误脱敏；只有明确请求 `D
 一次性规范化解码面向 owned 目标；借用、seed 和重复物化通过
 `NormalizedJsonDocument` 两阶段接口完成。prepare 只记一次输入，每次 document decode 独立记账并提交 value。
 
+decoder 接收完整的 `&str` 或 `&[u8]`。对该切片设置输入上限，不能限制 HTTP body 或其他
+外层传输在聚合它时已经分配的内存；调用方必须在进入 decoder 前另行限制读取和 body 聚合。
+
 ### 严格文本
 
 用户必须以对象方式传入调用方持有的 session：`JsonDecoder` 负责 `decode_str`/`decode_utf8`、
