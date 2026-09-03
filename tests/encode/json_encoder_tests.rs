@@ -104,6 +104,87 @@ fn test_json_text_encoder_rejects_non_finite_floats() {
     assert!(encoder.to_vec(&f64::NEG_INFINITY).is_err());
 }
 
+/// Non-finite floating-point shape emitted through a JSON map key.
+#[derive(Clone, Copy)]
+enum NonFiniteMapKey {
+    /// Emits an `f32` NaN.
+    F32,
+
+    /// Emits an `f64` infinity.
+    F64,
+}
+
+impl Serialize for NonFiniteMapKey {
+    /// Enters the selected floating-point map-key serializer.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::F32 => serializer.serialize_f32(f32::NAN),
+            Self::F64 => serializer.serialize_f64(f64::INFINITY),
+        }
+    }
+}
+
+/// Map that emits one non-finite floating-point key.
+struct NonFiniteMapKeyObject(NonFiniteMapKey);
+
+impl Serialize for NonFiniteMapKeyObject {
+    /// Emits the selected key through Serde's map protocol.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(&self.0, &true)?;
+        map.end()
+    }
+}
+
+/// Value that records the encoder's human-readable serializer declaration.
+struct HumanReadableProbe;
+
+impl Serialize for HumanReadableProbe {
+    /// Serializes the declaration itself as a Boolean.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let human_readable = serializer.is_human_readable();
+        serializer.serialize_bool(human_readable)
+    }
+}
+
+/// Verifies non-finite map keys preserve the public serialization error kind.
+#[test]
+fn test_json_text_encoder_rejects_non_finite_map_keys() {
+    for key in [NonFiniteMapKey::F32, NonFiniteMapKey::F64] {
+        let error = JsonEncoder::unlimited()
+            .to_vec(&NonFiniteMapKeyObject(key))
+            .expect_err("a non-finite map key must fail");
+
+        assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
+        assert_eq!(
+            error
+                .serialization_error()
+                .expect("the error must retain its serialization cause")
+                .kind(),
+            JsonSerializationErrorKind::NonFiniteFloat,
+        );
+    }
+}
+
+/// Verifies the public text encoder declares human-readable serialization.
+#[test]
+fn test_json_text_encoder_is_human_readable() {
+    let output = JsonEncoder::unlimited()
+        .to_vec(&HumanReadableProbe)
+        .expect("the probe must encode");
+
+    assert_eq!(output, b"true");
+}
+
 /// Value that emits a prefix before returning a custom Serde error.
 struct FailsAfterPrefix;
 
