@@ -1,5 +1,7 @@
 # JSON 数字契约
 
+[English](number_contract.md)
+
 本文规定 `qubit-json` 接受的数字表示范围。这是明确的实现契约，不是对 JSON 语法的扩展。
 RFC 8259 没有规定 number token 的最大长度，但允许实现限制数字范围和精度。
 

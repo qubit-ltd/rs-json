@@ -46,7 +46,10 @@ explicit breaking change.
 `JsonEncodeError` keeps operation-level budget, invalid `RawValue`,
 serialization, and writer failures distinct. Arbitrary third-party
 `Serialize::custom` text becomes `CustomSerialization` and is never retained
-in public display, debug, or source chains.
+in public display, debug, or source chains. Callers that need ownership of the
+underlying failure use `JsonEncodeError::into_source()` and exhaustively match
+`JsonEncodeErrorSource`; the older `kind()` and `into_*()` methods remain for
+source compatibility.
 
 ## Performance model and experiment boundary
 

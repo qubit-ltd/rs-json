@@ -12,11 +12,28 @@
 无限制地消耗资源。输入必须是严格 JSON 时使用 `JsonDecoder`；如果输入边界明确允许对外部
 文本中的 JSON 做受控清理，则使用 `NormalizingJsonDecoder`。
 
+## 发布状态
+
+本文档描述仓库各分支上尚未发布的 `0.8` API。crates.io 最新发布版是 `0.7.0`，其 API
+文档位于 [docs.rs](https://docs.rs/qubit-json)。评估 `0.8` 时请使用下面的 Git 或 path
+形式；需要可复现构建时应固定 Git revision。
+
 ## 安装
+
+当前 `0.8` 分支：
 
 ```toml
 [dependencies]
-qubit-json = "0.8"
+qubit-json = { version = "0.8", git = "https://github.com/qubit-ltd/rs-json.git", branch = "main" }
+qubit-budget = { version = "0.4", features = ["json"] }
+serde_json = "1.0"
+```
+
+本地 checkout：
+
+```toml
+[dependencies]
+qubit-json = { version = "0.8", path = "../rs-json" }
 qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```
@@ -76,7 +93,7 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 | 严格解码前允许清理指定的展示痕迹 | 使用显式策略构造的 `NormalizingJsonDecoder` |
 | 需要检查规范化结果、重复解码，或让结果借用规范化文本 | 先调用 `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`，再通过 `NormalizedJsonDocument` 的解码方法处理 |
 
-标准宽松策略可以清理首尾空白、一个 BOM、一层 JSON Markdown 围栏，以及字符串内未经转义
+默认规范化策略可以清理首尾空白、一个 BOM、一层 JSON Markdown 围栏，以及字符串内未经转义
 的 ASCII 控制字符。这只是受控规范化，不是另一种 JSON 方言；注释、尾随逗号、未加引号的键
 和缺失的 JSON 语法仍会被拒绝。
 
@@ -124,7 +141,11 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
   [Design documents](doc/json_design.md)
 - [基准测试基线](doc/benchmark_baseline.zh_CN.md) ·
   [Benchmark baseline](doc/benchmark_baseline.md)
-- [API 文档](https://docs.rs/qubit-json/0.8.0/qubit_json/)
+- [从 0.3 迁移到 0.8](doc/migration_0_3_to_0_8.zh_CN.md) ·
+  [Migration from 0.3 to 0.8](doc/migration_0_3_to_0_8.md)
+- [中文变更记录](CHANGELOG.zh_CN.md) · [Changelog](CHANGELOG.md)
+- [已发布 API 文档](https://docs.rs/qubit-json)；当前分支 API 请运行
+  `cargo doc --all-features --open`
 
 ## 测试
 

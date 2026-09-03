@@ -4,7 +4,7 @@
 调用方预算约束下准入 JSON，同时保留 Serde 数据模型；它不替代 `serde_json`，也不负责应用
 数据模式。
 
-[English](user_guide.md) · [README](../README.zh_CN.md) · [API 文档](https://docs.rs/qubit-json/0.8.0/qubit_json/)
+[English](user_guide.md) · [README](../README.zh_CN.md) · [已发布 API 文档](https://docs.rs/qubit-json)
 
 ## 手册目标与读者
 
@@ -33,9 +33,12 @@
 
 ### 安装与最小配置
 
+本手册描述尚未发布的 `0.8` 分支 API。可复现构建应固定 Git revision；本地开发时也可
+把 `git` 替换为 `path`：
+
 ```toml
 [dependencies]
-qubit-json = "0.8"
+qubit-json = { version = "0.8", git = "https://github.com/qubit-ltd/rs-json.git", branch = "main" }
 qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```
@@ -216,7 +219,7 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 | `JsonDecodeErrorKind` | 含义 | 可读取的结构化信息 |
 | --- | --- | --- |
 | `Budget` | 配置的资源限制拒绝了本次测量 | `budget_error()`、`raw_input_bytes()`、`normalized_input_bytes()` |
-| `EmptyInput` | 严格准入或规范化边界收到空输入 | `stage()`、输入字节数 |
+| `EmptyInput` | 配置的规范化流程没有产生 JSON 文档 | `stage()`、输入字节数 |
 | `InvalidUtf8` | 字节输入不是合法 UTF-8 | `utf8_valid_up_to()`、`utf8_error_len()` |
 | `InvalidJson` | JSON 语法或数字契约不合法 | `syntax_error()`、`line()`、`column()` |
 | `UnexpectedTopLevel` | 仅接受对象或数组的方法收到错误的根类型 | `expected_top_level()`、`actual_top_level()` |
@@ -262,7 +265,8 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 
 - `Budget`：检查对应的输入字节、数字字节、深度、节点、集合、键、字符串或输出限制；只有
   需要累计记账时才继续复用该会话。
-- `EmptyInput`：确认请求体是否原本为空，或是否在配置的空白、BOM、Markdown 围栏处理后变为空。
+- `NormalizingJsonDecoder` 返回 `EmptyInput`：确认配置的空白、BOM 或 Markdown 围栏
+  处理是否移除了全部输入。原始空输入直接交给严格 `JsonDecoder` 时归类为 `InvalidJson`。
 - `InvalidUtf8`：查看 `utf8_valid_up_to()` 和 `utf8_error_len()`，先在传输边界拒绝或修复字节流，
   再进入 JSON 解析。
 - `InvalidJson`：检查原始字节以及错误中的原因、偏移量、行号和列号；规范化不会凭空补齐 JSON
@@ -288,4 +292,5 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 - [中文 README](../README.zh_CN.md) · [English README](../README.md)
 - [English user guide](user_guide.md)
 - [JSON 数字契约](number_contract.zh_CN.md)
-- [API 文档](https://docs.rs/qubit-json/0.8.0/qubit_json/)
+- [已发布 API 文档](https://docs.rs/qubit-json)；当前分支 API 可运行
+  `cargo doc --all-features --open` 生成

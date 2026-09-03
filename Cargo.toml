@@ -15,6 +15,8 @@ keywords = ["json", "serde", "decoder", "budget", "qubit"]
 categories = ["encoding", "parser-implementations"]
 include = [
     "/Cargo.toml",
+    "/CHANGELOG.md",
+    "/CHANGELOG.zh_CN.md",
     "/LICENSE",
     "/README.md",
     "/README.zh_CN.md",

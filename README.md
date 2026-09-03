@@ -15,11 +15,29 @@ Use `JsonDecoder` when the input must already be strict JSON, or
 `NormalizingJsonDecoder` when the boundary explicitly permits controlled
 cleanup of JSON embedded in external text.
 
+## Release status
+
+This README documents the unreleased `0.8` API on the repository branches.
+The latest crates.io release is `0.7.0`; its API is documented on
+[docs.rs](https://docs.rs/qubit-json). Use the Git or path form below when
+evaluating `0.8`, and pin a Git revision for reproducible builds.
+
 ## Installation
+
+Current `0.8` branch:
 
 ```toml
 [dependencies]
-qubit-json = "0.8"
+qubit-json = { version = "0.8", git = "https://github.com/qubit-ltd/rs-json.git", branch = "main" }
+qubit-budget = { version = "0.4", features = ["json"] }
+serde_json = "1.0"
+```
+
+Local checkout:
+
+```toml
+[dependencies]
+qubit-json = { version = "0.8", path = "../rs-json" }
 qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```
@@ -82,7 +100,7 @@ happens to parse:
 | Specific presentation artifacts are allowed before strict decoding | `NormalizingJsonDecoder` with an explicit policy |
 | Normalized text must be inspected, decoded repeatedly, or borrowed by the result | `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`, followed by `NormalizedJsonDocument` decoding methods |
 
-The standard lenient policy can trim surrounding whitespace, remove one BOM,
+The default normalization policy can trim surrounding whitespace, remove one BOM,
 unwrap one outer JSON Markdown fence, and escape raw ASCII control characters
 inside strings. It is controlled normalization, not another JSON dialect:
 comments, trailing commas, unquoted keys, and missing syntax remain errors.
@@ -138,7 +156,11 @@ construction, and traversal.
   [设计文档](doc/json_design.zh_CN.md)
 - [Benchmark baseline](doc/benchmark_baseline.md) ·
   [基准测试基线](doc/benchmark_baseline.zh_CN.md)
-- [API documentation](https://docs.rs/qubit-json/0.8.0/qubit_json/)
+- [Migration from 0.3 to 0.8](doc/migration_0_3_to_0_8.md) ·
+  [从 0.3 迁移到 0.8](doc/migration_0_3_to_0_8.zh_CN.md)
+- [Changelog](CHANGELOG.md) · [中文变更记录](CHANGELOG.zh_CN.md)
+- [Released API documentation](https://docs.rs/qubit-json); for the current
+  branch API, run `cargo doc --all-features --open`
 
 ## Testing
 

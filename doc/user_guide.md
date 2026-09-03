@@ -5,7 +5,7 @@ services, configuration readers, and data pipelines that must admit JSON under
 caller-owned resource limits while keeping Serde's data model. It does not
 replace `serde_json` or impose application schemas.
 
-[中文版](user_guide.zh_CN.md) · [README](../README.md) · [API documentation](https://docs.rs/qubit-json/0.8.0/qubit_json/)
+[中文版](user_guide.zh_CN.md) · [README](../README.md) · [Released API documentation](https://docs.rs/qubit-json)
 
 ## Purpose and audience
 
@@ -42,9 +42,12 @@ then handing only admitted data to application validation.
 
 ### Installation and minimal configuration
 
+This guide describes the unreleased `0.8` branch API. Use a Git revision in a
+reproducible build, or replace `git` with a local `path` while developing:
+
 ```toml
 [dependencies]
-qubit-json = "0.8"
+qubit-json = { version = "0.8", git = "https://github.com/qubit-ltd/rs-json.git", branch = "main" }
 qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```
@@ -244,7 +247,7 @@ Branch on the stable category returned by `kind()`:
 | `JsonDecodeErrorKind` | Meaning | Structured details |
 | --- | --- | --- |
 | `Budget` | A configured resource limit rejected a measurement | `budget_error()`, `raw_input_bytes()`, `normalized_input_bytes()` |
-| `EmptyInput` | Input was empty at the active strict or normalization boundary | `stage()`, input byte counts |
+| `EmptyInput` | Configured normalization produced no JSON document | `stage()`, input byte counts |
 | `InvalidUtf8` | A byte input was not valid UTF-8 | `utf8_valid_up_to()`, `utf8_error_len()` |
 | `InvalidJson` | Syntax or the numeric contract was invalid | `syntax_error()`, `line()`, `column()` |
 | `UnexpectedTopLevel` | An object/array-specific API received the wrong root kind | `expected_top_level()`, `actual_top_level()` |
@@ -297,8 +300,9 @@ binary rounding should use a string or explicit domain representation. See the
 - A `Budget` error: inspect the matching limit (input bytes, number bytes,
   depth, nodes, collection sizes, key/string bytes, or output bytes) and keep
   the session alive only if cumulative accounting is intended.
-- An `EmptyInput` error: check whether the body was empty before decoding or
-  became empty after the configured whitespace, BOM, or fence handling.
+- An `EmptyInput` error from `NormalizingJsonDecoder`: check whether configured
+  whitespace, BOM, or fence handling removed the complete input. A raw empty
+  input passed to strict `JsonDecoder` is classified as `InvalidJson`.
 - An `InvalidUtf8` error: inspect `utf8_valid_up_to()` and `utf8_error_len()`,
   and reject or repair the byte transport before JSON parsing.
 - An `InvalidJson` error: validate the original bytes and check the reported reason,
@@ -331,4 +335,5 @@ deserializers safe.
 - [English README](../README.md) · [中文 README](../README.zh_CN.md)
 - [中文用户手册](user_guide.zh_CN.md)
 - [JSON number contract](number_contract.md)
-- [API documentation](https://docs.rs/qubit-json/0.8.0/qubit_json/)
+- [Released API documentation](https://docs.rs/qubit-json); generate the
+  current branch API with `cargo doc --all-features --open`

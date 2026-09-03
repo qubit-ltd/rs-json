@@ -1,5 +1,7 @@
 # JSON number contract
 
+[简体中文](number_contract.zh_CN.md)
+
 This document defines the numeric representation accepted by `qubit-json`.
 It is a deliberate implementation contract, not an additional JSON grammar.
 RFC 8259 does not set a maximum number length, but permits implementations to
