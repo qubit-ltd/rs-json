@@ -17,6 +17,7 @@ set -euo pipefail
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 "$PROJECT_ROOT/doc-example-check.sh"
+"$PROJECT_ROOT/downstream-check.sh"
 
 if [ -n "${RS_CI_BUILD_TOOLCHAIN:-}" ]; then
     cargo +"$RS_CI_BUILD_TOOLCHAIN" test \
@@ -24,4 +25,3 @@ if [ -n "${RS_CI_BUILD_TOOLCHAIN:-}" ]; then
 else
     cargo test --manifest-path "$PROJECT_ROOT/fuzz/Cargo.toml"
 fi
-

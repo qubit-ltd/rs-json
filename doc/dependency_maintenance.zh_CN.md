@@ -24,7 +24,9 @@ RawValue Serde 私有协议，因此不能只依赖版本号推断兼容性。
    ```
 
 4. 使用 lockfile 当前解析版本运行 `./align-ci.sh`、`./style-check.sh`、
-   `./ci-check.sh`，并编译 benchmark、fuzz targets 和直接下游 crate。升级验证失败时
-   修复兼容层或提高最低版本，不能用精确锁定长期阻止兼容版本解析。
+   `./downstream-check.sh` 和 `./ci-check.sh`。相邻 checkout 存在时，下游脚本会检查
+   `rs-config`、`rs-datatype`、`rs-http`、`rs-metadata`、`rs-redact` 与 `rs-value`，项目
+   CI hook 也会自动调用它；此外还需编译 benchmark 和 fuzz targets。升级验证失败时修复
+   兼容层或提高最低版本，不能用精确锁定长期阻止兼容版本解析。
 5. 使用 `cargo bench --bench budgeted_serde_json` 对比编码结果；若 RawValue protocol
    或 serde_json formatter 行为改变，先更新兼容实现和回归测试，再发布依赖升级。
