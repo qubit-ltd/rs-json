@@ -28,13 +28,11 @@ directly.
    ```
 
 4. With the lockfile's resolved versions, run `./align-ci.sh`,
-   `./style-check.sh`, `./downstream-check.sh`, and `./ci-check.sh`. The
-   downstream script checks `rs-config`, `rs-datatype`, `rs-http`,
-   `rs-metadata`, `rs-redact`, and `rs-value` when they are available as
-   sibling checkouts; the project CI hook invokes it automatically. Also
-   compile the benchmarks and fuzz targets. If validation fails, fix the
-   compatibility layer or raise the minimum version; do not use an exact
-   lockfile pin as a long-term substitute for compatibility.
+   `./style-check.sh`, and `./ci-check.sh`. Also compile the benchmarks and
+   fuzz targets. If validation fails, fix the compatibility layer or raise the
+   minimum version; do not use an exact lockfile pin as a long-term substitute
+   for compatibility. Downstream crates validate their own integration in
+   their respective CI pipelines.
 5. Compare encoding results with
    `cargo bench --bench budgeted_serde_json`. If the RawValue protocol or the
    serde_json formatter behavior changes, update the compatibility
