@@ -16,7 +16,9 @@ use super::JsonTreeContext;
 /// # Examples
 ///
 /// ```
-/// use qubit_json::value::traverse::{JsonTreeContext, JsonTreeVisitor};
+/// use qubit_json::value::traverse::{
+///     JsonTreeContext, JsonTreeVisitor,
+/// };
 /// use serde_json::Value;
 ///
 /// struct CountingVisitor {
@@ -25,8 +27,12 @@ use super::JsonTreeContext;
 /// impl JsonTreeVisitor for CountingVisitor {
 ///     type Error = std::convert::Infallible;
 ///
-///     fn enter(&mut self, _: &Value, _: JsonTreeContext<'_>) -> Result<(),
-/// Self::Error> {         self.count += 1;
+///     fn enter(
+///         &mut self,
+///         _: &Value,
+///         _: JsonTreeContext<'_>,
+///     ) -> Result<(), Self::Error> {
+///         self.count += 1;
 ///         Ok(())
 ///     }
 /// }
