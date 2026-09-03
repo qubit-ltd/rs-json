@@ -28,7 +28,7 @@ use std::str::FromStr;
 pub enum JsonDecodeErrorKind {
     /// A configured resource budget rejected a measurement.
     Budget,
-    /// Input was empty at a decoding or normalization boundary.
+    /// Normalization produced no JSON document from the supplied input.
     EmptyInput,
     /// Raw byte input was not valid UTF-8.
     InvalidUtf8,

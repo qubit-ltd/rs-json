@@ -360,6 +360,11 @@ where
     ///
     /// * `document` - Precharged document whose JSON syntax is validated.
     ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the normalized document is valid and its decoded-value
+    /// usage is committed.
+    ///
     /// # Errors
     ///
     /// Returns a structured error when decoded-value accounting or JSON

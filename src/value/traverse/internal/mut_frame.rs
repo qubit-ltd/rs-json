@@ -6,6 +6,14 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Defines one stack frame for mutable JSON traversal.
+//!
+//! # Safety invariants
+//!
+//! Every frame pointer identifies a node inside the exclusively borrowed root
+//! and remains valid until that frame is popped. Frames may move as the stack
+//! reallocates because moving a frame does not move the pointed-to JSON node.
+//! While a child frame is active, ancestor frames retain only pointers and
+//! suspended cursors; they do not dereference or expose their nodes.
 
 use std::ptr::NonNull;
 

@@ -164,6 +164,11 @@ where
     ///
     /// * `value` - Root JSON value whose complete tree is admitted.
     ///
+    /// # Returns
+    ///
+    /// `Ok(())` after every node and payload has been staged in the borrowed
+    /// transaction.
+    ///
     /// # Errors
     ///
     /// Returns the first measured budget rejection encountered during the

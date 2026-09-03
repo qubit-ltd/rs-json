@@ -6,6 +6,18 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Implements non-recursive, budget-aware mutable JSON tree processing.
+//!
+//! # Mutable traversal safety
+//!
+//! The caller's exclusive root borrow outlives the complete frame stack. The
+//! visitor borrow for a node ends before a cursor over that node is created.
+//! Traversal then suspends every ancestor cursor while processing one child,
+//! pops that child before advancing the parent, and never dereferences an
+//! ancestor while a descendant is active. Visitors may replace the current
+//! `Value`, but after descent begins they cannot change an ancestor array
+//! length, object key set, or backing allocation. These rules are the safety
+//! contract for the internal `NonNull` pointers and lifetime-erased object
+//! iterator.
 
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonValueTransaction;

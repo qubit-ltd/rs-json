@@ -411,10 +411,14 @@ where
     ///
     /// * `input` - Complete JSON text to validate and account for.
     ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the complete document is valid and accounted for.
+    ///
     /// # Errors
     ///
-    /// Returns a structured error when accounting, parsing, or UTF-8
-    /// validation fails. No target value is allocated.
+    /// Returns a structured error when accounting or JSON parsing fails. No
+    /// target value is allocated; `str` input is already valid UTF-8.
     pub fn validate_str(&mut self, input: &str) -> Result<(), JsonDecodeError<R, Q>> {
         self.validate_utf8(input.as_bytes())
     }
@@ -425,6 +429,10 @@ where
     /// # Parameters
     ///
     /// * `input` - Complete UTF-8 JSON bytes to validate and account for.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the complete document is valid and accounted for.
     ///
     /// # Errors
     ///

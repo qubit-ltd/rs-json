@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Defines the privacy policy for lenient JSON decoding error diagnostics.
+//! Defines the privacy policy for JSON decoding error diagnostics.
 
 /// Controls whether JSON decoding errors retain input-derived serde details.
 ///

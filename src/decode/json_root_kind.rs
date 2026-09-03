@@ -5,8 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Defines the coarse top-level JSON kinds used by constrained lenient decode
-//! methods.
+//! Defines the coarse top-level JSON kinds used by constrained decode methods.
 
 use std::fmt;
 use std::str::FromStr;
