@@ -1,6 +1,6 @@
 # `rs-json` JSON 性能证据日志
 
-[English summary](benchmark_baseline.md)
+[English](benchmark_baseline.md)
 
 > 数字契约说明：当前严格路径只接受 i64/u64 联合整数范围和有限 f64；不再启用
 > serde_json arbitrary precision。复测数字密集输入时必须分别覆盖 i64/u64 边界、范围拒绝和

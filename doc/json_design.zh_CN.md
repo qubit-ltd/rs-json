@@ -49,6 +49,9 @@ prepare 立即且只提交一次 raw/normalized 输入消耗；每次 document d
 提交 value 消耗。document 不绑定创建它的 decoder。若规范化无需分配，其文本可借用原输入；
 包含 JSON 转义的字符串仍需 owned 目标，因为 Serde 必须物化解转义结果。
 
+两个 decoder 都接收完整的 `&str` 或 `&[u8]`。输入字节限制不能追溯约束外层 transport
+或 body aggregator 已经分配的内存；有界读取或聚合上限必须设置在该外层边界。
+
 ## Strict text
 
 严格文本接口由对象承载，避免无状态自由函数扩散：
