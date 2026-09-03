@@ -15,12 +15,11 @@ keywords = ["json", "serde", "decoder", "budget", "qubit"]
 categories = ["encoding", "parser-implementations"]
 include = [
     "/Cargo.toml",
-    "/CHANGELOG.md",
-    "/CHANGELOG.zh_CN.md",
     "/LICENSE",
     "/README.md",
     "/README.zh_CN.md",
     "/src/**",
+    "/CHANGELOG.md",
     "/doc/**",
     "/tests/**",
     "/benches/**",
@@ -48,7 +47,7 @@ path = "tests/mod.rs"
 serde = "1.0"
 # 1.0.151 is the minimum version covered by the RawValue compatibility tests.
 # See doc/dependency_maintenance.zh_CN.md before raising this lower bound.
-serde_json = { version = "1.0.151", features = ["float_roundtrip", "raw_value"] }
+serde_json = { version = "1.0", features = ["float_roundtrip", "raw_value"] }
 thiserror = "2.0"
 
 qubit-budget = { version = "0.4", features = ["json"] }
