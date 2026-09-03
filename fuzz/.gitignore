@@ -2,4 +2,16 @@ target
 corpus/*
 !corpus/decoder/
 !corpus/decoder/**
+!corpus/json_budget_invariants/
+corpus/json_budget_invariants/*
+!corpus/json_budget_invariants/decimal-boundaries
+!corpus/json_decode_differential/
+corpus/json_decode_differential/*
+!corpus/json_decode_differential/strict-object
+!corpus/json_encode_invariants/
+corpus/json_encode_invariants/*
+!corpus/json_encode_invariants/representative-value
+!corpus/json_tree_invariants/
+corpus/json_tree_invariants/*
+!corpus/json_tree_invariants/nested-redaction
 artifacts

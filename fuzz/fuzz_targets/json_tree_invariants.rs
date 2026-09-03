@@ -79,6 +79,21 @@ fn assert_serializable(value: &Value) {
     assert_eq!(decoded, *value);
 }
 
+/// Verifies a successful redaction traversal removed every secret field.
+fn assert_no_secret_fields(value: &Value) {
+    let mut pending = vec![value];
+    while let Some(value) = pending.pop() {
+        match value {
+            Value::Array(values) => pending.extend(values),
+            Value::Object(entries) => {
+                assert!(!entries.contains_key("secret"));
+                pending.extend(entries.values());
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Mutates object nodes in the same shape as a redaction visitor.
 struct SuccessVisitor;
 
@@ -156,6 +171,7 @@ fuzz_target!(|data: &[u8]| {
         output_transaction.commit().expect("output transaction commits");
     }
     assert_serializable(&success_value);
+    assert_no_secret_fields(&success_value);
 
     // Even an empty fuzz input produces the root object, two scalar fields,
     // and the items array, so a maximum of three nodes always rejects input.

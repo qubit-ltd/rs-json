@@ -35,6 +35,18 @@ impl Serialize for Bytes {
     }
 }
 
+/// Byte values spanning every decimal-width branch used by JSON accounting.
+struct BoundaryBytes;
+
+impl Serialize for BoundaryBytes {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(&[9, 10, 99, 100, 255])
+    }
+}
+
 /// Verifies compound serialization preserves object members.
 #[test]
 fn test_json_encode_compound_serializes_struct_members() {
@@ -51,6 +63,40 @@ fn test_json_encode_compound_serializes_tuple_struct_fields() {
     let output = encode(&Triple(3, 4), &mut session).expect("tuple-struct JSON should serialize");
 
     assert_eq!(output, b"[3,4]");
+}
+
+/// Verifies byte-array numbers use their exact decimal widths for both the
+/// point number limit and the cumulative value-payload limit.
+#[test]
+fn test_json_encode_bytes_charge_decimal_width_boundaries() {
+    let exact_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_number_bytes(3)
+        .max_payload_bytes(11)
+        .build();
+    let mut exact = JsonEncodeSession::from_limits(exact_limits);
+
+    assert_eq!(
+        encode(&BoundaryBytes, &mut exact).expect("exact byte budgets must fit"),
+        b"[9,10,99,100,255]",
+    );
+
+    let number_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_number_bytes(2)
+        .build();
+    let mut short_number = JsonEncodeSession::from_limits(number_limits);
+    assert!(
+        encode(&BoundaryBytes, &mut short_number).is_err(),
+        "100 must cross the two-to-three-digit number boundary",
+    );
+
+    let payload_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_payload_bytes(10)
+        .build();
+    let mut short_payload = JsonEncodeSession::from_limits(payload_limits);
+    assert!(
+        encode(&BoundaryBytes, &mut short_payload).is_err(),
+        "decimal byte widths must consume eleven payload bytes",
+    );
 }
 
 /// Verifies scalar serializer paths instantiate with byte-sized quantities.
