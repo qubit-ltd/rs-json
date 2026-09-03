@@ -8,6 +8,8 @@
 //! Tests for the public [`qubit_json::decode::JsonDecodeError`]
 //! type.
 
+use std::error::Error as StdError;
+
 use qubit_budget::ResourceLimit;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
@@ -21,7 +23,9 @@ use qubit_json::decode::JsonRootKind;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde::de::DeserializeOwned;
+use serde_json::Error as SerdeJsonError;
 use serde_json::Value;
+use serde_json::error::Category;
 
 use crate::fixtures::PublicChoice;
 
@@ -165,8 +169,13 @@ fn test_error_source_for_invalid_json_preserves_serde_error() {
     let error = decoder
         .decode_value("{")
         .expect_err("invalid JSON should preserve the parser source error");
-    let source = std::error::Error::source(&error).expect("invalid JSON errors should expose the serde_json source");
-    assert!(source.to_string().contains("EOF"));
+    let source = StdError::source(&error).expect("invalid JSON errors should expose the serde_json source");
+    let source = source
+        .downcast_ref::<SerdeJsonError>()
+        .expect("detailed parser source must retain its structured serde error");
+    assert_eq!(source.classify(), Category::Eof);
+    assert_eq!(source.line(), 1);
+    assert_eq!(source.column(), 1);
 }
 
 /// Verifies that default error privacy redacts input derived serde details.
