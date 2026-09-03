@@ -8,8 +8,6 @@
 //! Internal fuzz-target-only data types.
 
 #[allow(dead_code)]
-pub(crate) mod fuzz_input_limit;
-#[allow(dead_code)]
 pub(crate) mod fuzz_limit;
 #[allow(dead_code)]
 pub(crate) mod fuzz_record;

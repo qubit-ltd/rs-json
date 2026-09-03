@@ -1,0 +1,4 @@
+~"tee
+line two"~~json
+{"ok":true}
+~~~

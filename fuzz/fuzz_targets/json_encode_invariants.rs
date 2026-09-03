@@ -17,14 +17,15 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::encode::JsonEncoder;
+use qubit_json_fuzz::input_limit::bounded_input;
 use serde_json::Value;
 
 mod internal;
 
-const MAX_INPUT_LEN: usize = 4 * 1024;
-
 fuzz_target!(|data: &[u8]| {
-    let input = &data[..data.len().min(MAX_INPUT_LEN)];
+    let Some(input) = bounded_input(data) else {
+        return;
+    };
     let Ok(value) = serde_json::from_slice::<Value>(input) else {
         return;
     };

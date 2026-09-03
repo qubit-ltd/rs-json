@@ -19,14 +19,15 @@ use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::value::AccountingJsonValueSeed;
+use qubit_json_fuzz::input_limit::bounded_input;
 use serde_json::Value;
 
 mod internal;
 
-const MAX_INPUT_LEN: usize = 4 * 1024;
-
 fuzz_target!(|data: &[u8]| {
-    let input = &data[..data.len().min(MAX_INPUT_LEN)];
+    let Some(input) = bounded_input(data) else {
+        return;
+    };
     let bytes = internal::fuzz_limit::limit(data, 0);
     let depth = internal::fuzz_limit::limit(data, 2);
     let nodes = internal::fuzz_limit::limit(data, 4);
