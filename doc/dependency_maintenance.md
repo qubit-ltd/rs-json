@@ -28,8 +28,11 @@ directly.
    ```
 
 4. With the lockfile's resolved versions, run `./align-ci.sh`,
-   `./style-check.sh`, and `./ci-check.sh`. Also compile the benchmarks, fuzz
-   targets, and direct downstream crates. If validation fails, fix the
+   `./style-check.sh`, `./downstream-check.sh`, and `./ci-check.sh`. The
+   downstream script checks `rs-config`, `rs-datatype`, `rs-http`,
+   `rs-metadata`, `rs-redact`, and `rs-value` when they are available as
+   sibling checkouts; the project CI hook invokes it automatically. Also
+   compile the benchmarks and fuzz targets. If validation fails, fix the
    compatibility layer or raise the minimum version; do not use an exact
    lockfile pin as a long-term substitute for compatibility.
 5. Compare encoding results with
