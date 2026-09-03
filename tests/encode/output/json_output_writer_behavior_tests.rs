@@ -8,10 +8,13 @@
 //! Tests bounded JSON output error precedence.
 
 use qubit_budget::json::JsonResource;
+use qubit_json::encode::JsonEncodeErrorKind;
+use qubit_json::encode::JsonEncoder;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error as _;
 use serde::ser::SerializeSeq;
+use serde::ser::SerializeStruct;
 
 use crate::encode::json_encode_test_support::encode;
 use crate::fixtures::JsonTestLimits;
@@ -44,6 +47,21 @@ impl Serialize for ValueThenOutputViolation {
         let _ = sequence.serialize_element("x");
         let _ = sequence.serialize_element(&true);
         Err(S::Error::custom("masked serializer errors"))
+    }
+}
+
+/// Invalid raw JSON whose syntax failure is followed by a custom Serde error.
+struct MaskedInvalidRawValue;
+
+impl Serialize for MaskedInvalidRawValue {
+    /// Records invalid raw JSON, then attempts to mask that earlier failure.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
+        state.serialize_field(concat!("$", "serde_json", ":", ":private::RawValue"), "[")?;
+        state.end().map_err(|_| S::Error::custom("masked raw JSON error"))
     }
 }
 
@@ -106,4 +124,18 @@ fn test_json_encoder_preserves_chronological_budget_error_precedence() {
             .resource(),
         &JsonResource::StringBytes,
     );
+}
+
+/// Verifies invalid raw JSON wins over a later custom Serde error.
+#[test]
+fn test_json_output_writer_preserves_raw_json_error_precedence() {
+    let mut encoder = JsonEncoder::unlimited();
+    let mut output = Vec::new();
+
+    let error = encoder
+        .write_incremental(&mut output, &MaskedInvalidRawValue)
+        .expect_err("invalid raw JSON must remain the primary error");
+
+    assert_eq!(error.kind(), JsonEncodeErrorKind::InvalidRawJson);
+    assert!(error.syntax_error().is_some());
 }
