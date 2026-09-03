@@ -71,62 +71,21 @@ Unlike calling `serde_json::from_slice` alone, this boundary makes resource
 admission explicit and exposes a stable error category through `kind()`. Apply
 schema validation, authorization, and domain rules after a value is admitted.
 
-## Normalize JSON from external text
+## Choose the decoding boundary
 
-`NormalizingJsonDecoder` is the main entry point when the input is intended to
-be JSON but may contain explicitly permitted transport or presentation
-artifacts. Typical sources include generated text, copied Markdown snippets,
-and text configuration files. It first applies a
-`NormalizingJsonDecodePolicy`, then runs the same strict JSON syntax, numeric,
-and resource admission used by `JsonDecoder`.
-
-`NormalizingJsonDecodePolicy::lenient()` enables the library's standard
-normalization profile:
-
-- trim surrounding whitespace;
-- remove one leading UTF-8 BOM;
-- unwrap one outer JSON Markdown code fence, with an optional closing fence;
-- escape raw ASCII control characters found inside JSON strings; and
-- redact input-derived diagnostic details.
-
-This is controlled normalization, not a permissive JSON dialect. It does not
-accept comments, trailing commas, unquoted keys, or missing JSON syntax.
-
-```rust
-use qubit_budget::json::JsonDecodeLimits;
-use qubit_budget::json::JsonResource;
-use qubit_json::decode::NormalizingJsonDecodePolicy;
-use qubit_json::decode::NormalizingJsonDecoder;
-
-let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
-    .max_input_bytes(4096)
-    .max_normalized_input_bytes(4096)
-    .max_depth(32)
-    .max_nodes(256)
-    .max_sequence_items(64)
-    .max_map_entries(64)
-    .max_key_bytes(128)
-    .max_string_bytes(2048)
-    .max_number_bytes(20)
-    .max_payload_bytes(4096)
-    .build();
-let mut decoder = NormalizingJsonDecoder::with_limits(
-    NormalizingJsonDecodePolicy::lenient(),
-    limits,
-);
-let value = decoder
-    .decode_object_str::<serde_json::Value>("```json\n{\"ok\":true}\n```")
-    .expect("the configured policy accepts a JSON Markdown fence");
-assert_eq!(value["ok"], true);
-```
-
-Choose the decoding entry point according to the input contract:
+Choose the entry point from the input contract, not from whether the payload
+happens to parse:
 
 | Input contract | API |
 | --- | --- |
 | Input must already be complete, strict JSON | `JsonDecoder` |
 | Specific presentation artifacts are allowed before strict decoding | `NormalizingJsonDecoder` with an explicit policy |
 | Normalized text must be inspected, decoded repeatedly, or borrowed by the result | `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`, followed by `NormalizedJsonDocument` decoding methods |
+
+The standard lenient policy can trim surrounding whitespace, remove one BOM,
+unwrap one outer JSON Markdown fence, and escape raw ASCII control characters
+inside strings. It is controlled normalization, not another JSON dialect:
+comments, trailing commas, unquoted keys, and missing syntax remain errors.
 
 ## Why this project exists
 
@@ -148,105 +107,6 @@ commit boundaries explicit through `qubit-budget` sessions and transactions.
 `qubit-budget` owns limits, resource identities, budgets, and sessions.
 `qubit-json` owns JSON normalization, lexical validation, text codecs, value
 construction, and traversal.
-
-## Core API at a glance
-
-| API | Purpose |
-| --- | --- |
-| `decode::JsonDecoder` | Strictly validates and decodes complete JSON strings or UTF-8 byte slices, with optional top-level object/array checks and reusable cumulative accounting |
-| `decode::NormalizingJsonDecoder` | Normalizes explicitly permitted external-text artifacts, then performs the same strict decoding and resource admission as `JsonDecoder` |
-| `decode::NormalizingJsonDecodePolicy` / `NormalizingJsonDecodePolicyBuilder` | Selects each permitted normalization and whether diagnostics are redacted or detailed; resource limits remain separate |
-| `decode::NormalizedJsonDocument` | Retains normalized text for inspection, borrowed deserialization, or repeated decoding without charging the input a second time |
-| `decode::JsonDecodeError` and diagnostic enums | Exposes stable error kind, processing stage, root expectation, and syntax reason without requiring callers to parse messages |
-| `encode::JsonEncoder` | Serializes strict compact JSON to a byte vector or writer while enforcing output and encoded-value limits |
-| `encode::JsonSerializationError` and classification enums | Provides the shared privacy-safe serialization reason used by text and materialized-value encoders without retaining third-party custom diagnostics |
-| `value::JsonValueEncoder` | Projects any `Serialize` value into a strict `serde_json::Value`; failures expose a broad category, a precise reason, and privacy-safe typed details |
-| `value::AccountingJsonValueSeed` | Builds a `serde_json::Value` from any Serde deserializer while staging decoded-value charges in a caller-owned transaction |
-| `value::DuplicateKeyRejectingJsonValue` / `DuplicateKeyRejectingJsonValueSeed` | Materializes JSON while rejecting duplicate object keys recursively |
-| `value::traverse::JsonTreeBudgetTracker` | Accounts a complete materialized tree with a reusable, internally owned value budget |
-| `value::traverse::JsonTreeReader` / `JsonTreeVisitor` | Performs non-recursive, budget-aware, read-only traversal with node depth and location context |
-| `value::traverse::JsonTreeMutator` / `JsonTreeMutVisitor` | Performs non-recursive in-place mutation between separate input and output transactions; `JsonTreeControl` selects whether callbacks descend into children |
-
-Encode with output and value limits:
-
-```rust
-use qubit_budget::json::JsonEncodeLimits;
-use qubit_budget::json::JsonResource;
-use qubit_json::encode::JsonEncoder;
-
-let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
-    .max_output_bytes(64)
-    .max_depth(4)
-    .max_nodes(8)
-    .build();
-let mut encoder = JsonEncoder::with_limits(limits);
-let bytes = encoder
-    .to_vec(&serde_json::json!({"ok": true}))
-    .expect("the value fits the configured limits");
-assert_eq!(bytes, br#"{"ok":true}"#);
-```
-
-Handle materialized-value encoding failures without parsing display text:
-
-```rust
-use qubit_json::encode::JsonIntegerSignedness;
-use qubit_json::encode::JsonSerializationErrorCategory;
-use qubit_json::encode::JsonSerializationErrorKind;
-use qubit_json::value::JsonValueEncoder;
-
-let error = JsonValueEncoder::new()
-    .encode(&u128::MAX)
-    .expect_err("u128::MAX is outside the strict JSON integer range");
-assert_eq!(error.category(), JsonSerializationErrorCategory::Number);
-assert_eq!(
-    error.kind(),
-    JsonSerializationErrorKind::IntegerOutOfRange {
-        signedness: JsonIntegerSignedness::Unsigned,
-    },
-);
-assert!(error.is_number_error());
-```
-
-Reject ambiguous objects and account an already materialized tree:
-
-```rust
-use qubit_budget::json::JsonResource;
-use qubit_budget::json::JsonValueLimits;
-use qubit_json::value::DuplicateKeyRejectingJsonValue;
-use qubit_json::value::traverse::JsonTreeBudgetTracker;
-
-let duplicate = serde_json::from_str::<DuplicateKeyRejectingJsonValue>(
-    r#"{"role":"reader","role":"admin"}"#,
-);
-assert!(duplicate.is_err());
-
-let mut tracker = JsonTreeBudgetTracker::new(
-    JsonValueLimits::<JsonResource, usize>::builder()
-        .max_depth(4)
-        .max_nodes(8)
-        .build(),
-);
-tracker
-    .account(&serde_json::json!({"role": "reader"}))
-    .expect("the complete tree fits the configured limits");
-```
-
-## Performance model
-
-Resource checks are paid only where they can change the result. Encoding
-without an output limit serializes directly into its owned byte vector while
-retaining value accounting. Tree traversal with an unlimited value transaction
-skips admission work; bounded traversal keeps the same checks and error
-semantics. The Criterion suites keep both sides visible:
-
-```bash
-cargo bench --bench budgeted_serde_json
-cargo bench --bench tree_bench
-```
-
-`tree_bench` reports unlimited and bounded read/mutation cases separately, so
-future fast-path changes can be checked against the protected path rather than
-hiding its cost in one aggregate result.
 
 ## Explicit boundaries
 
@@ -276,6 +136,8 @@ hiding its cost in one aggregate result.
   [JSON 数字契约](doc/number_contract.zh_CN.md)
 - [Design documents](doc/json_design.md) ·
   [设计文档](doc/json_design.zh_CN.md)
+- [Benchmark baseline](doc/benchmark_baseline.md) ·
+  [基准测试基线](doc/benchmark_baseline.zh_CN.md)
 - [API documentation](https://docs.rs/qubit-json/0.8.0/qubit_json/)
 
 ## Testing
