@@ -12,10 +12,7 @@ use qubit_json::decode::JsonSyntaxErrorReason;
 /// Verifies syntax reasons retain their privacy-safe display text.
 #[test]
 fn test_json_syntax_error_reason_formats_unexpected_byte() {
-    assert_eq!(
-        JsonSyntaxErrorReason::UnexpectedByte { byte: b'x' }.to_string(),
-        "unexpected byte 0x78",
-    );
+    assert_eq!(JsonSyntaxErrorReason::UnexpectedByte.to_string(), "unexpected byte",);
 }
 
 /// Verifies every public syntax reason has a stable display representation.
@@ -23,7 +20,7 @@ fn test_json_syntax_error_reason_formats_unexpected_byte() {
 fn test_json_syntax_error_reason_formats_every_variant() {
     let reasons = [
         JsonSyntaxErrorReason::UnexpectedEnd,
-        JsonSyntaxErrorReason::UnexpectedByte { byte: 0xff },
+        JsonSyntaxErrorReason::UnexpectedByte,
         JsonSyntaxErrorReason::ExpectedColon,
         JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd,
         JsonSyntaxErrorReason::ExpectedCommaOrObjectEnd,

@@ -149,7 +149,7 @@ where
             Some(b'f') => self.literal(b"false", JsonMeasurement::Boolean { depth }),
             Some(b'n') => self.literal(b"null", JsonMeasurement::Null { depth }),
             None => Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd)),
-            Some(byte) => Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte { byte })),
+            Some(_) => Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte)),
         }
     }
 
@@ -158,15 +158,13 @@ where
         if !self.input[self.offset..].starts_with(literal) {
             return Err(match self.peek() {
                 None => self.syntax(JsonLexicalErrorReason::UnexpectedEnd),
-                Some(byte) => self.syntax(JsonLexicalErrorReason::UnexpectedByte { byte }),
+                Some(_) => self.syntax(JsonLexicalErrorReason::UnexpectedByte),
             });
         }
         let end = self.offset.saturating_add(literal.len());
         if !Self::is_value_delimiter(self.input.get(end).copied()) {
             self.offset = end;
-            return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte {
-                byte: self.peek().unwrap_or_default(),
-            }));
+            return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
         }
         self.admit(measurement)?;
         self.offset = end;
@@ -187,9 +185,7 @@ where
                         self.offset += 1;
                         return Ok(());
                     }
-                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte {
-                        byte: self.peek().unwrap_or_default(),
-                    }));
+                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
                 }
                 let Some(items) = items.checked_add(1) else {
                     return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
@@ -224,9 +220,7 @@ where
                         self.offset += 1;
                         return Ok(());
                     }
-                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte {
-                        byte: self.peek().unwrap_or_default(),
-                    }));
+                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
                 }
                 if self.peek() != Some(b'"') {
                     return Err(self.syntax(JsonLexicalErrorReason::ExpectedObjectKey));
@@ -316,7 +310,7 @@ where
                     decoded = next_decoded;
                 }
                 Some(byte) if byte >= 0x80 => {
-                    let Some(width) = Self::utf8_width(byte) else {
+                    let Some(width) = utf8_width(byte) else {
                         return Err(self.syntax(JsonLexicalErrorReason::InvalidUtf8));
                     };
                     let Some(end) = self.offset.checked_add(width) else {
@@ -341,8 +335,8 @@ where
                 None => {
                     return Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd));
                 }
-                Some(byte) => {
-                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte { byte }));
+                Some(_) => {
+                    return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
                 }
             }
         }
@@ -478,16 +472,6 @@ where
         matches!(byte, None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}'))
     }
 
-    /// Returns the UTF-8 width encoded by one valid leading byte.
-    const fn utf8_width(byte: u8) -> Option<usize> {
-        match byte {
-            0xC2..=0xDF => Some(2),
-            0xE0..=0xEF => Some(3),
-            0xF0..=0xF4 => Some(4),
-            _ => None,
-        }
-    }
-
     /// Computes one-based line and UTF-8 character column at the cursor.
     fn line_column(&self) -> (usize, usize) {
         self.line_column_at(self.offset)
@@ -506,38 +490,91 @@ where
 
     /// Computes one-based line and UTF-8 character column at `offset`.
     fn line_column_at(&self, offset: usize) -> (usize, usize) {
-        let end = offset.min(self.input.len());
-        let mut line = 1;
-        let mut column = 1;
-        let mut index = 0;
-        while index < end {
-            match self.input[index] {
-                b'\r' => {
-                    if index + 1 < end && self.input[index + 1] == b'\n' {
-                        index += 1;
-                    }
-                    line += 1;
-                    column = 1;
+        line_column_at_with_inspection(self.input, offset, |_| {})
+    }
+}
+
+/// Computes source coordinates while reporting how many bytes each scan step
+/// examines.
+fn line_column_at_with_inspection<F>(input: &[u8], offset: usize, mut record_examined_bytes: F) -> (usize, usize)
+where
+    F: FnMut(usize),
+{
+    let end = offset.min(input.len());
+    let mut line = 1;
+    let mut column = 1;
+    let mut index = 0;
+    while index < end {
+        match input[index] {
+            b'\r' => {
+                if index + 1 < end && input[index + 1] == b'\n' {
+                    record_examined_bytes(2);
                     index += 1;
+                } else {
+                    record_examined_bytes(1);
                 }
-                b'\n' => {
-                    line += 1;
-                    column = 1;
-                    index += 1;
-                }
-                _ => {
-                    let character = std::str::from_utf8(&self.input[index..end])
-                        .ok()
-                        .and_then(|text| text.chars().next());
-                    if let Some(character) = character {
-                        index += character.len_utf8();
-                    } else {
-                        index += 1;
-                    }
-                    column += 1;
-                }
+                line += 1;
+                column = 1;
+                index += 1;
+            }
+            b'\n' => {
+                record_examined_bytes(1);
+                line += 1;
+                column = 1;
+                index += 1;
+            }
+            _ => {
+                let character_bytes = utf8_width(input[index])
+                    .and_then(|width| input.get(index..index.saturating_add(width)))
+                    .filter(|text| std::str::from_utf8(text).is_ok())
+                    .map_or(1, <[u8]>::len)
+                    .min(end - index);
+                record_examined_bytes(character_bytes);
+                index += character_bytes;
+                column += 1;
             }
         }
-        (line, column)
+    }
+    (line, column)
+}
+
+/// Returns the UTF-8 width encoded by one valid leading byte.
+const fn utf8_width(byte: u8) -> Option<usize> {
+    match byte {
+        0xC2..=0xDF => Some(2),
+        0xE0..=0xEF => Some(3),
+        0xF0..=0xF4 => Some(4),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::line_column_at_with_inspection;
+
+    /// Verifies source-coordinate calculation examines each input byte at most
+    /// once, including multibyte characters and CRLF line endings.
+    #[test]
+    fn test_line_column_at_scans_input_linearly() {
+        let input = format!("{}\r\n@", "α".repeat(4_096));
+        let mut examined_bytes = 0_usize;
+
+        let coordinates = line_column_at_with_inspection(input.as_bytes(), input.len(), |bytes| {
+            examined_bytes = examined_bytes.saturating_add(bytes);
+        });
+
+        assert_eq!(coordinates, (2, 2));
+        assert!(
+            examined_bytes <= input.len(),
+            "line/column calculation examined {examined_bytes} bytes for an {}-byte input",
+            input.len(),
+        );
+
+        let invalid_utf8 = [0xC2, b'@'];
+        assert_eq!(
+            line_column_at_with_inspection(&invalid_utf8, invalid_utf8.len(), |_| {}),
+            (1, 3),
+            "invalid UTF-8 must advance one byte at a time",
+        );
     }
 }
