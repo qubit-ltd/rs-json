@@ -23,14 +23,14 @@ use crate::encode::JsonIntegerSignedness;
 use crate::encode::JsonSerializationError;
 use crate::encode::JsonSerializationErrorKind;
 use crate::encode::JsonSerializerStateError;
+use crate::internal::SERDE_JSON_RAW_VALUE_TOKEN;
 use crate::value::DuplicateKeyRejectingJsonValue;
 
 /// Maximum compound capacity reserved from an untrusted Serde length hint.
 const MAX_PREALLOCATED_ITEMS: usize = 1_024;
 
 /// Serde RawValue protocol token documented by serde_json's public behavior.
-pub(in crate::value::json_value_encoder) const RAW_VALUE_TOKEN: &str =
-    concat!("$", "serde_json", ":", ":private::RawValue");
+pub(in crate::value::json_value_encoder) const RAW_VALUE_TOKEN: &str = SERDE_JSON_RAW_VALUE_TOKEN;
 
 /// Bounds a Serde compound length hint before allocating its initial storage.
 #[inline(always)]
