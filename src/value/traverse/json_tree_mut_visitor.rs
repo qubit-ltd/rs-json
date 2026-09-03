@@ -21,15 +21,21 @@ use super::JsonTreeControl;
 /// # Examples
 ///
 /// ```
-/// use qubit_json::value::traverse::{JsonTreeContext, JsonTreeControl, JsonTreeMutVisitor};
+/// use qubit_json::value::traverse::{
+///     JsonTreeContext, JsonTreeControl, JsonTreeMutVisitor,
+/// };
 /// use serde_json::Value;
 ///
 /// struct Visitor;
 /// impl JsonTreeMutVisitor for Visitor {
 ///     type Error = std::convert::Infallible;
 ///
-///     fn visit(&mut self, value: &mut Value, _: JsonTreeContext<'_>) ->
-/// Result<JsonTreeControl, Self::Error> {         *value = Value::Null;
+///     fn visit(
+///         &mut self,
+///         value: &mut Value,
+///         _: JsonTreeContext<'_>,
+///     ) -> Result<JsonTreeControl, Self::Error> {
+///         *value = Value::Null;
 ///         Ok(JsonTreeControl::SkipSubtree)
 ///     }
 /// }

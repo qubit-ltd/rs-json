@@ -33,15 +33,20 @@ use super::internal::MutFrame;
 ///
 /// ```
 /// use qubit_budget::json::{JsonResource, JsonValueBudget, JsonValueLimits};
-/// use qubit_json::value::traverse::{JsonTreeContext, JsonTreeControl, JsonTreeMutVisitor, JsonTreeMutator};
+/// use qubit_json::value::traverse::{
+///     JsonTreeContext, JsonTreeControl, JsonTreeMutVisitor, JsonTreeMutator,
+/// };
 /// use serde_json::Value;
 ///
 /// struct Visitor;
 /// impl JsonTreeMutVisitor for Visitor {
 ///     type Error = std::convert::Infallible;
 ///
-///     fn visit(&mut self, _: &mut Value, _: JsonTreeContext<'_>) ->
-/// Result<JsonTreeControl, Self::Error> {
+///     fn visit(
+///         &mut self,
+///         _: &mut Value,
+///         _: JsonTreeContext<'_>,
+///     ) -> Result<JsonTreeControl, Self::Error> {
 ///         Ok(JsonTreeControl::SkipSubtree)
 ///     }
 /// }
