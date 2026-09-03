@@ -1,7 +1,5 @@
 # Maintenance Improvement Plan
 
-[简体中文](maintenance_improvement_plan.zh_CN.md)
-
 ## Execution order
 
 1. Add contract tests for the optional `rs-ci` project hook, then implement it
@@ -40,4 +38,3 @@
 | Documentation | bilingual links and semantic comparison |
 | Per-crate CI | successful latest `align-ci.sh` and `ci-check.sh` output |
 | Git delivery | equal branch commits, successful pushes, clean final status |
-

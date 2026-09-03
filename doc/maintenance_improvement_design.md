@@ -1,7 +1,5 @@
 # Maintenance Improvement Design
 
-[简体中文](maintenance_improvement_design.zh_CN.md)
-
 ## Scope
 
 This maintenance cycle improves `rs-json` without adding product features. It
@@ -80,4 +78,3 @@ transition. No `SECURITY.md` is introduced.
 `rs-datatype` calls `JsonTreeReader::account` directly and removes the no-op
 accounting visitor. `rs-config`, `rs-metadata`, and `rs-value` adopt
 `JsonEncodeErrorSource`. No unrelated downstream refactoring is included.
-
