@@ -11,6 +11,7 @@ mod internal;
 
 use std::hint::black_box;
 
+use criterion::BatchSize;
 use criterion::BenchmarkId;
 use criterion::Criterion;
 use criterion::Throughput;
@@ -350,18 +351,17 @@ fn benchmark_control_character_scaling(c: &mut Criterion) {
         for (name, control_stride) in [("plain", None), ("sparse", Some(1_024)), ("dense", Some(2))] {
             let input = control_character_input(payload_bytes, control_stride);
             let normalized_limit = normalized_control_character_input_bytes(input.len(), payload_bytes, control_stride);
-            let mut bounded_decoder = NormalizingJsonDecoder::with_limits(
+            NormalizingJsonDecoder::with_limits(
                 NormalizingJsonDecodePolicy::builder().build(),
                 JsonDecodeLimits::builder()
                     .max_normalized_input_bytes(normalized_limit)
                     .build(),
-            );
+            )
+            .decode_value(&input)
+            .expect("bounded benchmark input must decode");
             decoder
                 .decode_value(&input)
                 .expect("benchmark input must decode as a value");
-            bounded_decoder
-                .decode_value(&input)
-                .expect("bounded benchmark input must decode as a value");
             group.throughput(Throughput::Bytes(input.len() as u64));
             group.bench_with_input(BenchmarkId::new(name, payload_bytes), &input, |bencher, input| {
                 bencher.iter(|| black_box(decoder.decode_value(black_box(input.as_str()))));
@@ -370,7 +370,24 @@ fn benchmark_control_character_scaling(c: &mut Criterion) {
                 BenchmarkId::new(format!("{name}-normalized-limit"), payload_bytes),
                 &input,
                 |bencher, input| {
-                    bencher.iter(|| black_box(bounded_decoder.decode_value(black_box(input.as_str()))));
+                    bencher.iter_batched(
+                        || {
+                            NormalizingJsonDecoder::with_limits(
+                                NormalizingJsonDecodePolicy::builder().build(),
+                                JsonDecodeLimits::builder()
+                                    .max_normalized_input_bytes(normalized_limit)
+                                    .build(),
+                            )
+                        },
+                        |mut bounded_decoder| {
+                            black_box(
+                                bounded_decoder
+                                    .decode_value(black_box(input.as_str()))
+                                    .expect("bounded benchmark input must decode"),
+                            );
+                        },
+                        BatchSize::SmallInput,
+                    );
                 },
             );
         }
