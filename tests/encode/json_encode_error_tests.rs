@@ -14,6 +14,7 @@ use qubit_budget::json::JsonResource;
 use qubit_json::encode::JsonCollectionKind;
 use qubit_json::encode::JsonEncodeError;
 use qubit_json::encode::JsonEncodeErrorKind;
+use qubit_json::encode::JsonEncodeErrorSource;
 use qubit_json::encode::JsonEncoder;
 use qubit_json::encode::JsonIntegerSignedness;
 use qubit_json::encode::JsonMapKeyKind;
@@ -198,6 +199,44 @@ fn test_encode_error_converts_measured_budget_error() {
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert!(error.budget_error().is_some());
+}
+
+/// Verifies consuming an encoding error exposes every owned source without a
+/// kind-plus-extractor assertion pair.
+#[test]
+fn test_encode_error_into_source_exposes_owned_variants() {
+    match create_budget_error().into_source() {
+        JsonEncodeErrorSource::Budget(source) => {
+            assert_eq!(source.resource(), &JsonResource::OutputBytes);
+        }
+        source => panic!("expected budget source, got {source:?}"),
+    }
+
+    match create_invalid_raw_json_error().into_source() {
+        JsonEncodeErrorSource::InvalidRawJson(source) => {
+            assert_eq!(source.offset(), 1);
+        }
+        source => panic!("expected invalid raw JSON source, got {source:?}"),
+    }
+
+    match create_serialization_error().into_source() {
+        JsonEncodeErrorSource::Serialize(source) => {
+            assert_eq!(
+                source.kind(),
+                JsonSerializationErrorKind::IntegerOutOfRange {
+                    signedness: JsonIntegerSignedness::Unsigned,
+                },
+            );
+        }
+        source => panic!("expected serialization source, got {source:?}"),
+    }
+
+    match create_write_error().into_source() {
+        JsonEncodeErrorSource::Write(source) => {
+            assert_eq!(source.kind(), io::ErrorKind::Other);
+        }
+        source => panic!("expected write source, got {source:?}"),
+    }
 }
 
 /// Verifies every stable encoding kind round-trips case-insensitively.

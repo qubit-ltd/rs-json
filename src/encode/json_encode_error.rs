@@ -14,6 +14,7 @@ use std::io::Error as IoError;
 use qubit_budget::MeasuredBudgetError;
 
 use super::JsonEncodeErrorKind;
+use super::JsonEncodeErrorSource;
 use super::JsonSerializationError;
 use super::internal::JsonEncodeFailure;
 use crate::decode::JsonSyntaxError;
@@ -221,6 +222,21 @@ where
             _ => None,
         }
     }
+
+    /// Consumes this error and returns its owned underlying source.
+    ///
+    /// Unlike the kind-specific `into_*` methods, this operation never drops
+    /// a non-matching error. Callers can exhaustively map every source with one
+    /// `match` expression.
+    ///
+    /// # Returns
+    ///
+    /// The budget, raw-JSON syntax, serialization, or destination-writer
+    /// source retained by this error.
+    #[inline(always)]
+    pub fn into_source(self) -> JsonEncodeErrorSource<R, Q> {
+        self.failure
+    }
 }
 
 impl<R, Q> From<MeasuredBudgetError<R, Q>> for JsonEncodeError<R, Q>
@@ -243,9 +259,15 @@ where
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.failure {
             JsonEncodeFailure::Budget(source) => fmt::Display::fmt(source, formatter),
-            JsonEncodeFailure::InvalidRawJson(source) => write!(formatter, "JSON raw value is invalid: {source}"),
-            JsonEncodeFailure::Serialize(source) => write!(formatter, "JSON serialization failed: {source}"),
-            JsonEncodeFailure::Write(source) => write!(formatter, "JSON output writer failed: {source}"),
+            JsonEncodeFailure::InvalidRawJson(source) => {
+                write!(formatter, "JSON raw value is invalid: {source}")
+            }
+            JsonEncodeFailure::Serialize(source) => {
+                write!(formatter, "JSON serialization failed: {source}")
+            }
+            JsonEncodeFailure::Write(source) => {
+                write!(formatter, "JSON output writer failed: {source}")
+            }
         }
     }
 }
