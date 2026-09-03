@@ -5,7 +5,7 @@
 All notable changes to `qubit-json` are recorded here. The project follows
 semantic versioning for published releases.
 
-## Unreleased - 0.8.0
+## 0.8.0 - 2026
 
 - Reorganized the crate into explicit `decode`, `encode`, and `value` domains.
 - Added strict and normalizing decoders backed by resource-accounting sessions.
@@ -13,10 +13,9 @@ semantic versioning for published releases.
   rejection, and iterative read/mutation APIs.
 - Defined the signed-`i64`, unsigned-`u64`, and finite-`f64` number contract.
 - Added structured, privacy-aware decode and encode error models, including the
-  owned `JsonEncodeErrorSource` mapping API.
+  owned `JsonDecodeErrorSource` and `JsonEncodeErrorSource` mapping APIs.
 - Added fuzz, Miri, documentation-example, compatibility, and benchmark suites.
 
-This version is under development and has not been published to crates.io.
 See the [0.3 to 0.8 migration guide](doc/migration_0_3_to_0_8.md).
 
 ## 0.7.0 - 2026
@@ -31,4 +30,3 @@ See the [0.3 to 0.8 migration guide](doc/migration_0_3_to_0_8.md).
 ## 0.3.6 - 2026
 
 - Final patch release of the original root-level `LenientJsonDecoder` API.
-

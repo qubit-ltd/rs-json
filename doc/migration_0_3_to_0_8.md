@@ -2,21 +2,18 @@
 
 [简体中文](migration_0_3_to_0_8.zh_CN.md)
 
-Version 0.8 is an unreleased redesign, not a drop-in upgrade. It separates
-strict JSON admission, controlled text normalization, encoding, materialized
-values, and traversal. Budget configuration is now explicit at the trust
-boundary.
+Version 0.8 is a redesign, not a drop-in upgrade. It separates strict JSON
+admission, controlled text normalization, encoding, materialized values, and
+traversal. Budget configuration is now explicit at the trust boundary.
 
-## Dependency during development
+## Dependency
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.8", git = "https://github.com/qubit-ltd/rs-json.git", branch = "main" }
+qubit-json = "0.8"
 qubit-budget = { version = "0.4", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 ```
-
-Pin `rev` instead of `branch` for reproducible builds.
 
 ## Rename and module map
 
@@ -78,6 +75,8 @@ normalization produced no document.
 
 Decode errors are generic over the resource and quantity types and expose
 stable `kind`, `stage`, budget, syntax, location, and diagnostic-policy data.
+Adapters that own an error can exhaustively match `JsonDecodeErrorSource`
+after calling `JsonDecodeError::into_source`.
 Diagnostics are redacted by default. Detailed Serde sources require an
 explicit `DiagnosticPolicy::Detailed` choice.
 
@@ -96,4 +95,3 @@ should exhaustively match `JsonEncodeError::into_source()` rather than combine
 
 Review the [user guide](user_guide.md), [number contract](number_contract.md),
 and [design](json_design.md) before migrating a security-sensitive boundary.
-

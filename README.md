@@ -15,20 +15,13 @@ Use `JsonDecoder` when the input must already be strict JSON, or
 `NormalizingJsonDecoder` when the boundary explicitly permits controlled
 cleanup of JSON embedded in external text.
 
-## Release status
-
-This README documents the unreleased `0.8` API on the repository branches.
-The latest crates.io release is `0.7.0`; its API is documented on
-[docs.rs](https://docs.rs/qubit-json). Use the Git or path form below when
-evaluating `0.8`, and pin a Git revision for reproducible builds.
-
 ## Installation
 
-Current `0.8` branch:
+Current `0.8` release:
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.8", git = "https://github.com/qubit-ltd/rs-json.git", branch = "main" }
+qubit-json = "0.8"
 qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```

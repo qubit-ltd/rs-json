@@ -12,19 +12,13 @@
 无限制地消耗资源。输入必须是严格 JSON 时使用 `JsonDecoder`；如果输入边界明确允许对外部
 文本中的 JSON 做受控清理，则使用 `NormalizingJsonDecoder`。
 
-## 发布状态
-
-本文档描述仓库各分支上尚未发布的 `0.8` API。crates.io 最新发布版是 `0.7.0`，其 API
-文档位于 [docs.rs](https://docs.rs/qubit-json)。评估 `0.8` 时请使用下面的 Git 或 path
-形式；需要可复现构建时应固定 Git revision。
-
 ## 安装
 
-当前 `0.8` 分支：
+当前最新版 `0.8`：
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.8", git = "https://github.com/qubit-ltd/rs-json.git", branch = "main" }
+qubit-json = "0.8"
 qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```

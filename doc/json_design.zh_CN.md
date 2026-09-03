@@ -79,9 +79,10 @@ transaction 只在完整成功时提交。
 `write_incremental`。buffered 写入在完整字节序列可用后才写入目标；incremental 写入可在失败
 时保留已接受前缀。
 
-严格 decode 与 normalizing decode 都返回同一个泛型 `JsonDecodeError<R, Q>`。它的内部 failure
-保持私有；调用方通过稳定的 `JsonDecodeErrorKind`、`JsonDecodeStage` 以及 budget、syntax、UTF-8、
-top-level accessor 获取互斥的结构化信息。默认 `DiagnosticPolicy::Redacted` 不保留输入派生
+严格 decode 与 normalizing decode 都返回同一个泛型 `JsonDecodeError<R, Q>`。调用方通过稳定的
+`JsonDecodeErrorKind`、`JsonDecodeStage` 以及 budget、syntax、UTF-8、top-level accessor 获取
+互斥的结构化信息；取得错误所有权后，也可以调用 `into_source()` 穷举匹配
+`JsonDecodeErrorSource`，无需克隆结构化数据。默认 `DiagnosticPolicy::Redacted` 不保留输入派生
 source；严格 decoder 通过 `with_diagnostic_policy` 显式选择 `Detailed`，normalizing decoder
 则从 `NormalizingJsonDecodePolicy` 读取该设置。严格 encode 只返回 `JsonEncodeError`：`Budget`、`InvalidRawJson`、
 `Serialize` 或 `Write`。`JsonSyntaxError` 单独持有稳定的语法原因、偏移、行和列。
@@ -120,7 +121,7 @@ key 进行准入。
 
 公开错误和诊断类型按领域划分：
 
-1. `decode::JsonDecodeError`：两个 decoder facade 共用。
+1. `decode::JsonDecodeError` 及其 owned `JsonDecodeErrorSource`：两个 decoder facade 共用。
 2. `encode::JsonEncodeError`
 3. `decode::JsonSyntaxError`
 4. `value::traverse::JsonTreeProcessError`

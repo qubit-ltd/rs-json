@@ -2,8 +2,8 @@
 
 [中文版](error_performance_redaction_design.zh_CN.md)
 
-This document records the design decisions for the pre-release `qubit-json
-0.8` breaking-change window. It covers serialization errors and hot paths in
+This document records the design decisions for the `qubit-json 0.8`
+breaking-change window. It covers structured errors and hot paths in
 `rs-json`, as well as contracts consumed directly by `rs-budget`, `rs-value`,
 and `rs-redact`.
 
@@ -20,6 +20,15 @@ and `rs-redact`.
 - Experimental implementations are kept only when the target scenario has a
   stable improvement of at least 5% and primary existing scenarios do not
   regress unstably by more than 3%.
+
+## Decoding error model
+
+`JsonDecodeError` keeps the six decode failures mutually exclusive and exposes
+stable borrowed accessors for inspection. Adapters that own an error call
+`into_source()` and exhaustively match `JsonDecodeErrorSource`, moving budget,
+syntax, location, top-level, and retained detailed-source data without cloning.
+The source enum preserves the same privacy boundary: parser and Serde sources
+exist only when decoding explicitly selected `DiagnosticPolicy::Detailed`.
 
 ## Serialization error model
 

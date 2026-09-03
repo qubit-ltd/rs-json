@@ -33,12 +33,11 @@
 
 ### 安装与最小配置
 
-本手册描述尚未发布的 `0.8` 分支 API。可复现构建应固定 Git revision；本地开发时也可
-把 `git` 替换为 `path`：
+默认使用 crates.io 上的当前最新版 `0.8`；本地开发时也可以把版本号替换为 `path`：
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.8", git = "https://github.com/qubit-ltd/rs-json.git", branch = "main" }
+qubit-json = "0.8"
 qubit-budget = { version = "0.4", features = ["json"] }
 serde_json = "1.0"
 ```
@@ -89,9 +88,37 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 错误类别生成响应，无须依赖解析器的私有实现细节。
 
 输出侧使用 `JsonEncoder::with_limits(JsonEncodeLimits::...)`，再调用 `to_vec`、`write_buffered` 或
-`write_incremental`。缓冲模式会先完成序列化和预算检查，再接触写入器；只有完整写入成功后才
-提交资源用量，但 I/O 失败仍可能在外部写入器中留下部分字节。增量模式在后续序列化、预算或
-写入操作失败时，会保留已经接受的前缀。
+`write_incremental`：
+
+```rust
+use qubit_budget::json::JsonEncodeLimits;
+use qubit_json::encode::JsonEncodeErrorKind;
+use qubit_json::encode::JsonEncoder;
+use serde_json::json;
+
+let value = json!({"status": "ok"});
+let mut buffered = JsonEncoder::with_limits(
+    JsonEncodeLimits::builder().max_output_bytes(64).build(),
+);
+assert_eq!(buffered.to_vec(&value)?, br#"{"status":"ok"}"#);
+
+let mut incremental = JsonEncoder::with_limits(
+    JsonEncodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+        .max_output_bytes(4)
+        .build(),
+);
+let mut output = Vec::new();
+let error = incremental
+    .write_incremental(&mut output, &[1, 2, 3])
+    .expect_err("four output bytes cannot hold the complete array");
+assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
+assert_eq!(output, b"[1,2");
+# Ok::<(), qubit_json::encode::JsonEncodeError<qubit_budget::json::JsonResource>>(())
+```
+
+缓冲模式会先完成序列化和预算检查，再接触写入器；只有完整写入成功后才提交资源用量，但 I/O
+失败仍可能在外部写入器中留下部分字节。增量模式在后续序列化、预算或写入操作失败时，会像
+上例一样保留已经接受的前缀。
 
 下一步通常是把已准入文档反序列化为应用类型，再执行模式、权限和标识符规则。如果边界还
 需要文本规范化、重复解码、对象键唯一性或值树处理，请继续阅读后续章节。
@@ -206,7 +233,52 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 `DuplicateKeyRejectingJsonValueSeed`。
 
 对于已有值，`JsonTreeReader::account` 会在调用方事务中暂存整棵树的资源用量，但不会调用
-访问器。`JsonTreeMutator` 先准入原始值树，再执行原地访问器回调，最后准入修改后的值树。
+访问器。`JsonTreeMutator` 先准入原始值树，再执行原地访问器回调，最后准入修改后的值树：
+
+```rust
+use std::convert::Infallible;
+
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::value::traverse::{
+    JsonTreeContext, JsonTreeControl, JsonTreeMutVisitor, JsonTreeMutator,
+};
+use serde_json::{Value, json};
+
+struct RemoveSecrets;
+
+impl JsonTreeMutVisitor for RemoveSecrets {
+    type Error = Infallible;
+
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
+        if let Value::Object(entries) = value {
+            entries.remove("secret");
+        }
+        Ok(JsonTreeControl::Descend)
+    }
+}
+
+let limits = JsonValueLimits::<qubit_budget::json::JsonResource, usize>::builder()
+    .max_nodes(32)
+    .max_payload_bytes(256)
+    .build();
+let mut input_budget = limits.budget();
+let mut output_budget = limits.budget();
+let mut input = input_budget.transaction();
+let mut output = output_budget.transaction();
+let mut value = json!({"name": "qubit", "secret": "remove me"});
+
+JsonTreeMutator::new(&mut input, &mut output)
+    .process(&mut value, &mut RemoveSecrets)
+    .expect("both trees fit the configured budgets");
+input.commit().expect("input accounting commits");
+output.commit().expect("output accounting commits");
+assert_eq!(value, json!({"name": "qubit"}));
+```
+
 错误分别是 `JsonTreeMutateError::InputBudget`、`::Visitor` 和 `::OutputBudget`；访问器或输出
 预算失败不会回滚已经完成的修改。访问器可以返回 `JsonTreeControl::SkipSubtree` 跳过后代回调，
 但最终输出记账仍会覆盖修改后值树的全部后代。
@@ -224,6 +296,9 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 | `InvalidJson` | JSON 语法或数字契约不合法 | `syntax_error()`、`line()`、`column()` |
 | `UnexpectedTopLevel` | 仅接受对象或数组的方法收到错误的根类型 | `expected_top_level()`、`actual_top_level()` |
 | `Deserialize` | 已准入文档无法构造为请求的 Rust 类型 | `line()`、`column()`，启用详细诊断后还可读取来源错误 |
+
+适配层取得错误所有权后，也可以调用 `into_source()`，对 `JsonDecodeErrorSource` 做穷举匹配，
+不需要克隆预算或语法错误详情。
 
 `JsonValueEncoder` 与 `JsonEncoder` 共用隐私安全的 `JsonSerializationError` 错误模型。恢复策略应读取
 `JsonSerializationError::category()`，需要精确原因时读取 `kind()`。常用错误组有便捷谓词，
