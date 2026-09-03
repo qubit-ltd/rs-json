@@ -25,10 +25,10 @@ use qubit_json::value::traverse::JsonTreeControl;
 use qubit_json::value::traverse::JsonTreeMutVisitor;
 use qubit_json::value::traverse::JsonTreeMutateError;
 use qubit_json::value::traverse::JsonTreeMutator;
+use qubit_json_fuzz::input_limit::bounded_input;
 use serde_json::Value;
 use serde_json::json;
 
-const MAX_INPUT_LEN: usize = 4 * 1024;
 const MAX_TREE_DEPTH: usize = 64;
 const GENEROUS_LIMIT: usize = 1_000_000;
 
@@ -155,7 +155,9 @@ impl JsonTreeMutVisitor for PanicVisitor {
 }
 
 fuzz_target!(|data: &[u8]| {
-    let input = &data[..data.len().min(MAX_INPUT_LEN)];
+    let Some(input) = bounded_input(data) else {
+        return;
+    };
     let original = make_tree(input);
 
     let mut success_value = original.clone();

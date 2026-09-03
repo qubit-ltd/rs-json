@@ -11,7 +11,6 @@
 
 mod internal;
 
-use internal::fuzz_input_limit::is_fuzz_input_within_limit;
 use internal::fuzz_record::FuzzRecord;
 use libfuzzer_sys::fuzz_target;
 use qubit_budget::json::JsonDecodeLimits;
@@ -24,6 +23,7 @@ use qubit_json::decode::MarkdownFenceClosing;
 use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
+use qubit_json_fuzz::input_limit::bounded_input;
 use qubit_json_fuzz::json_number_contract::numbers_fit_contract;
 
 /// Verifies stable diagnostics shared by every redacted decoder configuration.
@@ -44,6 +44,10 @@ fn assert_error_invariants(error: &JsonDecodeError, raw_input_bytes: usize) {
         assert!(std::error::Error::source(error).is_some());
     } else {
         assert!(std::error::Error::source(error).is_none());
+    }
+    if let Some(syntax) = error.syntax_error() {
+        assert!(!syntax.to_string().contains("0x"));
+        assert!(!format!("{syntax:?}").contains("byte"));
     }
     let valid_stage = match error.kind() {
         JsonDecodeErrorKind::Budget => matches!(
@@ -70,9 +74,9 @@ fn no_normalization_policy() -> NormalizingJsonDecodePolicy {
 }
 
 fuzz_target!(|data: &[u8]| {
-    if !is_fuzz_input_within_limit(data) {
+    let Some(data) = bounded_input(data) else {
         return;
-    }
+    };
 
     let mut default_decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
