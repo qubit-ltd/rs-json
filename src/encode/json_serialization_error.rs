@@ -159,6 +159,11 @@ impl JsonSerializationError {
     }
 
     /// Returns the rejected map-key shape, when applicable.
+    ///
+    /// # Returns
+    ///
+    /// `Some(kind)` for an unsupported map key, or `None` for every other
+    /// serialization failure.
     #[must_use]
     #[inline(always)]
     pub const fn map_key_kind(&self) -> Option<JsonMapKeyKind> {
@@ -169,6 +174,11 @@ impl JsonSerializationError {
     }
 
     /// Returns the collection whose count overflowed, when applicable.
+    ///
+    /// # Returns
+    ///
+    /// `Some(kind)` for a collection-length overflow, or `None` for every
+    /// other serialization failure.
     #[must_use]
     #[inline(always)]
     pub const fn collection_kind(&self) -> Option<JsonCollectionKind> {
@@ -179,6 +189,11 @@ impl JsonSerializationError {
     }
 
     /// Returns the exact invalid serializer state, when applicable.
+    ///
+    /// # Returns
+    ///
+    /// `Some(reason)` for an invalid serializer state, or `None` for every
+    /// other serialization failure.
     #[must_use]
     #[inline(always)]
     pub const fn serializer_state_error(&self) -> Option<JsonSerializerStateError> {
