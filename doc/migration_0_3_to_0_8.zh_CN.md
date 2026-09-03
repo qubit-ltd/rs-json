@@ -70,8 +70,10 @@ assert_eq!(value["ok"], true);
 
 解码错误对资源与数量类型使用泛型，并公开稳定的 `kind`、`stage`、预算、语法、位置和诊断
 策略信息。适配层取得错误所有权后，可以调用 `JsonDecodeError::into_source()`，再穷举匹配
-`JsonDecodeErrorSource`。诊断默认脱敏；只有显式选择 `DiagnosticPolicy::Detailed` 才保留
-详细 Serde 来源。
+`JsonDecodeErrorSource`。诊断默认脱敏：仍可读取稳定分类和源坐标，但不保留意外字节或其他
+输入内容；只有显式选择 `DiagnosticPolicy::Detailed` 才保留详细 Serde 来源。
+`JsonSyntaxErrorReason::UnexpectedByte` 现为不携带内容的 unit variant；可信诊断如需字节，
+应通过报告的 offset 检查调用方保有的输入。
 
 编码使用 `JsonEncodeError`。需要把错误移入其他错误模型的调用方，应穷尽匹配
 `JsonEncodeError::into_source()`，不要再把 `kind()` 与可选 `into_*` 提取器组合使用。

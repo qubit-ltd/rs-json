@@ -9,8 +9,10 @@ and `rs-redact`.
 
 ## Design principles
 
-- Programs handle structured enums rather than strings. Public diagnostics do
-  not carry input values, object keys, or third-party `Error::custom` text.
+- Programs handle structured enums rather than strings. Redacted public
+  diagnostics carry only stable classifications and source coordinates; they
+  do not carry offending bytes, input values, object keys, or third-party
+  `Error::custom` text.
 - Strict numbers, duplicate keys, `RawValue` validation, budget transactions,
   and incremental-writer partial-output behavior take priority over throughput;
   an optimization may remove only work that cannot change results.
@@ -29,6 +31,29 @@ stable borrowed accessors for inspection. Adapters that own an error call
 syntax, location, top-level, and retained detailed-source data without cloning.
 The source enum preserves the same privacy boundary: parser and Serde sources
 exist only when decoding explicitly selected `DiagnosticPolicy::Detailed`.
+Callers that need to inspect an exact byte use their original input and the
+stable offset rather than extending the error's data-retention boundary.
+
+## Verification boundaries
+
+Benchmark samples that exercise bounded decoding create a fresh session for
+each measured operation. Fixture admission is asserted, and CI runs Criterion's
+test mode so an exhausted cumulative budget cannot silently become a measured
+error path.
+
+Differential fuzzing distinguishes lexical validation from target
+materialization: successful materialization implies validation, while a valid
+document may fail as Deserialize at a target or serde recursion boundary.
+Direct serde_json Value equivalence is restricted to conservatively shallow
+documents. The recursion-boundary case is retained as both a normal fuzz-crate
+test and a corpus seed.
+
+Coverage is a risk signal rather than a target in itself. Tests prioritize
+writer error ordering, partial-write accounting, and public API contracts.
+Defensive arithmetic that cannot be constructed without impossible allocation
+is documented as such instead of adding a production test hook. Every fuzz
+target shares one complete-input boundary; inputs above it are rejected rather
+than truncated to an unobserved prefix.
 
 ## Serialization error model
 

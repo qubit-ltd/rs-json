@@ -325,12 +325,14 @@ assert_eq!(value, json!({"name": "qubit"}));
 | `TopLevelCheck` | 检查根节点是否为要求的对象或数组 |
 | `Deserialize` | 构造请求的 Rust 类型 |
 
+脱敏诊断只保留稳定分类和源坐标，不保留意外字节、token、键/值文本或 parser/Serde 来源。
 只有 `DiagnosticPolicy::Detailed` 会保留由输入产生的来源错误。严格解码通过
 `JsonDecoder::with_diagnostic_policy(DiagnosticPolicy::Detailed)` 配置，规范化解码通过
 `NormalizingJsonDecodePolicyBuilder` 配置。详细诊断只应在可信边界启用，不可信日志应保持
-默认脱敏。编码错误不会保留第三方 `Serialize::custom` 提供的任意文本。其他领域还提供
-`JsonEncodeError`、`JsonSyntaxError`、
-`JsonTreeProcessError` 和 `JsonTreeMutateError`。
+默认脱敏。可信调用方如需精确字节，应通过稳定 offset 检查自己保有的原始输入，错误对象本身
+不会保留该字节。编码错误不会保留第三方 `Serialize::custom` 提供的任意文本。其他领域还
+提供 `JsonEncodeError`、`JsonSyntaxError`、`JsonTreeProcessError` 和
+`JsonTreeMutateError`。
 
 数字契约独立于资源限制：负整数装入 `i64`，非负整数装入 `u64`，小数/指数必须是有限 `f64`。
 超出范围或必须避免二进制浮点舍入的精确十进制，应使用字符串或显式领域表示。详见

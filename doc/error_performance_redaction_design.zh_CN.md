@@ -8,8 +8,8 @@
 
 ## 设计原则
 
-- 程序按结构化枚举处理错误，不能依赖字符串；公共诊断不得携带输入值、对象键或第三方
-  `Error::custom` 文本。
+- 程序按结构化枚举处理错误，不能依赖字符串；脱敏公共诊断只携带稳定分类和源坐标，不得携带
+  意外字节、输入值、对象键或第三方 `Error::custom` 文本。
 - 严格数字、重复键、`RawValue` 验证、预算事务和增量 writer 的 partial-output 契约优先于
   吞吐量；优化只能删除不影响结果的工作。
 - `unlimited()` 只适用于可信输入或已由其他层完成资源准入的数据。不可信输入必须在分配
@@ -22,7 +22,23 @@
 `JsonDecodeError` 维持六类解码失败互斥，并提供稳定的借用访问器。适配层取得错误所有权后，
 调用 `into_source()` 穷举匹配 `JsonDecodeErrorSource`，无需克隆即可移动预算、语法、位置、
 顶层类型与保留的详细来源数据。source 枚举保持原有隐私边界：只有显式选择
-`DiagnosticPolicy::Detailed` 才会携带 parser 或 Serde 来源。
+`DiagnosticPolicy::Detailed` 才会携带 parser 或 Serde 来源。需要精确字节的调用方应使用自己
+保有的原始输入和稳定 offset，而不是延长错误对象的数据保留边界。
+
+## 验证边界
+
+测量有预算 decode 的 benchmark 样本时，每次操作都创建新的 session。fixture 的成功准入必须
+断言，CI 使用 Criterion 的 test mode 运行基准，因此累计预算耗尽不会悄然变成被测的错误路径。
+
+differential fuzz 将词法 validation 与目标类型 materialization 分开：成功物化必然意味着
+validation 成功；合法文档在目标类型或 serde 递归边界上可以以 Deserialize 失败。只有保守的
+浅层文档才直接与 serde_json Value 做等价比较。递归边界场景同时保留为普通 fuzz crate 测试
+和 corpus seed。
+
+coverage 是风险信号，而不是自身目标。测试优先验证 writer 错误顺序、partial-write 记账和
+公开 API 契约。除非进行不可能的分配，否则无法构造的防御性算术分支会被明确记录，不会为它
+添加生产测试后门。所有 fuzz target 共享一个完整输入上限；超出上限的输入会被拒绝，而不会
+被截断为未观察尾部的共同前缀。
 
 ## 序列化错误模型
 

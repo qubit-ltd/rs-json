@@ -30,8 +30,9 @@ Users configure permitted normalization through
 `NormalizingJsonDecodePolicy` and explicitly provide `JsonDecodeLimits` or a
 `JsonDecodeSession` to `NormalizingJsonDecoder`. A policy must not carry a
 budget, and the decoder must not create an implicit default budget. Diagnostics
-are redacted by default; only an explicit `Detailed` policy retains
-potentially input-derived details. Session-based calls preserve raw and
+are redacted by default; they retain stable classifications and source
+coordinates but not offending bytes or other input content. Only an explicit
+`Detailed` policy retains potentially input-derived sources. Session-based calls preserve raw and
 normalized input charges and commit value charges only after complete typed
 decoding. One-shot normalization targets owned values; borrowed, seed-based,
 and repeated materialization use the two-stage `NormalizedJsonDocument` API.
@@ -49,7 +50,9 @@ Users pass a caller-owned session through objects: `JsonDecoder` provides
 provides `to_vec`, `write_buffered`, and `write_incremental`. Strict input is
 never repaired. Each document's accounting boundary is defined by its session
 transaction. `JsonDecoder` defaults to `DiagnosticPolicy::Redacted`; callers
-must explicitly select `Detailed` to retain input-derived sources.
+must explicitly select `Detailed` to retain input-derived sources. Trusted
+callers inspect caller-owned input at the reported offset when they need the
+exact unexpected byte.
 
 The numeric product boundary is negative `i64`, non-negative `u64`, and finite
 `f64` for fractional or exponential values. Identifiers above JavaScript's

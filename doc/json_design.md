@@ -101,7 +101,9 @@ Strict and normalizing decoding return the same generic
 `JsonDecodeStage`, and budget, syntax, UTF-8, and top-level accessors rather
 than parsing messages. Callers that own the error can use `into_source()` to
 exhaustively match `JsonDecodeErrorSource` without cloning structured data.
-`DiagnosticPolicy::Redacted` is the default. Strict decoding can opt into detailed diagnostics with
+`DiagnosticPolicy::Redacted` is the default. It retains only stable error
+classification and source coordinates, never an offending byte or other input
+content. Strict decoding can opt into detailed diagnostics with
 `with_diagnostic_policy`; normalizing decoding takes the setting from its
 policy. Strict encoding returns `JsonEncodeError` with budget, invalid raw
 JSON, serialization, or write failures. `JsonSyntaxError` separately owns a

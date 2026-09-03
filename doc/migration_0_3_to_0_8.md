@@ -77,8 +77,12 @@ Decode errors are generic over the resource and quantity types and expose
 stable `kind`, `stage`, budget, syntax, location, and diagnostic-policy data.
 Adapters that own an error can exhaustively match `JsonDecodeErrorSource`
 after calling `JsonDecodeError::into_source`.
-Diagnostics are redacted by default. Detailed Serde sources require an
-explicit `DiagnosticPolicy::Detailed` choice.
+Diagnostics are redacted by default: stable classifications and source
+coordinates remain available, but offending bytes and other input content do
+not. Detailed Serde sources require an explicit `DiagnosticPolicy::Detailed`
+choice. `JsonSyntaxErrorReason::UnexpectedByte` is now a content-free unit
+variant; inspect caller-owned input at the reported offset when a trusted
+diagnostic needs the byte.
 
 Encoding uses `JsonEncodeError`. Consumers that move errors into another model
 should exhaustively match `JsonEncodeError::into_source()` rather than combine

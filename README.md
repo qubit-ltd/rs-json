@@ -136,8 +136,10 @@ construction, and traversal.
   layer. Apply a bounded read or body-aggregation limit before decoding.
 - Diagnostics are redacted by default. Configure a strict decoder with
   `JsonDecoder::with_diagnostic_policy`, or a normalizing decoder through its
-  normalization policy. Enable `DiagnosticPolicy::Detailed` only where
-  input-derived details are safe to retain and log.
+  normalization policy. Redacted errors retain only stable classifications and
+  source coordinates: they never retain an offending byte, token/key/value
+  text, or parser/Serde source. Enable `DiagnosticPolicy::Detailed` only
+  where input-derived sources are safe to retain and log.
 
 ## Learn more
 

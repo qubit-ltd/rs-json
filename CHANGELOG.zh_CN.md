@@ -12,6 +12,7 @@
 - 明确有符号 `i64`、无符号 `u64` 和有限 `f64` 数字契约。
 - 增加结构化、隐私感知的编解码错误模型，包括所有权映射接口
   `JsonDecodeErrorSource` 和 `JsonEncodeErrorSource`。
+- 完成脱敏语法诊断：`UnexpectedByte` 不再保留输入内容。
 - 增加 fuzz、Miri、文档示例、兼容性和 benchmark 测试套件。
 
 参见 [0.3 到 0.8 迁移指南](doc/migration_0_3_to_0_8.zh_CN.md)。
