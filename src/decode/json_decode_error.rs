@@ -18,10 +18,10 @@ use serde_json::Error as JsonError;
 
 use super::DiagnosticPolicy;
 use super::JsonDecodeErrorKind;
+use super::JsonDecodeErrorSource;
 use super::JsonDecodeStage;
 use super::JsonRootKind;
 use super::JsonSyntaxError;
-use super::internal::JsonDecodeFailure;
 use crate::lexical::JsonLexicalFailure;
 
 /// Failure produced by either strict or normalizing JSON decoding.
@@ -55,7 +55,7 @@ where
     /// Policy controlling input-derived source retention.
     diagnostic_policy: DiagnosticPolicy,
     /// Mutually exclusive structured failure.
-    failure: JsonDecodeFailure<R, Q>,
+    failure: JsonDecodeErrorSource<R, Q>,
 }
 
 impl<R, Q> JsonDecodeError<R, Q>
@@ -73,7 +73,7 @@ where
     ) -> Self {
         Self {
             diagnostic_policy,
-            failure: JsonDecodeFailure::Budget {
+            failure: JsonDecodeErrorSource::Budget {
                 stage,
                 raw_input_bytes,
                 normalized_input_bytes,
@@ -92,7 +92,7 @@ where
     ) -> Self {
         Self {
             diagnostic_policy,
-            failure: JsonDecodeFailure::EmptyInput {
+            failure: JsonDecodeErrorSource::EmptyInput {
                 stage,
                 raw_input_bytes,
                 normalized_input_bytes,
@@ -112,7 +112,7 @@ where
         let source = (diagnostic_policy == DiagnosticPolicy::Detailed).then_some(source);
         Self {
             diagnostic_policy,
-            failure: JsonDecodeFailure::InvalidUtf8 {
+            failure: JsonDecodeErrorSource::InvalidUtf8 {
                 raw_input_bytes,
                 valid_up_to,
                 error_len,
@@ -132,7 +132,7 @@ where
     ) -> Self {
         Self {
             diagnostic_policy,
-            failure: JsonDecodeFailure::InvalidJson {
+            failure: JsonDecodeErrorSource::InvalidJson {
                 raw_input_bytes,
                 normalized_input_bytes,
                 syntax: JsonSyntaxError::from_lexical(syntax_source),
@@ -152,7 +152,7 @@ where
     ) -> Self {
         Self {
             diagnostic_policy,
-            failure: JsonDecodeFailure::UnexpectedTopLevel {
+            failure: JsonDecodeErrorSource::UnexpectedTopLevel {
                 raw_input_bytes,
                 normalized_input_bytes,
                 expected,
@@ -176,7 +176,7 @@ where
             (diagnostic_policy == DiagnosticPolicy::Detailed).then(|| Arc::new(source) as Arc<dyn Error + Send + Sync>);
         Self {
             diagnostic_policy,
-            failure: JsonDecodeFailure::Deserialize {
+            failure: JsonDecodeErrorSource::Deserialize {
                 raw_input_bytes,
                 normalized_input_bytes,
                 line,
@@ -195,12 +195,12 @@ where
     #[inline(always)]
     pub const fn kind(&self) -> JsonDecodeErrorKind {
         match self.failure {
-            JsonDecodeFailure::Budget { .. } => JsonDecodeErrorKind::Budget,
-            JsonDecodeFailure::EmptyInput { .. } => JsonDecodeErrorKind::EmptyInput,
-            JsonDecodeFailure::InvalidUtf8 { .. } => JsonDecodeErrorKind::InvalidUtf8,
-            JsonDecodeFailure::InvalidJson { .. } => JsonDecodeErrorKind::InvalidJson,
-            JsonDecodeFailure::UnexpectedTopLevel { .. } => JsonDecodeErrorKind::UnexpectedTopLevel,
-            JsonDecodeFailure::Deserialize { .. } => JsonDecodeErrorKind::Deserialize,
+            JsonDecodeErrorSource::Budget { .. } => JsonDecodeErrorKind::Budget,
+            JsonDecodeErrorSource::EmptyInput { .. } => JsonDecodeErrorKind::EmptyInput,
+            JsonDecodeErrorSource::InvalidUtf8 { .. } => JsonDecodeErrorKind::InvalidUtf8,
+            JsonDecodeErrorSource::InvalidJson { .. } => JsonDecodeErrorKind::InvalidJson,
+            JsonDecodeErrorSource::UnexpectedTopLevel { .. } => JsonDecodeErrorKind::UnexpectedTopLevel,
+            JsonDecodeErrorSource::Deserialize { .. } => JsonDecodeErrorKind::Deserialize,
         }
     }
 
@@ -213,11 +213,11 @@ where
     #[inline(always)]
     pub const fn stage(&self) -> JsonDecodeStage {
         match self.failure {
-            JsonDecodeFailure::Budget { stage, .. } | JsonDecodeFailure::EmptyInput { stage, .. } => stage,
-            JsonDecodeFailure::InvalidUtf8 { .. } => JsonDecodeStage::DecodeText,
-            JsonDecodeFailure::InvalidJson { .. } => JsonDecodeStage::Parse,
-            JsonDecodeFailure::UnexpectedTopLevel { .. } => JsonDecodeStage::TopLevelCheck,
-            JsonDecodeFailure::Deserialize { .. } => JsonDecodeStage::Deserialize,
+            JsonDecodeErrorSource::Budget { stage, .. } | JsonDecodeErrorSource::EmptyInput { stage, .. } => stage,
+            JsonDecodeErrorSource::InvalidUtf8 { .. } => JsonDecodeStage::DecodeText,
+            JsonDecodeErrorSource::InvalidJson { .. } => JsonDecodeStage::Parse,
+            JsonDecodeErrorSource::UnexpectedTopLevel { .. } => JsonDecodeStage::TopLevelCheck,
+            JsonDecodeErrorSource::Deserialize { .. } => JsonDecodeStage::Deserialize,
         }
     }
 
@@ -241,12 +241,12 @@ where
     #[inline(always)]
     pub const fn raw_input_bytes(&self) -> usize {
         match self.failure {
-            JsonDecodeFailure::Budget { raw_input_bytes, .. }
-            | JsonDecodeFailure::EmptyInput { raw_input_bytes, .. }
-            | JsonDecodeFailure::InvalidUtf8 { raw_input_bytes, .. }
-            | JsonDecodeFailure::InvalidJson { raw_input_bytes, .. }
-            | JsonDecodeFailure::UnexpectedTopLevel { raw_input_bytes, .. }
-            | JsonDecodeFailure::Deserialize { raw_input_bytes, .. } => raw_input_bytes,
+            JsonDecodeErrorSource::Budget { raw_input_bytes, .. }
+            | JsonDecodeErrorSource::EmptyInput { raw_input_bytes, .. }
+            | JsonDecodeErrorSource::InvalidUtf8 { raw_input_bytes, .. }
+            | JsonDecodeErrorSource::InvalidJson { raw_input_bytes, .. }
+            | JsonDecodeErrorSource::UnexpectedTopLevel { raw_input_bytes, .. }
+            | JsonDecodeErrorSource::Deserialize { raw_input_bytes, .. } => raw_input_bytes,
         }
     }
 
@@ -260,22 +260,22 @@ where
     #[inline(always)]
     pub const fn normalized_input_bytes(&self) -> Option<usize> {
         match self.failure {
-            JsonDecodeFailure::Budget {
+            JsonDecodeErrorSource::Budget {
                 normalized_input_bytes, ..
             }
-            | JsonDecodeFailure::EmptyInput {
+            | JsonDecodeErrorSource::EmptyInput {
                 normalized_input_bytes, ..
             }
-            | JsonDecodeFailure::InvalidJson {
+            | JsonDecodeErrorSource::InvalidJson {
                 normalized_input_bytes, ..
             }
-            | JsonDecodeFailure::UnexpectedTopLevel {
+            | JsonDecodeErrorSource::UnexpectedTopLevel {
                 normalized_input_bytes, ..
             }
-            | JsonDecodeFailure::Deserialize {
+            | JsonDecodeErrorSource::Deserialize {
                 normalized_input_bytes, ..
             } => normalized_input_bytes,
-            JsonDecodeFailure::InvalidUtf8 { .. } => None,
+            JsonDecodeErrorSource::InvalidUtf8 { .. } => None,
         }
     }
 
@@ -288,8 +288,8 @@ where
     #[inline(always)]
     pub const fn line(&self) -> Option<usize> {
         match &self.failure {
-            JsonDecodeFailure::InvalidJson { syntax, .. } => Some(syntax.line()),
-            JsonDecodeFailure::Deserialize { line, .. } if *line > 0 => Some(*line),
+            JsonDecodeErrorSource::InvalidJson { syntax, .. } => Some(syntax.line()),
+            JsonDecodeErrorSource::Deserialize { line, .. } if *line > 0 => Some(*line),
             _ => None,
         }
     }
@@ -303,8 +303,8 @@ where
     #[inline(always)]
     pub const fn column(&self) -> Option<usize> {
         match &self.failure {
-            JsonDecodeFailure::InvalidJson { syntax, .. } => Some(syntax.column()),
-            JsonDecodeFailure::Deserialize { column, .. } if *column > 0 => Some(*column),
+            JsonDecodeErrorSource::InvalidJson { syntax, .. } => Some(syntax.column()),
+            JsonDecodeErrorSource::Deserialize { column, .. } if *column > 0 => Some(*column),
             _ => None,
         }
     }
@@ -318,7 +318,7 @@ where
     #[inline(always)]
     pub const fn syntax_error(&self) -> Option<&JsonSyntaxError> {
         match &self.failure {
-            JsonDecodeFailure::InvalidJson { syntax, .. } => Some(syntax),
+            JsonDecodeErrorSource::InvalidJson { syntax, .. } => Some(syntax),
             _ => None,
         }
     }
@@ -333,7 +333,7 @@ where
     #[inline(always)]
     pub const fn budget_error(&self) -> Option<&MeasuredBudgetError<R, Q>> {
         match &self.failure {
-            JsonDecodeFailure::Budget { source, .. } => Some(source),
+            JsonDecodeErrorSource::Budget { source, .. } => Some(source),
             _ => None,
         }
     }
@@ -348,7 +348,7 @@ where
     #[inline(always)]
     pub const fn utf8_valid_up_to(&self) -> Option<usize> {
         match self.failure {
-            JsonDecodeFailure::InvalidUtf8 { valid_up_to, .. } => Some(valid_up_to),
+            JsonDecodeErrorSource::InvalidUtf8 { valid_up_to, .. } => Some(valid_up_to),
             _ => None,
         }
     }
@@ -363,7 +363,7 @@ where
     #[inline(always)]
     pub const fn utf8_error_len(&self) -> Option<usize> {
         match self.failure {
-            JsonDecodeFailure::InvalidUtf8 { error_len, .. } => error_len,
+            JsonDecodeErrorSource::InvalidUtf8 { error_len, .. } => error_len,
             _ => None,
         }
     }
@@ -378,7 +378,7 @@ where
     #[inline(always)]
     pub const fn expected_top_level(&self) -> Option<JsonRootKind> {
         match self.failure {
-            JsonDecodeFailure::UnexpectedTopLevel { expected, .. } => Some(expected),
+            JsonDecodeErrorSource::UnexpectedTopLevel { expected, .. } => Some(expected),
             _ => None,
         }
     }
@@ -392,9 +392,25 @@ where
     #[inline(always)]
     pub const fn actual_top_level(&self) -> Option<JsonRootKind> {
         match self.failure {
-            JsonDecodeFailure::UnexpectedTopLevel { actual, .. } => Some(actual),
+            JsonDecodeErrorSource::UnexpectedTopLevel { actual, .. } => Some(actual),
             _ => None,
         }
+    }
+
+    /// Consumes this error and returns its owned semantic source.
+    ///
+    /// Unlike the kind-specific accessors, this operation preserves the
+    /// complete mutually exclusive failure state. Input-derived third-party
+    /// sources remain present only when the decoder used
+    /// [`DiagnosticPolicy::Detailed`].
+    ///
+    /// # Returns
+    ///
+    /// The structured budget, input, syntax, top-level, or deserialization
+    /// source retained by this error.
+    #[inline(always)]
+    pub fn into_source(self) -> JsonDecodeErrorSource<R, Q> {
+        self.failure
     }
 }
 
@@ -421,27 +437,27 @@ where
     /// Formats a privacy-safe or detailed message according to the policy.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.failure {
-            JsonDecodeFailure::Budget { source, .. } => {
+            JsonDecodeErrorSource::Budget { source, .. } => {
                 write!(formatter, "JSON resource budget rejected input: {source}")
             }
-            JsonDecodeFailure::EmptyInput { .. } => formatter.write_str("JSON input is empty after normalization"),
-            JsonDecodeFailure::InvalidUtf8 { source, .. } => match source {
+            JsonDecodeErrorSource::EmptyInput { .. } => formatter.write_str("JSON input is empty after normalization"),
+            JsonDecodeErrorSource::InvalidUtf8 { source, .. } => match source {
                 Some(source) => write!(formatter, "Failed to decode JSON input as UTF-8: {source}"),
                 None => formatter.write_str("Failed to decode JSON input as UTF-8"),
             },
-            JsonDecodeFailure::InvalidJson { syntax, source, .. } => match source {
+            JsonDecodeErrorSource::InvalidJson { syntax, source, .. } => match source {
                 Some(source) => {
                     write!(formatter, "Failed to parse JSON: {source}")
                 }
                 None => write!(formatter, "Failed to parse JSON: {syntax}"),
             },
-            JsonDecodeFailure::UnexpectedTopLevel { expected, actual, .. } => {
+            JsonDecodeErrorSource::UnexpectedTopLevel { expected, actual, .. } => {
                 write!(
                     formatter,
                     "Unexpected JSON top-level type: expected {expected}, got {actual}"
                 )
             }
-            JsonDecodeFailure::Deserialize {
+            JsonDecodeErrorSource::Deserialize {
                 normalized_input_bytes,
                 line,
                 column,
@@ -471,14 +487,14 @@ where
     /// when detailed diagnostics retained them.
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.failure {
-            JsonDecodeFailure::Budget { source, .. } => Some(source),
-            JsonDecodeFailure::InvalidUtf8 {
+            JsonDecodeErrorSource::Budget { source, .. } => Some(source),
+            JsonDecodeErrorSource::InvalidUtf8 {
                 source: Some(source), ..
             } => Some(source),
-            JsonDecodeFailure::InvalidJson {
+            JsonDecodeErrorSource::InvalidJson {
                 source: Some(source), ..
             } => Some(source.as_ref()),
-            JsonDecodeFailure::Deserialize {
+            JsonDecodeErrorSource::Deserialize {
                 source: Some(source), ..
             } => Some(source.as_ref()),
             _ => None,

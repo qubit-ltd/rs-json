@@ -10,6 +10,7 @@
 mod diagnostic_policy;
 mod json_decode_error;
 mod json_decode_error_kind;
+mod json_decode_error_source;
 mod json_decode_stage;
 mod json_decoder;
 mod json_root_kind;
@@ -25,6 +26,7 @@ mod normalizing_json_decoder;
 pub use diagnostic_policy::DiagnosticPolicy;
 pub use json_decode_error::JsonDecodeError;
 pub use json_decode_error_kind::JsonDecodeErrorKind;
+pub use json_decode_error_source::JsonDecodeErrorSource;
 pub use json_decode_stage::JsonDecodeStage;
 pub use json_decoder::JsonDecoder;
 pub use json_root_kind::JsonRootKind;

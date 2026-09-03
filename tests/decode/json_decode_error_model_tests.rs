@@ -11,9 +11,12 @@ use std::str::FromStr;
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonResource;
+use qubit_json::decode::DiagnosticPolicy;
 use qubit_json::decode::JsonDecodeErrorKind;
+use qubit_json::decode::JsonDecodeErrorSource;
 use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::JsonRootKind;
 use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
@@ -153,4 +156,89 @@ fn test_json_decode_error_model_representative_matrix() {
         (error.kind(), error.stage()),
         (JsonDecodeErrorKind::Deserialize, JsonDecodeStage::Deserialize,),
     );
+}
+
+/// Verifies consuming a decoding error exposes every owned semantic source
+/// without a kind-plus-extractor assertion pair.
+#[test]
+fn test_json_decode_error_into_source_exposes_owned_variants() {
+    let limits = JsonDecodeLimits::builder().max_input_bytes(1_usize).build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    match decoder.validate_str("null").expect_err("input budget").into_source() {
+        JsonDecodeErrorSource::Budget {
+            stage,
+            raw_input_bytes,
+            source,
+            ..
+        } => {
+            assert_eq!(stage, JsonDecodeStage::Input);
+            assert_eq!(raw_input_bytes, 4);
+            assert_eq!(source.resource(), &JsonResource::InputBytes);
+        }
+        source => panic!("expected budget source, got {source:?}"),
+    }
+
+    let mut normalizing = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::lenient(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
+    );
+    match normalizing.decode_value("").expect_err("empty input").into_source() {
+        JsonDecodeErrorSource::EmptyInput {
+            stage, raw_input_bytes, ..
+        } => {
+            assert_eq!(stage, JsonDecodeStage::Normalize);
+            assert_eq!(raw_input_bytes, 0);
+        }
+        source => panic!("expected empty-input source, got {source:?}"),
+    }
+
+    let mut decoder = JsonDecoder::unlimited().with_diagnostic_policy(DiagnosticPolicy::Detailed);
+    match decoder.validate_utf8(&[0xff]).expect_err("invalid UTF-8").into_source() {
+        JsonDecodeErrorSource::InvalidUtf8 {
+            valid_up_to,
+            error_len,
+            source,
+            ..
+        } => {
+            assert_eq!(valid_up_to, 0);
+            assert_eq!(error_len, Some(1));
+            assert!(source.is_some());
+        }
+        source => panic!("expected invalid-UTF-8 source, got {source:?}"),
+    }
+
+    match decoder.validate_str("{").expect_err("invalid JSON").into_source() {
+        JsonDecodeErrorSource::InvalidJson { syntax, source, .. } => {
+            assert_eq!(syntax.offset(), 1);
+            assert!(source.is_some());
+        }
+        source => panic!("expected invalid-JSON source, got {source:?}"),
+    }
+
+    match decoder
+        .decode_object_str::<serde_json::Value>("null")
+        .expect_err("object contract")
+        .into_source()
+    {
+        JsonDecodeErrorSource::UnexpectedTopLevel { expected, actual, .. } => {
+            assert_eq!(expected, JsonRootKind::Object);
+            assert_eq!(actual, JsonRootKind::Other);
+        }
+        source => panic!("expected top-level source, got {source:?}"),
+    }
+
+    match decoder
+        .decode_str::<bool>("1")
+        .expect_err("target mismatch")
+        .into_source()
+    {
+        JsonDecodeErrorSource::Deserialize {
+            line, column, source, ..
+        } => {
+            assert_eq!(line, 1);
+            assert_eq!(column, 1);
+            assert!(source.is_some());
+        }
+        source => panic!("expected deserialization source, got {source:?}"),
+    }
 }

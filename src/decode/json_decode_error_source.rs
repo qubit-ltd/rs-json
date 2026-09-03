@@ -5,22 +5,50 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Defines mutually exclusive private JSON decoding failure states.
+//! Defines the owned sources retained by JSON decoding errors.
 
 use std::error::Error;
+use std::fmt;
 use std::sync::Arc;
 
 use qubit_budget::MeasuredBudgetError;
 
-use super::super::JsonDecodeStage;
-use super::super::JsonRootKind;
-use super::super::JsonSyntaxError;
+use super::JsonDecodeStage;
+use super::JsonRootKind;
+use super::JsonSyntaxError;
 
-/// Stores diagnostics valid for exactly one JSON decoding failure.
+/// An owned semantic source extracted from a JSON decoding failure.
+///
+/// This enum preserves the complete structured state of exactly one failure.
+/// It lets downstream adapters move error data into their own models with one
+/// exhaustive `match`, without pairing [`super::JsonDecodeError::kind`] with
+/// fallible source accessors. Parser and Serde sources remain present only
+/// when decoding used [`super::DiagnosticPolicy::Detailed`].
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity attached to budget failures.
+/// * `Q` - Quantity representation attached to budget failures.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::{JsonDecodeErrorSource, JsonDecoder};
+///
+/// let mut decoder = JsonDecoder::unlimited();
+/// let error = decoder.validate_str("{").expect_err("invalid JSON must fail");
+/// match error.into_source() {
+///     JsonDecodeErrorSource::InvalidJson { syntax, .. } => {
+///         assert_eq!(syntax.offset(), 1);
+///     }
+///     source => panic!("unexpected decoding source: {source:?}"),
+/// }
+/// ```
+#[must_use]
 #[derive(Debug, Clone)]
-pub(in crate::decode) enum JsonDecodeFailure<R, Q>
+pub enum JsonDecodeErrorSource<R, Q = usize>
 where
-    Q: Copy + std::fmt::Debug,
+    Q: Copy + fmt::Debug,
 {
     /// A resource measurement was rejected.
     Budget {
