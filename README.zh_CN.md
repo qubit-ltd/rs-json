@@ -14,12 +14,12 @@
 
 ## 安装
 
-当前最新版 `0.8`：
+当前最新版 `0.9`：
 
 ```toml
 [dependencies]
-qubit-json = "0.8"
-qubit-budget = { version = "0.4", features = ["json"] }
+qubit-json = "0.9"
+qubit-budget = { version = "0.5", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -27,8 +27,8 @@ serde_json = "1.0"
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.8", path = "../rs-json" }
-qubit-budget = { version = "0.4", features = ["json"] }
+qubit-json = { version = "0.9", path = "../rs-json" }
+qubit-budget = { version = "0.5", features = ["json"] }
 serde_json = "1.0"
 ```
 
