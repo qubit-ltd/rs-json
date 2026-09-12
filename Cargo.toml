@@ -1,6 +1,6 @@
 [package]
 name = "qubit-json"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 rust-version = "1.94"
 autotests = false
@@ -50,7 +50,7 @@ serde = "1.0"
 serde_json = { version = "1.0", features = ["float_roundtrip", "raw_value"] }
 thiserror = "2.0"
 
-qubit-budget = { version = "0.5", features = ["json"] }
+qubit-budget = { version = "0.7", features = ["json"] }
 
 [dev-dependencies]
 criterion = "0.8"
