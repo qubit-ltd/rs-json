@@ -6,7 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Defines the serializer decorator for serde_json private text payloads.
-// qubit-style: allow explicit-imports
 
 use std::cell::RefCell;
 use std::fmt::Display;

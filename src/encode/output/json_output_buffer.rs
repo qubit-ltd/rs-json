@@ -6,8 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Bounded output buffer for budget-aware JSON encoding.
-// qubit-style: allow source-test-pair
-// qubit-style: allow multiple-public-types
 
 use std::cell::RefCell;
 use std::io;

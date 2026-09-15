@@ -27,7 +27,7 @@ include = [
     "/.github/workflows/fuzz.yml",
 ]
 
-[package.metadata.rs-ci]
+[package.metadata.rs-infra]
 miri = true
 miri-test-args = ["--test", "tests", "value::traverse::json_tree_mutator_tests"]
 package-include-extra = [

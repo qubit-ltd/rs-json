@@ -1,0 +1,66 @@
+format = 1
+
+[[exceptions]]
+rule = "explicit-imports"
+path = "src/encode/serializer/budgeted_key.rs"
+reason = "This file intentionally uses a legacy import shape required by its module boundary."
+
+[[exceptions]]
+rule = "explicit-imports"
+path = "src/encode/serializer/budgeted_private_value.rs"
+reason = "This file intentionally uses a legacy import shape required by its module boundary."
+
+[[exceptions]]
+rule = "explicit-imports"
+path = "src/encode/serializer/internal/json_key_budget_serializer.rs"
+reason = "This file intentionally uses a legacy import shape required by its module boundary."
+
+[[exceptions]]
+rule = "explicit-imports"
+path = "src/encode/serializer/internal/json_private_text_serializer.rs"
+reason = "This file intentionally uses a legacy import shape required by its module boundary."
+
+[[exceptions]]
+rule = "explicit-imports"
+path = "src/encode/serializer/json_encode_compound.rs"
+reason = "This file intentionally uses a legacy import shape required by its module boundary."
+
+[[exceptions]]
+rule = "explicit-imports"
+path = "src/encode/serializer/json_encode_serializer.rs"
+reason = "This file intentionally uses a legacy import shape required by its module boundary."
+
+[[exceptions]]
+rule = "explicit-imports"
+path = "tests/decode/json_decoder_budget_tests.rs"
+reason = "This file intentionally uses a legacy import shape required by its module boundary."
+
+[[exceptions]]
+rule = "explicit-imports"
+path = "tests/encode/serializer/json_encode_serializer_tests.rs"
+reason = "This file intentionally uses a legacy import shape required by its module boundary."
+
+[[exceptions]]
+rule = "public-type-layout"
+path = "src/encode/output/json_output_buffer.rs"
+reason = "This module intentionally groups multiple public types for dispatch."
+
+[[exceptions]]
+rule = "public-type-layout"
+path = "src/encode/serializer/budgeted_key.rs"
+reason = "This module intentionally groups multiple public types for dispatch."
+
+[[exceptions]]
+rule = "public-type-layout"
+path = "src/encode/serializer/budgeted_private_value.rs"
+reason = "This module intentionally groups multiple public types for dispatch."
+
+[[exceptions]]
+rule = "public-type-layout"
+path = "src/encode/serializer/json_encode_compound.rs"
+reason = "This module intentionally groups multiple public types for dispatch."
+
+[[exceptions]]
+rule = "public-type-layout"
+path = "src/encode/serializer/json_encode_serializer.rs"
+reason = "This module intentionally groups multiple public types for dispatch."

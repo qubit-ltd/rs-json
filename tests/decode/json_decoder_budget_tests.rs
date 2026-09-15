@@ -6,7 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Tests strict JSON decoding admission and session accounting.
-// qubit-style: allow explicit-imports
 
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
