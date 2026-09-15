@@ -6,9 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Strict serde_json RawValue serializer adapter.
-// qubit-style: allow source-test-pair
-// qubit-style: allow multiple-public-types
-// qubit-style: allow explicit-imports
 
 use std::cell::RefCell;
 

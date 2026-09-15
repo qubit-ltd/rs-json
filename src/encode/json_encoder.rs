@@ -6,7 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Stateful strict JSON text encoding.
-// qubit-style: allow source-test-pair
 
 use std::cell::RefCell;
 use std::fmt::Debug;

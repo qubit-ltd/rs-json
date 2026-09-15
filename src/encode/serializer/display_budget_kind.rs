@@ -6,7 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Budget categories used by strict display-based JSON encoding.
-// qubit-style: allow source-test-pair
 
 /// Resource checked while a `Display` implementation emits text chunks.
 #[derive(Clone, Copy)]

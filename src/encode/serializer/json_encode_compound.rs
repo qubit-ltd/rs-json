@@ -6,9 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Compound state for single-pass budget-aware JSON encoding.
-// qubit-style: allow source-test-pair
-// qubit-style: allow multiple-public-types
-// qubit-style: allow explicit-imports
 
 use std::cell::RefCell;
 

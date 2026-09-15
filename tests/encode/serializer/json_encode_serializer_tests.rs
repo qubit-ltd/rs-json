@@ -6,7 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Tests budget-aware JSON serialization behavior.
-// qubit-style: allow explicit-imports
 
 use std::cell::Cell;
 use std::collections::BTreeMap;
