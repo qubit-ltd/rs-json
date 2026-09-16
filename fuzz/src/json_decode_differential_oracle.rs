@@ -12,6 +12,7 @@ use qubit_json::decode::JsonDecoder;
 use serde_json::Value;
 
 use crate::json_number_contract::numbers_fit_contract;
+use crate::json_reference::parse_literal_value;
 
 /// Conservative upper bound for inputs compared directly with serde_json.
 ///
@@ -28,6 +29,9 @@ const MAX_REFERENCE_OPENING_DELIMITERS: usize = 64;
 /// target type or serde_json's recursion limit rejects it; such failures must
 /// be classified as JsonDecodeErrorKind::Deserialize. Direct equivalence with
 /// serde_json is checked only for conservatively shallow inputs.
+/// Materialization uses the same Value target; lexical admission uses literal
+/// object keys so Value's private RawValue protocol cannot turn valid JSON into
+/// a syntax error.
 ///
 /// # Panics
 ///
@@ -65,7 +69,7 @@ pub fn assert_decode_contract(input: &[u8]) {
         );
         assert_eq!(
             validated.is_ok(),
-            reference_admitted,
+            parse_literal_value(input).is_ok() && numbers_fit_contract(input),
             "shallow strict validation must match the reference contract",
         );
     }

@@ -18,6 +18,7 @@ use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::encode::JsonEncoder;
 use qubit_json_fuzz::input_limit::bounded_input;
+use qubit_json_fuzz::json_reference::parse_literal_value;
 use serde_json::Value;
 
 mod internal;
@@ -84,8 +85,7 @@ fuzz_target!(|data: &[u8]| {
     assert_eq!(encoded.is_ok(), buffered.is_ok());
     assert_eq!(encoded.is_ok(), incremental.is_ok());
     if let Ok(encoded) = encoded {
-        let decoded =
-            serde_json::from_slice::<Value>(&encoded).expect("successful budget-aware encoding must produce JSON");
+        let decoded = parse_literal_value(&encoded).expect("successful budget-aware encoding must produce JSON");
         assert_eq!(decoded, value);
         assert_eq!(buffered_output, encoded);
         assert_eq!(incremental_output, encoded);
