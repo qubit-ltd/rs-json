@@ -44,16 +44,16 @@ name = "tests"
 path = "tests/mod.rs"
 
 [dependencies]
-serde = "1.0"
+serde = "^1.0"
 # 1.0.151 is the minimum version covered by the RawValue compatibility tests.
 # See doc/dependency_maintenance.zh_CN.md before raising this lower bound.
-serde_json = { version = "1.0", features = ["float_roundtrip", "raw_value"] }
-thiserror = "2.0"
+serde_json = { version = "^1.0", features = ["float_roundtrip", "raw_value"] }
+thiserror = "^2.0"
 
 qubit-budget = { version = "0.7", features = ["json"] }
 
 [dev-dependencies]
-criterion = "0.8"
+criterion = "^0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
