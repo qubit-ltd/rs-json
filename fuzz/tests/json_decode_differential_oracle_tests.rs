@@ -27,6 +27,12 @@ fn test_decode_contract_accepts_shallow_reference_documents() {
     assert_decode_contract(br#"{"items":[1,true,"text"]}"#);
 }
 
+/// Lexical JSON admission is independent of Value's private RawValue protocol.
+#[test]
+fn test_decode_contract_accepts_literal_private_raw_value_key() {
+    assert_decode_contract(b"{\"$serde_json::private::RawValue\"\t\t:\"\"}\r");
+}
+
 /// Verifies a lexically admitted document may fail `Value` materialization at
 /// Serde's recursion boundary without violating the differential contract.
 #[test]
