@@ -23,8 +23,8 @@ RawValue Serde 私有协议，因此不能只依赖版本号推断兼容性。
    cargo test --test tests json_text_encoder
    ```
 
-4. 使用 lockfile 当前解析版本运行 `./align-ci.sh`、`./style-check.sh` 和
-   `./ci-check.sh`，此外还需编译 benchmark 和 fuzz targets。升级验证失败时修复兼容层
+4. 使用 lockfile 当前解析版本运行 `./.infra/bin/align-ci.sh`、`./.infra/bin/style-check.sh` 和
+   `./.infra/bin/ci-check.sh`，此外还需编译 benchmark 和 fuzz targets。升级验证失败时修复兼容层
    或提高最低版本，不能用精确锁定长期阻止兼容版本解析。各下游 crate 在各自的 CI
    流水线中验证集成兼容性。
 5. 使用 `cargo bench --bench budgeted_serde_json` 对比编码结果；若 RawValue protocol

@@ -139,6 +139,6 @@ and each non-empty NDJSON line is parsed once.
 ## Verification requirements
 
 Every observable behavior needs a regression test. Final verification includes
-`align-ci.sh`, `ci-check.sh`, documentation tests, Miri, fuzzing, coverage,
+`align-ci.sh`, `.infra/bin/ci-check.sh`, documentation tests, Miri, fuzzing, coverage,
 feature matrices, downstream compilation, and fixed-CPU Criterion encode and
 tree benchmarks. Benchmark records must state the machine and input shape.

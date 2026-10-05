@@ -27,8 +27,8 @@ directly.
    cargo test --test tests json_text_encoder
    ```
 
-4. With the lockfile's resolved versions, run `./align-ci.sh`,
-   `./style-check.sh`, and `./ci-check.sh`. Also compile the benchmarks and
+4. With the lockfile's resolved versions, run `./.infra/bin/align-ci.sh`,
+   `./.infra/bin/style-check.sh`, and `./.infra/bin/ci-check.sh`. Also compile the benchmarks and
    fuzz targets. If validation fails, fix the compatibility layer or raise the
    minimum version; do not use an exact lockfile pin as a long-term substitute
    for compatibility. Downstream crates validate their own integration in

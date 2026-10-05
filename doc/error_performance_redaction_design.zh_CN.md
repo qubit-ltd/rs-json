@@ -103,6 +103,6 @@ bounded copy，不再伪装成 parser。结果是这些路径不再包含 `JsonD
 
 ## 验证要求
 
-所有可观察行为先有回归测试。最终验证包括各修改仓库的 `align-ci.sh`、`ci-check.sh`、
+所有可观察行为先有回归测试。最终验证包括各修改仓库的 `align-ci.sh`、`.infra/bin/ci-check.sh`、
 文档测试、Miri、fuzz、coverage、feature matrix、下游编译，以及固定 CPU 的完整 Criterion
 编码与 tree 基准。benchmark 只描述同机事实，不承诺跨机器倍率。
