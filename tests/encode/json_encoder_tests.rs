@@ -21,6 +21,7 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
+use qubit_io::Output;
 use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
 use qubit_json::encode::JsonIntegerSignedness;
@@ -43,6 +44,39 @@ use crate::fixtures::JsonTestLimits;
 
 /// Largest supported unsigned integer text used by online accounting tests.
 const LARGE_NUMBER_TEXT: &str = "18446744073709551615";
+
+struct OnlyOutput(std::rc::Rc<std::cell::RefCell<Vec<u8>>>);
+
+impl Output for OnlyOutput {
+    type Item = u8;
+
+    unsafe fn write_unchecked(&mut self, bytes: &[u8], index: usize, count: usize) -> io::Result<usize> {
+        self.0.borrow_mut().extend_from_slice(&bytes[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn test_json_encoder_accepts_output_only_destination() {
+    let mut encoder = JsonEncoder::unlimited();
+    let buffered = OnlyOutput(std::rc::Rc::default());
+    let buffered_bytes = buffered.0.clone();
+    encoder
+        .write_buffered(buffered, &true)
+        .expect("buffered encoding must succeed");
+    assert_eq!(*buffered_bytes.borrow(), b"true");
+
+    let incremental = OnlyOutput(std::rc::Rc::default());
+    let incremental_bytes = incremental.0.clone();
+    encoder
+        .write_incremental(incremental, &true)
+        .expect("incremental encoding must succeed");
+    assert_eq!(*incremental_bytes.borrow(), b"true");
+}
 
 /// Verifies the encoder accepts the complete signed and unsigned 64-bit
 /// integer range but rejects wider Serde integers.

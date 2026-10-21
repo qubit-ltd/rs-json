@@ -50,6 +50,7 @@ fn assert_error_invariants(error: &JsonDecodeError, raw_input_bytes: usize) {
         assert!(!format!("{syntax:?}").contains("byte"));
     }
     let valid_stage = match error.kind() {
+        JsonDecodeErrorKind::Read => error.stage() == JsonDecodeStage::Input,
         JsonDecodeErrorKind::Budget => matches!(
             error.stage(),
             JsonDecodeStage::Input | JsonDecodeStage::Normalize | JsonDecodeStage::Admission

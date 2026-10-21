@@ -9,6 +9,7 @@
 
 use std::error::Error;
 use std::fmt;
+use std::io;
 use std::sync::Arc;
 
 use qubit_budget::MeasuredBudgetError;
@@ -50,6 +51,15 @@ pub enum JsonDecodeErrorSource<R, Q = usize>
 where
     Q: Copy + fmt::Debug,
 {
+    /// Reading input failed before text decoding began.
+    Read {
+        /// Number of successfully read and charged bytes before the failure.
+        raw_input_bytes: usize,
+        /// Stable standard I/O failure category.
+        kind: io::ErrorKind,
+        /// Original error retained only under detailed diagnostics.
+        source: Option<Arc<io::Error>>,
+    },
     /// A resource measurement was rejected.
     Budget {
         /// Semantic stage where the measurement was rejected.

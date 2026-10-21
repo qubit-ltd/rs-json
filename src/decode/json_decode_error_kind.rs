@@ -26,6 +26,8 @@ use std::str::FromStr;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeErrorKind {
+    /// Reading bytes from the input failed.
+    Read,
     /// A configured resource budget rejected a measurement.
     Budget,
     /// Normalization produced no JSON document from the supplied input.
@@ -44,6 +46,7 @@ impl fmt::Display for JsonDecodeErrorKind {
     /// Writes the stable snake-case category name.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
+            Self::Read => "read",
             Self::Budget => "budget",
             Self::EmptyInput => "empty_input",
             Self::InvalidUtf8 => "invalid_utf8",
@@ -59,7 +62,9 @@ impl FromStr for JsonDecodeErrorKind {
 
     /// Parses a stable category name without ASCII case sensitivity.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        if value.eq_ignore_ascii_case("budget") {
+        if value.eq_ignore_ascii_case("read") {
+            Ok(Self::Read)
+        } else if value.eq_ignore_ascii_case("budget") {
             Ok(Self::Budget)
         } else if value.eq_ignore_ascii_case("empty_input") {
             Ok(Self::EmptyInput)

@@ -8,11 +8,11 @@
 //! Shared public-API adapters for encoder tests.
 
 use std::fmt::Debug;
-use std::io::Write;
 
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
+use qubit_io::Output;
 use qubit_json::encode::JsonEncodeError;
 use qubit_json::encode::JsonEncoder;
 use serde::Serialize;
@@ -45,7 +45,7 @@ pub(crate) fn write_buffered<W, T, R, Q>(
     session: &mut JsonEncodeSession<'_, R, Q>,
 ) -> Result<(), JsonEncodeError<R, Q>>
 where
-    W: Write,
+    W: Output<Item = u8>,
     T: Serialize + ?Sized,
     R: Clone + Debug + 'static,
     Q: ResourceQuantity + 'static,
@@ -68,7 +68,7 @@ pub(crate) fn write_incremental<W, T, R, Q>(
     session: &mut JsonEncodeSession<'_, R, Q>,
 ) -> Result<(), JsonEncodeError<R, Q>>
 where
-    W: Write,
+    W: Output<Item = u8>,
     T: Serialize + ?Sized,
     R: Clone + Debug + 'static,
     Q: ResourceQuantity + 'static,

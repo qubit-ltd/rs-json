@@ -210,3 +210,194 @@ fn test_json_text_decoder_classifies_serde_depth_as_deserialization() {
         .expect_err("the deep UTF-8 value must hit Serde's recursion guard");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
 }
+
+struct OnlyInput {
+    chunks: Vec<&'static [u8]>,
+    next: usize,
+    interrupt_once: bool,
+    fail_after_chunks: bool,
+    reads: usize,
+}
+
+impl OnlyInput {
+    fn new(chunks: Vec<&'static [u8]>) -> Self {
+        Self {
+            chunks,
+            next: 0,
+            interrupt_once: false,
+            fail_after_chunks: false,
+            reads: 0,
+        }
+    }
+}
+
+impl qubit_io::Input for OnlyInput {
+    type Item = u8;
+
+    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> std::io::Result<usize> {
+        self.reads += 1;
+        if self.interrupt_once {
+            self.interrupt_once = false;
+            return Err(std::io::ErrorKind::Interrupted.into());
+        }
+        if self.next == self.chunks.len() {
+            return if self.fail_after_chunks {
+                Err(std::io::Error::other("sensitive source text"))
+            } else {
+                Ok(0)
+            };
+        }
+        let chunk = self.chunks[self.next];
+        let copied = chunk.len().min(count);
+        output[index..index + copied].copy_from_slice(&chunk[..copied]);
+        self.next += 1;
+        Ok(copied)
+    }
+}
+
+#[test]
+fn test_json_decoder_reads_input_only_stream_and_cursor_to_eof() {
+    let mut decoder = JsonDecoder::unlimited();
+    let mut input = OnlyInput::new(vec![br#"{"a":1}"#, b"  "]);
+    input.interrupt_once = true;
+    assert_eq!(decoder.decode_input::<Value, _>(&mut input).unwrap(), json!({"a": 1}));
+    assert_eq!(input.reads, 4);
+
+    let mut cursor = std::io::Cursor::new(&b"[1,2] \n"[..]);
+    assert_eq!(decoder.decode_input::<Value, _>(&mut cursor).unwrap(), json!([1, 2]));
+}
+
+#[test]
+fn test_json_decoder_stream_rejects_trailing_document() {
+    let mut input = OnlyInput::new(vec![br#"{"a":1} "#, br#"{"b":2}"#]);
+    let error = JsonDecoder::unlimited()
+        .decode_input::<Value, _>(&mut input)
+        .expect_err("a second top-level document must fail");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
+fn test_json_decoder_stream_read_errors_are_redacted_or_retained() {
+    use qubit_json::decode::DiagnosticPolicy;
+    use qubit_json::decode::JsonDecodeErrorSource;
+    use qubit_json::decode::JsonDecodeStage;
+
+    let mut input = OnlyInput::new(vec![b"true"]);
+    input.fail_after_chunks = true;
+    let error = JsonDecoder::unlimited()
+        .decode_input::<Value, _>(&mut input)
+        .expect_err("the injected read error must be reported");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Read);
+    assert_eq!("read".parse(), Ok(JsonDecodeErrorKind::Read));
+    assert_eq!(error.stage(), JsonDecodeStage::Input);
+    assert_eq!(error.raw_input_bytes(), 4);
+    assert_eq!(error.read_error_kind(), Some(std::io::ErrorKind::Other));
+    assert!(error.read_error().is_none());
+    assert!(std::error::Error::source(&error).is_none());
+    assert!(!error.to_string().contains("sensitive source text"));
+
+    let mut input = OnlyInput::new(vec![b"true"]);
+    input.fail_after_chunks = true;
+    let error = JsonDecoder::unlimited()
+        .with_diagnostic_policy(DiagnosticPolicy::Detailed)
+        .decode_input::<Value, _>(&mut input)
+        .expect_err("the injected read error must be reported");
+    assert_eq!(error.read_error().unwrap().to_string(), "sensitive source text");
+    let cloned = error.clone();
+    assert_eq!(cloned.read_error_kind(), Some(std::io::ErrorKind::Other));
+    assert!(matches!(
+        error.into_source(),
+        JsonDecodeErrorSource::Read { source: Some(_), .. }
+    ));
+
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(16)
+        .value_limits(JsonValueLimits::builder().max_nodes(8).build())
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut input = OnlyInput::new(vec![b"true"]);
+    input.fail_after_chunks = true;
+    let error = decoder
+        .decode_input::<Value, _>(&mut input)
+        .expect_err("a mid-stream read error must abort before value admission");
+    assert_eq!(error.raw_input_bytes(), 4);
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 4);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+
+    let mut input = OnlyInput::new(Vec::new());
+    input.fail_after_chunks = true;
+    let error = JsonDecoder::unlimited()
+        .decode_input::<Value, _>(&mut input)
+        .expect_err("an error on the first read must be reported");
+    assert_eq!(error.raw_input_bytes(), 0);
+}
+
+#[test]
+fn test_json_decoder_stream_budget_stops_before_reading_next_chunk() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(3)
+        .build();
+    let mut input = OnlyInput::new(vec![b"tr", b"ue", b"x"]);
+    let error = JsonDecoder::with_limits(limits)
+        .decode_input::<Value, _>(&mut input)
+        .expect_err("the second chunk exceeds the cumulative input limit");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), qubit_json::decode::JsonDecodeStage::Input);
+    assert_eq!(input.next, 2);
+    assert_eq!(error.raw_input_bytes(), 2);
+}
+
+#[test]
+fn test_json_decoder_stream_classifies_empty_input_and_invalid_utf8() {
+    let mut empty = OnlyInput::new(Vec::new());
+    let error = JsonDecoder::unlimited()
+        .decode_input::<Value, _>(&mut empty)
+        .expect_err("an empty stream must fail strict JSON decoding");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(error.raw_input_bytes(), 0);
+
+    let mut invalid_utf8 = OnlyInput::new(vec![b"\xff"]);
+    let error = JsonDecoder::unlimited()
+        .decode_input::<Value, _>(&mut invalid_utf8)
+        .expect_err("invalid UTF-8 must fail before JSON parsing");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
+    assert_eq!(error.raw_input_bytes(), 1);
+}
+
+#[test]
+fn test_json_decoder_stream_cumulative_input_budget_spans_calls() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(5)
+        .value_limits(JsonValueLimits::builder().max_nodes(8).build())
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut first = OnlyInput::new(vec![b"true"]);
+    assert_eq!(decoder.decode_input::<Value, _>(&mut first).unwrap(), Value::Bool(true));
+
+    let mut second = OnlyInput::new(vec![b"false"]);
+    let error = decoder
+        .decode_input::<Value, _>(&mut second)
+        .expect_err("the second call must use the remaining cumulative input budget");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.raw_input_bytes(), 0);
+    assert_eq!(second.next, 1);
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 4);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
+}
+
+#[test]
+fn test_json_decoder_stream_accounts_bytes_once_and_does_not_commit_failures() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(16)
+        .value_limits(JsonValueLimits::builder().max_nodes(10).build())
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut input = OnlyInput::new(vec![b"true"]);
+    assert_eq!(decoder.decode_input::<Value, _>(&mut input).unwrap(), Value::Bool(true));
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 4);
+
+    let mut invalid = OnlyInput::new(vec![b"{"]);
+    assert!(decoder.decode_input::<Value, _>(&mut invalid).is_err());
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 5);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
+}

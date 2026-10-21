@@ -16,6 +16,7 @@ use qubit_budget::json::JsonEncodeAttempt;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
+use qubit_io::Output;
 use serde::Serialize;
 use serde_json::Error as JsonError;
 use serde_json::Serializer as JsonSerializer;
@@ -209,9 +210,9 @@ where
     ///
     /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects the value
     /// or output, or a serialization/writer error on failure.
-    pub fn write_buffered<W, T>(&mut self, writer: W, value: &T) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_buffered<O, T>(&mut self, writer: O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
-        W: Write,
+        O: Output<Item = u8>,
         T: Serialize + ?Sized,
     {
         let has_value_limits = self.session.value_budget().limits().has_limits();
@@ -246,9 +247,9 @@ where
     /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects output,
     /// or a serialization/writer error on failure. Accepted output prefixes
     /// remain written when a later operation fails.
-    pub fn write_incremental<W, T>(&mut self, writer: W, value: &T) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_incremental<O, T>(&mut self, writer: O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
-        W: Write,
+        O: Output<Item = u8>,
         T: Serialize + ?Sized,
     {
         let has_value_limits = self.session.value_budget().limits().has_limits();
@@ -271,7 +272,7 @@ where
                 }
             };
             if result.is_ok() {
-                let _ = output.flush();
+                let _ = Write::flush(&mut output);
             }
             output.into_result(result)
         };
@@ -334,19 +335,19 @@ where
             }
         };
         if result.is_ok() {
-            let _ = output.flush();
+            let _ = Write::flush(&mut output);
         }
         output.into_result(result)
     }
 
     /// Writes buffered bytes and charges each accepted prefix.
-    fn write_buffer<W>(
-        writer: W,
+    fn write_buffer<O>(
+        writer: O,
         bytes: &[u8],
         attempt: &mut JsonEncodeAttempt<'_, R, Q>,
     ) -> Result<(), JsonEncodeError<R, Q>>
     where
-        W: Write,
+        O: Output<Item = u8>,
     {
         let (output_budget, _) = attempt.split_mut();
         let accounting = RefCell::new(JsonOutputAccounting::new(output_budget));

@@ -100,10 +100,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "qubit-io"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72ec26e44df006b11bdb6bdb0b4423565fdc4cb9f2ffa37e3fb0a2ccc6efda30"
+dependencies = [
+ "qubit-utils",
+]
+
+[[package]]
 name = "qubit-json"
 version = "0.10.0"
 dependencies = [
  "qubit-budget",
+ "qubit-io",
  "serde",
  "serde_json",
  "thiserror",
@@ -119,6 +129,12 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "qubit-utils"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff9da2a76c1f983bc036d4135036db57f9d066c6fd6e8cdfbfacee72de4e2309"
 
 [[package]]
 name = "quote"

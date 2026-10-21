@@ -12,6 +12,7 @@ use std::io;
 use std::io::Write;
 
 use qubit_budget::ResourceQuantity;
+use qubit_io::Output;
 
 use super::json_output_accounting::JsonOutputAccounting;
 use crate::encode::JsonEncodeError;
@@ -74,9 +75,9 @@ where
     }
 }
 
-impl<W, R, Q> Write for JsonOutputWriter<'_, W, R, Q>
+impl<O, R, Q> Write for JsonOutputWriter<'_, O, R, Q>
 where
-    W: Write,
+    O: Output<Item = u8>,
     R: Clone,
     Q: ResourceQuantity,
 {
@@ -92,7 +93,7 @@ where
             }
         }
 
-        match self.writer.write(input) {
+        match Output::write(&mut self.writer, input) {
             Ok(written) => {
                 if written == 0 && !input.is_empty() {
                     let error = io::Error::new(io::ErrorKind::WriteZero, "JSON output writer accepted no bytes");
@@ -117,7 +118,7 @@ where
 
     /// Flushes the destination and preserves any resulting I/O error.
     fn flush(&mut self) -> io::Result<()> {
-        match self.writer.flush() {
+        match Output::flush(&mut self.writer) {
             Ok(()) => Ok(()),
             Err(error) => {
                 self.io_error = Some(io::Error::new(error.kind(), error.to_string()));

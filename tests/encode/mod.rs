@@ -7,6 +7,8 @@
 // =============================================================================
 
 mod encoder_api_tests;
+#[cfg(feature = "jcs")]
+mod jcs_encoder_tests;
 mod json_encode_error_tests;
 mod json_encode_session_tests;
 mod json_encoder_tests;

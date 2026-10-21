@@ -9,6 +9,7 @@
 
 use std::error::Error;
 use std::fmt;
+use std::io;
 use std::sync::Arc;
 
 use qubit_budget::MeasuredBudgetError;
@@ -62,6 +63,21 @@ impl<R, Q> JsonDecodeError<R, Q>
 where
     Q: Copy + fmt::Debug,
 {
+    /// Creates a stream-read failure and conditionally retains its source.
+    #[must_use = "return or inspect the constructed decoding error"]
+    pub(crate) fn read(source: io::Error, raw_input_bytes: usize, diagnostic_policy: DiagnosticPolicy) -> Self {
+        let kind = source.kind();
+        let source = (diagnostic_policy == DiagnosticPolicy::Detailed).then(|| Arc::new(source));
+        Self {
+            diagnostic_policy,
+            failure: JsonDecodeErrorSource::Read {
+                raw_input_bytes,
+                kind,
+                source,
+            },
+        }
+    }
+
     /// Creates a measured-budget failure at a semantic stage.
     #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) const fn budget(
@@ -195,6 +211,7 @@ where
     #[inline(always)]
     pub const fn kind(&self) -> JsonDecodeErrorKind {
         match self.failure {
+            JsonDecodeErrorSource::Read { .. } => JsonDecodeErrorKind::Read,
             JsonDecodeErrorSource::Budget { .. } => JsonDecodeErrorKind::Budget,
             JsonDecodeErrorSource::EmptyInput { .. } => JsonDecodeErrorKind::EmptyInput,
             JsonDecodeErrorSource::InvalidUtf8 { .. } => JsonDecodeErrorKind::InvalidUtf8,
@@ -214,6 +231,7 @@ where
     pub const fn stage(&self) -> JsonDecodeStage {
         match self.failure {
             JsonDecodeErrorSource::Budget { stage, .. } | JsonDecodeErrorSource::EmptyInput { stage, .. } => stage,
+            JsonDecodeErrorSource::Read { .. } => JsonDecodeStage::Input,
             JsonDecodeErrorSource::InvalidUtf8 { .. } => JsonDecodeStage::DecodeText,
             JsonDecodeErrorSource::InvalidJson { .. } => JsonDecodeStage::Parse,
             JsonDecodeErrorSource::UnexpectedTopLevel { .. } => JsonDecodeStage::TopLevelCheck,
@@ -241,7 +259,8 @@ where
     #[inline(always)]
     pub const fn raw_input_bytes(&self) -> usize {
         match self.failure {
-            JsonDecodeErrorSource::Budget { raw_input_bytes, .. }
+            JsonDecodeErrorSource::Read { raw_input_bytes, .. }
+            | JsonDecodeErrorSource::Budget { raw_input_bytes, .. }
             | JsonDecodeErrorSource::EmptyInput { raw_input_bytes, .. }
             | JsonDecodeErrorSource::InvalidUtf8 { raw_input_bytes, .. }
             | JsonDecodeErrorSource::InvalidJson { raw_input_bytes, .. }
@@ -275,7 +294,29 @@ where
             | JsonDecodeErrorSource::Deserialize {
                 normalized_input_bytes, ..
             } => normalized_input_bytes,
-            JsonDecodeErrorSource::InvalidUtf8 { .. } => None,
+            JsonDecodeErrorSource::InvalidUtf8 { .. } | JsonDecodeErrorSource::Read { .. } => None,
+        }
+    }
+
+    /// Returns the standard I/O error category for a read failure.
+    #[must_use]
+    #[inline(always)]
+    pub const fn read_error_kind(&self) -> Option<io::ErrorKind> {
+        match self.failure {
+            JsonDecodeErrorSource::Read { kind, .. } => Some(kind),
+            _ => None,
+        }
+    }
+
+    /// Returns the retained original I/O error for detailed read diagnostics.
+    #[must_use]
+    #[inline(always)]
+    pub fn read_error(&self) -> Option<&io::Error> {
+        match &self.failure {
+            JsonDecodeErrorSource::Read {
+                source: Some(source), ..
+            } => Some(source.as_ref()),
+            _ => None,
         }
     }
 
@@ -437,6 +478,7 @@ where
     /// Formats a privacy-safe or detailed message according to the policy.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.failure {
+            JsonDecodeErrorSource::Read { kind, .. } => write!(formatter, "JSON input read failed ({kind:?})"),
             JsonDecodeErrorSource::Budget { source, .. } => {
                 write!(formatter, "JSON resource budget rejected input: {source}")
             }
@@ -487,6 +529,9 @@ where
     /// when detailed diagnostics retained them.
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.failure {
+            JsonDecodeErrorSource::Read {
+                source: Some(source), ..
+            } => Some(source.as_ref()),
             JsonDecodeErrorSource::Budget { source, .. } => Some(source),
             JsonDecodeErrorSource::InvalidUtf8 {
                 source: Some(source), ..

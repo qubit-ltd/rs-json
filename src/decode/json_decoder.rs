@@ -11,7 +11,9 @@ use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
+use qubit_io::Input;
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde::de::DeserializeSeed;
 
 use super::DiagnosticPolicy;
@@ -232,6 +234,26 @@ where
         T: Deserialize<'de>,
     {
         self.decode_seed_utf8(TypedSeed::new(), input)
+    }
+
+    /// Decodes a complete document from an item-oriented byte input through
+    /// EOF.
+    ///
+    /// The input is read in fixed-size chunks and charged as each chunk
+    /// arrives. The complete document is buffered in memory because the
+    /// returned value must not borrow from the temporary buffer. Without an
+    /// input-byte limit, this buffering has no implicit size cap.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error for read failures, input-budget rejection,
+    /// invalid UTF-8, invalid JSON, or target deserialization failures.
+    pub fn decode_input<T, I>(&mut self, input: &mut I) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        T: DeserializeOwned,
+        I: Input<Item = u8> + ?Sized,
+    {
+        self.engine.decode_input(input, self.diagnostic_policy)
     }
 
     /// Decodes a JSON string through a caller-provided Serde seed.

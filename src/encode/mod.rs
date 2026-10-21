@@ -8,6 +8,12 @@
 //! Strict JSON encoding APIs and their budget-aware serializer internals.
 
 mod internal;
+#[cfg(feature = "jcs")]
+mod jcs_encode_error;
+#[cfg(feature = "jcs")]
+mod jcs_encode_error_kind;
+#[cfg(feature = "jcs")]
+mod jcs_encoder;
 mod json_collection_kind;
 mod json_encode_error;
 mod json_encode_error_kind;
@@ -23,6 +29,12 @@ mod output;
 mod serde_compat;
 mod serializer;
 
+#[cfg(feature = "jcs")]
+pub use jcs_encode_error::JcsEncodeError;
+#[cfg(feature = "jcs")]
+pub use jcs_encode_error_kind::JcsEncodeErrorKind;
+#[cfg(feature = "jcs")]
+pub use jcs_encoder::JcsEncoder;
 pub use json_collection_kind::JsonCollectionKind;
 pub use json_encode_error::JsonEncodeError;
 pub use json_encode_error_kind::JsonEncodeErrorKind;

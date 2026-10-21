@@ -8,11 +8,13 @@
 //! Shared resource admission and materialization for JSON decoder facades.
 
 use std::error::Error;
+use std::io;
 use std::sync::Arc;
 
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonDecodeAttempt;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_io::Input;
 use serde::de::DeserializeSeed;
 use serde_json::from_slice;
 use serde_json::value::RawValue;
@@ -186,6 +188,68 @@ where
         self.validate(document.as_str().as_bytes(), metadata, false, expected)
     }
 
+    /// Reads and accounts one complete input before applying the shared strict
+    /// document decoder. Bytes are buffered because returned values are owned.
+    pub(in crate::decode) fn decode_input<T, I>(
+        &mut self,
+        input: &mut I,
+        diagnostic_policy: DiagnosticPolicy,
+    ) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        T: serde::de::DeserializeOwned,
+        I: Input<Item = u8> + ?Sized,
+    {
+        let has_value_limits = self.session.value_budget().limits().has_limits();
+        let mut attempt = self.session.begin_value();
+        let mut scratch = [0_u8; 8192];
+        let mut bytes = Vec::new();
+        let mut raw_input_bytes = 0_usize;
+        loop {
+            let count = match Input::read(input, &mut scratch) {
+                Ok(0) => break,
+                Ok(count) => count,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(JsonDecodeError::read(error, raw_input_bytes, diagnostic_policy)),
+            };
+            let next_total = raw_input_bytes.checked_add(count).ok_or_else(|| {
+                JsonDecodeError::read(
+                    io::Error::new(io::ErrorKind::InvalidData, "input byte count overflow"),
+                    raw_input_bytes,
+                    diagnostic_policy,
+                )
+            })?;
+            attempt.try_consume_input_bytes(count).map_err(|source| {
+                JsonDecodeError::budget(source, JsonDecodeStage::Input, raw_input_bytes, None, diagnostic_policy)
+            })?;
+            bytes.extend_from_slice(&scratch[..count]);
+            raw_input_bytes = next_total;
+        }
+        let metadata = DecodeMetadata {
+            raw_input_bytes,
+            normalized_input_bytes: None,
+            diagnostic_policy,
+        };
+        let value = Self::decode_seed_attempt(
+            &mut attempt,
+            crate::decode::internal::TypedSeed::<T>::new(),
+            &bytes,
+            metadata,
+            false,
+            has_value_limits,
+            None,
+        )?;
+        attempt.commit().map_err(|source| {
+            JsonDecodeError::budget(
+                source,
+                JsonDecodeStage::Admission,
+                metadata.raw_input_bytes,
+                None,
+                diagnostic_policy,
+            )
+        })?;
+        Ok(value)
+    }
+
     /// Runs admission, an optional root check, Serde materialization, and value
     /// commit for one document.
     fn decode_seed<'de, S>(
@@ -201,20 +265,44 @@ where
     {
         let has_value_limits = self.session.value_budget().limits().has_limits();
         let mut attempt = self.session.begin_value();
-        Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
-        Self::check_top_level(input, metadata, expected)?;
-        let value = deserialize_json_document(seed, input).map_err(|source| {
-            JsonDecodeError::deserialize(
+        let value = Self::decode_seed_attempt(
+            &mut attempt,
+            seed,
+            input,
+            metadata,
+            charge_raw_input,
+            has_value_limits,
+            expected,
+        )?;
+        attempt.commit().map_err(|source| {
+            JsonDecodeError::budget(
                 source,
+                JsonDecodeStage::Admission,
                 metadata.raw_input_bytes,
                 metadata.normalized_input_bytes,
                 metadata.diagnostic_policy,
             )
         })?;
-        attempt.commit().map_err(|source| {
-            JsonDecodeError::budget(
+        Ok(value)
+    }
+
+    fn decode_seed_attempt<'de, S>(
+        attempt: &mut JsonDecodeAttempt<'_, R, Q>,
+        seed: S,
+        input: &'de [u8],
+        metadata: DecodeMetadata,
+        charge_raw_input: bool,
+        has_value_limits: bool,
+        expected: Option<JsonRootKind>,
+    ) -> Result<S::Value, JsonDecodeError<R, Q>>
+    where
+        S: DeserializeSeed<'de>,
+    {
+        Self::prepare_attempt(attempt, input, metadata, charge_raw_input, has_value_limits)?;
+        Self::check_top_level(input, metadata, expected)?;
+        let value = deserialize_json_document(seed, input).map_err(|source| {
+            JsonDecodeError::deserialize(
                 source,
-                JsonDecodeStage::Admission,
                 metadata.raw_input_bytes,
                 metadata.normalized_input_bytes,
                 metadata.diagnostic_policy,
