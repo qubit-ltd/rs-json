@@ -1,4 +1,4 @@
-# `qubit-json` 0.8 design
+# `qubit-json` design
 
 [中文版](json_design.zh_CN.md)
 
@@ -116,9 +116,15 @@ integers fit `i64`, non-negative integers fit `u64`, and fractional or
 exponential values must be finite `f64`. The lexical scanner admits
 `NumberBytes` before range validation, so resource and representation limits
 remain separate and budget failures have priority. The implementation does
-not enable serde_json arbitrary precision or recognize its old private Number
-marker. See [the number contract](number_contract.md) and [the numeric design
-decision](number_contract_design.md).
+not enable serde_json arbitrary precision or recognize its private Number
+marker. See [the number contract](number_contract.md).
+
+This keeps object structure and budget categories consistent: an object with
+`$serde_json::private::Number` as a key remains an ordinary object rather than
+becoming a number through a private Serde protocol. The separate `RawValue`
+integration remains supported. Finite float lexeme lengths use the public
+`serde_json::ser::CompactFormatter` interface, without a direct dependency on
+its underlying float-formatting library.
 
 ## Value
 
@@ -163,15 +169,57 @@ Public errors are divided by domain:
 Each error exposes only context that its domain can provide stably. There is
 no root-level error aggregate or compatibility alias.
 
-## Related design documents
+## Serialization errors and output boundaries
 
-- [Product requirements](json_prd.md) · [中文产品需求](json_prd.zh_CN.md)
+`JsonEncoder` and `JsonValueEncoder` share `JsonSerializationError`. Callers
+inspect `kind()` for precise causes and `category()` for recovery policies:
+`Number`, `ObjectKey`, `RawValue`, `Capacity`, `SerializerContract`, or `Custom`.
+Detail accessors expose only non-sensitive integer signedness, key shapes,
+collection kinds, or serializer states. Arbitrary third-party error text maps
+to `CustomSerialization` and never enters public Display, Debug, or error
+source chains. `JsonEncodeError::into_source()` transfers ownership of the
+operation-level source. See the [user guide](user_guide.md) for error categories.
+
+`RawValue` must be fully validated before its bytes reach an external target.
+Buffered writing completes serialization and budget checks before touching the
+target, but I/O failure can still leave partial bytes. Incremental writing also
+cannot roll back external output. Optimizations must preserve numeric ranges,
+duplicate-key checks, budget commits, error ordering, and partial-output behavior.
+
+## Resource measurement and performance validation
+
+When limits are disabled, work used only for measurement and admission can be
+skipped; syntax, numeric, and key validation remain mandatory.
+`JsonValueTransaction::has_limits()` lets readers skip unlimited budget
+measurement. Mutators select input and output measurement independently.
+Owned-buffer encoding writes directly to `Vec<u8>` when output is unlimited.
+
+Benchmarks distinguish strict validation, value budgets, output budgets, full
+budgets, fresh and reused sessions, and buffered and incremental writing. They
+cover numbers, strings, objects, `RawValue`, and different tree shapes. See the
+[benchmark guide](benchmark_baseline.md) for comparison methods.
+
+## Core invariants and validation boundaries
+
+- Normalization policy and resource limits remain independent. Untrusted input
+  needs limits at both the transport and decoding boundaries.
+- Failed decoding retains input charges; value charges commit only after full
+  success. Preparation charges input once.
+- The private Number marker is an ordinary key. Numeric lexical budgets take
+  precedence over range checks.
+- Tree traversal avoids Rust recursion. Budget and visitor failures preserve
+  their documented commit and mutation boundaries.
+- Default diagnostics retain no input content; custom serialization errors
+  never expose arbitrary source text.
+- Successful benchmark paths assert fixture admission, so cumulative budget
+  exhaustion cannot silently turn them into failure-path measurements.
+- Differential fuzzing separates lexical validation from target construction.
+  Deep admitted input may hit Serde's construction recursion guard; direct
+  materialized-value comparison is limited to conservatively shallow input.
+  Oversized fuzz inputs are rejected in full rather than truncated for comparison.
+
+## Related documents
+
+- [User guide](user_guide.md) · [用户手册](user_guide.zh_CN.md)
 - [Number contract](number_contract.md) · [数字契约](number_contract.zh_CN.md)
-- [Number contract design](number_contract_design.md) ·
-  [数字收敛设计](number_contract_design.zh_CN.md)
-- [Error, performance, and downstream safety](error_performance_redaction_design.md) ·
-  [错误、性能与下游安全边界](error_performance_redaction_design.zh_CN.md)
-- [Performance evidence log](benchmark_baseline.md) ·
-  [性能证据日志](benchmark_baseline.zh_CN.md)
-- [Dependency maintenance](dependency_maintenance.md) ·
-  [依赖维护](dependency_maintenance.zh_CN.md)
+- [Benchmark guide](benchmark_baseline.md) · [基准测试指南](benchmark_baseline.zh_CN.md)

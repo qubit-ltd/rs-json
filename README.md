@@ -17,12 +17,12 @@ cleanup of JSON embedded in external text.
 
 ## Installation
 
-Current `0.9` release:
+For the `0.10` version described by this checkout:
 
 ```toml
 [dependencies]
 qubit-json = "0.10"
-qubit-budget = { version = "0.5", features = ["json"] }
+qubit-budget = { version = "0.7", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -31,7 +31,7 @@ Local checkout:
 ```toml
 [dependencies]
 qubit-json = { version = "0.10", path = "../rs-json" }
-qubit-budget = { version = "0.5", features = ["json"] }
+qubit-budget = { version = "0.7", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -149,11 +149,8 @@ construction, and traversal.
   [JSON 数字契约](doc/number_contract.zh_CN.md)
 - [Design documents](doc/json_design.md) ·
   [设计文档](doc/json_design.zh_CN.md)
-- [Benchmark baseline](doc/benchmark_baseline.md) ·
-  [基准测试基线](doc/benchmark_baseline.zh_CN.md)
-- [Migration from 0.3 to 0.8](doc/migration_0_3_to_0_8.md) ·
-  [从 0.3 迁移到 0.8](doc/migration_0_3_to_0_8.zh_CN.md)
-- [Changelog](CHANGELOG.md) · [中文变更记录](CHANGELOG.zh_CN.md)
+- [Benchmark guide](doc/benchmark_baseline.md) ·
+  [基准测试指南](doc/benchmark_baseline.zh_CN.md)
 - [Released API documentation](https://docs.rs/qubit-json); for the current
   branch API, run `cargo doc --all-features --open`
 

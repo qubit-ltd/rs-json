@@ -1,450 +1,81 @@
-# `rs-json` JSON 性能证据日志
+# JSON 基准测试指南
 
 [English](benchmark_baseline.md)
 
-> 数字契约说明：当前严格路径只接受 i64/u64 联合整数范围和有限 f64；不再启用
-> serde_json arbitrary precision。复测数字密集输入时必须分别覆盖 i64/u64 边界、范围拒绝和
-> `NumberBytes` 拒绝，不能将历史任意精度行为作为兼容基线。
+本文介绍当前 checkout 的基准测试目标与比较方法。测量结果取决于硬件、输入和启用的限制。
 
-## 记录范围
+## 基准目标
 
-本记录保存 `decoder_bench` 在 `2026-07-23` 的一次完整执行结果中，
-下游形态的严格字节解码与宽松类型解码的关键中位数。它用于复核
-`rs-http` 的响应与 SSE 解码场景，不是跨机器或跨运行的性能阈值。
+| 目标 | 覆盖范围 |
+| --- | --- |
+| `decoder_bench` | 严格与规范化解码、UTF-8 入口、下游形态输入、控制字符和失败路径 |
+| `budgeted_serde_json` | 与直接使用 `serde_json` 的编解码对照、多种输入规模及独立预算模式 |
+| `tree_bench` | 大数组、大对象和深层树的迭代读取与修改 |
 
-基准命令：
-
-```bash
-cargo +1.94.0 bench --bench decoder_bench
-```
-
-执行基线提交为 `081fb98f73ba7cd5dc7a930f9d0c98cf70a5bd92`。完整执行还覆盖
-公开入口、控制字符规范化和代表性失败路径；Criterion 的原始统计保存在本地
-`target/criterion/`，不纳入版本控制。
-
-## 环境
-
-- CPU：Intel(R) Core(TM) i5-9600K CPU @ 3.70GHz，6 核、每核 1 线程。
-- 操作系统：Linux 6.17.0-35-generic x86_64。
-- 工具链：rustc 1.94.0 (4a4ef493e 2026-03-02)，LLVM 21.1.8。
-
-## 严格字节解码中位数
-
-| 输入大小 | `serde_json::from_slice` | 复用严格 decoder | 按次构造严格 decoder |
-| --- | ---: | ---: | ---: |
-| 1 KiB | 231.56 ns | 239.74 ns | 241.28 ns |
-| 64 KiB | 10.978 µs | 10.944 µs | 10.895 µs |
-| 1 MiB | 184.94 µs | 185.18 µs | 186.52 µs |
-
-“按次构造严格 decoder”在每个 Criterion 迭代内构造 `JsonDecoder` 后调用 `decode_utf8`，与当前
-`rs-http` 的响应和 SSE 调用方式一致。三种严格路径的数值接近，比较时应以同机多次运行及
-Criterion 的置信区间为准，而非将单次结果视为回归结论。
-
-## 宽松类型解码中位数
-
-| 输入大小 | 普通 JSON | Markdown fenced JSON | 每 1024 字节一个原始控制字符 |
-| --- | ---: | ---: | ---: |
-| 1 KiB | 311.00 ns | 355.11 ns | 2.4553 µs |
-| 64 KiB | 13.337 µs | 13.656 µs | 241.17 µs |
-| 1 MiB | 223.03 µs | 220.23 µs | 2.2784 ms |
-
-该组通过 `NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::default(),
-JsonDecodeLimits::<JsonResource, usize>::default()).decode_object_str` 解码类型化记录，覆盖 `rs-http`
-宽松 SSE 消息所依赖的普通、fenced 与控制字符规范化路径。控制字符密度会显著影响结果，
-因此应单独与相同输入形态的历史运行比较。
-
-## 2026-07-24 追加基线
-
-本次在提交 `76e027c35639542c8df1bac846907cc85e37043d` 上完整重跑
-`cargo +1.94.0 bench --bench decoder_bench`。环境与上次记录相同；下表使用
-Criterion `median.point_estimate`，保留历史记录以便按输入形态比较。
-
-### 严格字节解码中位数
-
-| 输入大小 | `serde_json::from_slice` | 复用严格 decoder | 按次构造严格 decoder |
-| --- | ---: | ---: | ---: |
-| 1 KiB | 244.69 ns | 242.00 ns | 243.75 ns |
-| 64 KiB | 10.959 µs | 11.400 µs | 11.040 µs |
-| 1 MiB | 182.17 µs | 188.68 µs | 186.63 µs |
-
-### 宽松类型解码中位数
-
-| 输入大小 | 普通 JSON | 含 Unicode、无原始控制字符 | Markdown fenced JSON | Pretty JSON | 每 1024 字节一个原始控制字符 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 1 KiB | 580.23 ns | 581.39 ns | 615.90 ns | 2.3020 µs | 2.4164 µs |
-| 64 KiB | 30.450 µs | 30.397 µs | 29.871 µs | 131.09 µs | 141.79 µs |
-| 1 MiB | 506.53 µs | 491.52 µs | 495.86 µs | 2.1129 ms | 2.4197 ms |
-
-新增的 Unicode、无原始控制字符输入用于单独观察规范化预扫描；它不应与含控制字符的
-输入直接比较。由于本机当前 CPU 调频状态会影响单次结果，这些数值只作为同机、同输入形态
-的后续回归基线，不构成跨机器性能阈值。
-
-## 2026-07-24 控制字符预扫描 A/B
-
-本次比较标量逐字节预扫描（A，提交 `c422d0b`）与每次安全处理 8 字节的预扫描
-（B，提交 `82dcbe2`）。两者使用相同的 benchmark harness，验证逻辑均在 Criterion
-计时循环之外。测试固定在 CPU 3，使用 Rust 1.94.0、1 秒预热、2 秒测量和 50 个样本，
-按 `A1-B1-B2-A2-A3-B3` 顺序交错执行。下表列出最后一对运行的中位数和 Criterion
-给出的耗时变化 95% 置信区间；另外两对用于确认方向。主机负载明显异常且严格解码对照项
-同时漂移的试跑没有计入结果。
-
-### 1 MiB 主要路径
-
-| 输入形态 | A 中位数 | B 中位数 | B 相对 A 的耗时变化 |
-| --- | ---: | ---: | ---: |
-| 普通 JSON | 490.39 µs | 232.54 µs | -53.11%（-53.72% 至 -52.50%） |
-| 含 Unicode、无原始控制字符 | 489.64 µs | 233.28 µs | -52.08%（-52.69% 至 -51.37%） |
-| Markdown fenced JSON | 489.20 µs | 231.39 µs | -51.94%（-52.49% 至 -51.37%） |
-| Pretty JSON | 2.0519 ms | 1.8591 ms | -9.99%（-10.97% 至 -9.02%） |
-| 每 1024 字节一个原始控制字符 | 2.1805 ms | 2.0044 ms | -7.53%（-8.63% 至 -6.37%） |
-
-三条无原始控制字符的 1 MiB 主路径均超过预设的 20% 改善门槛，且置信区间上界仍超过
-10% 改善。1 KiB 和 64 KiB 的对应路径同样改善；Pretty、稀疏控制字符、密集控制字符、
-显式规范化限制和严格解码对照项在交错运行中没有发现可复现的性能回归。第三对运行中，
-1 MiB 密集控制字符路径变化为 -0.77%（95% 置信区间 -1.80% 至 +0.29%），严格解码
-复用路径变化为 +0.66%（95% 置信区间 -1.83% 至 +3.89%），均未检出显著变化。
-
-因此保留 8 字节预扫描实现。该改动也让 Pretty 路径受益，但 Pretty 的 1 MiB 耗时仍约为
-紧凑 JSON 的 8 倍，说明其剩余成本主要来自后续空白压缩；是否优化 Pretty 路径应作为
-独立实验评估，而不是本次预扫描改动的组成部分。
-
-## 2026-07-24 状态感知普通块跳过 A/B
-
-本次比较已有的标量 JSON 状态扫描（A，提交
-`c87bd2eba740444e6c2e7b605bb30eb1d9c669aa`）与状态感知的 8 字节普通块跳过
-（B）。两者固定在 CPU 3，使用 Rust 1.94.0、1 秒预热和 2 秒测量完成 50
-样本的完整矩阵；最终实现再以 3 秒测量和 100 个样本复测下表端点。数值取
-Criterion `median.point_estimate`，变化范围为中位数变化的 95% 置信区间。
-
-### 代表性端点
-
-| 输入形态 | A 中位数 | B 中位数 | B 相对 A 的耗时变化 |
-| --- | ---: | ---: | ---: |
-| 1 MiB 普通宽松类型 JSON | 231.06 µs | 227.53 µs | -1.53%（-2.48% 至 -0.19%） |
-| 1 MiB Pretty 宽松类型 JSON | 1.8384 ms | 457.10 µs | -75.14%（-75.60% 至 -74.83%） |
-| 1 MiB、每 1024 字节一个原始控制字符 | 1.9980 ms | 546.72 µs | -72.64%（-73.15% 至 -72.36%） |
-| 1 MiB、每 2 字节一个原始控制字符 | 12.496 ms | 12.839 ms | +2.75%（+1.51% 至 +3.42%） |
-| 1 KiB、按次构造严格 decoder | 240.89 ns | 241.12 ns | +0.10%（-0.52% 至 +0.77%） |
-
-普通块跳过同时携带字符串和反斜杠状态，只有含引号、字符串内反斜杠或字符串内
-原始控制字符的块才逐字节处理。为了避免密集畸形字符串反复支付块分类成本，只要
-一个 8 字节块含至少两个 C0 字节，就退回原有标量路径。完整矩阵中未发现超过 5%
-的可复现回退；Pretty 和稀疏控制字符这两条原先仍受标量扫描限制的 1 MiB 路径分别
-改善约 75% 和 73%，因此保留该实现。
-
-## 2026-08-14 `budgeted_serde_json` 多规模基线
-
-本节记录资源预算 JSON 编解码改造前的比较基线。基准使用固定的紧凑
-`{"records":[...]}` 对象数组，数组元素均为
-`{"id":7,"text":"benchmark-record"}`；生成器对每个目标大小断言实际长度不超过目标，
-且与目标相差不超过一条编码记录。实际输入为 993 B、65,533 B 和 1,048,543 B，分别代表约
-1 KiB、64 KiB 和 1 MiB。每项的吞吐量以该实际输入字节数计算。
-
-基准命令：
+在仓库根目录运行：
 
 ```bash
+cargo bench --bench decoder_bench
 cargo bench --bench budgeted_serde_json -- --noplot
+cargo bench --bench tree_bench -- --noplot
 ```
 
-执行日期为 2026-08-14；提交为 `97e49b5f575ac0fce0da9a15f8403c1d6fb5456b` 的未提交任务
-工作树。Criterion 使用默认的 3 秒预热、5 秒测量和 100 个样本；表中的延迟取
-`median.point_estimate`，倍率以同规模 `serde_json` 为基准，较小值表示更快。该记录仅供相同
-机器、工具链和输入形态下的后续对比，不构成跨机器性能阈值。
-
-### 环境
-
-- CPU：Intel(R) Core(TM) i5-9600K CPU @ 3.70GHz，6 核、每核 1 线程。
-- 操作系统：Linux 6.17.0-35-generic x86_64 GNU/Linux。
-- 工具链：rustc 1.94.0 (4a4ef493e 2026-03-02)，LLVM 21.1.8。
-
-### 严格解码
-
-`owned-session` 在每次迭代构造 `JsonDecodeSession::from_limits`；`borrowed-session` 在每次
-迭代构造借用 `JsonValueBudget` 的会话；`reused-session` 在迭代之间复用无限制会话。后两项
-严格项均采用 `JsonDecoder`，其中带 session 的项复用一个无限制会话；表中
-`NormalizingJsonDecoder` 项仅用于比较显式规范化 facade。
-
-| 场景 | 约 1 KiB（延迟 / 吞吐 / 倍率） | 约 64 KiB（延迟 / 吞吐 / 倍率） | 约 1 MiB（延迟 / 吞吐 / 倍率） |
-| --- | ---: | ---: | ---: |
-| `serde_json` | 3.0582 µs / 309.66 MiB/s / 1.00× | 226.63 µs / 275.77 MiB/s / 1.00× | 3.9649 ms / 252.21 MiB/s / 1.00× |
-| `owned-session` | 5.7951 µs / 163.41 MiB/s / 1.89× | 375.03 µs / 166.65 MiB/s / 1.66× | 6.4060 ms / 156.10 MiB/s / 1.62× |
-| `borrowed-session` | 5.5218 µs / 171.50 MiB/s / 1.81× | 372.26 µs / 167.89 MiB/s / 1.64× | 6.4005 ms / 156.23 MiB/s / 1.61× |
-| `reused-session` | 5.5906 µs / 169.39 MiB/s / 1.83× | 378.06 µs / 165.31 MiB/s / 1.67× | 6.4071 ms / 156.07 MiB/s / 1.62× |
-| `NormalizingJsonDecoder::decode_str` | 2.6992 µs / 350.84 MiB/s / 0.88× | 186.22 µs / 335.60 MiB/s / 0.82× | 3.3947 ms / 294.57 MiB/s / 0.86× |
-| `NormalizingJsonDecoder::new(...).decode_str` | 2.6619 µs / 355.76 MiB/s / 0.87× | 182.60 µs / 342.25 MiB/s / 0.81× | 3.3478 ms / 298.69 MiB/s / 0.84× |
-
-### 严格编码
-
-编码场景使用与解码相同的预先解析 fixture。三个 budgeted 场景分别使用按次创建的 owned
-会话、按次创建的 borrowed 会话和跨迭代复用的无限制会话。
-
-| 场景 | 约 1 KiB（延迟 / 吞吐 / 倍率） | 约 64 KiB（延迟 / 吞吐 / 倍率） | 约 1 MiB（延迟 / 吞吐 / 倍率） |
-| --- | ---: | ---: | ---: |
-| `serde_json` | 1.1311 µs / 837.24 MiB/s / 1.00× | 61.576 µs / 1014.95 MiB/s / 1.00× | 984.02 µs / 1016.20 MiB/s / 1.00× |
-| `owned-session` | 5.0364 µs / 188.03 MiB/s / 4.45× | 292.39 µs / 213.74 MiB/s / 4.75× | 4.6477 ms / 215.15 MiB/s / 4.72× |
-| `borrowed-session` | 5.0701 µs / 186.78 MiB/s / 4.48× | 291.98 µs / 214.04 MiB/s / 4.74× | 4.6359 ms / 215.70 MiB/s / 4.71× |
-| `reused-session` | 5.0570 µs / 187.27 MiB/s / 4.47× | 291.97 µs / 214.05 MiB/s / 4.74× | 4.6374 ms / 215.63 MiB/s / 4.71× |
-
-预算会话路径包含结构和载荷的实时记账，编码路径还包含事务性输出记账，因此与直接调用
-`serde_json` 的绝对耗时不可等同；后续改造应按相同场景和实际输入大小比较，重点关注是否出现
-超出 Criterion 置信区间的回退。
-
-## 2026-08-14 完整 budget admission 改造后复测
-
-本次在同一台机器、同一工具链和相同的 993 B、65,533 B、1,048,543 B 输入上复跑上述
-30 个场景。工作树基于 `97e49b5f575ac0fce0da9a15f8403c1d6fb5456b`，包含任务 1—8
-最终集成以及最终 clippy/style 修复；Criterion 仍使用默认的 3 秒预热、5 秒测量和 100
-个样本。表格采用 `median.point_estimate`。相对倍率以本次同规模 `serde_json` 为 1.00×；
-括号内变化为本次延迟相对上一节改造前数据的差值，负数表示更快。两次运行未交错，CPU
-调频和系统负载会造成几个百分点的整体漂移，因此小幅变化只用于确认数量级，不视作显著回归。
-
-### 严格解码复测
-
-| 场景 | 约 1 KiB（延迟 / 吞吐 / 倍率 / 前后变化） | 约 64 KiB（延迟 / 吞吐 / 倍率 / 前后变化） | 约 1 MiB（延迟 / 吞吐 / 倍率 / 前后变化） |
-| --- | ---: | ---: | ---: |
-| `serde_json` | 2.9135 µs / 325.04 MiB/s / 1.00× / -4.73% | 218.44 µs / 286.10 MiB/s / 1.00× / -3.61% | 3.8917 ms / 256.95 MiB/s / 1.00× / -1.85% |
-| `owned-session` | 5.7484 µs / 164.74 MiB/s / 1.97× / -0.81% | 367.50 µs / 170.06 MiB/s / 1.68× / -2.01% | 6.3164 ms / 158.31 MiB/s / 1.62× / -1.40% |
-| `borrowed-session` | 5.8399 µs / 162.16 MiB/s / 2.00× / +5.76% | 368.75 µs / 169.48 MiB/s / 1.69× / -0.94% | 6.3221 ms / 158.17 MiB/s / 1.62× / -1.22% |
-| `reused-session` | 5.4755 µs / 172.95 MiB/s / 1.88× / -2.06% | 369.54 µs / 169.12 MiB/s / 1.69× / -2.25% | 6.4119 ms / 155.96 MiB/s / 1.65× / +0.07% |
-| `NormalizingJsonDecoder::decode_str` | 2.7992 µs / 338.31 MiB/s / 0.96× / +3.70% | 178.91 µs / 349.33 MiB/s / 0.82× / -3.93% | 3.2670 ms / 306.08 MiB/s / 0.84× / -3.76% |
-| `NormalizingJsonDecoder::new(...).decode_str` | 5.1220 µs / 184.89 MiB/s / 1.76× / +92.42% | 326.85 µs / 191.21 MiB/s / 1.50× / +79.00% | 5.6367 ms / 177.40 MiB/s / 1.45× / +68.37% |
-
-这一组历史数据记录的是 API 清理前的实现，不能作为当前 `decode_str()` 的性能结论。
-当前实现中，普通 `decode_str()` 与 `new(...).decode_str()` 都会先执行 lexical
-admission，再直接反序列化目标类型；参见 2026-08-18 的快速复测。后续性能比较必须使用
-同一命令和同一实现重新采样，不得把本节两个路径的旧差异解释为当前行为。
-
-owned、borrowed 与 reused 三条通用 budgeted decode 路径的差异在 1 KiB 仅约
-0.27—0.36 µs；64 KiB 和 1 MiB 的符号会翻转，且幅度不足各自总耗时的约 2%。这说明固定
-session 构造/借用成本只在小输入上可见，并非中大尺寸优化重点。`new(...).decode_str()` 的
-本次会话在迭代间复用，因此它与 `decode_str()` 的差值主要反映新增 preflight，而不是 session
-构造。
-
-### 严格编码复测
-
-| 场景 | 约 1 KiB（延迟 / 吞吐 / 倍率 / 前后变化） | 约 64 KiB（延迟 / 吞吐 / 倍率 / 前后变化） | 约 1 MiB（延迟 / 吞吐 / 倍率 / 前后变化） |
-| --- | ---: | ---: | ---: |
-| `serde_json` | 1.2738 µs / 743.47 MiB/s / 1.00× / +12.61% | 67.110 µs / 931.27 MiB/s / 1.00× / +8.99% | 1.0676 ms / 936.63 MiB/s / 1.00× / +8.50% |
-| `owned-session` | 4.8595 µs / 194.88 MiB/s / 3.82× / -3.51% | 288.64 µs / 216.52 MiB/s / 4.30× / -1.28% | 4.6059 ms / 217.11 MiB/s / 4.31× / -0.90% |
-| `borrowed-session` | 4.8581 µs / 194.93 MiB/s / 3.81× / -4.18% | 287.83 µs / 217.13 MiB/s / 4.29× / -1.42% | 4.5470 ms / 219.92 MiB/s / 4.26× / -1.92% |
-| `reused-session` | 4.8236 µs / 196.32 MiB/s / 3.79× / -4.61% | 288.08 µs / 216.94 MiB/s / 4.29× / -1.33% | 4.5549 ms / 219.54 MiB/s / 4.27× / -1.78% |
-
-三个 budgeted encode 场景彼此接近：1 KiB 的 owned/borrowed 相对 reused 只多约 35 ns，
-中大尺寸也没有一致的构造成本方向。相较之下，budgeted encode 的吞吐稳定在约
-195—220 MiB/s，只有直接 `serde_json` 的约 23%—26%，是本矩阵最明确的热点。
-
-### 仅基于本次数据的优化优先级
-
-1. 优先优化 budgeted encode 的结构、载荷和事务性输出记账；该结论需要由当前实现的固定
-   Criterion 命令持续复核。
-2. 评估 strict 与 normalizing decode 共享 lexical admission 的扫描成本，但必须保留完整
-   value admission 和直接 Serde 反序列化语义。
-3. session 创建、borrow 或复用只在固定基准显示稳定收益时优化；不以历史快路径差异为依据。
-
-## 2026-08-18 当前实现快速复测
-
-快速筛查使用以下命令；`--quick` 只用于回归方向判断，不能替代固定环境下的完整基准。
+通过过滤器缩小测量范围：
 
 ```bash
-cargo bench --bench budgeted_serde_json -- --quick
-cargo bench --bench budgeted_serde_json -- decode --quick
-```
-
-无输出字节预算的 encode 路径缓存一次“是否需要记账”的判断，避免每次 serializer
-`Write` 回调借用 accounting。第一条命令中，1 KiB / 64 KiB / 1 MiB 的中位时间分别从
-4.866 / 290.31 / 4412 µs 降至 4.009 / 232.55 / 3721 µs（owned session）；增量写入则从
-2.761 / 180.92 / 2976 µs 降至 2.308 / 155.98 / 2456 µs。带输出预算时仍保留每次写入的
-预检查与已接受字节记账，语义不变。
-
-第二条命令显示 993 B 输入上 strict 和 normalizing 的 session 路径约为 6.10--6.17 µs，
-本轮未检测到统计显著变化。两条路径都会先执行 lexical admission，再直接反序列化目标
-类型；字符串转字节的 forwarding 方法只内联，不改变该成本模型。后续若要建立新的性能
-基线，应在相同硬件与完整 Criterion 参数下重新采样，并同时报告带预算和无预算场景。
-
-## 2026-08-25 编码能力缓存优化
-
-本次把编码基准拆分为 `strict-only`、`output-only`、`value-only` 和 `full`
-四种明确模式。修改前的 quick 矩阵显示，严格模式即使没有 value 限制，仍会为每个
-Serde 事件动态借用共享 context；整数还会计算仅供预算使用的词法长度，序列和 map
-还会维护并检查仅供预算使用的计数。1 MiB `strict-only` 因而为直接 `serde_json`
-的约 3.40 倍，`full` 则约为 4.96 倍。主要损失不是 session 构造，而是按节点执行的
-动态借用、测量计算和容器计数。
-
-优化在编码入口只计算一次 `has_value_limits`，随后把这一不可变能力位复制到 serializer、
-compound、nested value 和 key wrapper。无 value 限制时在借用 context 之前返回，并跳过
-数字词法长度、字节数组逐元素计量及容器计数；64 位联合整数范围、RawValue 语法扫描和
-output accounting 仍始终执行。修改前后使用同一进程环境分别运行 quick 矩阵，方向性结果如下：
-
-| 路径 | 约 1 KiB | 约 64 KiB | 约 1 MiB |
-| --- | ---: | ---: | ---: |
-| `strict-only` | 3.5267 → 3.2877 µs（-6.8%） | 208.27 → 173.96 µs（-16.5%） | 3.2188 → 2.8161 ms（-12.5%） |
-| `output-only` | 4.4097 → 3.8314 µs（-13.1%） | 255.18 → 217.96 µs（-14.6%） | 3.8645 → 3.5712 ms（-7.6%） |
-| `numeric` | 2.5146 → 1.7406 µs（-30.8%） | 140.11 → 87.082 µs（-37.8%） | 2.1975 → 1.3118 ms（-40.3%） |
-| `full` | 5.1318 → 4.9785 µs（-3.0%） | 289.23 → 282.29 µs（-2.4%） | 4.6958 → 4.4903 ms（-4.4%） |
-
-quick 数字只用于 A/B 方向判断。`numeric` 改善最大，直接验证了无预算路径仍计算每个数字
-词法长度是主要根因；`full` 中这些工作本来就是必须的，因此只出现噪声范围附近的小幅变化。
-
-最终基线使用以下完整 Criterion 命令，默认 3 秒预热、5 秒测量和 100 个样本；表中采用
-输出区间的中心估计值。运行时工作树基于 `40121aa` 且包含本次未提交修改。
-
-```bash
+cargo bench --bench budgeted_serde_json -- decode --noplot
 cargo bench --bench budgeted_serde_json -- encode --noplot
+cargo bench --bench budgeted_serde_json -- encode --quick
 ```
 
-环境为 Intel(R) Core(TM) i5-9600K、Linux 6.17.0-35-generic x86_64、rustc 1.94.0
-（LLVM 21.1.8）。
+`--quick` 只用于初步筛选候选，正式结论需完整采样确认。Criterion 结果在本地生成，位于
+`target/criterion/`。
 
-| 场景 | 约 1 KiB（延迟 / 吞吐 / serde 倍率） | 约 64 KiB（延迟 / 吞吐 / serde 倍率） | 约 1 MiB（延迟 / 吞吐 / serde 倍率） |
-| --- | ---: | ---: | ---: |
-| `serde_json` | 1.1748 µs / 806.07 MiB/s / 1.00× | 64.315 µs / 971.74 MiB/s / 1.00× | 1.0118 ms / 988.30 MiB/s / 1.00× |
-| `strict-only` | 3.1517 µs / 300.47 MiB/s / 2.68× | 177.50 µs / 352.09 MiB/s / 2.76× | 2.8302 ms / 353.32 MiB/s / 2.80× |
-| `output-only` | 3.7749 µs / 250.87 MiB/s / 3.21× | 218.21 µs / 286.41 MiB/s / 3.39× | 3.5173 ms / 284.30 MiB/s / 3.48× |
-| `value-only` | 4.1269 µs / 229.47 MiB/s / 3.51× | 235.77 µs / 265.07 MiB/s / 3.67× | 3.7423 ms / 267.21 MiB/s / 3.70× |
-| `full` | 4.8979 µs / 193.35 MiB/s / 4.17× | 285.37 µs / 219.00 MiB/s / 4.44× | 4.5259 ms / 220.94 MiB/s / 4.47× |
-| `raw-value` | 2.4314 µs / 389.48 MiB/s / 2.07× | 145.49 µs / 429.55 MiB/s / 2.26× | 2.3498 ms / 425.56 MiB/s / 2.32× |
+## 比较矩阵
 
-最终结果保留该最小优化。剩余开销由严格 Serde decorator、事务生命周期、按事件 output
-writer 和实际启用的 value accounting 构成；若继续优化，必须把 output writer 的可变记账
-作为独立实验，不应与本次能力缓存叠加评估。
+带预算的编解码基准使用约 1 KiB、64 KiB 和 1 MiB 的文档。解码区分直接使用 `serde_json`、
+自有会话、借用会话、复用会话、值限制和规范化解码。编码包含：
 
-## 2026-08-25 输出记账分离实验
+| 模式 | 用途 |
+| --- | --- |
+| `strict-only` | 无预算限制的严格序列化 |
+| `value-only` | 带值资源限制的严格序列化 |
+| `output-only` | 带输出字节限制的严格序列化 |
+| `full` | 同时启用值限制与输出限制 |
+| `strict-owned` / `strict-only` | 比较新建和复用无限制编码器的成本 |
+| `incremental-writer` / `incremental-output-only` | 比较无限制与有输出限制的增量写入 |
+| `numeric`、`string`、`raw-value` | 不同数据形态的成本，均有相同形态的直接 `serde_json` 对照 |
 
-新增 `encode/incremental-output-only`，使增量 writer 在与
-`encode/output-only` 相同的输出字节上限下运行。quick 复测使用：
+tree 基准区分纯 visitor 遍历、无限制与有限制的 reader，以及 mutator 输入和输出限制的
+四种组合。
 
-```bash
-cargo bench --bench budgeted_serde_json -- encode/output-only --quick
-cargo bench --bench budgeted_serde_json -- encode/incremental-writer --quick
-cargo bench --bench budgeted_serde_json -- encode/incremental-output-only --quick
-```
+## 测量步骤
 
-本机这轮的 993 B / 64 KiB / 1 MiB 吞吐分别为：缓冲 `output-only` 约
-248 / 287 / 292 MiB/s；不受输出上限约束的增量 writer 约 566 / 600 / 604 MiB/s；
-受相同上限约束的增量 writer 约 381 / 393 / 377 MiB/s。因而这轮实验确认了两件事：输出
-记账本身有可测成本，同时缓冲 `Vec` 路径还含有独立的分配/复制成本。结果不足以支持改变
-记账语义或删除每次写入前的边界检查，所以本次只保留可重复的比较基准，不引入未经验证的
-热路径优化。
+1. 记录代码版本与未提交改动、Rust 工具链、依赖解析结果、硬件、操作系统、输入形态、
+   限制配置和实际命令。
+2. 在同一台机器上用相同 fixture 和 Criterion 参数比较修改前后，保持 CPU 亲和性与电源
+   设置一致。
+3. 确认成功场景实际准入成功。每次受限操作新建会话，或在复用前重置，避免累计用量改变
+   被测路径。
+4. 报告延迟、吞吐、置信区间与相同形态的直接对照。重新采样当前代码，不把旧的本地
+   Criterion 结果视为当前实现基线。
+5. 局部优化后复查有代表性的有限制和无限制场景。增加热路径设计复杂度前，先取得性能
+   剖析证据。
 
-## 2026-08-26 编码剩余开销分离实验
-
-本次先在提交 `0d6db73a2c29838769df44f762f3b6ec913ec91f` 上固定 CPU 3 运行修改前
-quick 矩阵，随后增加三个与现有 fixture 完全同形态的直接 `serde_json` 对照：
-`incremental-serde-json`、`numeric-serde-json` 和 `raw-value-serde-json`。这些对照分别用于
-分离普通结构 serializer 包装、数字事件包装和 `RawValue` 整段词法验证成本。工具链仍为
-rustc 1.94.0、LLVM 21.1.8，CPU 为 Intel(R) Core(TM) i5-9600K。
-
-Linux `perf` 因主机 `kernel.perf_event_paranoid=4` 拒绝非特权采样，本机也没有可用的
-flamegraph 或 valgrind 工具；实验没有修改系统权限，改用同一 Criterion 进程内的形态对照。
-最终采样命令使用 1 秒预热、2 秒测量和 50 个样本：
-
-```bash
-taskset -c 3 cargo bench --bench budgeted_serde_json -- \
-  '(65533|1048543|54601|873811)' \
-  --warm-up-time 1 --measurement-time 2 --sample-size 50 --noplot
-```
-
-表中倍率以同一行的直接 `serde_json` 对照为 1.00×；`RawValue` 的直接路径信任已构造值，
-而 `JsonEncoder` 按公开契约重新执行词法验证，因此该倍率只用于量化契约成本，不能作为删除
-验证的依据。
-
-| 路径 | 约 64 KiB：直接 / `JsonEncoder` / 倍率 | 约 1 MiB：直接 / `JsonEncoder` / 倍率 |
-| --- | ---: | ---: |
-| 普通缓冲结构 | 67.018 / 178.70 µs / 2.67× | 1.0743 / 2.8220 ms / 2.63× |
-| 普通增量结构 | 22.768 / 103.30 µs / 4.54× | 398.64 µs / 1.6665 ms / 4.18× |
-| 数字数组 | 63.969 / 82.219 µs / 1.29× | 1.0306 / 1.3013 ms / 1.26× |
-| `RawValue` | 1.2525 / 140.00 µs / 111.78× | 31.164 µs / 2.2557 ms / 72.38× |
-
-普通结构路径的主要剩余差异来自每个嵌套值必须再次进入严格 serializer/compound wrapper；
-数字路径只有约 26%—29% 的同类差异；`RawValue` 则由必须遍历完整输入的词法验证主导。
-在不复制一套专用 Serde serializer/compound 状态机、也不取消 `RawValue` 验证的前提下，
-本轮没有找到能够用小范围实现消除且有望达到 10% 主端点改善门槛的候选。因此不保留性能
-候选代码，只保留三个对照基准，供以后评估 serializer 架构方案。
-
-实验同时补上严格编码契约的缺失回归：原实现把非有限 `f32`/`f64` 委托给
-`serde_json` 并输出 `null`，与 `JsonEncoder` 和数字契约文档不符。现在 serializer 在任何
-预算模式下都先拒绝非有限浮点数。修改前测试稳定失败，修正后完整 JSON text encode 测试
-通过；该分支在修改前后 quick 主矩阵中没有产生可复现的 5% 以上回退。它属于契约修复，
-不作为性能候选或 10% 改善声明。
-
-## 2026-08-31 unlimited 编码与 tree 快路径实验
-
-本轮先按第一性原理拆分必需成本和可删除成本：严格 Serde 遍历、数字/键校验与字节生成是
-必需工作；没有 output limit 时仍经过 output buffer/accounting，以及没有 value limits 时
-仍进行 tree measurement/admission，属于不能改变结果的额外工作。quick 筛选固定在 CPU 3；
-它只用于决定是否进入完整采样。
-
-编码的 1 MiB object-array quick 中位数如下：
-
-| 路径 | 修改前 | E1 后 | 结论 |
-| --- | ---: | ---: | --- |
-| `serde_json` | 1.0228 ms | 同一对照 | 参考 |
-| `strict-only` | 2.3252 ms | 1.0620 ms | 约 -54%，保留 E1 |
-| `value-only` | 3.1161 ms | 1.8543 ms | 约 -40%，保留 E1 |
-| `output-only` | 2.9761 ms | 3.2209 ms | 未走 E1；quick 噪声，完整采样复核 |
-| `full` | 3.7308 ms | 3.9392 ms | 未走 E1；quick 噪声，完整采样复核 |
-
-E1 让无 output limit 的 owned-buffer 直接写入 `Vec<u8>`，仍保留 value transaction 和
-`RawValue` 失败传播。优化后 strict-only 相对直接 `serde_json` 只剩约 4% 差距，已低于复制
-一套无 value-budget serializer 的 5% 理论收益上限，故否决 E2。E3 所需的 perf 证据无法取得：
-主机 `kernel.perf_event_paranoid=4`，未修改系统权限；benchmark 也没有指向 admission-plan
-复杂化的充分证据。E4 会把完整 `RawValue` 扫描与输出状态机耦合，且增量 writer 在验证完成前
-不能写出，因此不实施。string-heavy、owned/reused session 和 `RawValue` 对照保留在基准中。
-
-tree quick A/B 的代表性中位数如下：
-
-| unlimited 场景 | 修改前 | 快路径后 | 变化 |
-| --- | ---: | ---: | ---: |
-| reader array / 1K | 16.2 µs | 8.22 µs | 约 -49% |
-| reader array / 16K | 252 µs | 156.85 µs | 约 -38% |
-| reader object / 256 | 15.5 µs | 10.09 µs | 约 -35% |
-| reader object / 4096 | 269 µs | 164.87 µs | 约 -39% |
-| reader deep tree | 8.66 µs | 5.87 µs | 约 -32% |
-| mutator large array | 669 µs | 157.8 µs | 约 -76% |
-| mutator large object | 1.97 ms | 1.49 ms | 约 -24% |
-| mutator deep tree | 48.5 µs | 30.97 µs | 约 -36% |
-
-快路径达到保留门槛；bounded 场景继续执行原检查，quick 波动由完整 Criterion 采样复核。
-最终复现命令为：
+Linux 安装了 `taskset` 时，可固定到一个可用 CPU，例如：
 
 ```bash
 taskset -c 3 cargo bench --bench budgeted_serde_json -- --noplot
 taskset -c 3 cargo bench --bench tree_bench -- --noplot
 ```
 
-两套命令随后以 Criterion 默认的 3 秒预热、5 秒测量和 100 个样本完整运行并成功退出。
-最终 1 MiB 编码中位数为：`serde_json` 1.1117 ms、`strict-only` 0.9944 ms、
-`value-only` 1.7384 ms、`output-only` 3.2153 ms、`full` 4.0015 ms。
-`output-only` 相对相邻基线的变化区间跨过零，未检测到回退；`value-only` 的完整采样变化为
--5.87%，与 E1 方向一致。严格路径在该 fixture 上已经到达直接对照的同一量级，所以不再增加
-第二套 serializer。
+## 结果解释边界
 
-最终 tree 中位数再次确认快路径的绝对成本：reader unlimited 的 array 1K/16K、object
-256/4096、deep tree 分别为 9.93 µs、157.05 µs、9.87 µs、161.64 µs、5.74 µs；对应 bounded
-为 17.96 µs、281.65 µs、16.51 µs、270.58 µs、9.24 µs。mutator unlimited 的 large array、
-large object、deep tree 分别为 169.53 µs、1.4316 ms、28.51 µs；四种限制组合也均完成采样。
-受保护路径与同一实现的先前 quick 样本存在正负波动，但大尺寸差异不显著，未发现稳定超过
-3% 的回退；行为测试同时确认 unlimited 与 bounded reader 的回调序列一致。
+严格编解码会执行直接 `serde_json` 不一定承担的检查。尤其是 `RawValue` 的直接对照信任
+已经构造的值，而 `JsonEncoder` 会重新验证原始 JSON。差值用于测量契约成本，不能作为
+删除验证的依据。
 
-## 2026-08-31 budgeted encode 当前热点 A/B 复测
-
-本轮使用当前工作树执行 `cargo bench --bench budgeted_serde_json -- encode --quick`，并用同一
-fixture 的 `strict-only`、`value-only`、`output-only`、`full` 及增量 writer 对照拆分成本。
-1 MiB 中位时间如下；`serde_json` 与 `incremental-serde-json` 是同形态直接实现对照：
-
-| 路径 | 中位时间 | 相对 `serde_json` |
-| --- | ---: | ---: |
-| `serde_json` | 1.1144 ms | 1.00× |
-| `strict-only` | 996.43 µs | 0.89× |
-| `value-only` | 1.7374 ms | 1.56× |
-| `output-only` | 3.1972 ms | 2.87× |
-| `full` | 4.2207 ms | 3.79× |
-| `incremental-serde-json` | 423.93 µs | 0.38× |
-| `incremental-writer` | 1.7001 ms | 1.53× |
-| `incremental-output-only` | 2.3780 ms | 2.13× |
-
-这个 A/B 矩阵确认当前主要成本集中在输出记账和 materialized-value 记账；session 构造不是
-主要差异。Criterion 与已保存基线的变化区间没有形成稳定的 5% 改善候选，且输出记账必须
-保留逐次边界检查和 partial-output 契约。因此本轮不提交新的 encode 热路径优化；后续若要继续
-改动，应先取得固定 CPU 的 profiler 证据，再单独 A/B 输出 writer 或 admission plan，并同时
-验证预算、I/O 和增量输出语义。
+优化必须保留数字范围、重复键拒绝、输入与值记账、writer 错误顺序和部分输出行为。
+数字检查应覆盖 `i64`/`u64` 边界、范围拒绝和 `NumberBytes` 拒绝。无限制结果仅适用于
+可信数据或已由其他层准入的数据。详见[设计文档](json_design.zh_CN.md)和
+[数字契约](number_contract.zh_CN.md)。

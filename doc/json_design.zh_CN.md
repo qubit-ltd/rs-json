@@ -1,4 +1,4 @@
-# `qubit-json` 0.8 设计
+# `qubit-json` 设计
 
 [English](json_design.md)
 
@@ -93,8 +93,12 @@ transaction 只在完整成功时提交。
 strict 与 normalizing 文本路径共享同一数字契约：负整数装入 `i64`，非负整数装入 `u64`，
 小数或指数装入有限 `f64`。lexical scanner 先完成 `NumberBytes` 预算准入，再执行范围校验；
 因此资源限制与表示限制职责独立，且预算失败优先。实现不启用 serde_json arbitrary precision，
-也不识别其旧 Number marker。完整规则见 [JSON 数字契约](number_contract.zh_CN.md)，决策背景见
-[64 位数字收敛设计](number_contract_design.zh_CN.md)。
+也不识别其私有 Number marker。完整规则见 [JSON 数字契约](number_contract.zh_CN.md)。
+
+该选择让合法对象的结构与预算类别保持一致：键为 `$serde_json::private::Number` 的对象始终
+按普通对象处理，不能因匹配 Serde 私有协议而变成数字。`RawValue` 的独立集成仍然保留。
+有限浮点的紧凑 JSON 文本长度通过公开的 `serde_json::ser::CompactFormatter` 接口计算，
+不直接依赖其底层浮点格式化库。
 
 ## Value
 
@@ -130,15 +134,41 @@ key 进行准入。
 
 每种错误只暴露其领域能稳定提供的上下文；没有根级错误聚合或兼容别名。
 
-## 相关设计文档
+## 序列化错误与输出边界
 
-- [产品需求](json_prd.zh_CN.md) · [Product requirements](json_prd.md)
+`JsonEncoder` 与 `JsonValueEncoder` 共用 `JsonSerializationError`。调用方通过 `kind()`
+识别精确原因，通过 `category()` 按 `Number`、`ObjectKey`、`RawValue`、`Capacity`、
+`SerializerContract` 或 `Custom` 制定恢复策略。细节访问器只暴露整数符号、键形状、集合类型
+或序列化状态等非敏感信息。第三方自定义错误文本映射为 `CustomSerialization`，不会进入
+公开的 Display、Debug 或错误来源链。`JsonEncodeError::into_source()` 用于取得操作层错误
+来源的所有权。具体错误类别见[用户手册](user_guide.zh_CN.md)。
+
+`RawValue` 必须先完整验证，才能将其字节写入外部目标。缓冲写入先完成序列化和预算检查，
+再接触目标，但 I/O 失败仍可能留下部分字节；增量写入同样不承诺回滚外部输出。性能优化
+必须保持数字范围、重复键、预算提交、错误顺序和部分输出契约。
+
+## 资源计量与性能验证
+
+未启用限制时可跳过仅用于预算的测量和准入，仍须执行语法、数字和键校验。
+`JsonValueTransaction::has_limits()` 允许 reader 跳过无限事务的预算计量；mutator 分别根据
+输入和输出限制决定是否执行相应的完整树计量。无输出限制的自有缓冲路径直接写入 `Vec<u8>`。
+
+基准应区分严格校验、值预算、输出预算、完整预算、会话构造与复用、缓冲与增量写入，
+并覆盖数字、字符串、对象、`RawValue` 和不同树形。比较方法见[基准测试指南](benchmark_baseline.zh_CN.md)。
+
+## 核心不变量与验证边界
+
+- 规范化策略与资源限制独立；不可信输入必须在传输层和解码层分别设置上限。
+- 解码失败后保留输入消耗，值消耗只在完整成功后提交；prepare 仅核算一次输入。
+- 私有 Number marker 是普通键；数字文本预算先于范围检查。
+- tree 遍历不依赖 Rust 递归；预算失败和 visitor 失败遵循各自的提交及修改边界。
+- 默认诊断不保留输入内容，自定义序列化错误不泄露任意来源文本。
+- 基准的成功路径必须确认 fixture 准入成功，避免累计预算耗尽后测到错误路径。
+- 差分 fuzz 区分词法验证与目标类型构造。词法准入成功的深层输入可能触发 Serde 构造递归
+  保护，因此只有保守的浅层文档才直接比较物化值。超长 fuzz 输入整体拒绝，不截断后比较。
+
+## 相关文档
+
+- [用户手册](user_guide.zh_CN.md) · [User guide](user_guide.md)
 - [数字契约](number_contract.zh_CN.md) · [Number contract](number_contract.md)
-- [64 位数字收敛设计](number_contract_design.zh_CN.md) ·
-  [Number contract design](number_contract_design.md)
-- [错误、性能与下游安全边界](error_performance_redaction_design.zh_CN.md) ·
-  [Error, performance, and downstream safety](error_performance_redaction_design.md)
-- [性能证据日志](benchmark_baseline.zh_CN.md) ·
-  [Performance evidence log](benchmark_baseline.md)
-- [依赖维护](dependency_maintenance.zh_CN.md) ·
-  [Dependency maintenance](dependency_maintenance.md)
+- [基准测试指南](benchmark_baseline.zh_CN.md) · [Benchmark guide](benchmark_baseline.md)

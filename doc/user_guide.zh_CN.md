@@ -1,6 +1,6 @@
 # Qubit JSON 用户手册
 
-本手册面向使用 `qubit-json` 0.8、Rust 1.94+ 的服务、配置读取器和数据管道。它说明如何在
+本手册面向使用 `qubit-json` 0.10、Rust 1.94+ 的服务、配置读取器和数据管道。它说明如何在
 调用方预算约束下准入 JSON，同时保留 Serde 数据模型；它不替代 `serde_json`，也不负责应用
 数据模式。
 
@@ -33,12 +33,12 @@
 
 ### 安装与最小配置
 
-默认使用 crates.io 上的当前最新版 `0.8`；本地开发时也可以把版本号替换为 `path`：
+以下依赖版本与本 checkout 一致；使用尚未发布的本地改动时，改为对应的 `path` 依赖：
 
 ```toml
 [dependencies]
-qubit-json = "0.8"
-qubit-budget = { version = "0.4", features = ["json"] }
+qubit-json = "0.10"
+qubit-budget = { version = "0.7", features = ["json"] }
 serde_json = "1.0"
 ```
 

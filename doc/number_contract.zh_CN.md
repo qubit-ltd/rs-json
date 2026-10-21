@@ -40,7 +40,7 @@ parser。`n` 后缀仅属于 JavaScript 源码；`123n` 不是合法 JSON，绝�
 
 ## Serde 边界
 
-`qubit-json` 不启用 serde_json 的 `arbitrary_precision` feature，也不解释其旧私有 Number marker。
+`qubit-json` 不启用 serde_json 的 `arbitrary_precision` feature，也不解释其私有 Number marker。
 键为 `$serde_json::private::Number` 的对象是普通对象，并按 object/key/string 正常记账；独立的
 `RawValue` 集成仍保留。
 
