@@ -138,6 +138,55 @@ and apply schema, authorization, and identifier rules. Continue below when the
 boundary also needs normalization, repeated decoding, unique object keys, or
 tree processing.
 
+## Canonical bytes for signatures and hashes
+
+When an application signs or hashes JSON, the sender and verifier need the
+same byte representation even if object members arrived in a different order.
+Enable the optional `jcs` feature and give `JcsEncoder` a constructed
+`serde_json::Value`:
+
+```toml
+[dependencies]
+qubit-json = { version = "0.10", features = ["jcs"] }
+serde_json = "1.0"
+```
+
+The application can then canonicalize a value before passing its bytes to its
+existing signing or hashing code:
+
+```rust
+use qubit_json::encode::JcsEncoder;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut encoder = JcsEncoder::unlimited();
+    let value = serde_json::json!({"b": 2, "a": 1.0});
+    let canonical = encoder.to_vec(&value)?;
+    assert_eq!(canonical, br#"{"a":1,"b":2}"#);
+    Ok(())
+}
+```
+
+The feature is disabled by default. The encoder accepts `Value`, not arbitrary
+`Serialize` implementations or raw JSON text. Reject duplicate keys while
+reading raw JSON, before constructing `Value`; once duplicate members have
+been collapsed into a map, the encoder cannot detect them. The existing
+`JsonDecoder` is a strict JSON decoder, but its integer text limits do not
+cover every number lexeme accepted by JCS, so it is not a complete raw-text JCS
+entry point.
+
+JCS numbers follow the IEEE 754 binary64 model. A value containing
+`9007199254740993` can therefore produce the canonical number
+`9007199254740992`. Represent an integer as a JSON string when its exact digits
+must survive canonicalization.
+
+`to_vec` and `to_string` return a complete result. `write_buffered` creates and
+checks the canonical document before writing it; `write_incremental` sends
+produced bytes directly to the destination. Either writer can leave a prefix
+if the destination fails, and accepted bytes remain charged to the output
+budget; the value transaction commits only if the complete operation succeeds.
+The canonicalizer may buffer object members while sorting them, so
+internal sorting allocations are not bounded by the output-byte limit.
+
 ## Advanced usage
 
 Use `NormalizingJsonDecoder` only when the boundary explicitly permits the
@@ -147,11 +196,39 @@ fence, or control-character escaping). Its policy is independent from
 limits)`, or pass a `JsonDecodeSession` to `NormalizingJsonDecoder::new(policy,
 session)`.
 
-The strict and normalizing decoders currently consume a complete `&str` or
-`&[u8]` input. Their input-byte limit admits the supplied slice; it does not
-retroactively limit memory already allocated by an HTTP body aggregator or
-other transport. Apply a bounded read or body-aggregation limit at that outer
-boundary before passing the complete input to a decoder.
+Slice-based strict and normalizing decoder methods consume a complete `&str`
+or `&[u8]` input. Use them when a decoded result must borrow from that input.
+Their input-byte limit admits the supplied slice; it does not retroactively
+limit memory already allocated by an HTTP body aggregator or other transport.
+`JsonDecoder::decode_input` offers a byte-oriented source for owned results:
+
+```rust
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecoder;
+fn main() -> Result<(), JsonDecodeError<JsonResource>> {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4096)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut body = std::io::Cursor::new(br#"{"id":42}  "#);
+    let request: serde_json::Value = decoder.decode_input(&mut body)?;
+    assert_eq!(request["id"], 42);
+    Ok(())
+}
+```
+
+`decode_input` accepts `Input<Item = u8>` sources; standard `Read` values such
+as `Cursor` use the `qubit-io` integration. It reads through EOF and applies
+strict checks to the complete document, including trailing whitespace and any
+second JSON value. Input bytes are charged chunk by chunk, and a configured
+`max_input_bytes` stops the read as soon as the next chunk exceeds the limit.
+The return type must implement `DeserializeOwned` because the decoder buffers
+the complete document internally. With no input-byte limit, that temporary
+buffer has no configured maximum. This method parses ordinary strict JSON; it
+does not add the number-text rules or duplicate-key rejection needed to
+canonicalize arbitrary raw JSON as JCS.
 
 ### Prepared normalized documents
 

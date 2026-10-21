@@ -123,6 +123,44 @@ assert_eq!(output, b"[1,2");
 下一步通常是把已准入文档反序列化为应用类型，再执行模式、权限和标识符规则。如果边界还
 需要文本规范化、重复解码、对象键唯一性或值树处理，请继续阅读后续章节。
 
+## 为签名和哈希生成规范化字节
+
+应用为 JSON 签名或计算哈希时，即使对象成员的到达顺序不同，签名方和验证方也必须使用相同
+的字节表示。开启可选 `jcs` feature，再把已经构造好的 `serde_json::Value` 交给 `JcsEncoder`：
+
+```toml
+[dependencies]
+qubit-json = { version = "0.10", features = ["jcs"] }
+serde_json = "1.0"
+```
+
+应用可以先规范化，再把结果字节传给现有的签名或哈希逻辑：
+
+```rust
+use qubit_json::encode::JcsEncoder;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut encoder = JcsEncoder::unlimited();
+    let value = serde_json::json!({"b": 2, "a": 1.0});
+    let canonical = encoder.to_vec(&value)?;
+    assert_eq!(canonical, br#"{"a":1,"b":2}"#);
+    Ok(())
+}
+```
+
+该 feature 默认关闭。编码器接收 `Value`，不接收任意 `Serialize` 实现或原始 JSON 文本。读取原始
+JSON 时，应在构造 `Value` 前拒绝重复键；重复成员一旦合并到 map 中，编码器就无法再发现它们。
+现有 `JsonDecoder` 用于严格 JSON 解码，但其整数文本范围不足以覆盖 JCS 接受的所有数字词法，
+因此它不是完整的原始文本 JCS 入口。
+
+JCS 数值遵循 IEEE 754 双精度模型。包含 `9007199254740993` 的值可能规范化为
+`9007199254740992`。协议必须精确保留的整数应表示成 JSON 字符串。
+
+`to_vec` 和 `to_string` 返回完整结果。`write_buffered` 会先生成并检查规范化文档，再写入目标；
+`write_incremental` 则直接写出已经生成的字节。目标写入失败时，两种模式都可能留下已接受的前缀，
+且这些字节仍计入输出预算。canonicalizer 为排序对象成员也可能暂存数据，因此输出字节上限并不
+限制这部分内部临时内存。只有完整操作成功后，值资源事务才会提交。
+
 ## 进阶用法
 
 只有在边界明确允许时才使用 `NormalizingJsonDecoder`，并通过策略选择 BOM、外围空白、一层
@@ -130,9 +168,32 @@ JSON Markdown 围栏或控制字符转义。规范化策略不携带 `JsonDecode
 `NormalizingJsonDecoder::with_limits(policy, limits)` 显式传入限制，或把
 `JsonDecodeSession` 传给 `NormalizingJsonDecoder::new(policy, session)`。
 
-严格解码器和规范化解码器当前都接收完整的 `&str` 或 `&[u8]`。输入字节限制只负责准入调用方
-已经提供的切片，不能追溯限制 HTTP body 聚合器或其他传输层已经分配的内存。向解码器交付完整
-输入前，应先在外层传输边界设置有界读取或 body 聚合上限。
+严格解码和规范化解码的切片方法接收完整的 `&str` 或 `&[u8]`。需要让结果借用输入时，应使用这些
+方法。其输入字节限制只负责准入现有切片，不能追溯限制 HTTP body 聚合器或其他传输层已经分配的
+内存。`JsonDecoder::decode_input` 可从字节输入源解码拥有所有权的结果：
+
+```rust
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::decode::JsonDecodeError;
+use qubit_json::decode::JsonDecoder;
+fn main() -> Result<(), JsonDecodeError<JsonResource>> {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4096)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut body = std::io::Cursor::new(br#"{"id":42}  "#);
+    let request: serde_json::Value = decoder.decode_input(&mut body)?;
+    assert_eq!(request["id"], 42);
+    Ok(())
+}
+```
+
+`decode_input` 接受 `Input<Item = u8>`，标准 `Read` 类型（例如 `Cursor`）可通过 `qubit-io`
+集成直接使用。它会读取到 EOF，再对整份文档执行严格检查，包括末尾空白以及第二个 JSON 值。
+输入按块计费；配置 `max_input_bytes` 后，下一块会超限时立即停止读取。返回类型必须实现
+`DeserializeOwned`，因为方法内部会暂存整份文档。未设置输入字节上限时，临时缓冲区没有配置最大值。
+这个入口只解析普通严格 JSON；要将任意原始 JSON 规范化为 JCS，还需要适用的数字文本规则和重复键拒绝。
 
 ### 已准备的规范化文档
 

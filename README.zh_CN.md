@@ -35,6 +35,12 @@ serde_json = "1.0"
 如果需要解码到通过 derive 生成的应用类型，再添加
 `serde = { version = "1.0", features = ["derive"] }`。
 
+要生成符合 RFC 8785 的规范化字节，请显式开启 `jcs` feature：
+
+```toml
+qubit-json = { version = "0.10", features = ["jcs"] }
+```
+
 ## 快速开始：准入 HTTP 请求体
 
 下面的示例先接收一个包含完整 `u64` 范围标识符的请求体，再验证超出输入上限的请求会在
@@ -84,12 +90,35 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 | 输入契约 | API |
 | --- | --- |
 | 输入必须已经是完整、严格的 JSON | `JsonDecoder` |
+| 从字节输入源读取到 EOF，并生成拥有所有权的结果 | `JsonDecoder::decode_input` |
 | 严格解码前允许清理指定的展示痕迹 | 使用显式策略构造的 `NormalizingJsonDecoder` |
 | 需要检查规范化结果、重复解码，或让结果借用规范化文本 | 先调用 `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`，再通过 `NormalizedJsonDocument` 的解码方法处理 |
 
 默认规范化策略可以清理首尾空白、一个 BOM、一层 JSON Markdown 围栏，以及字符串内未经转义
 的 ASCII 控制字符。这只是受控规范化，不是另一种 JSON 方言；注释、尾随逗号、未加引号的键
 和缺失的 JSON 语法仍会被拒绝。
+
+## 为签名生成规范化字节
+
+如果应用需要为哈希或签名生成稳定字节，应开启 `jcs`，并把已经构造好的
+`serde_json::Value` 交给 `JcsEncoder`：
+
+```rust
+use qubit_json::encode::JcsEncoder;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut encoder = JcsEncoder::unlimited();
+    let value = serde_json::json!({"b": 2, "a": 1.0});
+    assert_eq!(encoder.to_vec(&value)?, br#"{"a":1,"b":2}"#);
+    Ok(())
+}
+```
+
+`jcs` 默认关闭。规范化对象是 `Value` 数据模型，不接受任意 `Serialize` 值或原始 JSON 文本。
+处理原始文本时，必须在构造 `Value` 前拒绝重复对象键；一旦键已合并，就无法再找回重复项。
+JCS 数值遵循 IEEE 754 双精度语义，因此 `9007199254740993` 可能输出为
+`9007199254740992`。若协议必须保留整数的每一位十进制数字，应将整数编码为 JSON 字符串。
+普通 `JsonDecoder` 也不接受所有 JCS 数字词法形式作为原始文本。
 
 ## 为什么需要这个项目
 
@@ -118,9 +147,13 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
   更宽的整数以及不能接受二进制舍入的精确十进制值，应使用字符串或领域类型。
 - 所有不可信边界都应设置有限资源上限。`unlimited()` 只应用于可信输入，或已由其他层完成
   准入的数据；外层输出上限不能替代解析前的输入与结构准入。
-- 严格解码器和规范化解码器当前接收完整的 `&str` 或 `&[u8]`。输入字节限制只负责准入调用方
-  已经提供的切片，不能限制 HTTP body 聚合器或其他传输层已经分配的内存。交给解码器之前，
-  应先在外层传输边界设置有界读取或 body 聚合上限。
+- 严格解码和规范化解码的切片入口接收完整的 `&str` 或 `&[u8]`；需要借用输入的结果时使用它们。
+  `JsonDecoder::decode_input` 则从 `Input<Item = u8>` 读取到 EOF，并返回拥有数据的
+  `DeserializeOwned` 结果。它会暂存整份文档；未设置 `max_input_bytes` 时，这部分临时内存没有配置上限。
+  解码前仍应在传输层限制读取或 body 聚合大小。这个严格 JSON 入口不能用于原始文本的 JCS 规范化。
+- `JcsEncoder::write_buffered` 和 `write_incremental` 在后续写入失败时，可能在外部目标留下已经接受的字节，
+  这些字节会计入输出预算。增量模式直接写入目标，但 canonicalizer 仍可能为对象键排序分配临时内存；
+  输出字节上限不约束这部分内部分配。
 - 诊断信息默认脱敏。严格解码器通过 `JsonDecoder::with_diagnostic_policy` 配置，规范化
   解码器通过其规范化策略配置。脱敏错误只保留稳定分类和源坐标，不保留意外字节、token、
   键/值文本或 parser/Serde 来源。只有在输入派生来源可以安全保留和记录时，才启用

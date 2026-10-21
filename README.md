@@ -38,6 +38,12 @@ serde_json = "1.0"
 Add `serde = { version = "1.0", features = ["derive"] }` when decoding into
 derived application types.
 
+To enable RFC 8785 canonical output, opt into the feature explicitly:
+
+```toml
+qubit-json = { version = "0.10", features = ["jcs"] }
+```
+
 ## Quick start: admit an HTTP request body
 
 This example accepts one request body containing a full-range `u64` identifier,
@@ -90,6 +96,7 @@ happens to parse:
 | Input contract | API |
 | --- | --- |
 | Input must already be complete, strict JSON | `JsonDecoder` |
+| A byte-oriented source should be read through EOF into an owned result | `JsonDecoder::decode_input` |
 | Specific presentation artifacts are allowed before strict decoding | `NormalizingJsonDecoder` with an explicit policy |
 | Normalized text must be inspected, decoded repeatedly, or borrowed by the result | `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`, followed by `NormalizedJsonDocument` decoding methods |
 
@@ -97,6 +104,30 @@ The default normalization policy can trim surrounding whitespace, remove one BOM
 unwrap one outer JSON Markdown fence, and escape raw ASCII control characters
 inside strings. It is controlled normalization, not another JSON dialect:
 comments, trailing commas, unquoted keys, and missing syntax remain errors.
+
+## Canonical bytes for a signed payload
+
+When an application needs stable bytes for a hash or signature, enable `jcs`
+and pass an already constructed `serde_json::Value` to `JcsEncoder`:
+
+```rust
+use qubit_json::encode::JcsEncoder;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut encoder = JcsEncoder::unlimited();
+    let value = serde_json::json!({"b": 2, "a": 1.0});
+    assert_eq!(encoder.to_vec(&value)?, br#"{"a":1,"b":2}"#);
+    Ok(())
+}
+```
+
+The `jcs` feature is disabled by default. JCS canonicalizes the `Value` model;
+it does not accept arbitrary `Serialize` values or raw JSON text. For raw input,
+reject duplicate object keys before constructing a `Value`, since duplicates
+cannot be recovered afterward. JCS numbers use IEEE 754 binary64 semantics, so
+`9007199254740993` can be emitted as `9007199254740992`; encode an integer as a
+JSON string when its exact decimal digits must be preserved. The regular
+`JsonDecoder` does not accept every JCS number lexeme as raw text.
 
 ## Why this project exists
 
@@ -130,10 +161,19 @@ construction, and traversal.
 - Set finite limits at every untrusted boundary. Use `unlimited()` only for
   trusted input or data already admitted by another layer; an outer output
   bound cannot replace input and structural admission before parsing.
-- The strict and normalizing decoders consume complete `&str` or `&[u8]`
-  inputs. Their input-byte limit admits the supplied slice; it does not cap
-  memory already allocated by an HTTP body aggregator or another transport
-  layer. Apply a bounded read or body-aggregation limit before decoding.
+- Slice-based strict and normalizing decoder methods consume complete `&str` or
+  `&[u8]` inputs; use them when the decoded result must borrow from the input.
+  `JsonDecoder::decode_input` instead reads an `Input<Item = u8>` source through
+  EOF and returns an owned `DeserializeOwned` value. It buffers the complete
+  document; without `max_input_bytes`, that temporary memory use has no
+  configured limit. Apply a bounded read or body-aggregation limit before
+  decoding. This strict JSON method is not a raw-text JCS canonicalization
+  entry point.
+- `JcsEncoder::write_buffered` and `write_incremental` can leave and charge
+  bytes accepted by an external destination before a later write failure.
+  Incremental mode writes directly, while the canonicalizer may still allocate
+  temporary memory to sort object members; the output-byte limit does not bound
+  that internal allocation.
 - Diagnostics are redacted by default. Configure a strict decoder with
   `JsonDecoder::with_diagnostic_policy`, or a normalizing decoder through its
   normalization policy. Redacted errors retain only stable classifications and
