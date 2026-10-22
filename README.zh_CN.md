@@ -14,12 +14,12 @@
 
 ## 安装
 
-本 checkout 对应的 `0.10` 版本：
+本 checkout 对应的 `0.11` 版本：
 
 ```toml
 [dependencies]
-qubit-json = "0.10"
-qubit-budget = { version = "0.7", features = ["json"] }
+qubit-json = "0.11"
+qubit-budget = { version = "0.8", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -27,8 +27,8 @@ serde_json = "1.0"
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.10", path = "../rs-json" }
-qubit-budget = { version = "0.7", features = ["json"] }
+qubit-json = { version = "0.11", path = "../rs-json" }
+qubit-budget = { version = "0.8", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -38,7 +38,7 @@ serde_json = "1.0"
 要生成符合 RFC 8785 的规范化字节，请显式开启 `jcs` feature：
 
 ```toml
-qubit-json = { version = "0.10", features = ["jcs"] }
+qubit-json = { version = "0.11", features = ["jcs"] }
 ```
 
 ## 快速开始：准入 HTTP 请求体
@@ -187,6 +187,9 @@ cargo test
 
 # 使用项目声明的全部 feature 运行测试
 cargo test --all-features
+
+# 运行独立 fixture 中的 Markdown 文档示例
+cargo test --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc --locked
 
 # 运行项目 CI 检查
 ./.infra/bin/ci-check.sh

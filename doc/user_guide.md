@@ -1,6 +1,6 @@
 # Qubit JSON user guide
 
-This guide targets Rust 1.94+ applications using `qubit-json` 0.10. It is for
+This guide targets Rust 1.94+ applications using `qubit-json` 0.11. It is for
 services, configuration readers, and data pipelines that must admit JSON under
 caller-owned resource limits while keeping Serde's data model. It does not
 replace `serde_json` or impose application schemas.
@@ -47,8 +47,8 @@ while developing against unpublished changes:
 
 ```toml
 [dependencies]
-qubit-json = "0.10"
-qubit-budget = { version = "0.7", features = ["json"] }
+qubit-json = "0.11"
+qubit-budget = { version = "0.8", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -147,7 +147,7 @@ Enable the optional `jcs` feature and give `JcsEncoder` a constructed
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.10", features = ["jcs"] }
+qubit-json = { version = "0.11", features = ["jcs"] }
 serde_json = "1.0"
 ```
 

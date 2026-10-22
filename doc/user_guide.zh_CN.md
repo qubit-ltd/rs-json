@@ -1,6 +1,6 @@
 # Qubit JSON 用户手册
 
-本手册面向使用 `qubit-json` 0.10、Rust 1.94+ 的服务、配置读取器和数据管道。它说明如何在
+本手册面向使用 `qubit-json` 0.11、Rust 1.94+ 的服务、配置读取器和数据管道。它说明如何在
 调用方预算约束下准入 JSON，同时保留 Serde 数据模型；它不替代 `serde_json`，也不负责应用
 数据模式。
 
@@ -37,8 +37,8 @@
 
 ```toml
 [dependencies]
-qubit-json = "0.10"
-qubit-budget = { version = "0.7", features = ["json"] }
+qubit-json = "0.11"
+qubit-budget = { version = "0.8", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -130,7 +130,7 @@ assert_eq!(output, b"[1,2");
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.10", features = ["jcs"] }
+qubit-json = { version = "0.11", features = ["jcs"] }
 serde_json = "1.0"
 ```
 

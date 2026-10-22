@@ -17,12 +17,12 @@ cleanup of JSON embedded in external text.
 
 ## Installation
 
-For the `0.10` version described by this checkout:
+For the `0.11` version described by this checkout:
 
 ```toml
 [dependencies]
-qubit-json = "0.10"
-qubit-budget = { version = "0.7", features = ["json"] }
+qubit-json = "0.11"
+qubit-budget = { version = "0.8", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -30,8 +30,8 @@ Local checkout:
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.10", path = "../rs-json" }
-qubit-budget = { version = "0.7", features = ["json"] }
+qubit-json = { version = "0.11", path = "../rs-json" }
+qubit-budget = { version = "0.8", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -41,7 +41,7 @@ derived application types.
 To enable RFC 8785 canonical output, opt into the feature explicitly:
 
 ```toml
-qubit-json = { version = "0.10", features = ["jcs"] }
+qubit-json = { version = "0.11", features = ["jcs"] }
 ```
 
 ## Quick start: admit an HTTP request body
@@ -212,6 +212,9 @@ cargo test
 
 # Run tests with all declared features
 cargo test --all-features
+
+# Run the standalone Markdown documentation examples
+cargo test --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc --locked
 
 # Project CI checks
 ./.infra/bin/ci-check.sh
