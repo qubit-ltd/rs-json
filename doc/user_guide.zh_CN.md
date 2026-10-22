@@ -214,7 +214,7 @@ let error = JcsDecoder::unlimited()
     .unwrap_err();
 assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
 let value = JcsDecoder::unlimited()
-    .decode_str(r#"{"x":1,"\u0078":2}"#)
+    .decode_str(r#"{"x":1,"\\u0078":2}"#)
     .unwrap();
 assert_eq!(value.as_object().unwrap().len(), 2);
 ```
