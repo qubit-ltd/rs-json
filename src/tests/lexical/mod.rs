@@ -8,3 +8,4 @@
 //! Tests for crate-private lexical scanning contracts.
 
 mod json_lexical_error_reason_tests;
+mod json_lexical_event_tests;

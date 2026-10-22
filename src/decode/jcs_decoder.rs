@@ -7,9 +7,6 @@
 // =============================================================================
 //! Stateful strict JSON decoding with JCS binary64 number semantics.
 
-use std::cell::Cell;
-use std::fmt;
-
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
@@ -18,13 +15,18 @@ use qubit_io::Input;
 
 use super::DiagnosticPolicy;
 use super::JcsDecodeError;
-use super::JsonDecodeError;
-use super::JsonDecodeErrorSource;
-use super::internal::JcsValueSeed;
 use super::internal::JsonDecodeEngine;
-use crate::lexical::JsonNumberModel;
 
 /// Decodes strict JSON text into an owned value using finite binary64 numbers.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::JcsDecoder;
+///
+/// let value = JcsDecoder::unlimited().decode_str("1.5").unwrap();
+/// assert_eq!(value.as_f64(), Some(1.5));
+/// ```
 #[derive(Debug)]
 pub struct JcsDecoder<'budget, R = JsonResource, Q = usize>
 where
@@ -98,13 +100,7 @@ where
 
     /// Decodes one complete UTF-8 JSON document into an owned value.
     pub fn decode_utf8(&mut self, input: &[u8]) -> Result<serde_json::Value, JcsDecodeError<R, Q>> {
-        let duplicate_key = Cell::new(false);
-        let seed = JcsValueSeed {
-            duplicate_key: &duplicate_key,
-        };
-        self.engine
-            .decode_seed_utf8_with_number_model(seed, input, self.diagnostic_policy, JsonNumberModel::Binary64)
-            .map_err(|error| map_jcs_error(error, duplicate_key.get()))
+        self.engine.decode_jcs_utf8(input, self.diagnostic_policy)
     }
 
     /// Reads a complete byte input through EOF and decodes it into an owned
@@ -117,25 +113,6 @@ where
     where
         I: Input<Item = u8> + ?Sized,
     {
-        let duplicate_key = Cell::new(false);
-        let seed = JcsValueSeed {
-            duplicate_key: &duplicate_key,
-        };
-        self.engine
-            .decode_input_seed(seed, input, self.diagnostic_policy, JsonNumberModel::Binary64)
-            .map_err(|error| map_jcs_error(error, duplicate_key.get()))
-    }
-}
-
-fn map_jcs_error<R, Q>(error: JsonDecodeError<R, Q>, duplicate_key: bool) -> JcsDecodeError<R, Q>
-where
-    Q: Copy + fmt::Debug,
-{
-    if !duplicate_key {
-        return JcsDecodeError::Decode(error);
-    }
-    match error.into_source() {
-        JsonDecodeErrorSource::Deserialize { line, column, .. } => JcsDecodeError::DuplicateKey { line, column },
-        _ => unreachable!("duplicate-key marker requires a materialization error"),
+        self.engine.decode_jcs_input(input, self.diagnostic_policy)
     }
 }

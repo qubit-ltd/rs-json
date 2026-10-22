@@ -14,6 +14,7 @@ use super::json_lexical_container_frame::JsonLexicalContainerFrame;
 use super::json_lexical_cursor::JsonLexicalCursor;
 use super::json_lexical_error::JsonLexicalError;
 use super::json_lexical_error_reason::JsonLexicalErrorReason;
+use super::json_lexical_event::JsonLexicalEvent;
 use super::json_number_model::JsonNumberModel;
 
 /// Lexically validates and charges one JSON document without recursion.
@@ -80,13 +81,28 @@ where
     /// or [`JsonLexicalError::Syntax`] when `input` is not one complete JSON
     /// value. All value measurements remain staged in the caller's transaction.
     pub(crate) fn scan(&mut self, input: &[u8]) -> Result<(), JsonLexicalError<R, Q>> {
+        self.scan_with_events(input, |_| {})
+    }
+
+    /// Validates a document and synchronously emits each admitted token.
+    ///
+    /// Events may precede a later document error; consumers must only
+    /// materialize input after a complete admission pass has succeeded.
+    pub(crate) fn scan_with_events<'input, F>(
+        &mut self,
+        input: &'input [u8],
+        mut emit: F,
+    ) -> Result<(), JsonLexicalError<R, Q>>
+    where
+        F: FnMut(JsonLexicalEvent<'input>),
+    {
         let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         cursor.set_number_model(self.number_model);
         let mut stack: Vec<JsonLexicalContainerFrame> = Vec::new();
         cursor.skip_whitespace();
-        cursor.value(self.root_depth, &mut stack)?;
+        cursor.value(self.root_depth, &mut stack, &mut emit)?;
         while let Some(frame) = stack.pop() {
-            cursor.resume(frame, &mut stack)?;
+            cursor.resume(frame, &mut stack, &mut emit)?;
         }
         cursor.skip_whitespace();
         if cursor.is_at_end() {

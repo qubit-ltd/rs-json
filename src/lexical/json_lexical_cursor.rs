@@ -15,6 +15,7 @@ use qubit_budget::json::JsonValueTransaction;
 use super::json_lexical_container_frame::JsonLexicalContainerFrame;
 use super::json_lexical_error::JsonLexicalError;
 use super::json_lexical_error_reason::JsonLexicalErrorReason;
+use super::json_lexical_event::JsonLexicalEvent;
 use super::json_lexical_failure::JsonLexicalFailure;
 use super::json_number_model::JsonNumberModel;
 
@@ -126,38 +127,77 @@ where
     }
 
     /// Admits one JSON value and schedules any container continuation.
-    pub(super) fn value(
+    pub(super) fn value<F>(
         &mut self,
         depth: usize,
         stack: &mut Vec<JsonLexicalContainerFrame>,
-    ) -> Result<(), JsonLexicalError<R, Q>> {
+        emit: &mut F,
+    ) -> Result<(), JsonLexicalError<R, Q>>
+    where
+        F: FnMut(JsonLexicalEvent<'input>),
+    {
         self.skip_whitespace();
         match self.peek() {
             Some(b'{') => {
+                let offset = self.offset;
                 self.offset += 1;
                 self.enter_container(JsonContainerKind::Map, depth)?;
+                emit(JsonLexicalEvent::BeginObject { offset });
                 stack.push(JsonLexicalContainerFrame::ObjectKey { depth, entries: 0 });
                 Ok(())
             }
             Some(b'[') => {
+                let offset = self.offset;
                 self.offset += 1;
                 self.enter_container(JsonContainerKind::Sequence, depth)?;
+                emit(JsonLexicalEvent::BeginArray { offset });
                 stack.push(JsonLexicalContainerFrame::ArrayValue { depth, items: 0 });
                 Ok(())
             }
             Some(b'"') => {
+                let start = self.offset;
                 let bytes = self.string_bytes()?;
-                self.admit(JsonMeasurement::String { depth, bytes })
+                self.admit(JsonMeasurement::String { depth, bytes })?;
+                emit(JsonLexicalEvent::String {
+                    token: &self.input[start..self.offset],
+                    offset: start,
+                });
+                Ok(())
             }
             Some(b'-' | b'0'..=b'9') => {
                 let start = self.offset;
                 let bytes = self.number_bytes()?;
                 self.admit(JsonMeasurement::Number { depth, bytes })?;
-                self.validate_number_range(start, self.offset)
+                self.validate_number_range(start, self.offset)?;
+                emit(JsonLexicalEvent::Number {
+                    token: &self.input[start..self.offset],
+                    offset: start,
+                });
+                Ok(())
             }
-            Some(b't') => self.literal(b"true", JsonMeasurement::Boolean { depth }),
-            Some(b'f') => self.literal(b"false", JsonMeasurement::Boolean { depth }),
-            Some(b'n') => self.literal(b"null", JsonMeasurement::Null { depth }),
+            Some(b't') => {
+                self.literal(b"true", JsonMeasurement::Boolean { depth })?;
+                emit(JsonLexicalEvent::Boolean {
+                    value: true,
+                    offset: self.offset - 4,
+                });
+                Ok(())
+            }
+            Some(b'f') => {
+                self.literal(b"false", JsonMeasurement::Boolean { depth })?;
+                emit(JsonLexicalEvent::Boolean {
+                    value: false,
+                    offset: self.offset - 5,
+                });
+                Ok(())
+            }
+            Some(b'n') => {
+                self.literal(b"null", JsonMeasurement::Null { depth })?;
+                emit(JsonLexicalEvent::Null {
+                    offset: self.offset - 4,
+                });
+                Ok(())
+            }
             None => Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd)),
             Some(_) => Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte)),
         }
@@ -182,17 +222,23 @@ where
     }
 
     /// Resumes a container after its child value has completed.
-    pub(super) fn resume(
+    pub(super) fn resume<F>(
         &mut self,
         frame: JsonLexicalContainerFrame,
         stack: &mut Vec<JsonLexicalContainerFrame>,
-    ) -> Result<(), JsonLexicalError<R, Q>> {
+        emit: &mut F,
+    ) -> Result<(), JsonLexicalError<R, Q>>
+    where
+        F: FnMut(JsonLexicalEvent<'input>),
+    {
         match frame {
             JsonLexicalContainerFrame::ArrayValue { depth, items } => {
                 self.skip_whitespace();
                 if self.peek() == Some(b']') {
                     if items == 0 {
+                        let offset = self.offset;
                         self.offset += 1;
+                        emit(JsonLexicalEvent::EndArray { offset });
                         return Ok(());
                     }
                     return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
@@ -205,7 +251,7 @@ where
                 let Some(child_depth) = depth.checked_add(1) else {
                     return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
                 };
-                self.value(child_depth, stack)
+                self.value(child_depth, stack, emit)
             }
             JsonLexicalContainerFrame::ArrayDelimiter { depth, items } => {
                 self.skip_whitespace();
@@ -216,7 +262,9 @@ where
                         Ok(())
                     }
                     Some(b']') => {
+                        let offset = self.offset;
                         self.offset += 1;
+                        emit(JsonLexicalEvent::EndArray { offset });
                         Ok(())
                     }
                     None => Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd)),
@@ -227,7 +275,9 @@ where
                 self.skip_whitespace();
                 if self.peek() == Some(b'}') {
                     if entries == 0 {
+                        let offset = self.offset;
                         self.offset += 1;
+                        emit(JsonLexicalEvent::EndObject { offset });
                         return Ok(());
                     }
                     return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
@@ -239,8 +289,13 @@ where
                     return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
                 };
                 self.check_container_count(JsonContainerKind::Map, entries)?;
+                let key_start = self.offset;
                 let bytes = self.string_bytes()?;
                 self.admit(JsonMeasurement::Key { bytes })?;
+                emit(JsonLexicalEvent::Key {
+                    token: &self.input[key_start..self.offset],
+                    offset: key_start,
+                });
                 self.skip_whitespace();
                 if self.peek() != Some(b':') {
                     return Err(match self.peek() {
@@ -253,7 +308,7 @@ where
                 let Some(child_depth) = depth.checked_add(1) else {
                     return Err(self.syntax(JsonLexicalErrorReason::NestingOverflow));
                 };
-                self.value(child_depth, stack)
+                self.value(child_depth, stack, emit)
             }
             JsonLexicalContainerFrame::ObjectDelimiter { depth, entries } => {
                 self.skip_whitespace();
@@ -264,7 +319,9 @@ where
                         Ok(())
                     }
                     Some(b'}') => {
+                        let offset = self.offset;
                         self.offset += 1;
+                        emit(JsonLexicalEvent::EndObject { offset });
                         Ok(())
                     }
                     None => Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd)),
@@ -505,12 +562,16 @@ where
 
     /// Computes one-based line and UTF-8 character column at `offset`.
     fn line_column_at(&self, offset: usize) -> (usize, usize) {
-        line_column_at_with_inspection(self.input, offset, |_| {})
+        line_column_at(self.input, offset)
     }
 }
 
 /// Computes source coordinates while reporting how many bytes each scan step
 /// examines.
+pub(crate) fn line_column_at(input: &[u8], offset: usize) -> (usize, usize) {
+    line_column_at_with_inspection(input, offset, |_| {})
+}
+
 fn line_column_at_with_inspection<F>(input: &[u8], offset: usize, mut record_examined_bytes: F) -> (usize, usize)
 where
     F: FnMut(usize),

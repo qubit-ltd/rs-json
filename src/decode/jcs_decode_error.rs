@@ -15,19 +15,41 @@ use qubit_budget::json::JsonResource;
 
 use super::JsonDecodeError;
 
-/// JCS decoding failure, with duplicate object keys represented explicitly.
+/// JCS decoding failure with explicit duplicate-key and construction-depth
+/// cases.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::{JcsDecodeError, JcsDecoder};
+///
+/// let error = JcsDecoder::unlimited()
+///     .decode_str(r#"{"x":1,"x":2}"#)
+///     .expect_err("duplicate keys must be rejected");
+/// assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
+/// ```
+#[must_use]
 #[derive(Debug, Clone)]
 pub enum JcsDecodeError<R = JsonResource, Q = usize>
 where
     Q: Copy + fmt::Debug,
 {
-    /// A lexical, input, budget, or Serde decoding failure.
+    /// An input, UTF-8, budget, or lexical admission failure.
     Decode(JsonDecodeError<R, Q>),
     /// An object contains two keys equal after JSON escape decoding.
     DuplicateKey {
-        /// One-based line reported by the JSON deserializer.
+        /// One-based source line of the second key token.
         line: usize,
-        /// One-based column reported by the JSON deserializer.
+        /// One-based UTF-8 character column of the second key token.
+        column: usize,
+    },
+    /// A valid document exceeds the fixed JCS value construction depth.
+    MaterializationDepthLimit {
+        /// Maximum number of nested containers accepted during construction.
+        limit: usize,
+        /// One-based source line where the first over-limit container begins.
+        line: usize,
+        /// One-based UTF-8 character column of that container token.
         column: usize,
     },
 }
@@ -43,6 +65,10 @@ where
             Self::DuplicateKey { line, column } => {
                 write!(formatter, "duplicate JSON object key at line {line}, column {column}")
             }
+            Self::MaterializationDepthLimit { limit, line, column } => write!(
+                formatter,
+                "JCS value construction depth exceeds {limit} at line {line}, column {column}"
+            ),
         }
     }
 }
@@ -55,7 +81,7 @@ where
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Decode(error) => Some(error),
-            Self::DuplicateKey { .. } => None,
+            Self::DuplicateKey { .. } | Self::MaterializationDepthLimit { .. } => None,
         }
     }
 }
