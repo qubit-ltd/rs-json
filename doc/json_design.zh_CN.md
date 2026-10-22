@@ -93,9 +93,10 @@ transaction 只在完整成功时提交。
 `Serialize` 或 `Write`。`JsonSyntaxError` 单独持有稳定的语法原因、偏移、行和列。
 
 `JcsDecoder` 返回 `JcsDecodeError<R, Q>`，其中 `Decode` 包装既有解码错误，
-`DuplicateKey { line, column }` 则结构化标识重复键，且不保存键名或 backend source。每次操作都会创建独立的
-重复键标记；共享 Value visitor 在返回物化错误前设置它，因此其他语法、预算或提交失败仍保留普通解码错误分类。
-完整文档成功后才提交值资源；失败时已接受的输入字节仍计入 session。
+`DuplicateKey { line, column }` 与 `MaterializationDepthLimit { limit, line, column }` 是结构化物化错误，
+且不保存键名或 backend source。完整词法准入后，scanner 会再次运行并同步向迭代式 Value builder 发送事件；
+builder 在插入值之前检查重复键。JCS 构造固定拒绝超过 127 层的嵌套容器，该上限独立于可配置的 value-depth 预算。
+其他语法和预算失败仍保留普通解码错误分类。完整文档成功后才提交值资源；失败时已接受的输入字节仍计入 session。
 
 ### 数字表示
 
@@ -105,9 +106,11 @@ strict 与 normalizing 文本路径共享同一数字契约：负整数装入 `i
 再校验范围，因此预算错误优先。实现不启用 serde_json arbitrary precision，也不识别其私有 Number marker。
 完整规则见 [JSON 数字契约](number_contract.zh_CN.md)。
 
-`JcsDecoder` 复用词法准入、session 与事务；专用 Value visitor 在插入前按反转义后的键字符串检查重复项，
-不执行 Unicode 规范化。词法扫描使用配置的深度预算，Value 构造仍由 serde_json 默认递归保护；无限预算
-不承诺任意深度。`decode_input` 沿用读取到 EOF 并缓冲完整文档的流程，有限输入上限允许一个不计费的探测字节。
+`JcsDecoder` 复用词法准入、session 与事务：第一遍完整扫描并计量，第二遍通过词法事件同步构造 Value，
+不收集整份事件数组。事件 builder 在插入前按反转义后的键字符串检查重复项，不执行 Unicode 规范化。
+JCS Value 构造最多接受 127 层容器（根容器计第 1 层，标量不计层）；准备进入第 128 层时返回
+`JcsDecodeError::MaterializationDepthLimit { limit, line, column }`。该保护即使在 unlimited 配置下也生效，
+与第一遍包含根值的 `max_depth` 预算分别计算；低于 127 的用户深度限制先返回 Budget。`decode_input` 沿用读取到 EOF 并缓冲完整文档的流程，有限输入上限允许一个不计费的探测字节。
 预算描述被计量资源，不构成精确 malloc 上限。JCS 解码只检查并构造值，已规范字节验证须由调用方将编码结果与输入比较。
 
 该选择让合法对象的结构与预算类别保持一致：键为 `$serde_json::private::Number` 的对象始终
@@ -141,11 +144,13 @@ key 进行准入。
 
 公开错误和诊断类型按领域划分：
 
-1. `decode::JsonDecodeError` 及其 owned `JsonDecodeErrorSource`：两个 decoder facade 共用。
+1. `decode::JsonDecodeError` 及其 owned `JsonDecodeErrorSource`：普通与规范化 decoder 共用；JCS 专属错误为 `JcsDecodeError`。
 2. `encode::JsonEncodeError`
 3. `decode::JsonSyntaxError`
 4. `value::traverse::JsonTreeProcessError`
 5. `value::traverse::JsonTreeMutateError`
+6. feature-gated 的 `decode::JcsDecodeError` 与 `encode::JcsEncodeError`
+7. JSON encoder 共用的 `encode::JsonSerializationError`
 
 每种错误只暴露其领域能稳定提供的上下文；没有根级错误聚合或兼容别名。
 
@@ -199,8 +204,9 @@ renderer 前先暂存值资源用量，完整编码成功后才提交。`Budget`
 - tree 遍历不依赖 Rust 递归；预算失败和 visitor 失败遵循各自的提交及修改边界。
 - 默认诊断不保留输入内容，自定义序列化错误不泄露任意来源文本。
 - 基准的成功路径必须确认 fixture 准入成功，避免累计预算耗尽后测到错误路径。
-- 差分 fuzz 区分词法验证与目标类型构造。词法准入成功的深层输入可能触发 Serde 构造递归
-  保护，因此只有保守的浅层文档才直接比较物化值。超长 fuzz 输入整体拒绝，不截断后比较。
+- 差分 fuzz 区分词法验证与目标类型构造。普通 typed decode 可能触发 Serde 构造递归保护；
+  JCS Value 使用迭代式构造，并以固定的 127 层上限拒绝更深的容器。因此只有保守的浅层文档才直接比较物化值。
+  超长 fuzz 输入整体拒绝，不截断后比较。
 
 ## 相关文档
 

@@ -237,6 +237,51 @@ is non-finite, while sufficiently small values may underflow to zero. Encode
 amounts and identifiers as JSON strings when their exact digits must survive,
 then parse them according to the application's domain rules.
 
+Duplicate detection compares decoded JSON key strings. This executable example
+shows that a Unicode escape can spell the same key, while a doubled backslash
+makes the backslash part of a different key:
+
+```rust
+use qubit_json::decode::{JcsDecodeError, JcsDecoder};
+
+let error = JcsDecoder::unlimited()
+    .decode_str(r#"{"x":1,"\u0078":2}"#)
+    .unwrap_err();
+assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
+let value = JcsDecoder::unlimited()
+    .decode_str(r#"{"x":1,"\\u0078":2}"#)
+    .unwrap();
+assert_eq!(value.as_object().unwrap().len(), 2);
+```
+
+
+
+A 128-container document reaches the fixed construction guard even with an
+unlimited decoder:
+
+```rust
+use qubit_json::decode::{JcsDecodeError, JcsDecoder};
+
+let nested = (0..128).fold(String::from("null"), |value, _| format!("[{value}]"));
+let error = JcsDecoder::unlimited().decode_str(&nested).unwrap_err();
+assert!(matches!(
+    error,
+    JcsDecodeError::MaterializationDepthLimit {
+        limit: 127,
+        line: 1,
+        column: 128,
+    }
+));
+```
+
+Handle JCS errors by variant: `Decode(source)` carries ordinary input,
+syntax, and budget failures; `DuplicateKey { line, column }` identifies the
+second key's opening quote; `MaterializationDepthLimit { limit, line, column }`
+reports the fixed construction guard. The limit is 127 containers, distinct
+from root-inclusive `max_depth`. Public error families also include
+`JcsEncodeError`, `JsonSerializationError`, and the ordinary
+`JsonDecodeError` / `JsonEncodeError` domain errors.
+
 Keys are compared after JSON unescaping, so `"x"` and `"\\u0078"` are
 duplicates, including in nested objects. Unicode is not normalized to NFC or
 NFD, so different code-point sequences remain distinct keys. Valid JSON
@@ -254,10 +299,13 @@ the full operation succeeds.
 
 Resource budgets limit measured JSON resources; they are not exact malloc
 ceilings. Input buffers, `Vec`/`Map` capacities, and allocator metadata are not
-measured precisely. Lexical scanning applies the configured depth budget, but
-Value construction retains serde_json's default recursion guard. Raising or
-removing budgets does not promise arbitrary depth; an input admitted by the
-budget may still fail with a backend deserialization error at deep nesting.
+measured precisely. Lexical depth is root-inclusive and follows the configured `max_depth`.
+JCS Value construction has a separate fixed limit of 127 nested containers:
+the root container counts as level one, while scalars add no container level.
+The 128th container returns
+`JcsDecodeError::MaterializationDepthLimit { limit, line, column }`, even
+with `JcsDecoder::unlimited()`. A lower configured `max_depth` is rejected
+earlier as `JcsDecodeError::Decode(JsonDecodeErrorKind::Budget)`.
 
 ## Advanced usage
 
@@ -545,11 +593,12 @@ binary rounding should use a string or explicit domain representation. See the
   `actual_top_level()`, then either fix the payload or select a decoder method
   whose root contract matches it.
 - A `Deserialize` error: the JSON was admitted but does not match the target
-  type; fix the payload or the target schema separately. This also includes a
-  `serde_json` materialization recursion-guard failure: lexical validation uses
-  an explicit stack and can admit a document that the typed deserializer will
-  not materialize. If the target is `DuplicateKeyRejectingJsonValue`, a
-  duplicate object key is also reported at this boundary.
+  type; fix the payload or target schema. This typed-deserialization behavior
+  is separate from JCS Value construction, which returns
+  `JcsDecodeError::MaterializationDepthLimit` at the fixed 127-container
+  boundary. For JCS, handle `Decode`, `DuplicateKey`, and
+  `MaterializationDepthLimit` explicitly; the latter two include the relevant
+  source line and column.
 - An unexpected tree mutation after an error: `JsonTreeMutator` is incremental;
   visitor and output-budget failures do not roll back prior mutations.
 

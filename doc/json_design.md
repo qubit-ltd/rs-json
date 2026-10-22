@@ -119,13 +119,15 @@ JSON, serialization, or write failures. `JsonSyntaxError` separately owns a
 stable reason and source position.
 
 `JcsDecoder` returns `JcsDecodeError<R, Q>`, with a `Decode` case wrapping the
-existing decode error and a structured `DuplicateKey { line, column }` case.
-The duplicate-key variant stores no key text or backend source. Each operation
-creates its own duplicate marker; the shared Value visitor sets it before
-returning a materialization error, so unrelated syntax, budget, and commit
-failures keep their ordinary decode classification. Value accounting still
-commits only after the complete document succeeds, while accepted input bytes
-remain charged after failure.
+existing decode error, a structured `DuplicateKey { line, column }` case, and
+`MaterializationDepthLimit { limit, line, column }`. The materialization errors
+store no key text or backend source. After complete lexical admission, the
+scanner runs again and synchronously sends events to an iterative Value builder;
+duplicate keys are detected before inserting their values. JCS construction
+rejects more than 127 nested containers, independently of the configurable
+value-depth budget. Unrelated syntax and budget errors keep their ordinary
+decode classification. Value accounting commits only after the complete
+document succeeds, while accepted input bytes remain charged after failure.
 
 ### Numeric representation
 
@@ -139,11 +141,17 @@ have priority. The implementation does not enable serde_json arbitrary
 precision or recognize its private Number marker. See [the number
 contract](number_contract.md).
 
-`JcsDecoder` reuses lexical admission, sessions, and transactions. Its
-dedicated Value visitor checks each unescaped key string before insertion and
-does not normalize Unicode. Lexical scanning applies the configured depth
-budget, while Value construction retains serde_json's default recursion guard;
-unlimited budgets do not promise arbitrary depth. `decode_input` keeps the
+`JcsDecoder` reuses lexical admission, sessions, and transactions. It performs a
+complete first scan for admission and accounting, then scans again and builds
+the Value synchronously from lexical events without collecting a document-sized
+event array. The builder checks decoded key strings before insertion and does
+not normalize Unicode. JCS Value construction accepts at most 127 nested
+containers (the root container is level one and scalars add no container
+level); attempting the 128th returns
+`JcsDecodeError::MaterializationDepthLimit { limit, line, column }`. This guard
+also applies to unlimited configurations and is distinct from the first pass's
+root-inclusive `max_depth`; a lower configured depth limit fails earlier as
+Budget. `decode_input` keeps the
 read-through-EOF, full-buffering behavior and may consume one uncharged probe
 byte with a finite input limit. Budgets describe measured resources, not an
 exact malloc ceiling. JCS decoding parses and constructs a value; verifying
@@ -191,11 +199,13 @@ accounting still covers every resulting descendant.
 Public errors are divided by domain:
 
 1. `decode::JsonDecodeError` and its owned `JsonDecodeErrorSource`, shared by
-   both decoder facades.
+   the ordinary and normalizing decoders; JCS decoding uses `JcsDecodeError`.
 2. `encode::JsonEncodeError`.
 3. `decode::JsonSyntaxError`.
 4. `value::traverse::JsonTreeProcessError`.
 5. `value::traverse::JsonTreeMutateError`.
+6. Feature-gated `decode::JcsDecodeError` and `encode::JcsEncodeError`.
+7. `encode::JsonSerializationError`, shared by JSON encoders.
 
 Each error exposes only context that its domain can provide stably. There is
 no root-level error aggregate or compatibility alias.
@@ -274,9 +284,11 @@ cover numbers, strings, objects, `RawValue`, and different tree shapes. See the
 - Successful benchmark paths assert fixture admission, so cumulative budget
   exhaustion cannot silently turn them into failure-path measurements.
 - Differential fuzzing separates lexical validation from target construction.
-  Deep admitted input may hit Serde's construction recursion guard; direct
-  materialized-value comparison is limited to conservatively shallow input.
-  Oversized fuzz inputs are rejected in full rather than truncated for comparison.
+  Ordinary typed decoding may encounter Serde's construction recursion guard;
+  JCS Value construction is iterative and rejects containers beyond its fixed
+  127-level limit. Direct materialized-value comparison is limited to
+  conservatively shallow input. Oversized fuzz inputs are rejected in full
+  rather than truncated for comparison.
 
 ## Related documents
 

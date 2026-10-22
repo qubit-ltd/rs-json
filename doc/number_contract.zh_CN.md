@@ -51,9 +51,9 @@ JCS 解码的 `NumberBytes` 仍按原始 token 字节数计量，并先于范围
 
 ## Serde 边界
 
-`qubit-json` 不启用 serde_json 的 `arbitrary_precision` feature，也不解释其私有 Number marker。
-键为 `$serde_json::private::Number` 的对象是普通对象，并按 object/key/string 正常记账；独立的
-`RawValue` 集成仍保留。
+`qubit-json` 自身不启用 serde_json 的 `arbitrary_precision` feature。即使其他依赖在统一后的依赖图中启用了该 feature，
+`JcsDecoder` 仍由 scanner 按 binary64 数字模型解码；真实的 `$serde_json::private::Number` 键对象也仍是普通对象，
+不会被解释为数字。此保证仅针对 JCS 文本解码，不扩展到任意 Serde Value seed。独立的 `RawValue` 集成仍保留。
 
 `AccountingJsonValueSeed` 看到的是已解码的 Serde 事件。它可以拒绝无法装入 value 模型的宽整数事件，
 但不能检查原始 token 或执行词法预算。需要语法、范围和 `NumberBytes` 保证时，JSON 文本必须

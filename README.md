@@ -93,8 +93,9 @@ with `JsonDecoder` → schema, authorization, and domain validation.
 
 `qubit-json` does not provide HTTP body aggregation. For a downstream HTTP
 integration that applies the transport limit before `BoundedJson` performs JSON
-admission, see the [`rs-web` controller example](../rs-web/examples/controller_crud.rs)
-and the [user guide's `decode_input` section](doc/user_guide.md#advanced-usage).
+admission, see the [`rs-web` controller example](https://github.com/qubit-ltd/rs-web/blob/main/examples/controller_crud.rs).
+This is a changeable downstream reference; the [user guide](doc/user_guide.md#advanced-usage)
+explains `decode_input`.
 
 ## Choose the decoding boundary
 
@@ -106,7 +107,7 @@ happens to parse:
 | Input must already be complete, strict JSON | `JsonDecoder` |
 | A byte-oriented source should be read through EOF into an owned result | `JsonDecoder::decode_input` |
 | Specific presentation artifacts are allowed before strict decoding | `NormalizingJsonDecoder` with an explicit policy |
-| Normalized text must be inspected, decoded repeatedly, or borrowed by the result | `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`, followed by `NormalizedJsonDocument` decoding methods |
+| Normalized text must be inspected, decoded repeatedly, or borrowed by the result | `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`, followed by `NormalizingJsonDecoder::decode_precharged_document`, `decode_precharged_object_document`, or `decode_precharged_array_document` |
 
 The default normalization policy can trim surrounding whitespace, remove one BOM,
 unwrap one outer JSON Markdown fence, and escape raw ASCII control characters
@@ -201,10 +202,11 @@ identifies the separate auxiliary-capacity limit configured with
   finite input limit, it may consume one uncharged probe byte that cannot be
   returned to the source. Lexical budgets are not exact heap-memory bounds:
   result-container and input-buffer capacities and allocator metadata are not
-  measured precisely. Value construction retains serde_json's default
-  recursion guard, so unlimited budgets do not promise arbitrary depth.
-  Duplicate keys are compared after JSON unescaping, without Unicode
-  normalization; canonical-byte verification is outside this API.
+  measured precisely. JCS Value construction separately caps nested
+  containers at 127, including with unlimited budgets; the 128th container
+  returns `MaterializationDepthLimit`. This differs from root-inclusive
+  `max_depth`. Duplicate keys are compared after JSON unescaping, without
+  Unicode normalization; canonical-byte verification is outside this API.
 - `JcsEncoder::write_buffered` and `write_incremental` can leave and charge
   bytes accepted by an external destination before a later write or flush
   failure. Incremental mode writes directly and flushes on success; value

@@ -12,6 +12,7 @@
 | `budgeted_serde_json` | 与直接使用 `serde_json` 的编解码对照、多种输入规模及独立预算模式 |
 | `tree_bench` | 大数组、大对象和深层树的迭代读取与修改 |
 | `jcs_bench` | 大对象、深层对象和大数组的 JCS 编码，比较有限/无限配置及直接 canonicalizer 对照 |
+| `decoder_bench` / `jcs_decode` | JCS 文本解码：数字数组、嵌套对象、普通/转义键和重复键拒绝；区分有限/无限预算及 fresh/reused session |
 
 在仓库根目录运行：
 
@@ -20,6 +21,7 @@ cargo bench --bench decoder_bench
 cargo bench --bench budgeted_serde_json -- --noplot
 cargo bench --bench tree_bench -- --noplot
 cargo bench --features jcs --bench jcs_bench -- --noplot
+cargo bench --features jcs --bench decoder_bench -- jcs_decode --noplot
 JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --features "jcs jcs-allocation-diagnostics" --bench jcs_bench -- --noplot
 ```
 
@@ -52,7 +54,11 @@ cargo bench --bench budgeted_serde_json -- encode --quick
 tree 基准区分纯 visitor 遍历、无限制与有限制的 reader，以及 mutator 输入和输出限制的
 四种组合。
 
-JCS 目标覆盖三种 `Value` 形态：成员很多的对象（排序表开销）、深层对象（遍历栈开销）
+`decoder_bench` 中的 `jcs_decode` 组覆盖 1 KiB 和 64 KiB 数字数组、64 层对象、普通/转义键写法以及重复键拒绝。
+计时前会断言成功 fixture 确实解码成功。有限和无限配置都分别测量 fresh decoder；reused session 场景在同一 decoder 中连续成功解码
+8 次，每个 Criterion batch 都重新创建 session。因此用量会在一个 batch 内累计，但不会跨 Criterion 样本耗尽。
+
+JCS 编码目标覆盖三种 `Value` 形态：成员很多的对象（排序表开销）、深层对象（遍历栈开销）
 以及大数组（值节点多但排序状态少）。它在相同 fixture 上比较有限的值、输出和工作内存限制，
 `JcsEncoder::unlimited`，以及旧 `serde_json_canonicalizer` 路径。canonicalizer 对照测量其完整输出路径，
 不提供新版的工作内存边界。报告结果时应记录 fixture 规模和这三项限制。
@@ -84,6 +90,31 @@ taskset -c 3 cargo bench --bench budgeted_serde_json -- --noplot
 taskset -c 3 cargo bench --bench tree_bench -- --noplot
 ```
 
+定向采样应保留 Criterion 给出的估计值和置信区间，并记录机器、Rust 版本、依赖解析结果、fixture 大小、预算配置和完整命令。
+如果没有同机、同 fixture 的修改前基线，当前单次采样只能描述本次环境，不能据此声称性能提升或退化。这些 fixture 不测分配次数或峰值内存。
+
+## JCS 解码定向采样记录
+
+2026-10-22 对
+`jcs_decode/numbers_1k/unlimited/fresh/decoder_per_decode` 完成一次定向采样：
+
+- 估计值为 38.014 µs，Criterion 区间为 37.633–38.607 µs。
+- 吞吐量为 25.714 MiB/s，区间为 25.320–25.975 MiB/s。
+- Criterion 使用 1 秒预热、1 秒测量和 10 个样本；报告 1 个轻微高值离群点。
+- fixture 是生成的 1,024 字节数组，包含 512 个整数。配置为
+  `JcsDecoder::unlimited()`，每次操作新建 decoder。
+- 环境：Intel Core i5-9600K（6 核，3.70 GHz）、x86_64 Linux
+  7.0.0-38-generic、Rust/Cargo 1.94.0，使用锁定的依赖版本。未设置 CPU 亲和性，
+  主机未隔离且启用了 CPU 频率调节。系统未安装 Gnuplot，Criterion 使用 Plotters 后端。
+
+命令：
+
+```bash
+cargo bench --manifest-path /data/working/qubit/rust-common/.worktrees/rs-json/implementation-20261022/Cargo.toml --features jcs --bench decoder_bench -- jcs_decode/numbers_1k/unlimited/fresh --noplot --sample-size 10 --measurement-time 1 --warm-up-time 1
+```
+
+这是当前 worktree 的一次观测，没有修改前对照，不能据此得出性能结论，也未测分配次数或峰值内存。
+该 fixture 不代表转义字符串、大对象、有限预算、复用 session 或应用层工作负载。
 ## 结果解释边界
 
 严格编解码会执行直接 `serde_json` 不一定承担的检查。尤其是 `RawValue` 的直接对照信任

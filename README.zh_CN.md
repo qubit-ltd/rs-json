@@ -85,8 +85,7 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 有界聚合 → `JsonDecoder` 准入 JSON → 模式、权限和领域校验。
 
 `qubit-json` 不提供 HTTP body 聚合 API。需要查看下游 HTTP 接入方式时，可参考
-[`rs-web` controller 示例](../rs-web/examples/controller_crud.rs)；该示例先经过传输层限制，
-再由 `BoundedJson` 执行 JSON 准入。更多输入方式见[用户手册的 `decode_input` 章节](doc/user_guide.zh_CN.md#进阶用法)。
+[`rs-web` controller 示例](https://github.com/qubit-ltd/rs-web/blob/main/examples/controller_crud.rs)；该链接是可能随下游仓库变化的参考示例。更多输入方式见[用户手册的 `decode_input` 章节](doc/user_guide.zh_CN.md#进阶用法)。
 
 ## 选择解码边界
 
@@ -97,7 +96,7 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 | 输入必须已经是完整、严格的 JSON | `JsonDecoder` |
 | 从字节输入源读取到 EOF，并生成拥有所有权的结果 | `JsonDecoder::decode_input` |
 | 严格解码前允许清理指定的展示痕迹 | 使用显式策略构造的 `NormalizingJsonDecoder` |
-| 需要检查规范化结果、重复解码，或让结果借用规范化文本 | 先调用 `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`，再通过 `NormalizedJsonDocument` 的解码方法处理 |
+| 需要检查规范化结果、重复解码，或让结果借用规范化文本 | 先调用 `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`，再由 `NormalizingJsonDecoder::decode_precharged_document`、`decode_precharged_object_document` 或 `decode_precharged_array_document` 解码 |
 
 默认规范化策略可以清理首尾空白、一个 BOM、一层 JSON Markdown 围栏，以及字符串内未经转义
 的 ASCII 控制字符。这只是受控规范化，不是另一种 JSON 方言；注释、尾随逗号、未加引号的键
@@ -170,8 +169,9 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
   `DeserializeOwned` 结果。它会暂存整份文档；未设置 `max_input_bytes` 时，这部分临时内存没有配置上限。
   解码前仍应在传输层限制读取或 body 聚合大小。这个严格 JSON 入口不能用于原始文本的 JCS 规范化。
 - `JcsDecoder::decode_input` 也会读取并缓冲完整输入；有限输入预算下可能多读取一个不计费且无法放回输入源的探测字节。
-  词法预算不是堆内存上限，结果容器容量、分配器元数据和输入缓冲区容量不受精确约束。它保留 serde_json 默认递归保护，
-  所以无限预算不表示支持任意深度。重复键按反转义后的字符串比较，不做 Unicode 规范化；该 API 不验证规范字节。
+  词法预算不是堆内存上限，结果容器容量、分配器元数据和输入缓冲区容量不受精确约束。JCS Value 构造另有 127 层容器上限，
+  即使无限预算也生效；第 128 层返回 `MaterializationDepthLimit`。它与包含根值的 `max_depth` 不同。重复键按反转义后的字符串比较，
+  不做 Unicode 规范化；该 API 不验证规范字节。
 - `JcsEncoder::write_buffered` 和 `write_incremental` 在后续写入或 flush 失败时，可能在外部目标留下已经接受的字节，
   这些字节会计入输出预算。增量模式直接写入，并在成功时 flush；值预算只在完整操作成功后提交。
   `max_working_bytes` 限制遍历栈和对象排序表的辅助容量，不限制输入 `Value`、分配器元数据或输出缓冲区容量。

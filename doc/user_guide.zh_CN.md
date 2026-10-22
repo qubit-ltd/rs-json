@@ -204,6 +204,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 `9007199254740993` 会变成 `9007199254740992`；`1e400` 因结果非有限而拒绝，较小的数字可以下溢为零。
 若金额或标识符必须逐位精确，应在 JSON 中用字符串表示，之后由应用按领域规则解析。
 
+重复键比较的是 JSON 反转义后的键字符串。下面的断言说明，Unicode 转义可以拼出相同键；双反斜杠则会让反斜杠成为键名的一部分：
+
+```rust
+use qubit_json::decode::{JcsDecodeError, JcsDecoder};
+
+let error = JcsDecoder::unlimited()
+    .decode_str(r#"{"x":1,"\u0078":2}"#)
+    .unwrap_err();
+assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
+let value = JcsDecoder::unlimited()
+    .decode_str(r#"{"x":1,"\\u0078":2}"#)
+    .unwrap();
+assert_eq!(value.as_object().unwrap().len(), 2);
+```
+
+
+
+即使使用无限 decoder，包含 128 层容器的文档也会触发固定构造上限：
+
+```rust
+use qubit_json::decode::{JcsDecodeError, JcsDecoder};
+
+let nested = (0..128).fold(String::from("null"), |value, _| format!("[{value}]"));
+let error = JcsDecoder::unlimited().decode_str(&nested).unwrap_err();
+assert!(matches!(
+    error,
+    JcsDecodeError::MaterializationDepthLimit {
+        limit: 127,
+        line: 1,
+        column: 128,
+    }
+));
+```
+
+按变体处理 JCS 错误：`Decode(source)` 包含普通输入、语法和预算错误；`DuplicateKey { line, column }`
+指向第二个键的开引号；`MaterializationDepthLimit { limit, line, column }` 表示触发固定构造保护。
+该上限为 127 层容器，与包含根值的 `max_depth` 不同。公开错误族还包括 `JcsEncodeError`、
+`JsonSerializationError` 以及普通的 `JsonDecodeError` / `JsonEncodeError` 领域错误。
+
 同一对象中的键按 JSON 反转义后的字符串查重，因此 `"x"` 与 `"\u0078"` 重复；嵌套对象也执行同样检查。
 Unicode 不做 NFC/NFD 归一化，因而不同码点序列仍是不同键。合法 JSON 的空白和成员顺序不要求规范；
 注释、BOM、尾逗号、非法 UTF-8、孤立代理项和尾随第二个文档会被拒绝。该入口不是“输入已规范”验证器。
@@ -213,8 +252,10 @@ Unicode 不做 NFC/NFD 归一化，因而不同码点序列仍是不同键。合
 已经接受的输入字节即使后续解码失败仍计入 session，值资源则只在完整成功后提交。
 
 资源预算限制被计量的 JSON 资源，不是精确的 malloc 上限：输入缓冲区、`Vec`/`Map` 容量和分配器元数据
-不会被精确计入。词法扫描有深度准入，但 Value 构造仍保留 serde_json 默认递归保护；增大或取消预算不表示支持
-任意深度。预算许可的极深输入仍可能因后端递归保护而作为反序列化错误失败。
+不会被精确计入。词法深度按包含根值的 `max_depth` 计量。JCS Value 构造另有固定的 127 层容器上限：
+根容器算第 1 层，标量不增加容器层数。即使使用 `JcsDecoder::unlimited()`，第 128 个容器仍会返回
+`JcsDecodeError::MaterializationDepthLimit { limit, line, column }`。若配置的 `max_depth` 更低，则会先以
+`JcsDecodeError::Decode(JsonDecodeErrorKind::Budget)` 拒绝。
 
 ## 进阶用法
 
@@ -451,7 +492,8 @@ assert_eq!(value, json!({"name": "qubit"}));
 默认脱敏。可信调用方如需精确字节，应通过稳定 offset 检查自己保有的原始输入，错误对象本身
 不会保留该字节。编码错误不会保留第三方 `Serialize::custom` 提供的任意文本。其他领域还
 提供 `JsonEncodeError`、`JsonSyntaxError`、`JsonTreeProcessError` 和
-`JsonTreeMutateError`。
+`JsonTreeMutateError`。JCS 解码另返回 `JcsDecodeError`：普通输入和预算问题在 `Decode` 中，重复键及 127 层构造上限分别由
+`DuplicateKey` 和 `MaterializationDepthLimit` 标识，并带有源坐标。
 
 数字契约独立于资源限制：负整数装入 `i64`，非负整数装入 `u64`，小数/指数必须是有限 `f64`。
 超出范围或必须避免二进制浮点舍入的精确十进制，应使用字符串或显式领域表示。详见

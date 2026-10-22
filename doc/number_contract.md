@@ -68,9 +68,12 @@ binary64 semantics and is not an exact decimal wire format.
 
 ## Serde boundaries
 
-`qubit-json` does not enable serde_json's `arbitrary_precision` feature and
-does not interpret its former private Number marker. An object whose key is
-`$serde_json::private::Number` is an ordinary object and is budgeted as such.
+`qubit-json` does not enable serde_json's `arbitrary_precision` feature
+itself. If another dependency unifies that feature, `JcsDecoder` still uses its
+scanner's binary64 number model and preserves a real object whose key is
+`$serde_json::private::Number` as an ordinary object; it does not interpret
+that private marker as a number. This guarantee is specific to the JCS text
+decoder, not arbitrary Serde Value seeds.
 The independent `RawValue` integration remains supported.
 
 `AccountingJsonValueSeed` sees already-decoded Serde events. It can reject wide numeric

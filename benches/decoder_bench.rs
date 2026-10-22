@@ -20,6 +20,8 @@ use criterion::criterion_main;
 use internal::BenchmarkRecord;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+#[cfg(feature = "jcs")]
+use qubit_json::decode::JcsDecoder;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
@@ -507,6 +509,97 @@ fn consume_record(record: BenchmarkRecord) {
     black_box(record.text);
 }
 
+/// Registers feature-gated JCS text decoding benchmarks.
+///
+/// Each fixture is checked before timing. Reused-session measurements decode
+/// a fixed batch through one decoder; Criterion setup creates a new session
+/// for every batch so usage cannot accumulate across samples.
+#[cfg(feature = "jcs")]
+fn benchmark_jcs_decode(c: &mut Criterion) {
+    let numeric_1k = format!("[{}]", std::iter::repeat_n("1", 512).collect::<Vec<_>>().join(","));
+    let numeric_64k = format!("[{}]", std::iter::repeat_n("1", 32_768).collect::<Vec<_>>().join(","));
+    let nested_64 = format!("{}0{}", r#"{"k":"#.repeat(64), "}".repeat(64));
+    let ordinary_keys = r#"{"plain":1,"another":2}"#.to_owned();
+    let escaped_keys = r#"{"plain":1,"escaped\u006bey":2}"#.to_owned();
+    let duplicate_key = r#"{"x":1,"\u0078":2}"#.to_owned();
+
+    for (fixture_name, input, expected_success) in [
+        ("numbers_1k", numeric_1k, true),
+        ("numbers_64k", numeric_64k, true),
+        ("nested_64", nested_64, true),
+        ("ordinary_keys", ordinary_keys, true),
+        ("escaped_keys", escaped_keys, true),
+        ("duplicate_key", duplicate_key, false),
+    ] {
+        for (budget_name, finite) in [("unlimited", false), ("finite", true)] {
+            let make_decoder = || {
+                if finite {
+                    JcsDecoder::with_limits(
+                        JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+                            .max_input_bytes(input.len().saturating_mul(8))
+                            .max_depth(127)
+                            .max_nodes(input.len().saturating_mul(16).max(64))
+                            .max_map_entries(input.len().max(8))
+                            .max_number_bytes(16)
+                            .max_string_bytes(input.len())
+                            .max_key_bytes(input.len())
+                            .max_payload_bytes(input.len().saturating_mul(16))
+                            .build(),
+                    )
+                } else {
+                    JcsDecoder::unlimited()
+                }
+            };
+
+            let mut validation_decoder = make_decoder();
+            let validation = validation_decoder.decode_str(&input);
+            assert_eq!(
+                validation.is_ok(),
+                expected_success,
+                "JCS fixture {fixture_name} has an unexpected decode result"
+            );
+
+            let mut fresh_group = c.benchmark_group(format!("jcs_decode/{fixture_name}/{budget_name}/fresh"));
+            fresh_group.throughput(Throughput::Bytes(input.len() as u64));
+            fresh_group.bench_function("decoder_per_decode", |bencher| {
+                bencher.iter(|| {
+                    let mut decoder = make_decoder();
+                    let result = decoder.decode_str(black_box(input.as_str()));
+                    assert_eq!(result.is_ok(), expected_success);
+                    black_box(result)
+                });
+            });
+            fresh_group.finish();
+
+            let mut reused_group = c.benchmark_group(format!("jcs_decode/{fixture_name}/{budget_name}/reused"));
+            reused_group.throughput(Throughput::Bytes((input.len() * 8) as u64));
+            reused_group.bench_function("session_batch_8", |bencher| {
+                bencher.iter_batched(
+                    make_decoder,
+                    |mut decoder| {
+                        for _ in 0..8 {
+                            let result = decoder.decode_str(black_box(input.as_str()));
+                            assert_eq!(result.is_ok(), expected_success);
+                            let _ = black_box(result);
+                        }
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+            reused_group.finish();
+        }
+    }
+}
+
+#[cfg(feature = "jcs")]
+criterion_group!(
+    benches,
+    benchmark_decoder,
+    benchmark_control_character_scaling,
+    benchmark_downstream_scaling,
+    benchmark_jcs_decode
+);
+#[cfg(not(feature = "jcs"))]
 criterion_group!(
     benches,
     benchmark_decoder,

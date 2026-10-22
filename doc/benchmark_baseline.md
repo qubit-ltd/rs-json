@@ -13,6 +13,7 @@ changes. Results depend on the hardware, inputs, and enabled limits.
 | `budgeted_serde_json` | Decode and encode comparisons with direct `serde_json`, multiple input sizes, and separate budget modes |
 | `tree_bench` | Iterative readers and mutators over large arrays, large objects, and deep trees |
 | `jcs_bench` | JCS encoding of large objects, deep objects, and large arrays, with bounded and unlimited configurations and a direct canonicalizer control |
+| `decoder_bench` / `jcs_decode` | JCS text decoding of number arrays, nested objects, ordinary/escaped keys, and duplicate-key rejection with finite/unlimited budgets and fresh/reused sessions |
 
 Run from the repository root:
 
@@ -21,6 +22,7 @@ cargo bench --bench decoder_bench
 cargo bench --bench budgeted_serde_json -- --noplot
 cargo bench --bench tree_bench -- --noplot
 cargo bench --features jcs --bench jcs_bench -- --noplot
+cargo bench --features jcs --bench decoder_bench -- jcs_decode --noplot
 JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --features "jcs jcs-allocation-diagnostics" --bench jcs_bench -- --noplot
 ```
 
@@ -53,6 +55,14 @@ sessions, value limits, and normalizing decoding. Encode cases include:
 
 Tree benchmarks distinguish visitor-only traversal, unlimited and bounded
 readers, and all four input/output limit combinations for mutators.
+
+The `jcs_decode` group in `decoder_bench` covers 1 KiB and 64 KiB numeric
+arrays, a 64-container object, plain and escaped key spellings, and duplicate
+key rejection. Successful fixtures are asserted before timing. Unlimited and
+finite configurations each measure fresh decoder construction; reused-session
+cases run a bounded batch of eight successful decodes in one decoder. Every
+batch starts with a new session, so usage can accumulate within that batch but
+cannot exhaust one session across Criterion samples.
 
 The JCS target exercises three materially different `Value` shapes: objects
 with many members (sorting-table cost), deeply nested objects (traversal
@@ -97,6 +107,39 @@ taskset -c 3 cargo bench --bench budgeted_serde_json -- --noplot
 taskset -c 3 cargo bench --bench tree_bench -- --noplot
 ```
 
+For a focused run, preserve Criterion's reported estimate and confidence
+intervals along with the machine, Rust version, resolved dependencies, fixture
+sizes, limits, and exact command. A single current-code sample without a
+same-machine pre-change baseline is descriptive only; it does not establish a
+performance improvement or regression. These fixtures do not measure
+allocation counts or peak memory.
+
+## Recorded JCS decode sample
+
+One directed sample was collected on 2026-10-22 for
+`jcs_decode/numbers_1k/unlimited/fresh/decoder_per_decode`:
+
+- Estimate: 38.014 µs; Criterion interval: 37.633–38.607 µs.
+- Throughput: 25.714 MiB/s; interval: 25.320–25.975 MiB/s.
+- Criterion used 10 samples after 1 s warm-up and 1 s measurement time;
+  it reported one mild high outlier.
+- Fixture: generated 1,024-byte array containing 512 integer values.
+  Configuration: `JcsDecoder::unlimited()`; a fresh decoder per operation.
+- Environment: Intel Core i5-9600K (6 cores, 3.70 GHz), x86_64 Linux
+  7.0.0-38-generic, Rust/Cargo 1.94.0, locked dependencies. No CPU affinity
+  was set; the host was not isolated and CPU frequency scaling was enabled.
+  Gnuplot was unavailable, so Criterion used its Plotters backend.
+
+Command:
+
+```bash
+cargo bench --manifest-path /data/working/qubit/rust-common/.worktrees/rs-json/implementation-20261022/Cargo.toml --features jcs --bench decoder_bench -- jcs_decode/numbers_1k/unlimited/fresh --noplot --sample-size 10 --measurement-time 1 --warm-up-time 1
+```
+
+This is a single current-worktree observation, not a before/after comparison.
+It provides no performance conclusion and does not measure allocation counts
+or peak memory. The fixture does not represent escaped strings, large objects,
+bounded budgets, reused sessions, or application-level work.
 ## Interpretation boundaries
 
 Strict codecs perform checks that direct `serde_json` may not perform. In
