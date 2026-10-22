@@ -22,7 +22,7 @@ For the `0.11` version described by this checkout:
 ```toml
 [dependencies]
 qubit-json = "0.11"
-qubit-budget = { version = "0.8", features = ["json"] }
+qubit-budget = { version = "0.9", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -31,7 +31,7 @@ Local checkout:
 ```toml
 [dependencies]
 qubit-json = { version = "0.11", path = "../rs-json" }
-qubit-budget = { version = "0.8", features = ["json"] }
+qubit-budget = { version = "0.9", features = ["json"] }
 serde_json = "1.0"
 ```
 

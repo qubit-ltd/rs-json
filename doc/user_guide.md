@@ -48,7 +48,7 @@ while developing against unpublished changes:
 ```toml
 [dependencies]
 qubit-json = "0.11"
-qubit-budget = { version = "0.8", features = ["json"] }
+qubit-budget = { version = "0.9", features = ["json"] }
 serde_json = "1.0"
 ```
 
