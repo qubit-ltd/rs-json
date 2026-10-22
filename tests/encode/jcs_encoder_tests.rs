@@ -208,18 +208,14 @@ fn test_jcs_preserves_unicode_forms_and_budget_independent_bytes() {
         let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_output_bytes(maximum)
             .build();
-        let actual = JcsEncoder::with_limits(limits, 1024 * 1024)
-            .to_vec(&value)
-            .unwrap();
+        let actual = JcsEncoder::with_limits(limits, 1024 * 1024).to_vec(&value).unwrap();
         assert_eq!(actual, expected);
     }
 
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(expected.len() - 1)
         .build();
-    assert!(JcsEncoder::with_limits(limits, 1024 * 1024)
-        .to_vec(&value)
-        .is_err());
+    assert!(JcsEncoder::with_limits(limits, 1024 * 1024).to_vec(&value).is_err());
 }
 
 #[test]
