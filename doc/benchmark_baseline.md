@@ -12,6 +12,7 @@ changes. Results depend on the hardware, inputs, and enabled limits.
 | `decoder_bench` | Strict and normalizing decoding, UTF-8 entry points, downstream-shaped inputs, control characters, and failure paths |
 | `budgeted_serde_json` | Decode and encode comparisons with direct `serde_json`, multiple input sizes, and separate budget modes |
 | `tree_bench` | Iterative readers and mutators over large arrays, large objects, and deep trees |
+| `jcs_bench` | JCS encoding of large objects, deep objects, and large arrays, with bounded and unlimited configurations and a direct canonicalizer control |
 
 Run from the repository root:
 
@@ -19,6 +20,8 @@ Run from the repository root:
 cargo bench --bench decoder_bench
 cargo bench --bench budgeted_serde_json -- --noplot
 cargo bench --bench tree_bench -- --noplot
+cargo bench --features jcs --bench jcs_bench -- --noplot
+JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --features "jcs jcs-allocation-diagnostics" --bench jcs_bench -- --noplot
 ```
 
 Use filters for focused measurements:
@@ -50,6 +53,28 @@ sessions, value limits, and normalizing decoding. Encode cases include:
 
 Tree benchmarks distinguish visitor-only traversal, unlimited and bounded
 readers, and all four input/output limit combinations for mutators.
+
+The JCS target exercises three materially different `Value` shapes: objects
+with many members (sorting-table cost), deeply nested objects (traversal
+stack cost), and large arrays (many values with little sorting state). It
+compares finite value/output/working-memory limits with `JcsEncoder::unlimited`
+and the previous `serde_json_canonicalizer` path on the same fixture. The
+canonicalizer control measures its own end-to-end output path; it does not
+provide the new working-memory bound. Record fixture dimensions and all three
+limits when reporting results.
+
+The first command runs Criterion with only the JCS feature, so its timed
+samples use the system allocator without allocation-counting instrumentation.
+The second command enables `jcs-allocation-diagnostics` and sets
+`JCS_ALLOCATION_DIAGNOSTICS`; it prints one
+`JCS_ALLOC` diagnostic for each fixture and each of the finite JCS, unlimited
+JCS, and legacy paths, and registers no Criterion timing samples. It counts
+successful global allocator calls (`alloc`, `alloc_zeroed`, and `realloc`) and
+sums their requested byte sizes for that single operation. These one-shot
+diagnostics include encoder state, sorting tables, temporary storage, and
+output buffers; they are total requested allocation traffic, not auxiliary
+working bytes, peak live memory, or process RSS. The prebuilt input `Value` and
+diagnostic formatting are outside the measured operation.
 
 ## Measurement procedure
 

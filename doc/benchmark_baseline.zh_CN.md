@@ -11,6 +11,7 @@
 | `decoder_bench` | 严格与规范化解码、UTF-8 入口、下游形态输入、控制字符和失败路径 |
 | `budgeted_serde_json` | 与直接使用 `serde_json` 的编解码对照、多种输入规模及独立预算模式 |
 | `tree_bench` | 大数组、大对象和深层树的迭代读取与修改 |
+| `jcs_bench` | 大对象、深层对象和大数组的 JCS 编码，比较有限/无限配置及直接 canonicalizer 对照 |
 
 在仓库根目录运行：
 
@@ -18,6 +19,8 @@
 cargo bench --bench decoder_bench
 cargo bench --bench budgeted_serde_json -- --noplot
 cargo bench --bench tree_bench -- --noplot
+cargo bench --features jcs --bench jcs_bench -- --noplot
+JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --features "jcs jcs-allocation-diagnostics" --bench jcs_bench -- --noplot
 ```
 
 通过过滤器缩小测量范围：
@@ -48,6 +51,18 @@ cargo bench --bench budgeted_serde_json -- encode --quick
 
 tree 基准区分纯 visitor 遍历、无限制与有限制的 reader，以及 mutator 输入和输出限制的
 四种组合。
+
+JCS 目标覆盖三种 `Value` 形态：成员很多的对象（排序表开销）、深层对象（遍历栈开销）
+以及大数组（值节点多但排序状态少）。它在相同 fixture 上比较有限的值、输出和工作内存限制，
+`JcsEncoder::unlimited`，以及旧 `serde_json_canonicalizer` 路径。canonicalizer 对照测量其完整输出路径，
+不提供新版的工作内存边界。报告结果时应记录 fixture 规模和这三项限制。
+
+第一条命令只启用 `jcs` feature，Criterion 计时使用系统分配器，不包含分配计数器。第二条命令额外
+启用 `jcs-allocation-diagnostics` 并设置 `JCS_ALLOCATION_DIAGNOSTICS`；它为每个 fixture 的有限 JCS、无限 JCS 和旧路径各打印一条
+`JCS_ALLOC` 诊断，并且不注册 Criterion 计时样本。诊断仅包围一次操作，统计成功的全局分配器调用
+（`alloc`、`alloc_zeroed` 和 `realloc`）及其请求字节数总和。这些一次性数据包括编码器状态、排序表、
+临时存储和输出缓冲，是总分配请求量，不是辅助工作内存、峰值存活内存或进程 RSS。预先构造的输入
+`Value` 和诊断文本格式化均不计入操作测量。
 
 ## 测量步骤
 

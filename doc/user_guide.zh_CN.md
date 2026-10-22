@@ -137,10 +137,14 @@ serde_json = "1.0"
 应用可以先规范化，再把结果字节传给现有的签名或哈希逻辑：
 
 ```rust
+use qubit_budget::json::{JsonEncodeLimits, JsonResource};
 use qubit_json::encode::JcsEncoder;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut encoder = JcsEncoder::unlimited();
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_output_bytes(4096)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
     let value = serde_json::json!({"b": 2, "a": 1.0});
     let canonical = encoder.to_vec(&value)?;
     assert_eq!(canonical, br#"{"a":1,"b":2}"#);
@@ -157,9 +161,11 @@ JCS 数值遵循 IEEE 754 双精度模型。包含 `9007199254740993` 的值可�
 `9007199254740992`。协议必须精确保留的整数应表示成 JSON 字符串。
 
 `to_vec` 和 `to_string` 返回完整结果。`write_buffered` 会先生成并检查规范化文档，再写入目标；
-`write_incremental` 则直接写出已经生成的字节。目标写入失败时，两种模式都可能留下已接受的前缀，
-且这些字节仍计入输出预算。canonicalizer 为排序对象成员也可能暂存数据，因此输出字节上限并不
-限制这部分内部临时内存。只有完整操作成功后，值资源事务才会提交。
+`write_incremental` 则直接写出已经生成的字节，并在成功前执行 flush。目标写入或 flush 失败时，
+两种模式都可能留下已接受的前缀，且这些字节仍计入输出预算；值资源事务只在完整操作成功后提交。
+`Budget` 表示值或输出预算拒绝操作，`WorkingMemory` 表示单独配置的 `max_working_bytes` 不足。
+工作内存覆盖 renderer 遍历栈和活动对象成员表的辅助容量，不包含输入 `Value`、分配器元数据或输出缓冲容量。
+`unlimited()` 会同时取消值、输出和工作内存限制，只应处理可信数据或已由其他层准入的数据。
 
 ## 进阶用法
 

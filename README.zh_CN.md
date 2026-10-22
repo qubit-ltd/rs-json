@@ -104,10 +104,14 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 `serde_json::Value` 交给 `JcsEncoder`：
 
 ```rust
+use qubit_budget::json::{JsonEncodeLimits, JsonResource};
 use qubit_json::encode::JcsEncoder;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut encoder = JcsEncoder::unlimited();
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_output_bytes(4096)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
     let value = serde_json::json!({"b": 2, "a": 1.0});
     assert_eq!(encoder.to_vec(&value)?, br#"{"a":1,"b":2}"#);
     Ok(())
@@ -139,21 +143,24 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 `qubit-budget` 负责限制、资源标识、预算和会话；`qubit-json` 负责 JSON 规范化、词法校验、
 文本编解码、值构造和遍历。
 
+JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemory` 表示单独配置的辅助容量上限不足，
+该上限通过 `JcsEncoder::with_limits(limits, max_working_bytes)` 设置。
+
 ## 明确边界
 
 - 严格准入会检查 JSON 语法和文档规定的数字范围，但不会自动要求对象键唯一。若唯一性属于
   输入契约，应选择 `DuplicateKeyRejectingJsonValue` 等目标类型。
 - 负整数须能装入 `i64`，非负整数须能装入 `u64`，小数或指数形式须能表示为有限 `f64`。
   更宽的整数以及不能接受二进制舍入的精确十进制值，应使用字符串或领域类型。
-- 所有不可信边界都应设置有限资源上限。`unlimited()` 只应用于可信输入，或已由其他层完成
-  准入的数据；外层输出上限不能替代解析前的输入与结构准入。
+- 所有不可信边界都应设置有限资源上限。`unlimited()` 会同时取消值、输出和工作内存限制，
+  只应用于可信输入或已由其他层完成准入的数据；外层输出上限不能替代解析前的输入与结构准入。
 - 严格解码和规范化解码的切片入口接收完整的 `&str` 或 `&[u8]`；需要借用输入的结果时使用它们。
   `JsonDecoder::decode_input` 则从 `Input<Item = u8>` 读取到 EOF，并返回拥有数据的
   `DeserializeOwned` 结果。它会暂存整份文档；未设置 `max_input_bytes` 时，这部分临时内存没有配置上限。
   解码前仍应在传输层限制读取或 body 聚合大小。这个严格 JSON 入口不能用于原始文本的 JCS 规范化。
-- `JcsEncoder::write_buffered` 和 `write_incremental` 在后续写入失败时，可能在外部目标留下已经接受的字节，
-  这些字节会计入输出预算。增量模式直接写入目标，但 canonicalizer 仍可能为对象键排序分配临时内存；
-  输出字节上限不约束这部分内部分配。
+- `JcsEncoder::write_buffered` 和 `write_incremental` 在后续写入或 flush 失败时，可能在外部目标留下已经接受的字节，
+  这些字节会计入输出预算。增量模式直接写入，并在成功时 flush；值预算只在完整操作成功后提交。
+  `max_working_bytes` 限制遍历栈和对象排序表的辅助容量，不限制输入 `Value`、分配器元数据或输出缓冲区容量。
 - 诊断信息默认脱敏。严格解码器通过 `JsonDecoder::with_diagnostic_policy` 配置，规范化
   解码器通过其规范化策略配置。脱敏错误只保留稳定分类和源坐标，不保留意外字节、token、
   键/值文本或 parser/Serde 来源。只有在输入派生来源可以安全保留和记录时，才启用

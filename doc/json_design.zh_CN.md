@@ -147,6 +147,26 @@ key 进行准入。
 再接触目标，但 I/O 失败仍可能留下部分字节；增量写入同样不承诺回滚外部输出。性能优化
 必须保持数字范围、重复键、预算提交、错误顺序和部分输出契约。
 
+## JCS 编码与工作内存边界
+
+启用可选 `jcs` feature 后，`JcsEncoder` 接收已经构造好的
+`serde_json::Value`。`with_limits(limits, max_working_bytes)` 和
+`new(session, max_working_bytes)` 都要求单独指定辅助内存上限；
+`max_working_bytes()` 可读取该配置。`unlimited()` 会明确取消值、输出和工作内存限制，
+只适合可信值或已由其他层准入的值。
+
+renderer 以迭代方式遍历数组和对象。每个对象只对借用的成员引用按键的 UTF-16 顺序排序，
+随后直接向输出写入标点和标量。遍历栈与活动成员表扩容前，会先将其保留容量计入
+`max_working_bytes`。这个逻辑容量上限不包含调用方持有的输入 `Value`、分配器元数据或输出缓冲容量。
+`max_depth`、`max_map_entries`、`max_nodes` 等值限制仍独立生效；`max_output_bytes` 限制最终
+规范化字节数，不限制 renderer 工作内存。
+
+renderer 前先暂存值资源用量，完整编码成功后才提交。`Budget` 表示值或输出记账失败；
+`WorkingMemory` 表示辅助内存超限；真实分配失败映射为安全的序列化错误。`write_buffered` 会先
+渲染并检查完整文档，再接触目标。`write_incremental` 边写边计入目标接受的字节，并在成功前 flush。
+任一 writer 遇到写入失败，都可能留下已接受前缀；这些字节仍计费，但失败操作不会提交值用量。incremental 写入在最后 flush 失败时也可能留下已接受前缀。
+错误优先级取决于这些阶段中最先发生的失败。
+
 ## 资源计量与性能验证
 
 未启用限制时可跳过仅用于预算的测量和准入，仍须执行语法、数字和键校验。

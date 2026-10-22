@@ -186,6 +186,35 @@ target, but I/O failure can still leave partial bytes. Incremental writing also
 cannot roll back external output. Optimizations must preserve numeric ranges,
 duplicate-key checks, budget commits, error ordering, and partial-output behavior.
 
+## JCS encoding and working-memory boundary
+
+With the optional `jcs` feature, `JcsEncoder` accepts an already constructed
+`serde_json::Value`. `with_limits(limits, max_working_bytes)` and
+`new(session, max_working_bytes)` require a separate auxiliary-memory limit;
+`max_working_bytes()` reports that configuration. `unlimited()` explicitly
+removes value, output, and working-memory limits and is intended only for
+trusted or separately admitted values.
+
+The renderer walks arrays and objects iteratively. For each object it sorts
+borrowed member references by UTF-16 key order, then writes punctuation and
+scalar values directly to the output. It accounts the reserved traversal-stack
+and active member-table capacities against `max_working_bytes` before growing
+them. This logical capacity bound excludes the caller-owned input `Value`,
+allocator metadata, and output-buffer capacity. The configured value limits
+such as `max_depth`, `max_map_entries`, and `max_nodes` remain independent;
+`max_output_bytes` limits canonical output bytes, not renderer working memory.
+
+Value accounting is staged before rendering and commits only after the whole
+encoding succeeds. `Budget` reports value or output accounting failures;
+`WorkingMemory` reports the auxiliary limit; allocation failure maps to a safe
+serialization error. `write_buffered` renders and checks the document before
+touching the destination. `write_incremental` charges accepted bytes as they
+are written and flushes before reporting success. Either writer may leave an
+accepted prefix after a write failure; those bytes remain charged, while
+failed operations do not commit value accounting. Incremental writing may
+also leave its accepted prefix when its final flush fails. Error precedence
+follows the first failure encountered in these stages.
+
 ## Resource measurement and performance validation
 
 When limits are disabled, work used only for measurement and admission can be

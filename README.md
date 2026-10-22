@@ -111,10 +111,14 @@ When an application needs stable bytes for a hash or signature, enable `jcs`
 and pass an already constructed `serde_json::Value` to `JcsEncoder`:
 
 ```rust
+use qubit_budget::json::{JsonEncodeLimits, JsonResource};
 use qubit_json::encode::JcsEncoder;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut encoder = JcsEncoder::unlimited();
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_output_bytes(4096)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
     let value = serde_json::json!({"b": 2, "a": 1.0});
     assert_eq!(encoder.to_vec(&value)?, br#"{"a":1,"b":2}"#);
     Ok(())
@@ -150,6 +154,10 @@ commit boundaries explicit through `qubit-budget` sessions and transactions.
 `qubit-json` owns JSON normalization, lexical validation, text codecs, value
 construction, and traversal.
 
+For JCS, `Budget` identifies value or output limits, while `WorkingMemory`
+identifies the separate auxiliary-capacity limit configured with
+`JcsEncoder::with_limits(limits, max_working_bytes)`.
+
 ## Explicit boundaries
 
 - Strict admission validates JSON syntax and the documented numeric range; it
@@ -158,8 +166,9 @@ construction, and traversal.
 - Negative integers fit `i64`, non-negative integers fit `u64`, and fractional
   or exponential values must be finite `f64`. Use strings or domain types for
   wider integers or exact decimals that must avoid binary rounding.
-- Set finite limits at every untrusted boundary. Use `unlimited()` only for
-  trusted input or data already admitted by another layer; an outer output
+- Set finite limits at every untrusted boundary. `unlimited()` disables value,
+  output, and working-memory limits; use it only for trusted input or data
+  already admitted by another layer. An outer output
   bound cannot replace input and structural admission before parsing.
 - Slice-based strict and normalizing decoder methods consume complete `&str` or
   `&[u8]` inputs; use them when the decoded result must borrow from the input.
@@ -170,10 +179,11 @@ construction, and traversal.
   decoding. This strict JSON method is not a raw-text JCS canonicalization
   entry point.
 - `JcsEncoder::write_buffered` and `write_incremental` can leave and charge
-  bytes accepted by an external destination before a later write failure.
-  Incremental mode writes directly, while the canonicalizer may still allocate
-  temporary memory to sort object members; the output-byte limit does not bound
-  that internal allocation.
+  bytes accepted by an external destination before a later write or flush
+  failure. Incremental mode writes directly and flushes on success; value
+  accounting is committed only after the complete operation succeeds.
+  `max_working_bytes` bounds auxiliary traversal and object-sorting capacity,
+  not the input `Value`, allocator metadata, or output buffer capacity.
 - Diagnostics are redacted by default. Configure a strict decoder with
   `JsonDecoder::with_diagnostic_policy`, or a normalizing decoder through its
   normalization policy. Redacted errors retain only stable classifications and

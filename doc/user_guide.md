@@ -155,10 +155,14 @@ The application can then canonicalize a value before passing its bytes to its
 existing signing or hashing code:
 
 ```rust
+use qubit_budget::json::{JsonEncodeLimits, JsonResource};
 use qubit_json::encode::JcsEncoder;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut encoder = JcsEncoder::unlimited();
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_output_bytes(4096)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
     let value = serde_json::json!({"b": 2, "a": 1.0});
     let canonical = encoder.to_vec(&value)?;
     assert_eq!(canonical, br#"{"a":1,"b":2}"#);
@@ -184,8 +188,13 @@ checks the canonical document before writing it; `write_incremental` sends
 produced bytes directly to the destination. Either writer can leave a prefix
 if the destination fails, and accepted bytes remain charged to the output
 budget; the value transaction commits only if the complete operation succeeds.
-The canonicalizer may buffer object members while sorting them, so
-internal sorting allocations are not bounded by the output-byte limit.
+Incremental output is flushed before success is reported. A write or flush
+failure is `Write`; an output limit failure is `Budget`; exceeding the separate
+`max_working_bytes` auxiliary-capacity limit is `WorkingMemory`. Working memory
+covers the renderer's traversal stack and active object member tables, not the
+input `Value`, allocator metadata, or output buffer capacity. `unlimited()`
+selects unlimited value, output, and working-memory budgets, so reserve it for
+trusted or separately admitted data.
 
 ## Advanced usage
 
