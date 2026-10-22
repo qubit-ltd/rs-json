@@ -34,11 +34,6 @@ where
         depth,
         bytes: text.len(),
     };
-    if context.borrow().has_value_limits {
-        let check = context.borrow_mut().transaction.check_admit(measurement);
-        context.borrow_mut().record(check)?;
-    }
-
     if let Err(error) = StrictJsonNumber::parse(text) {
         context
             .borrow_mut()

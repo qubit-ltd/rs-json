@@ -15,6 +15,7 @@ use qubit_budget::MeasuredBudgetError;
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonContainerKind;
 use qubit_budget::json::JsonMeasurement;
+use qubit_budget::json::JsonValueLimits;
 use qubit_budget::json::JsonValueTransaction;
 use serde::ser::Error;
 
@@ -40,6 +41,9 @@ where
 
     /// Whether any decoded-value resource dimension is configured.
     pub(in crate::encode) has_value_limits: bool,
+
+    /// Value limits used for non-mutating per-item display checks.
+    pub(in crate::encode) value_limits: JsonValueLimits<R, Q>,
 }
 
 impl<R, Q> JsonEncodeContext<'_, '_, R, Q>
@@ -103,8 +107,21 @@ where
         let Some(measurement) = kind.measurement(depth, bytes) else {
             return Ok(());
         };
-        let result = self.transaction.check_admit(measurement);
-        self.record(result)
+        let maximum = match kind {
+            DisplayBudgetKind::String => self.value_limits.max_string_bytes(),
+            DisplayBudgetKind::Key => self.value_limits.max_key_bytes(),
+            DisplayBudgetKind::RawOutput => None,
+        };
+        let exceeds_point_limit = match Q::try_from_usize(bytes) {
+            Ok(quantity) => maximum.is_some_and(|maximum| quantity > maximum),
+            Err(_) => true,
+        };
+        if exceeds_point_limit {
+            let result = self.transaction.try_admit(measurement);
+            self.record(result)
+        } else {
+            Ok(())
+        }
     }
 
     /// Checks and charges a container before requesting its Serde compound.
