@@ -377,7 +377,152 @@ fn test_json_decoder_stream_budget_stops_before_reading_next_chunk() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     assert_eq!(error.stage(), qubit_json::decode::JsonDecodeStage::Input);
     assert_eq!(input.next, 2);
+    assert_eq!(error.raw_input_bytes(), 3);
+}
+
+#[test]
+fn test_json_decoder_stream_budget_reads_only_one_probe_byte() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(3)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut input = Cursor::new(b"true".to_vec());
+    let error = decoder
+        .decode_input::<Value, _>(&mut input)
+        .expect_err("the fourth byte must exceed the input budget");
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.stage(), JsonDecodeStage::Input);
+    assert_eq!(input.position(), 4);
+    assert_eq!(error.raw_input_bytes(), 3);
+    assert_eq!(
+        decoder
+            .session()
+            .input_budget()
+            .expect("input budget must be configured")
+            .used(),
+        3
+    );
+
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut input = Cursor::new(b"true".to_vec());
+    assert_eq!(
+        decoder
+            .decode_input::<Value, _>(&mut input)
+            .expect("a document ending exactly at the input limit must decode"),
+        Value::Bool(true)
+    );
+    assert_eq!(input.position(), 4);
+}
+
+#[test]
+fn test_json_decoder_stream_budget_probe_handles_zero_and_large_inputs() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(0)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut empty = Cursor::new(Vec::<u8>::new());
+    let error = decoder
+        .decode_input::<Value, _>(&mut empty)
+        .expect_err("an empty stream still fails JSON syntax validation");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(empty.position(), 0);
+
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(0)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut nonempty = Cursor::new(vec![b'x'; 8192]);
+    let error = decoder
+        .decode_input::<Value, _>(&mut nonempty)
+        .expect_err("the first byte must exceed a zero-byte budget");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(nonempty.position(), 1);
+    assert_eq!(error.raw_input_bytes(), 0);
+
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(2)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut large = Cursor::new(vec![b'x'; 8192]);
+    let error = decoder
+        .decode_input::<Value, _>(&mut large)
+        .expect_err("the probe byte beyond the two-byte limit must reject the stream");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(large.position(), 3);
     assert_eq!(error.raw_input_bytes(), 2);
+}
+
+#[test]
+fn test_json_decoder_stream_budget_handles_chunk_sized_allowances() {
+    let mut exact_chunk = vec![b'x'; 8190];
+    exact_chunk.insert(0, b'"');
+    exact_chunk.push(b'"');
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(8192)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut input = Cursor::new(exact_chunk);
+    let value = decoder
+        .decode_input::<String, _>(&mut input)
+        .expect("a complete document exactly one chunk long must decode");
+    assert_eq!(value.len(), 8190);
+    assert_eq!(input.position(), 8192);
+
+    let mut multiple_chunks = vec![b'x'; 16382];
+    multiple_chunks.insert(0, b'"');
+    multiple_chunks.push(b'"');
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(16385)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut input = Cursor::new(multiple_chunks);
+    let value = decoder
+        .decode_input::<String, _>(&mut input)
+        .expect("a document spanning chunks with more than one chunk remaining must decode");
+    assert_eq!(value.len(), 16382);
+    assert_eq!(input.position(), 16384);
+}
+
+#[test]
+fn test_json_decoder_stream_budget_supports_small_quantity_types() {
+    let limits = JsonDecodeLimits::<JsonResource, u8>::builder()
+        .max_input_bytes(3)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut input = Cursor::new(b"true".to_vec());
+    let error = decoder
+        .decode_input::<Value, _>(&mut input)
+        .expect_err("the u8 budget must reject the fourth input byte");
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(input.position(), 4);
+    assert_eq!(error.raw_input_bytes(), 3);
+    assert_eq!(
+        decoder
+            .session()
+            .input_budget()
+            .expect("input budget must be configured")
+            .used(),
+        3
+    );
+
+    let mut max_u8_document = vec![b'x'; 253];
+    max_u8_document.insert(0, b'"');
+    max_u8_document.push(b'"');
+    let limits = JsonDecodeLimits::<JsonResource, u8>::builder()
+        .max_input_bytes(u8::MAX)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut input = Cursor::new(max_u8_document);
+    let value = decoder
+        .decode_input::<String, _>(&mut input)
+        .expect("a document exactly at the largest u8 budget must decode");
+    assert_eq!(value.len(), 253);
+    assert_eq!(input.position(), u64::from(u8::MAX));
 }
 
 #[test]
@@ -417,7 +562,7 @@ fn test_json_decoder_stream_cumulative_input_budget_spans_calls() {
         .decode_input::<Value, _>(&mut second)
         .expect_err("the second call must use the remaining cumulative input budget");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
-    assert_eq!(error.raw_input_bytes(), 0);
+    assert_eq!(error.raw_input_bytes(), 1);
     assert_eq!(second.next, 1);
     assert_eq!(
         decoder
@@ -425,7 +570,7 @@ fn test_json_decoder_stream_cumulative_input_budget_spans_calls() {
             .input_budget()
             .expect("input budget must be configured")
             .used(),
-        4
+        5
     );
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
 }

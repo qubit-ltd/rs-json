@@ -246,10 +246,14 @@ where
     /// Decodes a complete document from an item-oriented byte input through
     /// EOF.
     ///
-    /// The input is read in fixed-size chunks and charged as each chunk
-    /// arrives. The complete document is buffered in memory because the
-    /// returned value must not borrow from the temporary buffer. Without an
-    /// input-byte limit, this buffering has no implicit size cap.
+    /// Without an input-byte limit, the input is read in fixed-size chunks.
+    /// With a limit, each read is bounded by the remaining allowance plus at
+    /// most one probe byte. The probe distinguishes an input ending exactly
+    /// at the limit from an oversized input; it is neither charged nor
+    /// buffered, and cannot be returned to the input source. The complete
+    /// admitted document is buffered in memory because the returned value
+    /// must not borrow from the temporary buffer. Without an input-byte
+    /// limit, this buffering has no implicit size cap.
     ///
     /// # Parameters
     ///

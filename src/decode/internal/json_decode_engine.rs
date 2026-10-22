@@ -205,24 +205,51 @@ where
         let mut bytes = Vec::new();
         let mut raw_input_bytes = 0_usize;
         loop {
-            let count = match Input::read(input, &mut scratch) {
+            let admitted = attempt
+                .input_budget()
+                .map(|budget| Self::max_admitted_input_bytes(budget.remaining()));
+            let read_len = admitted.map_or(scratch.len(), |admitted| {
+                if admitted == scratch.len() {
+                    scratch.len()
+                } else {
+                    admitted.saturating_add(1)
+                }
+            });
+            let count = match Input::read(input, &mut scratch[..read_len]) {
                 Ok(0) => break,
                 Ok(count) => count,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                 Err(error) => return Err(JsonDecodeError::read(error, raw_input_bytes, diagnostic_policy)),
             };
-            let next_total = raw_input_bytes.checked_add(count).ok_or_else(|| {
+            let charged = admitted.map_or(count, |admitted| count.min(admitted));
+            let next_total = raw_input_bytes.checked_add(charged).ok_or_else(|| {
                 JsonDecodeError::read(
                     io::Error::new(io::ErrorKind::InvalidData, "input byte count overflow"),
                     raw_input_bytes,
                     diagnostic_policy,
                 )
             })?;
-            attempt.try_consume_input_bytes(count).map_err(|source| {
+            attempt.try_consume_input_bytes(charged).map_err(|source| {
                 JsonDecodeError::budget(source, JsonDecodeStage::Input, raw_input_bytes, None, diagnostic_policy)
             })?;
-            bytes.extend_from_slice(&scratch[..count]);
+            bytes.extend_from_slice(&scratch[..charged]);
             raw_input_bytes = next_total;
+            if count > charged {
+                return match attempt.try_consume_input_bytes(1) {
+                    Err(source) => Err(JsonDecodeError::budget(
+                        source,
+                        JsonDecodeStage::Input,
+                        raw_input_bytes,
+                        None,
+                        diagnostic_policy,
+                    )),
+                    Ok(()) => Err(JsonDecodeError::read(
+                        io::Error::new(io::ErrorKind::InvalidData, "input budget probe invariant violated"),
+                        raw_input_bytes,
+                        diagnostic_policy,
+                    )),
+                };
+            }
         }
         let metadata = DecodeMetadata {
             raw_input_bytes,
@@ -248,6 +275,21 @@ where
             )
         })?;
         Ok(value)
+    }
+
+    /// Finds the largest native input length that fits the remaining budget.
+    fn max_admitted_input_bytes(remaining: Q) -> usize {
+        let mut lower = 0_usize;
+        let mut upper = 8192_usize;
+        while lower < upper {
+            let middle = lower + (upper - lower).div_ceil(2);
+            if Q::try_from_usize(middle).is_ok_and(|quantity| quantity <= remaining) {
+                lower = middle;
+            } else {
+                upper = middle - 1;
+            }
+        }
+        lower
     }
 
     /// Runs admission, an optional root check, Serde materialization, and value
