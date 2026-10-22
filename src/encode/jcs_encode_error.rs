@@ -14,6 +14,7 @@ use std::io;
 use qubit_budget::MeasuredBudgetError;
 
 use super::JcsEncodeErrorKind;
+use super::JcsWorkingMemoryError;
 use super::JsonEncodeError;
 use super::JsonEncodeErrorKind;
 use super::JsonSerializationError;
@@ -25,6 +26,7 @@ where
     Q: Copy + fmt::Debug,
 {
     Budget(MeasuredBudgetError<R, Q>),
+    WorkingMemory(JcsWorkingMemoryError),
     Serialize(JsonSerializationError),
     Write(io::Error),
 }
@@ -55,6 +57,12 @@ where
     pub(crate) const fn serialization(source: JsonSerializationError) -> Self {
         Self {
             failure: JcsEncodeFailure::Serialize(source),
+        }
+    }
+
+    pub(crate) const fn working_memory(source: JcsWorkingMemoryError) -> Self {
+        Self {
+            failure: JcsEncodeFailure::WorkingMemory(source),
         }
     }
 
@@ -89,6 +97,7 @@ where
     pub const fn kind(&self) -> JcsEncodeErrorKind {
         match self.failure {
             JcsEncodeFailure::Budget(_) => JcsEncodeErrorKind::Budget,
+            JcsEncodeFailure::WorkingMemory(_) => JcsEncodeErrorKind::WorkingMemory,
             JcsEncodeFailure::Serialize(_) => JcsEncodeErrorKind::Serialize,
             JcsEncodeFailure::Write(_) => JcsEncodeErrorKind::Write,
         }
@@ -99,6 +108,15 @@ where
     pub const fn budget_error(&self) -> Option<&MeasuredBudgetError<R, Q>> {
         match &self.failure {
             JcsEncodeFailure::Budget(source) => Some(source),
+            _ => None,
+        }
+    }
+
+    /// Returns the working memory limit failure, when present.
+    #[must_use]
+    pub const fn working_memory_error(&self) -> Option<&JcsWorkingMemoryError> {
+        match &self.failure {
+            JcsEncodeFailure::WorkingMemory(source) => Some(source),
             _ => None,
         }
     }
@@ -130,6 +148,7 @@ where
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.failure {
             JcsEncodeFailure::Budget(source) => fmt::Display::fmt(source, formatter),
+            JcsEncodeFailure::WorkingMemory(source) => fmt::Display::fmt(source, formatter),
             JcsEncodeFailure::Serialize(_) => formatter.write_str("JCS serialization failed"),
             JcsEncodeFailure::Write(_) => formatter.write_str("JCS output writer failed"),
         }
@@ -144,6 +163,7 @@ where
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.failure {
             JcsEncodeFailure::Budget(source) => Some(source),
+            JcsEncodeFailure::WorkingMemory(source) => Some(source),
             JcsEncodeFailure::Serialize(source) => Some(source),
             JcsEncodeFailure::Write(source) => Some(source),
         }

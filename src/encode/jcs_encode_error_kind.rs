@@ -15,6 +15,8 @@ use std::str::FromStr;
 pub enum JcsEncodeErrorKind {
     /// Resource accounting rejected the value or output.
     Budget,
+    /// The encoder's auxiliary working memory exceeded its configured limit.
+    WorkingMemory,
     /// JCS serialization could not represent the value.
     Serialize,
     /// The external destination rejected output bytes.
@@ -25,6 +27,7 @@ impl fmt::Display for JcsEncodeErrorKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Budget => "budget",
+            Self::WorkingMemory => "working_memory",
             Self::Serialize => "serialize",
             Self::Write => "write",
         })
@@ -37,6 +40,8 @@ impl FromStr for JcsEncodeErrorKind {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.eq_ignore_ascii_case("budget") {
             Ok(Self::Budget)
+        } else if value.eq_ignore_ascii_case("working_memory") {
+            Ok(Self::WorkingMemory)
         } else if value.eq_ignore_ascii_case("serialize") {
             Ok(Self::Serialize)
         } else if value.eq_ignore_ascii_case("write") {

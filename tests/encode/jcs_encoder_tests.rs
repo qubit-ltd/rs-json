@@ -10,6 +10,7 @@
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
@@ -50,6 +51,35 @@ impl qubit_io::Output for PrefixOutput {
         let written = count.min(remaining);
         bytes.extend_from_slice(&input[index..index + written]);
         Ok(written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+struct FlushFailureOutput(Rc<RefCell<Vec<u8>>>);
+
+impl qubit_io::Output for FlushFailureOutput {
+    type Item = u8;
+
+    unsafe fn write_unchecked(&mut self, input: &[u8], index: usize, count: usize) -> io::Result<usize> {
+        self.0.borrow_mut().extend_from_slice(&input[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Err(io::Error::other("injected flush failure"))
+    }
+}
+
+struct ZeroOutput;
+
+impl qubit_io::Output for ZeroOutput {
+    type Item = u8;
+
+    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, _count: usize) -> io::Result<usize> {
+        Ok(0)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -113,7 +143,8 @@ fn test_jcs_encoder_exercises_construction_and_session_methods() {
         .max_output_bytes(16)
         .max_nodes(4)
         .build();
-    let mut encoder = JcsEncoder::new(JsonEncodeSession::from_limits(limits));
+    let mut encoder = JcsEncoder::new(JsonEncodeSession::from_limits(limits), 4096);
+    assert_eq!(encoder.max_working_bytes(), 4096);
     assert_eq!(encoder.session().max_output_bytes(), Some(16));
     assert_eq!(encoder.session_mut().max_output_bytes(), Some(16));
     assert_eq!(encoder.to_vec(&serde_json::Value::Bool(true)).unwrap(), b"true");
@@ -121,9 +152,18 @@ fn test_jcs_encoder_exercises_construction_and_session_methods() {
     let session = encoder.into_session();
     assert_eq!(session.output_budget().unwrap().used(), 4);
 
-    let configured = JcsEncoder::with_limits(JsonEncodeLimits::<JsonResource, usize>::new());
+    let configured = JcsEncoder::with_limits(JsonEncodeLimits::<JsonResource, usize>::new(), 8192);
     assert_eq!(configured.session().max_output_bytes(), None);
+    assert_eq!(configured.max_working_bytes(), 8192);
     assert_eq!(JcsEncoder::unlimited().session().max_output_bytes(), None);
+}
+
+#[test]
+fn test_jcs_encode_error_kind_parses_and_displays_working_memory() {
+    let kind = JcsEncodeErrorKind::from_str("working_memory").unwrap();
+    assert_eq!(kind, JcsEncodeErrorKind::WorkingMemory);
+    assert_eq!(kind.to_string(), "working_memory");
+    assert_eq!(JcsEncodeErrorKind::from_str("WORKING_MEMORY").unwrap(), kind);
 }
 
 #[test]
@@ -149,21 +189,23 @@ fn test_jcs_encoder_value_and_output_budget_boundaries_are_transactional() {
         .max_nodes(1)
         .max_output_bytes(16)
         .build();
-    let mut encoder = JcsEncoder::with_limits(limits);
+    let mut encoder = JcsEncoder::with_limits(limits, 4096);
     let error = encoder.to_vec(&serde_json::json!([null])).unwrap_err();
     assert_eq!(error.kind(), JcsEncodeErrorKind::Budget);
+    assert!(error.budget_error().is_some());
+    assert!(error.working_memory_error().is_none());
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
 
     let exact = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(7)
         .build();
-    let mut encoder = JcsEncoder::with_limits(exact);
+    let mut encoder = JcsEncoder::with_limits(exact, 4096);
     assert_eq!(encoder.to_vec(&serde_json::json!({"a": 1})).unwrap(), br#"{"a":1}"#);
 
     let too_small = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(6)
         .build();
-    let mut encoder = JcsEncoder::with_limits(too_small);
+    let mut encoder = JcsEncoder::with_limits(too_small, 4096);
     assert_eq!(
         encoder.to_vec(&serde_json::json!({"a": 1})).unwrap_err().kind(),
         JcsEncodeErrorKind::Budget
@@ -178,11 +220,13 @@ fn test_jcs_encoder_buffered_write_error_keeps_only_accepted_prefix() {
         .max_output_bytes(16)
         .max_nodes(8)
         .build();
-    let mut encoder = JcsEncoder::with_limits(limits);
+    let mut encoder = JcsEncoder::with_limits(limits, 4096);
     let error = encoder
         .write_buffered(output, &serde_json::json!({"a": 1}))
         .unwrap_err();
     assert_eq!(error.kind(), JcsEncodeErrorKind::Write);
+    assert!(error.write_error().is_some());
+    assert!(error.budget_error().is_none());
     assert_eq!(*bytes.borrow(), br#"{"a"#);
     assert_eq!(encoder.session().output_budget().unwrap().used(), 3);
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
@@ -195,12 +239,202 @@ fn test_jcs_encoder_incremental_write_error_keeps_only_accepted_prefix() {
         .max_output_bytes(16)
         .max_nodes(8)
         .build();
-    let mut encoder = JcsEncoder::with_limits(limits);
+    let mut encoder = JcsEncoder::with_limits(limits, 4096);
     let error = encoder
         .write_incremental(output, &serde_json::json!({"a": 1}))
         .unwrap_err();
     assert_eq!(error.kind(), JcsEncodeErrorKind::Write);
+    assert!(error.write_error().is_some());
+    assert!(error.budget_error().is_none());
     assert_eq!(*bytes.borrow(), br#"{"a"#);
     assert_eq!(encoder.session().output_budget().unwrap().used(), 3);
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+}
+
+#[test]
+fn test_jcs_encoder_rejects_object_before_working_memory_exceeds_limit() {
+    let value = serde_json::json!({"a": 1, "b": 2});
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_nodes(8)
+        .max_output_bytes(32)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 0);
+    let error = encoder.to_vec(&value).unwrap_err();
+    assert_eq!(error.kind(), JcsEncodeErrorKind::WorkingMemory);
+    let memory = error.working_memory_error().unwrap();
+    assert_eq!(memory.limit(), 0);
+    assert!(memory.requested() > 0);
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "JCS working memory limit exceeded (limit: 0, requested: {})",
+            memory.requested(),
+        ),
+    );
+    assert_eq!(
+        std::error::Error::source(&error).unwrap().to_string(),
+        error.to_string(),
+    );
+    assert!(error.budget_error().is_none());
+    assert!(error.serialization_error().is_none());
+    assert!(error.write_error().is_none());
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(encoder.session().output_budget().unwrap().used(), 0);
+    assert_eq!(encoder.to_vec(&serde_json::json!(true)).unwrap(), b"true");
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(1));
+}
+
+#[test]
+fn test_jcs_encoder_checks_working_memory_for_nested_containers_and_reuses_session() {
+    let value = serde_json::json!([{"a": [1, 2]}]);
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(8).build();
+    let mut encoder = JcsEncoder::with_limits(limits, 1);
+    assert_eq!(
+        encoder.to_vec(&value).unwrap_err().kind(),
+        JcsEncodeErrorKind::WorkingMemory
+    );
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+
+    let sufficient_limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(8).build();
+    let mut sufficient = JcsEncoder::with_limits(sufficient_limits, 4096);
+    assert_eq!(sufficient.to_vec(&value).unwrap(), br#"[{"a":[1,2]}]"#);
+    assert_eq!(sufficient.session().value_budget().used_nodes(), Some(5));
+}
+
+#[test]
+fn test_jcs_encoder_working_memory_exact_boundary_for_object() {
+    let value = serde_json::json!({"a": 1, "b": 2});
+    let mut exact_limit = 0;
+    loop {
+        let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(8).build();
+        let mut encoder = JcsEncoder::with_limits(limits, exact_limit);
+        match encoder.to_vec(&value) {
+            Ok(bytes) => {
+                assert_eq!(bytes, br#"{"a":1,"b":2}"#);
+                assert_eq!(encoder.session().value_budget().used_nodes(), Some(3));
+                break;
+            }
+            Err(error) => {
+                assert_eq!(error.kind(), JcsEncodeErrorKind::WorkingMemory);
+                exact_limit = error.working_memory_error().unwrap().requested();
+            }
+        }
+        assert!(exact_limit < 4096, "working-memory boundary did not converge");
+    }
+
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(8).build();
+    let mut one_byte_short = JcsEncoder::with_limits(limits, exact_limit - 1);
+    let error = one_byte_short.to_vec(&value).unwrap_err();
+    assert_eq!(error.kind(), JcsEncodeErrorKind::WorkingMemory);
+    assert_eq!(one_byte_short.session().value_budget().used_nodes(), Some(0));
+}
+
+#[test]
+fn test_jcs_encoder_zero_byte_destination_is_write_zero_and_rolls_back_value() {
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_nodes(8)
+        .max_output_bytes(16)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 4096);
+    let error = encoder
+        .write_incremental(ZeroOutput, &serde_json::json!({"a": 1}))
+        .unwrap_err();
+    assert_eq!(error.kind(), JcsEncodeErrorKind::Write);
+    assert_eq!(error.write_error().unwrap().kind(), io::ErrorKind::WriteZero);
+    assert_eq!(encoder.session().output_budget().unwrap().used(), 0);
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+}
+
+#[test]
+fn test_jcs_encoder_small_output_budget_fails_with_sufficient_working_memory() {
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_output_bytes(1)
+        .max_nodes(8)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 4096);
+    let error = encoder.to_vec(&serde_json::json!({"large": "value"})).unwrap_err();
+    assert_eq!(error.kind(), JcsEncodeErrorKind::Budget);
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(encoder.session().output_budget().unwrap().used(), 0);
+}
+
+#[test]
+fn test_jcs_encoder_large_object_with_tiny_output_limit_is_transactional() {
+    let mut object = serde_json::Map::new();
+    for index in 0..128 {
+        object.insert(format!("key-{index:03}"), serde_json::json!(index));
+    }
+    let value = serde_json::Value::Object(object);
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_output_bytes(1)
+        .max_nodes(256)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
+    let error = encoder.to_vec(&value).unwrap_err();
+    assert_eq!(error.kind(), JcsEncodeErrorKind::Budget);
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(encoder.session().output_budget().unwrap().used(), 0);
+}
+
+#[test]
+fn test_jcs_encoder_scalar_needs_no_working_memory() {
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(1).build();
+    let mut encoder = JcsEncoder::with_limits(limits, 0);
+    assert_eq!(
+        encoder.to_vec(&serde_json::json!("a large scalar string")).unwrap(),
+        br#""a large scalar string""#
+    );
+}
+
+#[test]
+fn test_jcs_encoder_all_output_paths_reject_insufficient_working_memory() {
+    let value = serde_json::json!({"a": 1});
+
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(4).build();
+    let mut string_encoder = JcsEncoder::with_limits(limits, 0);
+    assert_eq!(
+        string_encoder.to_string(&value).unwrap_err().kind(),
+        JcsEncodeErrorKind::WorkingMemory
+    );
+
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(4).build();
+    let mut buffered_encoder = JcsEncoder::with_limits(limits, 0);
+    let buffered = Rc::new(RefCell::new(Vec::new()));
+    assert_eq!(
+        buffered_encoder
+            .write_buffered(SharedOutput(buffered.clone()), &value)
+            .unwrap_err()
+            .kind(),
+        JcsEncodeErrorKind::WorkingMemory,
+    );
+    assert!(buffered.borrow().is_empty());
+
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(4).build();
+    let mut incremental_encoder = JcsEncoder::with_limits(limits, 0);
+    let incremental = Rc::new(RefCell::new(Vec::new()));
+    assert_eq!(
+        incremental_encoder
+            .write_incremental(SharedOutput(incremental.clone()), &value)
+            .unwrap_err()
+            .kind(),
+        JcsEncodeErrorKind::WorkingMemory,
+    );
+    assert!(incremental.borrow().is_empty());
+}
+
+#[test]
+fn test_jcs_encoder_incremental_flush_failure_keeps_output_and_rolls_back_value() {
+    let bytes = Rc::new(RefCell::new(Vec::new()));
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_nodes(8)
+        .max_output_bytes(32)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 4096);
+    let error = encoder
+        .write_incremental(FlushFailureOutput(bytes.clone()), &serde_json::json!({"a": 1}))
+        .unwrap_err();
+    assert_eq!(error.kind(), JcsEncodeErrorKind::Write);
+    assert_eq!(*bytes.borrow(), br#"{"a":1}"#);
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(encoder.session().output_budget().unwrap().used(), 7);
 }
