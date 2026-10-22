@@ -8,6 +8,7 @@
 //! Shared support for the `qubit-json` fuzz targets.
 
 pub mod input_limit;
+pub mod jcs_decode_invariants;
 pub mod json_decode_differential_oracle;
 pub mod json_number_contract;
 pub mod json_reference;

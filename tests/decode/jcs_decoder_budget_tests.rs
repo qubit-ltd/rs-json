@@ -76,14 +76,58 @@ fn test_jcs_decoder_depth_budget_rejects_before_value_materialization() {
 }
 
 #[test]
-fn test_jcs_decoder_input_entry_respects_exact_byte_budget() {
+fn test_jcs_decoder_input_entry_accepts_exact_byte_budget() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(4)
+        .max_nodes(32)
         .build();
     let mut decoder = JcsDecoder::with_limits(limits);
     let mut exact = std::io::Cursor::new(b"true".to_vec());
     assert_eq!(decoder.decode_input(&mut exact).unwrap(), serde_json::Value::Bool(true));
-    let mut oversized = std::io::Cursor::new(b"false".to_vec());
-    assert!(decoder.decode_input(&mut oversized).is_err());
+    assert_eq!(exact.position(), 4);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 4);
+}
+
+#[test]
+fn test_jcs_decoder_input_entry_rejects_overflow_probe_byte() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4)
+        .max_nodes(32)
+        .build();
+    let mut decoder = JcsDecoder::with_limits(limits);
+    let mut oversized = std::io::Cursor::new(b"true ".to_vec());
+    let error = decoder
+        .decode_input(&mut oversized)
+        .expect_err("the fifth byte must exceed the input budget");
+    let qubit_json::decode::JcsDecodeError::Decode(error) = error else {
+        panic!("input overflow must be reported as a decode budget error")
+    };
+    assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::Budget);
+    assert_eq!(oversized.position(), 5);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 4);
+}
+
+#[test]
+fn test_jcs_decoder_input_entry_keeps_cumulative_budget_exhaustion() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4)
+        .max_nodes(32)
+        .build();
+    let mut decoder = JcsDecoder::with_limits(limits);
+    let mut exact = std::io::Cursor::new(b"true".to_vec());
+    decoder.decode_input(&mut exact).expect("the first input fits");
+
+    let mut next = std::io::Cursor::new(b"x".to_vec());
+    let error = decoder
+        .decode_input(&mut next)
+        .expect_err("the shared session has already consumed its input allowance");
+    let qubit_json::decode::JcsDecodeError::Decode(error) = error else {
+        panic!("cumulative input overflow must be a decode budget error")
+    };
+    assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::Budget);
+    assert_eq!(next.position(), 1);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
     assert_eq!(decoder.session().input_budget().unwrap().used(), 4);
 }
