@@ -24,12 +24,14 @@ src/
 `lexical` is not a public interface. The crate does not share public APIs
 through root-level error or option modules.
 
-## Two facades and one shared core
+## Decode facades and one shared core
 
-The public layer keeps two distinct responsibilities: `JsonDecoder` handles
-strict JSON without modifying input, while `NormalizingJsonDecoder` handles
-explicitly permitted text normalization. Both delegate to the crate-private
-`JsonDecodeEngine<'budget, R, Q>`, generic over resource and quantity types.
+The public layer keeps distinct responsibilities: `JsonDecoder` handles
+strict JSON without modifying input, `NormalizingJsonDecoder` handles
+explicitly permitted text normalization, and feature-gated `JcsDecoder`
+handles strict raw text with binary64 number and duplicate-key rules. They
+delegate to the crate-private `JsonDecodeEngine<'budget, R, Q>`, generic over
+resource and quantity types.
 The shared core owns sessions, lexical admission, the numeric contract,
 top-level checks, Serde materialization, and transaction boundaries. The
 facades only select whether normalization happens first and shape the public
@@ -116,15 +118,36 @@ policy. Strict encoding returns `JsonEncodeError` with budget, invalid raw
 JSON, serialization, or write failures. `JsonSyntaxError` separately owns a
 stable reason and source position.
 
+`JcsDecoder` returns `JcsDecodeError<R, Q>`, with a `Decode` case wrapping the
+existing decode error and a structured `DuplicateKey { line, column }` case.
+The duplicate-key variant stores no key text or backend source. Each operation
+creates its own duplicate marker; the shared Value visitor sets it before
+returning a materialization error, so unrelated syntax, budget, and commit
+failures keep their ordinary decode classification. Value accounting still
+commits only after the complete document succeeds, while accepted input bytes
+remain charged after failure.
+
 ### Numeric representation
 
 Strict and normalizing text paths share one numeric contract: negative
 integers fit `i64`, non-negative integers fit `u64`, and fractional or
-exponential values must be finite `f64`. The lexical scanner admits
-`NumberBytes` before range validation, so resource and representation limits
-remain separate and budget failures have priority. The implementation does
-not enable serde_json arbitrary precision or recognize its private Number
-marker. See [the number contract](number_contract.md).
+exponential values must be finite `f64`. The feature-gated `JcsDecoder` uses a
+separate binary64 model, rounding every number (including integer lexemes) to
+`f64` and rejecting duplicate object keys during materialization. Both models
+admit the original `NumberBytes` before range validation, so budget failures
+have priority. The implementation does not enable serde_json arbitrary
+precision or recognize its private Number marker. See [the number
+contract](number_contract.md).
+
+`JcsDecoder` reuses lexical admission, sessions, and transactions. Its
+dedicated Value visitor checks each unescaped key string before insertion and
+does not normalize Unicode. Lexical scanning applies the configured depth
+budget, while Value construction retains serde_json's default recursion guard;
+unlimited budgets do not promise arbitrary depth. `decode_input` keeps the
+read-through-EOF, full-buffering behavior and may consume one uncharged probe
+byte with a finite input limit. Budgets describe measured resources, not an
+exact malloc ceiling. JCS decoding parses and constructs a value; verifying
+already canonical bytes requires callers to compare input with encoded output.
 
 This keeps object structure and budget categories consistent: an object with
 `$serde_json::private::Number` as a key remains an ordinary object rather than
@@ -141,7 +164,8 @@ its underlying float-formatting library.
 longer available but the materialized value still needs accounting. Lexical
 admission and the seed have different responsibilities: the seed cannot
 inspect the original number lexeme, so text-level number and `NumberBytes`
-guarantees must come from `JsonDecoder`.
+guarantees must come from `JsonDecoder`, or from `JcsDecoder` when its JCS
+number contract is required.
 
 ## Tree
 

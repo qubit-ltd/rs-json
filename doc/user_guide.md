@@ -171,12 +171,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 The feature is disabled by default. The encoder accepts `Value`, not arbitrary
-`Serialize` implementations or raw JSON text. Reject duplicate keys while
-reading raw JSON, before constructing `Value`; once duplicate members have
-been collapsed into a map, the encoder cannot detect them. The existing
-`JsonDecoder` is a strict JSON decoder, but its integer text limits do not
-cover every number lexeme accepted by JCS, so it is not a complete raw-text JCS
-entry point.
+`Serialize` implementations or raw JSON text. Use `JcsDecoder` to reject
+duplicate keys while reading raw JSON, before constructing `Value`; once
+duplicate members have been collapsed into a map, the encoder cannot detect
+them. The existing `JsonDecoder` is a strict JSON decoder, but its integer
+text limits do not cover every number lexeme accepted by JCS. Use `JcsDecoder` as the complete
+raw-text entry point when JCS number and duplicate-key rules are required.
 
 JCS numbers follow the IEEE 754 binary64 model. A value containing
 `9007199254740993` can therefore produce the canonical number
@@ -195,6 +195,69 @@ covers the renderer's traversal stack and active object member tables, not the
 input `Value`, allocator metadata, or output buffer capacity. `unlimited()`
 selects unlimited value, output, and working-memory budgets, so reserve it for
 trusted or separately admitted data.
+
+### Decode raw text with JCS semantics
+
+For raw JSON text, use the feature-gated `JcsDecoder` instead of first building
+a `Value` with ordinary `JsonDecoder`. This example sets finite input,
+structure, and value limits, then passes the result to `JcsEncoder`:
+
+```rust
+use qubit_budget::json::{JsonDecodeLimits, JsonEncodeLimits, JsonResource};
+use qubit_json::decode::JcsDecoder;
+use qubit_json::encode::JcsEncoder;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let decode_limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4096)
+        .max_depth(16)
+        .max_nodes(32)
+        .max_map_entries(8)
+        .max_number_bytes(32)
+        .max_string_bytes(256)
+        .max_key_bytes(64)
+        .build();
+    let mut decoder = JcsDecoder::with_limits(decode_limits);
+    let value = decoder.decode_str(r#"{"b":100000000000000000000,"a":1.0}"#)?;
+
+    let encode_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_output_bytes(4096)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(encode_limits, 16 * 1024);
+    let canonical = encoder.to_vec(&value)?;
+    assert_eq!(canonical, br#"{"a":1,"b":100000000000000000000}"#);
+    Ok(())
+}
+```
+
+Every number, whether written as an integer, fraction, or exponent, is rounded
+to binary64 before it is stored in `Value`. For example,
+`9007199254740993` becomes `9007199254740992`; `1e400` is rejected because it
+is non-finite, while sufficiently small values may underflow to zero. Encode
+amounts and identifiers as JSON strings when their exact digits must survive,
+then parse them according to the application's domain rules.
+
+Keys are compared after JSON unescaping, so `"x"` and `"\\u0078"` are
+duplicates, including in nested objects. Unicode is not normalized to NFC or
+NFD, so different code-point sequences remain distinct keys. Valid JSON
+whitespace and member ordering need not be canonical. Comments, a BOM, trailing
+commas, invalid UTF-8, unpaired surrogates, and a second trailing document are
+rejected. This entry point does not verify that input bytes are already
+canonical.
+
+`decode_input` reads through EOF and buffers the full input to return an owned
+`Value`. With a finite `max_input_bytes`, it may consume one additional probe
+byte to distinguish EOF at the exact limit from overflow. That byte is not
+charged or buffered and cannot be returned to the input source. Accepted input
+bytes remain charged if later decoding fails; value resources commit only after
+the full operation succeeds.
+
+Resource budgets limit measured JSON resources; they are not exact malloc
+ceilings. Input buffers, `Vec`/`Map` capacities, and allocator metadata are not
+measured precisely. Lexical scanning applies the configured depth budget, but
+Value construction retains serde_json's default recursion guard. Raising or
+removing budgets does not promise arbitrary depth; an input admitted by the
+budget may still fail with a backend deserialization error at deep nesting.
 
 ## Advanced usage
 

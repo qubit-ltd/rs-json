@@ -153,9 +153,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 该 feature 默认关闭。编码器接收 `Value`，不接收任意 `Serialize` 实现或原始 JSON 文本。读取原始
-JSON 时，应在构造 `Value` 前拒绝重复键；重复成员一旦合并到 map 中，编码器就无法再发现它们。
-现有 `JsonDecoder` 用于严格 JSON 解码，但其整数文本范围不足以覆盖 JCS 接受的所有数字词法，
-因此它不是完整的原始文本 JCS 入口。
+JSON 时，可使用 `JcsDecoder` 在构造 `Value` 时拒绝重复键；重复成员一旦合并到 map 中，编码器就无法再发现它们。
+现有 `JsonDecoder` 用于严格 JSON 解码，但其整数文本范围不足以覆盖 JCS 接受的所有数字词法。
+需要应用 JCS 数字和重复键规则时，原始文本应使用 `JcsDecoder`。
 
 JCS 数值遵循 IEEE 754 双精度模型。包含 `9007199254740993` 的值可能规范化为
 `9007199254740992`。协议必须精确保留的整数应表示成 JSON 字符串。
@@ -166,6 +166,55 @@ JCS 数值遵循 IEEE 754 双精度模型。包含 `9007199254740993` 的值可�
 `Budget` 表示值或输出预算拒绝操作，`WorkingMemory` 表示单独配置的 `max_working_bytes` 不足。
 工作内存覆盖 renderer 遍历栈和活动对象成员表的辅助容量，不包含输入 `Value`、分配器元数据或输出缓冲容量。
 `unlimited()` 会同时取消值、输出和工作内存限制，只应处理可信数据或已由其他层准入的数据。
+
+### 按 JCS 规则解码原始文本
+
+若输入来自原始 JSON 文本，使用 feature-gated 的 `JcsDecoder`，而不是先用普通 `JsonDecoder` 构造
+`Value`。下面的例子对输入、结构和值数量都设定有限预算，再将结果交给 `JcsEncoder`：
+
+```rust
+use qubit_budget::json::{JsonDecodeLimits, JsonEncodeLimits, JsonResource};
+use qubit_json::decode::JcsDecoder;
+use qubit_json::encode::JcsEncoder;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let decode_limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4096)
+        .max_depth(16)
+        .max_nodes(32)
+        .max_map_entries(8)
+        .max_number_bytes(32)
+        .max_string_bytes(256)
+        .max_key_bytes(64)
+        .build();
+    let mut decoder = JcsDecoder::with_limits(decode_limits);
+    let value = decoder.decode_str(r#"{"b":100000000000000000000,"a":1.0}"#)?;
+
+    let encode_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_output_bytes(4096)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(encode_limits, 16 * 1024);
+    let canonical = encoder.to_vec(&value)?;
+    assert_eq!(canonical, br#"{"a":1,"b":100000000000000000000}"#);
+    Ok(())
+}
+```
+
+数字不论输入写成整数、小数还是指数，都会按 binary64 舍入后存入 `Value`。例如
+`9007199254740993` 会变成 `9007199254740992`；`1e400` 因结果非有限而拒绝，较小的数字可以下溢为零。
+若金额或标识符必须逐位精确，应在 JSON 中用字符串表示，之后由应用按领域规则解析。
+
+同一对象中的键按 JSON 反转义后的字符串查重，因此 `"x"` 与 `"\u0078"` 重复；嵌套对象也执行同样检查。
+Unicode 不做 NFC/NFD 归一化，因而不同码点序列仍是不同键。合法 JSON 的空白和成员顺序不要求规范；
+注释、BOM、尾逗号、非法 UTF-8、孤立代理项和尾随第二个文档会被拒绝。该入口不是“输入已规范”验证器。
+
+`decode_input` 会读到 EOF 并缓冲完整输入以返回自有 `Value`。设置有限 `max_input_bytes` 时，读取逻辑可能
+额外消耗一个探测字节，用于区分刚好到达限额的 EOF 与超限输入；该字节不计费、不进入缓冲，也无法放回输入源。
+已经接受的输入字节即使后续解码失败仍计入 session，值资源则只在完整成功后提交。
+
+资源预算限制被计量的 JSON 资源，不是精确的 malloc 上限：输入缓冲区、`Vec`/`Map` 容量和分配器元数据
+不会被精确计入。词法扫描有深度准入，但 Value 构造仍保留 serde_json 默认递归保护；增大或取消预算不表示支持
+任意深度。预算许可的极深输入仍可能因后端递归保护而作为反序列化错误失败。
 
 ## 进阶用法
 

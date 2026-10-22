@@ -32,6 +32,17 @@ RFC 8259 没有规定 number token 的最大长度，但允许实现限制数字
 标识符。浏览器必须使用能保留整数文本并把不安全整数转换为 `BigInt`（或字符串）的 JSON
 parser。`n` 后缀仅属于 JavaScript 源码；`123n` 不是合法 JSON，绝不能出现在 wire 中。
 
+## JCS 原始文本解码
+
+启用 `jcs` feature 后，`JcsDecoder` 使用独立于普通路径的 binary64 数字契约。所有 JSON 数字
+（包括整数词法）都转为 `f64`，再构造 `serde_json::Number`。因此 `9007199254740993` 舍入为
+`9007199254740992`；有限值下溢为零是允许的，负零在解码后的值中保留符号位；会溢出为非有限值的
+数字（如 `1e400`）被拒绝。整数的精确十进制表示不能从结果中恢复。
+
+使用 JSON 字符串承载必须精确保留的 ID、金额或其他十进制值。普通 `JsonDecoder`、normalizing
+解码、Serde seed 和独立 `RawValue` 路径继续遵守各自原有契约；该例外仅适用于显式调用 `JcsDecoder`。
+JCS 解码的 `NumberBytes` 仍按原始 token 字节数计量，并先于范围检查；预算限制计量资源，不是精确堆内存上限。
+
 ## 精确值和更宽的值
 
 小于 `i64::MIN` 或大于 `u64::MAX` 的整数使用 JSON 字符串或显式领域结构。金额等精确十进制
@@ -46,4 +57,4 @@ parser。`n` 后缀仅属于 JavaScript 源码；`123n` 不是合法 JSON，绝�
 
 `AccountingJsonValueSeed` 看到的是已解码的 Serde 事件。它可以拒绝无法装入 value 模型的宽整数事件，
 但不能检查原始 token 或执行词法预算。需要语法、范围和 `NumberBytes` 保证时，JSON 文本必须
-经过 `JsonDecoder`。
+经过 `JsonDecoder`；若需 JCS binary64 舍入和重复键拒绝，则使用 `JcsDecoder`。

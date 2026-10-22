@@ -41,6 +41,24 @@ must use a JSON parser that preserves integer text and converts unsafe values
 to `BigInt` (or strings). The `n` suffix belongs to JavaScript source code;
 `123n` is not valid JSON and must never appear on the wire.
 
+## JCS raw-text decoding
+
+With the `jcs` feature enabled, `JcsDecoder` uses a binary64 number contract
+separate from the ordinary paths. Every JSON number, including integer
+lexemes, is converted to `f64` before constructing `serde_json::Number`.
+Thus `9007199254740993` rounds to `9007199254740992`; finite values may
+underflow to zero, and negative zero retains its sign bit in the decoded value.
+Numbers that overflow to a non-finite value, such as `1e400`, are rejected.
+The original exact decimal digits of an integer cannot be recovered.
+
+Use JSON strings for IDs, amounts, or other decimal values that must retain
+every digit. Ordinary `JsonDecoder`, normalizing decoding, Serde seeds, and the
+independent `RawValue` path keep their existing contracts; this exception only
+applies when explicitly using `JcsDecoder`. JCS decoding still measures
+`NumberBytes` from the original token and checks that budget before its binary64
+range check. These budgets measure resources; they are not exact heap-memory
+limits.
+
 ## Exact and wider values
 
 Use a JSON string or an explicit domain representation for integers below
@@ -58,4 +76,6 @@ The independent `RawValue` integration remains supported.
 `AccountingJsonValueSeed` sees already-decoded Serde events. It can reject wide numeric
 events that do not fit the value model, but it cannot inspect the original
 number token or enforce lexical budgets. Route JSON text through `JsonDecoder`
-when syntax, range, and `NumberBytes` guarantees are required.
+when its syntax, range, and `NumberBytes` guarantees are required, or through
+`JcsDecoder` when JCS binary64 rounding and duplicate-key rejection are
+required.

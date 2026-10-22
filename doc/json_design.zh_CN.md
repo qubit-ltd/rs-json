@@ -21,14 +21,13 @@ src/
 
 `lexical` 不是公共接口。领域不通过根级错误或选项模块共享公共 API。
 
-## 两个 facade 与共享核心
+## 解码 facade 与共享核心
 
-公开层保留两个职责明确的 facade：`JsonDecoder` 负责不修改输入的严格 JSON 解码，
-`NormalizingJsonDecoder` 负责显式允许的文本规范化。二者都委托给 crate-private、对资源类型 `R`
-和数量类型 `Q` 泛化的 `JsonDecodeEngine<'budget, R, Q>`。共享核心统一负责 session、lexical
-admission、数字契约、顶层类型检查、Serde 物化和 transaction 提交边界；facade 只定义输入是否
-先经过规范化以及公开入口形态。这样既不会把两种信任边界混成一个带模式开关的对象，也不会
-维护两套错误映射和记账实现。
+公开层提供三个职责明确的 facade：`JsonDecoder` 负责不修改输入的严格 JSON 解码，
+`NormalizingJsonDecoder` 负责显式允许的文本规范化，feature-gated `JcsDecoder` 则按 binary64
+数字规则解码原始文本并拒绝重复键。它们都委托给 crate-private、对资源类型 `R` 和数量类型 `Q`
+泛化的 `JsonDecodeEngine<'budget, R, Q>`。共享核心统一负责 session、lexical admission、数字契约、
+顶层类型检查、Serde 物化和 transaction 提交边界；各 facade 选择适用的输入规则与公开入口形态。
 
 ## Normalizing facade
 
@@ -93,12 +92,23 @@ transaction 只在完整成功时提交。
 `NormalizingJsonDecodePolicy` 读取该设置。严格 encode 只返回 `JsonEncodeError`：`Budget`、`InvalidRawJson`、
 `Serialize` 或 `Write`。`JsonSyntaxError` 单独持有稳定的语法原因、偏移、行和列。
 
+`JcsDecoder` 返回 `JcsDecodeError<R, Q>`，其中 `Decode` 包装既有解码错误，
+`DuplicateKey { line, column }` 则结构化标识重复键，且不保存键名或 backend source。每次操作都会创建独立的
+重复键标记；共享 Value visitor 在返回物化错误前设置它，因此其他语法、预算或提交失败仍保留普通解码错误分类。
+完整文档成功后才提交值资源；失败时已接受的输入字节仍计入 session。
+
 ### 数字表示
 
 strict 与 normalizing 文本路径共享同一数字契约：负整数装入 `i64`，非负整数装入 `u64`，
-小数或指数装入有限 `f64`。lexical scanner 先完成 `NumberBytes` 预算准入，再执行范围校验；
-因此资源限制与表示限制职责独立，且预算失败优先。实现不启用 serde_json arbitrary precision，
-也不识别其私有 Number marker。完整规则见 [JSON 数字契约](number_contract.zh_CN.md)。
+小数或指数装入有限 `f64`。feature-gated 的 `JcsDecoder` 单独采用 binary64 模型，将所有数字
+（含整数词法）舍入为 `f64`，并在物化时拒绝对象内重复键。两种模型都先准入原始 `NumberBytes`，
+再校验范围，因此预算错误优先。实现不启用 serde_json arbitrary precision，也不识别其私有 Number marker。
+完整规则见 [JSON 数字契约](number_contract.zh_CN.md)。
+
+`JcsDecoder` 复用词法准入、session 与事务；专用 Value visitor 在插入前按反转义后的键字符串检查重复项，
+不执行 Unicode 规范化。词法扫描使用配置的深度预算，Value 构造仍由 serde_json 默认递归保护；无限预算
+不承诺任意深度。`decode_input` 沿用读取到 EOF 并缓冲完整文档的流程，有限输入上限允许一个不计费的探测字节。
+预算描述被计量资源，不构成精确 malloc 上限。JCS 解码只检查并构造值，已规范字节验证须由调用方将编码结果与输入比较。
 
 该选择让合法对象的结构与预算类别保持一致：键为 `$serde_json::private::Number` 的对象始终
 按普通对象处理，不能因匹配 Serde 私有协议而变成数字。`RawValue` 的独立集成仍然保留。

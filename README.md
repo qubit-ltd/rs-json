@@ -133,13 +133,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-The `jcs` feature is disabled by default. JCS canonicalizes the `Value` model;
-it does not accept arbitrary `Serialize` values or raw JSON text. For raw input,
-reject duplicate object keys before constructing a `Value`, since duplicates
-cannot be recovered afterward. JCS numbers use IEEE 754 binary64 semantics, so
+The `jcs` feature is disabled by default. `JcsEncoder` canonicalizes the
+`Value` model; it does not accept arbitrary `Serialize` values or raw JSON
+text. With `JcsDecoder`, raw input duplicate keys are rejected before a
+`Value` is built; once duplicates are collapsed into a map, they cannot be
+recovered. JCS numbers use IEEE 754 binary64 semantics, so
 `9007199254740993` can be emitted as `9007199254740992`; encode an integer as a
 JSON string when its exact decimal digits must be preserved. The regular
 `JsonDecoder` does not accept every JCS number lexeme as raw text.
+
+For raw JSON text with JCS number semantics, enable `jcs` and use
+`JcsDecoder`. It returns an owned `serde_json::Value`, rounds every number to
+finite binary64, and rejects keys that are duplicates after JSON unescaping.
+See the [user guide](doc/user_guide.md#decode-raw-text-with-jcs-semantics) for
+finite-budget usage and the rounding, Unicode, depth, and input-buffering
+boundaries. `JcsDecoder` parses input; it does not verify that the input bytes
+are already canonical. `JcsEncoder` still produces canonical output.
 
 ## Why this project exists
 
@@ -153,7 +162,7 @@ commit boundaries explicit through `qubit-budget` sessions and transactions.
 
 | Domain | Use it for | Boundary |
 | --- | --- | --- |
-| `decode` | Strict JSON admission or explicitly configured text normalization | Normalization applies only configured transformations; it never invents missing JSON syntax |
+| `decode` | Strict JSON admission, explicitly configured normalization, or JCS text decoding with `JcsDecoder` | Ordinary decoding keeps its integer range; JCS decoding uses binary64 and rejects duplicate keys |
 | `encode` | Budgeted strict JSON output | Value accounting commits after complete serialization; an I/O failure can still leave bytes in an external writer |
 | `value` | Building budgeted `serde_json::Value` trees from Serde events | A seed cannot inspect original number text or enforce text-level range rules |
 | `value::traverse` | Iterative reads or in-place mutations of materialized values | Mutation is incremental; visitor and output-budget failures do not roll back prior changes |
@@ -168,12 +177,14 @@ identifies the separate auxiliary-capacity limit configured with
 
 ## Explicit boundaries
 
-- Strict admission validates JSON syntax and the documented numeric range; it
-  does not require object keys to be unique. Choose a target such as
-  `DuplicateKeyRejectingJsonValue` when uniqueness is part of the contract.
-- Negative integers fit `i64`, non-negative integers fit `u64`, and fractional
-  or exponential values must be finite `f64`. Use strings or domain types for
-  wider integers or exact decimals that must avoid binary rounding.
+- Ordinary strict admission validates JSON syntax and the documented numeric
+  range; it does not require object keys to be unique. Choose a target such as
+  `DuplicateKeyRejectingJsonValue`, or use `JcsDecoder` for raw JCS text, when
+  uniqueness is part of the contract.
+- Ordinary `JsonDecoder` requires negative integers to fit `i64` and
+  non-negative integers to fit `u64`; `JcsDecoder` rounds every number to a
+  finite `f64`. Thus `9007199254740993` becomes `9007199254740992`. Use strings
+  or domain types when every decimal digit must be preserved.
 - Set finite limits at every untrusted boundary. `unlimited()` disables value,
   output, and working-memory limits; use it only for trusted input or data
   already admitted by another layer. An outer output
@@ -186,6 +197,14 @@ identifies the separate auxiliary-capacity limit configured with
   configured limit. Apply a bounded read or body-aggregation limit before
   decoding. This strict JSON method is not a raw-text JCS canonicalization
   entry point.
+- `JcsDecoder::decode_input` also reads and buffers the complete input. With a
+  finite input limit, it may consume one uncharged probe byte that cannot be
+  returned to the source. Lexical budgets are not exact heap-memory bounds:
+  result-container and input-buffer capacities and allocator metadata are not
+  measured precisely. Value construction retains serde_json's default
+  recursion guard, so unlimited budgets do not promise arbitrary depth.
+  Duplicate keys are compared after JSON unescaping, without Unicode
+  normalization; canonical-byte verification is outside this API.
 - `JcsEncoder::write_buffered` and `write_incremental` can leave and charge
   bytes accepted by an external destination before a later write or flush
   failure. Incremental mode writes directly and flushes on success; value
