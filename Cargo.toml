@@ -40,6 +40,7 @@ doctest = true
 
 [features]
 jcs = ["dep:serde_json_canonicalizer"]
+jcs-allocation-diagnostics = []
 
 [[test]]
 name = "tests"
@@ -70,6 +71,11 @@ harness = false
 [[bench]]
 name = "tree_bench"
 harness = false
+
+[[bench]]
+name = "jcs_bench"
+harness = false
+required-features = ["jcs"]
 
 [profile.release]
 opt-level = 3
