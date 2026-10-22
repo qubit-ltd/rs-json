@@ -181,9 +181,8 @@ where
         T: Serialize + ?Sized,
     {
         let has_value_limits = self.session.value_budget().limits().has_limits();
-        let value_limits = self.session.value_budget().limits().clone();
         let mut attempt = self.session.begin_value();
-        let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits, value_limits)?;
+        let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits)?;
         attempt
             .try_consume_output_bytes(bytes.len())
             .map_err(JsonEncodeError::<R, Q>::budget)?;
@@ -218,9 +217,8 @@ where
         T: Serialize + ?Sized,
     {
         let has_value_limits = self.session.value_budget().limits().has_limits();
-        let value_limits = self.session.value_budget().limits().clone();
         let mut attempt = self.session.begin_value();
-        let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits, value_limits)?;
+        let bytes = Self::serialize_buffer(value, &mut attempt, has_value_limits)?;
         attempt
             .check_output_bytes(bytes.len())
             .map_err(JsonEncodeError::<R, Q>::budget)?;
@@ -256,7 +254,6 @@ where
         T: Serialize + ?Sized,
     {
         let has_value_limits = self.session.value_budget().limits().has_limits();
-        let value_limits = self.session.value_budget().limits().clone();
         let mut attempt = self.session.begin_value();
         let result = {
             let (output_budget, transaction) = attempt.split_mut();
@@ -268,7 +265,6 @@ where
                     transaction,
                     output: &accounting,
                     has_value_limits,
-                    value_limits,
                 });
                 if has_value_limits {
                     value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
@@ -311,7 +307,6 @@ where
         value: &T,
         attempt: &mut JsonEncodeAttempt<'_, R, Q>,
         has_value_limits: bool,
-        value_limits: qubit_budget::json::JsonValueLimits<R, Q>,
     ) -> Result<Vec<u8>, JsonEncodeError<R, Q>>
     where
         T: Serialize + ?Sized,
@@ -326,7 +321,6 @@ where
                     transaction,
                     output: &accounting,
                     has_value_limits,
-                    value_limits,
                 });
                 if has_value_limits {
                     value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
@@ -354,7 +348,6 @@ where
                 transaction,
                 output: &accounting,
                 has_value_limits,
-                value_limits,
             });
             if has_value_limits {
                 value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
