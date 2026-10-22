@@ -25,20 +25,31 @@ dependencies = [
 
 [[package]]
 name = "qubit-budget"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "353cf62af65868c70d5af6468b101a8099bd6de980d84678eeb99f99eb679161"
+checksum = "ac92d5681339f8a76fbc5460fd2eaf6339a29680e8de014ebf97da770a1cd1f4"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
+name = "qubit-io"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72ec26e44df006b11bdb6bdb0b4423565fdc4cb9f2ffa37e3fb0a2ccc6efda30"
+dependencies = [
+ "qubit-utils",
+]
+
+[[package]]
 name = "qubit-json"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "qubit-budget",
+ "qubit-io",
  "serde",
  "serde_json",
+ "serde_json_canonicalizer",
  "thiserror",
 ]
 
@@ -53,6 +64,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "qubit-utils"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff9da2a76c1f983bc036d4135036db57f9d066c6fd6e8cdfbfacee72de4e2309"
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -60,6 +77,12 @@ checksum = "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "ryu-js"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04d056b875a9d2e6cb9a61d127afee9ac5999b9f87bcb32079d1318e505be714"
 
 [[package]]
 name = "serde"
@@ -102,6 +125,17 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_json_canonicalizer"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87f7bb64f8c7e9f783fdfe883b5fe93a90bee1597c63705baa91842c5f698620"
+dependencies = [
+ "ryu-js",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
