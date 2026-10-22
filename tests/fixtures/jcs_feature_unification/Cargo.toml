@@ -1,0 +1,17 @@
+[package]
+name = "qubit-json-jcs-feature-unification"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[features]
+default = []
+arbitrary_precision = ["serde_json/arbitrary_precision"]
+preserve_order = ["serde_json/preserve_order"]
+
+[dependencies]
+qubit-json = { path = "../../..", features = ["jcs"] }
+qubit-budget = { version = "0.9", features = ["json"] }
+serde_json = "1.0"
+
+[workspace]
