@@ -19,28 +19,39 @@ use super::JsonEncodeError;
 use super::JsonEncodeErrorKind;
 use super::JsonSerializationError;
 use super::JsonSerializationErrorKind;
-
-#[derive(Debug)]
-enum JcsEncodeFailure<R, Q>
-where
-    Q: Copy + fmt::Debug,
-{
-    Budget(MeasuredBudgetError<R, Q>),
-    WorkingMemory(JcsWorkingMemoryError),
-    Serialize(JsonSerializationError),
-    Write(io::Error),
-}
+use super::internal::JcsEncodeFailure;
 
 /// Failure produced while encoding a JSON value as RFC 8785 JCS.
 ///
 /// Serialization diagnostics are deliberately fixed text and never expose
 /// details returned by the canonicalizer.
+///
+/// # Type Parameters
+///
+/// * `R` is the resource type used by the encoder's budget accounting.
+/// * `Q` is the quantity type used by that accounting.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_budget::json::JsonEncodeLimits;
+/// use qubit_json::encode::JcsEncodeErrorKind;
+/// use qubit_json::encode::JcsEncoder;
+///
+/// let limits: JsonEncodeLimits = JsonEncodeLimits::new();
+/// let mut encoder = JcsEncoder::with_limits(limits, 0);
+/// let error = encoder
+///     .to_vec(&serde_json::json!({"key": "value"}))
+///     .expect_err("zero working memory cannot render an object");
+/// assert_eq!(error.kind(), JcsEncodeErrorKind::WorkingMemory);
+/// ```
 #[must_use]
 #[derive(Debug)]
 pub struct JcsEncodeError<R, Q = usize>
 where
     Q: Copy + fmt::Debug,
 {
+    /// Retains the detailed source behind the stable public failure category.
     failure: JcsEncodeFailure<R, Q>,
 }
 
@@ -48,24 +59,32 @@ impl<R, Q> JcsEncodeError<R, Q>
 where
     Q: Copy + fmt::Debug,
 {
+    /// Wraps a budget-accounting failure without changing its source.
+    #[inline]
     pub(crate) const fn budget(source: MeasuredBudgetError<R, Q>) -> Self {
         Self {
             failure: JcsEncodeFailure::Budget(source),
         }
     }
 
+    /// Wraps a canonicalization failure while preserving its safe category.
+    #[inline]
     pub(crate) const fn serialization(source: JsonSerializationError) -> Self {
         Self {
             failure: JcsEncodeFailure::Serialize(source),
         }
     }
 
+    /// Wraps a working-memory limit failure.
+    #[inline]
     pub(crate) const fn working_memory(source: JcsWorkingMemoryError) -> Self {
         Self {
             failure: JcsEncodeFailure::WorkingMemory(source),
         }
     }
 
+    /// Wraps an output destination failure.
+    #[inline]
     pub(crate) fn write(source: io::Error) -> Self {
         Self {
             failure: JcsEncodeFailure::Write(source),
@@ -94,6 +113,7 @@ where
 
     /// Returns the stable failure category.
     #[must_use]
+    #[inline]
     pub const fn kind(&self) -> JcsEncodeErrorKind {
         match self.failure {
             JcsEncodeFailure::Budget(_) => JcsEncodeErrorKind::Budget,
@@ -103,8 +123,12 @@ where
         }
     }
 
-    /// Returns the measured budget failure, when resource accounting failed.
+    /// Returns the measured budget failure when resource accounting failed.
+    ///
+    /// `Some` contains the retained accounting source; `None` means the error
+    /// belongs to another category.
     #[must_use]
+    #[inline]
     pub const fn budget_error(&self) -> Option<&MeasuredBudgetError<R, Q>> {
         match &self.failure {
             JcsEncodeFailure::Budget(source) => Some(source),
@@ -112,8 +136,12 @@ where
         }
     }
 
-    /// Returns the working memory limit failure, when present.
+    /// Returns the working-memory limit failure when present.
+    ///
+    /// `Some` contains the retained limit source; `None` means another failure
+    /// occurred.
     #[must_use]
+    #[inline]
     pub const fn working_memory_error(&self) -> Option<&JcsWorkingMemoryError> {
         match &self.failure {
             JcsEncodeFailure::WorkingMemory(source) => Some(source),
@@ -121,8 +149,12 @@ where
         }
     }
 
-    /// Returns the privacy-safe serialization failure, when present.
+    /// Returns the privacy-safe serialization failure when present.
+    ///
+    /// `Some` contains its stable category without canonicalizer details;
+    /// `None` means another failure occurred.
     #[must_use]
+    #[inline]
     pub const fn serialization_error(&self) -> Option<&JsonSerializationError> {
         match &self.failure {
             JcsEncodeFailure::Serialize(source) => Some(source),
@@ -130,8 +162,12 @@ where
         }
     }
 
-    /// Returns the destination I/O failure, when present.
+    /// Returns the destination I/O failure when present.
+    ///
+    /// `Some` contains the writer's I/O source; `None` means another failure
+    /// occurred.
     #[must_use]
+    #[inline]
     pub const fn write_error(&self) -> Option<&io::Error> {
         match &self.failure {
             JcsEncodeFailure::Write(source) => Some(source),

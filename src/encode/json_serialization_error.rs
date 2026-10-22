@@ -68,7 +68,6 @@ impl JsonSerializationError {
     /// # Returns
     ///
     /// The precise serialization failure kind retained by this error.
-    #[must_use]
     #[inline(always)]
     pub const fn kind(&self) -> JsonSerializationErrorKind {
         self.kind

@@ -11,6 +11,20 @@ use std::fmt;
 use std::str::FromStr;
 
 /// Stable category describing a failure while producing JCS output.
+///
+/// The string representation is stable and uses lowercase snake case, making
+/// the kind suitable for logs and interchange formats.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::encode::JcsEncodeErrorKind;
+/// use std::str::FromStr;
+///
+/// let kind = JcsEncodeErrorKind::from_str("working_memory")
+///     .expect("known error kind");
+/// assert_eq!(kind.to_string(), "working_memory");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JcsEncodeErrorKind {
     /// Resource accounting rejected the value or output.

@@ -146,7 +146,7 @@ fn node_count(root: &Value) -> usize {
 }
 
 /// Registers comparisons using a fresh encoder session for each sample.
-fn jcs(criterion: &mut Criterion) {
+fn benchmark_jcs_encoding(criterion: &mut Criterion) {
     let fixtures = [
         ("large-object", large_object()),
         ("deep-object", deep_object()),
@@ -234,5 +234,5 @@ fn jcs(criterion: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, jcs);
+criterion_group!(benches, benchmark_jcs_encoding);
 criterion_main!(benches);

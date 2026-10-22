@@ -11,21 +11,34 @@ use std::mem::size_of;
 
 use crate::encode::JcsWorkingMemoryError;
 
+/// Failure reported while reserving tracked working memory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum JcsReserveError {
+    /// The requested capacity would exceed the configured working-memory limit.
     Limit(JcsWorkingMemoryError),
+    /// The allocator could not reserve the requested capacity.
     Allocation,
 }
 
 /// Tracks live stack and object member-table capacities.
 pub(super) struct JcsWorkingMemory {
+    /// Maximum number of bytes that may be held by tracked capacities.
     limit: usize,
+    /// Bytes currently held by the traversal stack.
     stack_bytes: usize,
+    /// Bytes currently held by object member tables.
     object_bytes: usize,
+    /// Largest combined tracked capacity observed so far.
     peak_bytes: usize,
 }
 
 impl JcsWorkingMemory {
+    /// Creates a tracker with the given capacity limit and no reserved memory.
+    ///
+    /// # Parameters
+    ///
+    /// - `limit`: Maximum combined byte capacity allowed for tracked
+    ///   collections.
     pub(super) const fn new(limit: usize) -> Self {
         Self {
             limit,
@@ -35,15 +48,37 @@ impl JcsWorkingMemory {
         }
     }
 
-    #[cfg(test)]
-    fn peak_bytes(&self) -> usize {
-        self.peak_bytes
-    }
-
+    /// Reserves enough capacity for additional traversal-stack values.
+    ///
+    /// # Parameters
+    ///
+    /// - `values`: Traversal stack whose capacity is tracked.
+    /// - `additional`: Number of elements the stack must hold beyond its
+    ///   current length.
+    ///
+    /// # Errors
+    ///
+    /// Returns `JcsReserveError::Limit` if the resulting tracked capacity
+    /// exceeds the configured limit, or `JcsReserveError::Allocation` if
+    /// reservation fails.
     pub(super) fn reserve_stack<T>(&mut self, values: &mut Vec<T>, additional: usize) -> Result<(), JcsReserveError> {
         self.reserve(values, additional, true)
     }
 
+    /// Reserves enough capacity for additional entries in an object member
+    /// table.
+    ///
+    /// # Parameters
+    ///
+    /// - `values`: Object member table whose capacity is tracked.
+    /// - `additional`: Number of entries the table must hold beyond its current
+    ///   length.
+    ///
+    /// # Errors
+    ///
+    /// Returns `JcsReserveError::Limit` if the resulting tracked capacity
+    /// exceeds the configured limit, or `JcsReserveError::Allocation` if
+    /// reservation fails.
     pub(super) fn reserve_object_entries<T>(
         &mut self,
         values: &mut Vec<T>,
@@ -52,6 +87,50 @@ impl JcsWorkingMemory {
         self.reserve(values, additional, false)
     }
 
+    /// Removes an object's member-table capacity from the tracked live total.
+    ///
+    /// # Parameters
+    ///
+    /// - `values`: Object member table whose capacity is no longer live.
+    ///
+    /// # Errors
+    ///
+    /// The caller must invoke this before dropping the corresponding vector.
+    /// Returns a limit error if its capacity cannot be represented or is
+    /// not currently tracked.
+    pub(super) fn release_object_entries<T>(&mut self, values: &Vec<T>) -> Result<(), JcsReserveError> {
+        let bytes = values
+            .capacity()
+            .checked_mul(size_of::<T>())
+            .ok_or_else(|| self.limit_error(usize::MAX))?;
+        self.object_bytes = self
+            .object_bytes
+            .checked_sub(bytes)
+            .ok_or_else(|| self.limit_error(usize::MAX))?;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn peak_bytes(&self) -> usize {
+        self.peak_bytes
+    }
+
+    /// Reserves capacity and updates the tracked bytes for the selected
+    /// collection.
+    ///
+    /// # Parameters
+    ///
+    /// - `values`: Collection to reserve and account for.
+    /// - `additional`: Number of elements required beyond the current length.
+    /// - `is_stack`: Whether the collection contributes to stack or object
+    ///   bytes.
+    ///
+    /// # Errors
+    ///
+    /// The old capacity is excluded while checking the replacement allocation.
+    /// Returns a limit error on arithmetic overflow or when the requested or
+    /// actual capacity exceeds the configured limit, and an allocation
+    /// error if reserving memory fails.
     fn reserve<T>(&mut self, values: &mut Vec<T>, additional: usize, is_stack: bool) -> Result<(), JcsReserveError> {
         let required_capacity = values
             .len()
@@ -109,18 +188,11 @@ impl JcsWorkingMemory {
         Ok(())
     }
 
-    pub(super) fn release_object_entries<T>(&mut self, values: &Vec<T>) -> Result<(), JcsReserveError> {
-        let bytes = values
-            .capacity()
-            .checked_mul(size_of::<T>())
-            .ok_or_else(|| self.limit_error(usize::MAX))?;
-        self.object_bytes = self
-            .object_bytes
-            .checked_sub(bytes)
-            .ok_or_else(|| self.limit_error(usize::MAX))?;
-        Ok(())
-    }
-
+    /// Creates the limit error for a requested total byte count.
+    ///
+    /// # Parameters
+    ///
+    /// - `requested`: Combined byte capacity that triggered the limit error.
     fn limit_error(&self, requested: usize) -> JcsReserveError {
         JcsReserveError::Limit(JcsWorkingMemoryError::new(self.limit, requested))
     }
@@ -132,7 +204,7 @@ mod tests {
     use super::JcsWorkingMemory;
 
     #[test]
-    fn tracks_exact_capacity_boundary_and_rejects_one_byte_less() {
+    fn test_tracks_exact_capacity_boundary_and_rejects_one_byte_less() {
         let requested = std::mem::size_of::<u64>() * 2;
         let mut exact = JcsWorkingMemory::new(requested);
         let mut entries = Vec::<u64>::new();
@@ -153,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn tracks_stack_capacity_and_keeps_it_after_a_no_growth_reserve() {
+    fn test_tracks_stack_capacity_and_keeps_it_after_a_no_growth_reserve() {
         let mut memory = JcsWorkingMemory::new(usize::MAX);
         let mut stack = Vec::<u64>::new();
 
@@ -168,7 +240,7 @@ mod tests {
     }
 
     #[test]
-    fn releases_object_capacity_before_a_later_object_is_reserved() {
+    fn test_releases_object_capacity_before_a_later_object_is_reserved() {
         let mut memory = JcsWorkingMemory::new(usize::MAX);
         let mut stack = Vec::<u64>::new();
         memory.reserve_stack(&mut stack, 1).unwrap();

@@ -34,6 +34,21 @@ impl qubit_io::Output for SharedOutput {
     }
 }
 
+struct OutputOnly(Rc<RefCell<Vec<u8>>>);
+
+impl qubit_io::Output for OutputOnly {
+    type Item = u8;
+
+    unsafe fn write_unchecked(&mut self, bytes: &[u8], index: usize, count: usize) -> io::Result<usize> {
+        self.0.borrow_mut().extend_from_slice(&bytes[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 struct PrefixOutput {
     bytes: Rc<RefCell<Vec<u8>>>,
     max_bytes: usize,
@@ -179,6 +194,31 @@ fn test_jcs_encoder_output_methods_return_expected_bytes() {
     let incremental = Rc::new(RefCell::new(Vec::new()));
     encoder
         .write_incremental(SharedOutput(incremental.clone()), &value)
+        .unwrap();
+    assert_eq!(*incremental.borrow(), br#"{"a":1,"b":2}"#);
+}
+
+#[test]
+fn test_jcs_encoder_canonicalizes_object() {
+    let mut encoder = JcsEncoder::unlimited();
+    let value = serde_json::json!({"b": 2, "a": 1.0});
+    assert_eq!(encoder.to_vec(&value).unwrap(), br#"{"a":1,"b":2}"#);
+}
+
+#[test]
+fn test_jcs_encoder_writes_to_output_only_destination() {
+    let value = serde_json::json!({"b": 2, "a": 1});
+    let mut buffered_encoder = JcsEncoder::unlimited();
+    let buffered = Rc::new(RefCell::new(Vec::new()));
+    buffered_encoder
+        .write_buffered(OutputOnly(buffered.clone()), &value)
+        .unwrap();
+    assert_eq!(*buffered.borrow(), br#"{"a":1,"b":2}"#);
+
+    let mut incremental_encoder = JcsEncoder::unlimited();
+    let incremental = Rc::new(RefCell::new(Vec::new()));
+    incremental_encoder
+        .write_incremental(OutputOnly(incremental.clone()), &value)
         .unwrap();
     assert_eq!(*incremental.borrow(), br#"{"a":1,"b":2}"#);
 }

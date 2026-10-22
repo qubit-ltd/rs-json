@@ -100,18 +100,21 @@ where
 
     /// Returns the maximum auxiliary working memory in bytes.
     #[must_use]
+    #[inline]
     pub const fn max_working_bytes(&self) -> usize {
         self.max_working_bytes
     }
 
     /// Returns the cumulative accounting session.
     #[must_use]
+    #[inline]
     pub const fn session(&self) -> &JsonEncodeSession<'budget, R, Q> {
         &self.session
     }
 
     /// Returns mutable access to the cumulative accounting session.
     #[must_use]
+    #[inline]
     pub const fn session_mut(&mut self) -> &mut JsonEncodeSession<'budget, R, Q> {
         &mut self.session
     }
@@ -230,53 +233,5 @@ where
         let mut writer = JsonOutputWriter::new(output, &accounting);
         let result = writer.write_all(bytes).map_err(serde_json::Error::io);
         writer.into_result(result).map_err(JcsEncodeError::from_json_encode)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
-    use super::JcsEncoder;
-
-    struct OutputOnly(Rc<RefCell<Vec<u8>>>);
-
-    impl qubit_io::Output for OutputOnly {
-        type Item = u8;
-
-        unsafe fn write_unchecked(&mut self, bytes: &[u8], index: usize, count: usize) -> std::io::Result<usize> {
-            self.0.borrow_mut().extend_from_slice(&bytes[index..index + count]);
-            Ok(count)
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn canonicalizes_object() {
-        let mut encoder = JcsEncoder::unlimited();
-        let value = serde_json::json!({"b": 2, "a": 1.0});
-        assert_eq!(encoder.to_vec(&value).unwrap(), br#"{"a":1,"b":2}"#);
-    }
-
-    #[test]
-    fn writes_to_output_only_destination() {
-        let value = serde_json::json!({"b": 2, "a": 1});
-        let mut buffered_encoder = JcsEncoder::unlimited();
-        let buffered = Rc::new(RefCell::new(Vec::new()));
-        buffered_encoder
-            .write_buffered(OutputOnly(buffered.clone()), &value)
-            .unwrap();
-        assert_eq!(*buffered.borrow(), br#"{"a":1,"b":2}"#);
-
-        let mut incremental_encoder = JcsEncoder::unlimited();
-        let incremental = Rc::new(RefCell::new(Vec::new()));
-        incremental_encoder
-            .write_incremental(OutputOnly(incremental.clone()), &value)
-            .unwrap();
-        assert_eq!(*incremental.borrow(), br#"{"a":1,"b":2}"#);
     }
 }

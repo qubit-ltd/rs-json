@@ -12,31 +12,21 @@ use std::io::Write;
 
 use serde_json::Value;
 
+use super::jcs_renderer_error::JcsRendererError;
+use super::jcs_renderer_frame::Frame;
 use super::jcs_working_memory::JcsReserveError;
 use super::jcs_working_memory::JcsWorkingMemory;
-use crate::encode::JcsWorkingMemoryError;
 
-#[derive(Debug)]
-pub(in crate::encode) enum JcsRendererError {
-    WorkingMemory(JcsWorkingMemoryError),
-    Serialize(serde_json::Error),
-    Allocation,
-}
-
-enum Frame<'value> {
-    Array {
-        values: &'value [Value],
-        next: usize,
-    },
-    Object {
-        entries: Vec<(&'value str, &'value Value)>,
-        next: usize,
-    },
-}
-
+/// Renders JSON values iteratively without allocating a recursive traversal
+/// stack.
 pub(in crate::encode) struct JcsRenderer;
 
 impl JcsRenderer {
+    /// Writes the canonical representation of `value` to `writer`.
+    ///
+    /// The traversal stack and sorted object member tables are bounded by
+    /// `max_working_bytes`. Serialization errors include failures from the
+    /// writer as well as errors encoding JSON strings and numbers.
     pub(in crate::encode) fn render<W: Write>(
         value: &Value,
         writer: &mut W,
@@ -123,16 +113,20 @@ impl JcsRenderer {
     }
 }
 
+/// Compares strings by the UTF-16 code units required by JCS object ordering.
 fn compare_utf16(left: &str, right: &str) -> Ordering {
     left.encode_utf16().cmp(right.encode_utf16())
 }
 
+/// Writes all bytes and converts I/O failures to the renderer's serialization
+/// error.
 fn write<W: Write>(writer: &mut W, bytes: &[u8]) -> Result<(), JcsRendererError> {
     writer
         .write_all(bytes)
         .map_err(|error| JcsRendererError::Serialize(serde_json::Error::io(error)))
 }
 
+/// Converts working-memory reservation failures to renderer errors.
 fn map_reserve_error(error: JcsReserveError) -> JcsRendererError {
     match error {
         JcsReserveError::Limit(error) => JcsRendererError::WorkingMemory(error),

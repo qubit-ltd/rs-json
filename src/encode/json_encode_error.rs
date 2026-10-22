@@ -94,7 +94,6 @@ where
     /// # Returns
     ///
     /// The category describing which encoding operation failed.
-    #[must_use]
     #[inline(always)]
     pub const fn kind(&self) -> JsonEncodeErrorKind {
         match self.failure {
