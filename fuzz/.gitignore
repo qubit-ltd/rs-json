@@ -1,7 +1,7 @@
 target
 corpus/*
 !corpus/decoder/
-!corpus/decoder/**
+corpus/decoder/*
 !corpus/json_budget_invariants/
 corpus/json_budget_invariants/*
 !corpus/json_budget_invariants/decimal-boundaries
