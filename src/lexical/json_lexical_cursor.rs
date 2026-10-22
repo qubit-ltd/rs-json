@@ -16,6 +16,7 @@ use super::json_lexical_container_frame::JsonLexicalContainerFrame;
 use super::json_lexical_error::JsonLexicalError;
 use super::json_lexical_error_reason::JsonLexicalErrorReason;
 use super::json_lexical_failure::JsonLexicalFailure;
+use super::json_number_model::JsonNumberModel;
 
 /// Iterative cursor over the JSON bytes being admitted.
 pub(super) struct JsonLexicalCursor<'input, 'transaction, 'budget, R, Q>
@@ -30,6 +31,8 @@ where
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     /// Whether native measurements must be staged in the transaction.
     has_value_limits: bool,
+    /// Numeric range contract selected by the owning decoder.
+    number_model: JsonNumberModel,
 }
 
 impl<'input, 'transaction, 'budget, R, Q> JsonLexicalCursor<'input, 'transaction, 'budget, R, Q>
@@ -49,7 +52,14 @@ where
             offset: 0,
             transaction,
             has_value_limits,
+            number_model: JsonNumberModel::Integer64,
         }
+    }
+
+    /// Selects the numeric range contract for this cursor.
+    #[inline(always)]
+    pub(super) const fn set_number_model(&mut self, number_model: JsonNumberModel) {
+        self.number_model = number_model;
     }
 
     /// Stages one native measurement when value limits are configured.
@@ -437,7 +447,12 @@ where
         let Ok(token) = std::str::from_utf8(&self.input[start..end]) else {
             return Err(self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber));
         };
-        if token.contains(['.', 'e', 'E']) {
+        let binary64 = match self.number_model {
+            JsonNumberModel::Integer64 => false,
+            #[cfg(feature = "jcs")]
+            JsonNumberModel::Binary64 => true,
+        };
+        if binary64 || token.contains(['.', 'e', 'E']) {
             let Ok(value) = token.parse::<f64>() else {
                 return Err(self.syntax_at(start, JsonLexicalErrorReason::FloatOutOfRange));
             };
@@ -576,5 +591,56 @@ mod tests {
             (1, 3),
             "invalid UTF-8 must advance one byte at a time",
         );
+    }
+}
+
+#[cfg(all(test, feature = "jcs"))]
+mod jcs_number_model_tests {
+    use qubit_budget::json::JsonDecodeLimits;
+    use qubit_budget::json::JsonDecodeSession;
+    use qubit_budget::json::JsonResource;
+    use qubit_budget::json::JsonValueLimits;
+
+    use super::super::JsonLexicalScanner;
+    use super::super::JsonNumberModel;
+
+    fn scan(input: &[u8], model: JsonNumberModel, limits: JsonDecodeLimits<JsonResource, usize>) -> bool {
+        let mut session = JsonDecodeSession::from_limits(limits);
+        let mut attempt = session.begin_value();
+        JsonLexicalScanner::new(attempt.value_transaction_mut(), true)
+            .with_number_model(model)
+            .scan(input)
+            .is_ok()
+    }
+
+    #[test]
+    fn test_jcs_number_model_accepts_large_integer_only_in_binary64() {
+        let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+            .value_limits(JsonValueLimits::builder().build())
+            .build();
+        assert!(scan(b"100000000000000000000", JsonNumberModel::Binary64, limits));
+        assert!(!scan(b"100000000000000000000", JsonNumberModel::Integer64, limits));
+    }
+
+    #[test]
+    fn test_jcs_number_model_rejects_non_finite_binary64() {
+        let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+            .value_limits(JsonValueLimits::builder().build())
+            .build();
+        assert!(!scan(b"1e400", JsonNumberModel::Binary64, limits));
+    }
+
+    #[test]
+    fn test_jcs_number_model_checks_number_bytes_before_range() {
+        let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+            .value_limits(JsonValueLimits::builder().max_number_bytes(2).build())
+            .build();
+        let mut session = JsonDecodeSession::from_limits(limits);
+        let mut attempt = session.begin_value();
+        let error = JsonLexicalScanner::new(attempt.value_transaction_mut(), true)
+            .with_number_model(JsonNumberModel::Binary64)
+            .scan(b"1e400")
+            .expect_err("token length budget rejects before range parsing");
+        assert!(matches!(error, super::super::JsonLexicalError::Budget(_)));
     }
 }

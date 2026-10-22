@@ -8,6 +8,7 @@
 //! Metadata retained across strict admission and Serde materialization.
 
 use crate::decode::DiagnosticPolicy;
+use crate::lexical::JsonNumberModel;
 
 /// Describes the public input boundary used for one decode attempt.
 #[derive(Clone, Copy)]
@@ -18,4 +19,6 @@ pub(in crate::decode) struct DecodeMetadata {
     pub(in crate::decode) normalized_input_bytes: Option<usize>,
     /// Policy controlling input-derived diagnostic retention.
     pub(in crate::decode) diagnostic_policy: DiagnosticPolicy,
+    /// Number range contract selected for lexical admission.
+    pub(in crate::decode) number_model: JsonNumberModel,
 }

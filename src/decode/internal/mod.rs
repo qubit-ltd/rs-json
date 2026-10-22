@@ -9,6 +9,10 @@
 
 mod control_character_escaper;
 mod decode_metadata;
+#[cfg(feature = "jcs")]
+mod jcs_value_seed;
+#[cfg(feature = "jcs")]
+mod jcs_value_visitor;
 mod json_decode_engine;
 mod json_document_decoder;
 pub(super) mod json_normalizer;
@@ -16,6 +20,8 @@ mod markdown_fence;
 mod typed_seed;
 
 pub(in crate::decode) use decode_metadata::DecodeMetadata;
+#[cfg(feature = "jcs")]
+pub(in crate::decode) use jcs_value_seed::JcsValueSeed;
 pub(in crate::decode) use json_decode_engine::JsonDecodeEngine;
 pub(super) use json_document_decoder::admit_json_document;
 pub(super) use json_document_decoder::deserialize_json_document;

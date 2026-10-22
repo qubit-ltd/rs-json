@@ -15,6 +15,7 @@ use serde_json::Error;
 
 use crate::lexical::JsonLexicalError;
 use crate::lexical::JsonLexicalScanner;
+use crate::lexical::JsonNumberModel;
 
 /// Lexically validates and stages value accounting for one complete document.
 ///
@@ -39,6 +40,22 @@ where
     Q: ResourceQuantity,
 {
     JsonLexicalScanner::new(attempt.value_transaction_mut(), has_value_limits).scan(input)
+}
+
+/// Admits a JSON document using an explicitly selected number range contract.
+pub(in crate::decode) fn admit_json_document_with_number_model<R, Q>(
+    attempt: &mut JsonDecodeAttempt<'_, R, Q>,
+    input: &[u8],
+    has_value_limits: bool,
+    model: JsonNumberModel,
+) -> Result<(), JsonLexicalError<R, Q>>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    JsonLexicalScanner::new(attempt.value_transaction_mut(), has_value_limits)
+        .with_number_model(model)
+        .scan(input)
 }
 
 /// Deserializes one complete JSON document through a caller-provided seed.

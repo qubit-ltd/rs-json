@@ -8,6 +8,10 @@
 //! JSON decoding APIs and their diagnostics.
 
 mod diagnostic_policy;
+#[cfg(feature = "jcs")]
+mod jcs_decode_error;
+#[cfg(feature = "jcs")]
+mod jcs_decoder;
 mod json_decode_error;
 mod json_decode_error_kind;
 mod json_decode_error_source;
@@ -24,6 +28,10 @@ mod normalizing_json_decode_policy_builder;
 mod normalizing_json_decoder;
 
 pub use diagnostic_policy::DiagnosticPolicy;
+#[cfg(feature = "jcs")]
+pub use jcs_decode_error::JcsDecodeError;
+#[cfg(feature = "jcs")]
+pub use jcs_decoder::JcsDecoder;
 pub use json_decode_error::JsonDecodeError;
 pub use json_decode_error_kind::JsonDecodeErrorKind;
 pub use json_decode_error_source::JsonDecodeErrorSource;

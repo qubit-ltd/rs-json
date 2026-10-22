@@ -610,3 +610,71 @@ fn test_json_decoder_stream_accounts_bytes_once_and_does_not_commit_failures() {
     );
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
 }
+
+#[cfg(feature = "jcs")]
+#[test]
+fn test_jcs_decoder_reuses_stream_input_fixtures() {
+    use qubit_json::decode::JcsDecodeError;
+    use qubit_json::decode::JcsDecoder;
+
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4)
+        .build();
+    let mut decoder = JcsDecoder::with_limits(limits);
+    let mut exact = OnlyInput::new(vec![b"true"]);
+    exact.interrupt_once = true;
+    assert_eq!(decoder.decode_input(&mut exact).unwrap(), Value::Bool(true));
+    assert_eq!(exact.reads, 3);
+
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4)
+        .build();
+    let mut oversized_decoder = JcsDecoder::with_limits(limits);
+    let mut oversized = OnlyInput::new(vec![b"false"]);
+    let error = oversized_decoder.decode_input(&mut oversized).unwrap_err();
+    let JcsDecodeError::Decode(error) = error else {
+        panic!("expected input budget error")
+    };
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(error.raw_input_bytes(), 4);
+    assert_eq!(oversized_decoder.session().input_budget().unwrap().used(), 4);
+
+    let mut failing = OnlyInput::new(vec![b"true"]);
+    failing.fail_after_chunks = true;
+    let error = JcsDecoder::unlimited().decode_input(&mut failing).unwrap_err();
+    let JcsDecodeError::Decode(error) = error else {
+        panic!("expected input read error")
+    };
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Read);
+    assert_eq!(error.raw_input_bytes(), 4);
+
+    let mut interrupted = OnlyInput::new(vec![b"true"]);
+    interrupted.interrupt_once = true;
+    assert_eq!(
+        JcsDecoder::unlimited().decode_input(&mut interrupted).unwrap(),
+        Value::Bool(true)
+    );
+    assert_eq!(interrupted.reads, 3);
+}
+
+#[cfg(feature = "jcs")]
+#[test]
+fn test_jcs_decoder_depth_admission_precedes_backend_materialization() {
+    use qubit_budget::StructureLimits;
+    use qubit_json::decode::JcsDecodeError;
+    use qubit_json::decode::JcsDecoder;
+
+    let deep = nested_array(20_000);
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .value_limits(
+            JsonValueLimits::builder()
+                .structure_limits(StructureLimits::builder().depth_limit(ResourceLimit::new(JsonResource::Depth, 128)))
+                .build(),
+        )
+        .build();
+    let error = JcsDecoder::with_limits(limits).decode_str(&deep).unwrap_err();
+    let JcsDecodeError::Decode(error) = error else {
+        panic!("expected lexical depth budget rejection")
+    };
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+}

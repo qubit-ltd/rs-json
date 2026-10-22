@@ -10,9 +10,11 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
+use qubit_json::decode::JcsDecoder;
 use qubit_json::encode::JcsEncodeErrorKind;
 use qubit_json::encode::JcsEncoder;
 use qubit_json_fuzz::input_limit::bounded_input;
@@ -26,6 +28,23 @@ fuzz_target!(|data: &[u8]| {
     let Some(input) = bounded_input(data) else {
         return;
     };
+
+    let raw_nodes = internal::fuzz_limit::limit(data, 6);
+    let raw_limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(input.len())
+        .max_nodes(raw_nodes)
+        .value_limits(
+            qubit_budget::json::JsonValueLimits::builder()
+                .max_depth(MAX_DEPTH)
+                .build(),
+        )
+        .build();
+    if let Ok(value) = JcsDecoder::with_limits(raw_limits).decode_utf8(input) {
+        let canonical = JcsEncoder::unlimited().to_vec(&value).unwrap();
+        let reparsed = JcsDecoder::unlimited().decode_utf8(&canonical).unwrap();
+        assert_eq!(JcsEncoder::unlimited().to_vec(&reparsed).unwrap(), canonical);
+    }
+
     let Ok(value) = serde_json::from_slice::<Value>(input) else {
         return;
     };
@@ -40,6 +59,11 @@ fuzz_target!(|data: &[u8]| {
         unlimited.to_vec(&value).expect("unlimited JCS encoding must succeed"),
         expected,
     );
+    let decoded = JcsDecoder::unlimited()
+        .decode_utf8(&expected)
+        .expect("JCS encoder output must be decodable within the bounded depth");
+    let recanonicalized = JcsEncoder::unlimited().to_vec(&decoded).unwrap();
+    assert_eq!(recanonicalized, expected);
 
     let working_bytes = internal::fuzz_limit::limit(data, 0);
     let output_bytes = internal::fuzz_limit::limit(data, 2);

@@ -23,12 +23,14 @@ use super::DecodeMetadata;
 use super::JsonNormalizer;
 use super::admit_json_document;
 use super::deserialize_json_document;
+use super::json_document_decoder::admit_json_document_with_number_model;
 use crate::decode::DiagnosticPolicy;
 use crate::decode::JsonDecodeError;
 use crate::decode::JsonDecodeStage;
 use crate::decode::JsonRootKind;
 use crate::decode::NormalizedJsonDocument;
 use crate::lexical::JsonLexicalError;
+use crate::lexical::JsonNumberModel;
 
 /// Shared generic execution core used by both public decoder facades.
 #[derive(Debug)]
@@ -117,7 +119,27 @@ where
     where
         S: DeserializeSeed<'de>,
     {
-        self.decode_seed_utf8_with_top_level(seed, input, diagnostic_policy, None)
+        self.decode_seed_utf8_with_number_model(seed, input, diagnostic_policy, JsonNumberModel::Integer64)
+    }
+
+    /// Decodes a complete document with an explicit internal number contract.
+    pub(in crate::decode) fn decode_seed_utf8_with_number_model<'de, S>(
+        &mut self,
+        seed: S,
+        input: &'de [u8],
+        diagnostic_policy: DiagnosticPolicy,
+        number_model: JsonNumberModel,
+    ) -> Result<S::Value, JsonDecodeError<R, Q>>
+    where
+        S: DeserializeSeed<'de>,
+    {
+        let metadata = DecodeMetadata {
+            raw_input_bytes: input.len(),
+            normalized_input_bytes: None,
+            diagnostic_policy,
+            number_model,
+        };
+        self.decode_seed(seed, input, metadata, true, None)
     }
 
     /// Strictly validates and deserializes one complete byte document while
@@ -136,6 +158,7 @@ where
             raw_input_bytes: input.len(),
             normalized_input_bytes: None,
             diagnostic_policy,
+            number_model: JsonNumberModel::Integer64,
         };
         self.decode_seed(seed, input, metadata, true, expected)
     }
@@ -155,6 +178,7 @@ where
             raw_input_bytes: document.raw_input_bytes(),
             normalized_input_bytes: Some(document.normalized_input_bytes()),
             diagnostic_policy,
+            number_model: JsonNumberModel::Integer64,
         };
         self.decode_seed(seed, document.as_str().as_bytes(), metadata, false, expected)
     }
@@ -169,6 +193,7 @@ where
             raw_input_bytes: input.len(),
             normalized_input_bytes: None,
             diagnostic_policy,
+            number_model: JsonNumberModel::Integer64,
         };
         self.validate(input, metadata, true, None)
     }
@@ -184,6 +209,7 @@ where
             raw_input_bytes: document.raw_input_bytes(),
             normalized_input_bytes: Some(document.normalized_input_bytes()),
             diagnostic_policy,
+            number_model: JsonNumberModel::Integer64,
         };
         self.validate(document.as_str().as_bytes(), metadata, false, expected)
     }
@@ -197,6 +223,27 @@ where
     ) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: serde::de::DeserializeOwned,
+        I: Input<Item = u8> + ?Sized,
+    {
+        self.decode_input_seed(
+            crate::decode::internal::TypedSeed::<T>::new(),
+            input,
+            diagnostic_policy,
+            JsonNumberModel::Integer64,
+        )
+    }
+
+    /// Reads an owned value through a supplied seed and one selected number
+    /// contract.
+    pub(in crate::decode) fn decode_input_seed<S, T, I>(
+        &mut self,
+        seed: S,
+        input: &mut I,
+        diagnostic_policy: DiagnosticPolicy,
+        number_model: JsonNumberModel,
+    ) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        S: for<'de> DeserializeSeed<'de, Value = T>,
         I: Input<Item = u8> + ?Sized,
     {
         let has_value_limits = self.session.value_budget().limits().has_limits();
@@ -255,16 +302,9 @@ where
             raw_input_bytes,
             normalized_input_bytes: None,
             diagnostic_policy,
+            number_model,
         };
-        let value = Self::decode_seed_attempt(
-            &mut attempt,
-            crate::decode::internal::TypedSeed::<T>::new(),
-            &bytes,
-            metadata,
-            false,
-            has_value_limits,
-            None,
-        )?;
+        let value = Self::decode_seed_attempt(&mut attempt, seed, &bytes, metadata, false, has_value_limits, None)?;
         attempt.commit().map_err(|source| {
             JsonDecodeError::budget(
                 source,
@@ -423,7 +463,12 @@ where
         std::str::from_utf8(input).map_err(|source| {
             JsonDecodeError::invalid_utf8(source, metadata.raw_input_bytes, metadata.diagnostic_policy)
         })?;
-        admit_json_document(attempt, input, has_value_limits).map_err(|error| match error {
+        let admission = if matches!(metadata.number_model, JsonNumberModel::Integer64) {
+            admit_json_document(attempt, input, has_value_limits)
+        } else {
+            admit_json_document_with_number_model(attempt, input, has_value_limits, metadata.number_model)
+        };
+        admission.map_err(|error| match error {
             JsonLexicalError::Budget(source) => JsonDecodeError::budget(
                 source,
                 JsonDecodeStage::Admission,

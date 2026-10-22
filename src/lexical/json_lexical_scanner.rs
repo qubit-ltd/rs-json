@@ -14,6 +14,7 @@ use super::json_lexical_container_frame::JsonLexicalContainerFrame;
 use super::json_lexical_cursor::JsonLexicalCursor;
 use super::json_lexical_error::JsonLexicalError;
 use super::json_lexical_error_reason::JsonLexicalErrorReason;
+use super::json_number_model::JsonNumberModel;
 
 /// Lexically validates and charges one JSON document without recursion.
 pub(crate) struct JsonLexicalScanner<'transaction, 'budget, R, Q>
@@ -26,6 +27,8 @@ where
     root_depth: usize,
     /// Whether scanning must stage JSON value measurements.
     has_value_limits: bool,
+    /// Numeric range contract selected by the owning decoder.
+    number_model: JsonNumberModel,
 }
 
 impl<'transaction, 'budget, R, Q> JsonLexicalScanner<'transaction, 'budget, R, Q>
@@ -43,6 +46,7 @@ where
             transaction,
             root_depth: 1,
             has_value_limits,
+            number_model: JsonNumberModel::Integer64,
         }
     }
 
@@ -57,7 +61,15 @@ where
             transaction,
             root_depth,
             has_value_limits,
+            number_model: JsonNumberModel::Integer64,
         }
+    }
+
+    /// Selects the number range contract for this scan.
+    #[inline(always)]
+    pub(crate) const fn with_number_model(mut self, number_model: JsonNumberModel) -> Self {
+        self.number_model = number_model;
+        self
     }
 
     /// Validates and charges one complete JSON document.
@@ -69,6 +81,7 @@ where
     /// value. All value measurements remain staged in the caller's transaction.
     pub(crate) fn scan(&mut self, input: &[u8]) -> Result<(), JsonLexicalError<R, Q>> {
         let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
+        cursor.set_number_model(self.number_model);
         let mut stack: Vec<JsonLexicalContainerFrame> = Vec::new();
         cursor.skip_whitespace();
         cursor.value(self.root_depth, &mut stack)?;

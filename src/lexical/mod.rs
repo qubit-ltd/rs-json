@@ -13,8 +13,10 @@ mod json_lexical_error;
 mod json_lexical_error_reason;
 mod json_lexical_failure;
 mod json_lexical_scanner;
+mod json_number_model;
 
 pub(crate) use json_lexical_error::JsonLexicalError;
 pub(crate) use json_lexical_error_reason::JsonLexicalErrorReason;
 pub(crate) use json_lexical_failure::JsonLexicalFailure;
 pub(crate) use json_lexical_scanner::JsonLexicalScanner;
+pub(crate) use json_number_model::JsonNumberModel;

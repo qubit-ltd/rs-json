@@ -54,7 +54,8 @@ pub enum JsonSyntaxErrorReason {
     InvalidNumber,
     /// An integer is outside the supported `i64`/`u64` range.
     IntegerOutOfRange,
-    /// A fractional or exponential number is outside finite `f64` range.
+    /// A number is outside the finite `f64` range for the selected number
+    /// model.
     FloatOutOfRange,
     /// Non-whitespace bytes follow the complete root value.
     TrailingCharacters,

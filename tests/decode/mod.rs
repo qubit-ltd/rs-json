@@ -9,6 +9,10 @@
 mod decoder_api_tests;
 mod diagnostic_policy_tests;
 mod internal;
+#[cfg(feature = "jcs")]
+mod jcs_decoder_budget_tests;
+#[cfg(feature = "jcs")]
+mod jcs_decoder_tests;
 mod json_decode_error_model_tests;
 mod json_decode_error_tests;
 mod json_decode_session_tests;
