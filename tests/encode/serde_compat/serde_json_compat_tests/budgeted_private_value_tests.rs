@@ -105,7 +105,7 @@ impl Serialize for PrivateScalar {
                 .and_then(|value| value.end()),
             Self::HumanReadable => {
                 let _ = serializer.is_human_readable();
-                serializer.serialize_str("text")
+                serializer.serialize_str(r#""text""#)
             }
         }
     }
@@ -174,7 +174,7 @@ fn test_budgeted_private_value_delegates_scalar_serializer_paths() {
         if matches!(value, PrivateScalar::HumanReadable) {
             assert_eq!(
                 result.expect("a string raw-value payload must encode"),
-                br#""text"#
+                br#""text""#
             );
         } else {
             assert_eq!(
