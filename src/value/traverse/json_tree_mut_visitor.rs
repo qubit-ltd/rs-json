@@ -40,7 +40,15 @@ use super::JsonTreeControl;
 ///     }
 /// }
 ///
-/// let _visitor = Visitor;
+/// let mut visitor = Visitor;
+/// let mut value = Value::Bool(true);
+/// let context = JsonTreeContext {
+///     depth: 1,
+///     location: qubit_json::value::traverse::JsonTreeLocation::Root,
+/// };
+/// let control = visitor.visit(&mut value, context).unwrap();
+/// assert_eq!(value, Value::Null);
+/// assert_eq!(control, JsonTreeControl::SkipSubtree);
 /// ```
 pub trait JsonTreeMutVisitor {
     /// Domain-specific failure returned by this visitor.
@@ -56,5 +64,10 @@ pub trait JsonTreeMutVisitor {
     /// # Returns
     ///
     /// The traversal control decision for descendant callbacks.
+    ///
+    /// # Errors
+    ///
+    /// Returns the visitor's [`Self::Error`] when the visitor cannot process
+    /// the current node.
     fn visit(&mut self, value: &mut Value, context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error>;
 }

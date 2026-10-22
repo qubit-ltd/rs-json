@@ -21,5 +21,8 @@ fn test_json_encode_context_charges_string_payload() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    assert!(encode(&"value", &mut session).is_err());
+    assert!(
+        encode(&"value", &mut session).is_err(),
+        "string payload should exceed the zero-byte limit",
+    );
 }

@@ -39,6 +39,8 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a private raw JSON payload wrapper at its final depth.
+    #[must_use]
+    #[inline]
     pub(super) const fn raw_value(
         value: &'a T,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,

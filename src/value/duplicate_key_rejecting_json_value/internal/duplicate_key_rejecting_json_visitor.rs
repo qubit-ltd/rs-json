@@ -140,10 +140,8 @@ mod tests {
     use serde::de::value::BoolDeserializer;
     use serde::de::value::Error;
     use serde_json::Value;
-    use serde_json::from_str;
 
     use super::DuplicateKeyRejectingJsonVisitor;
-    use crate::value::DuplicateKeyRejectingJsonValue;
 
     /// Covers the private visitor's scalar Serde entry points.
     #[test]
@@ -237,16 +235,5 @@ mod tests {
             Value::from(u64::MAX),
         );
         assert!(DuplicateKeyRejectingJsonVisitor.visit_u128::<Error>(u128::MAX).is_err());
-    }
-
-    /// Verifies invalid input still reports serde_json's expected-value error.
-    #[test]
-    fn test_duplicate_key_rejecting_json_visitor_describes_expected_value() {
-        assert_eq!(
-            from_str::<DuplicateKeyRejectingJsonValue>("invalid")
-                .expect_err("invalid JSON must fail")
-                .to_string(),
-            "expected value at line 1 column 1",
-        );
     }
 }

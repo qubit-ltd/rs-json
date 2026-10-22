@@ -26,6 +26,7 @@ use std::str::FromStr;
 /// assert_eq!(kind, JsonEncodeErrorKind::InvalidRawJson);
 /// # Ok::<(), &'static str>(())
 /// ```
+#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonEncodeErrorKind {
     /// Resource accounting rejected the value or output.

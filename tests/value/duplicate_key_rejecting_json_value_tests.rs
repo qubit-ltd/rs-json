@@ -72,3 +72,14 @@ fn test_duplicate_key_rejecting_json_value_preserves_private_number_marker_objec
 
     assert_eq!(value.into_inner(), json!({MARKER: "123"}),);
 }
+
+/// Verifies invalid input still reports serde_json's expected-value error.
+#[test]
+fn test_duplicate_key_rejecting_json_value_reports_expected_value_for_invalid_input() {
+    assert_eq!(
+        from_str::<DuplicateKeyRejectingJsonValue>("invalid")
+            .expect_err("invalid JSON must fail")
+            .to_string(),
+        "expected value at line 1 column 1",
+    );
+}

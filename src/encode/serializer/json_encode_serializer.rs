@@ -58,6 +58,7 @@ where
     /// # Returns
     ///
     /// A decorator positioned at the root JSON value.
+    #[must_use]
     #[inline]
     pub(in crate::encode) fn new(
         inner: S,
@@ -71,6 +72,7 @@ where
     }
 
     /// Creates a nested decorator sharing an existing traversal context.
+    #[must_use]
     pub(super) const fn with_context(
         inner: S,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,

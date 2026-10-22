@@ -14,6 +14,7 @@ use super::json_number_lexeme_length;
 
 /// Builds the resource measurement for one JSON node at a root-inclusive depth.
 #[must_use]
+#[inline]
 pub(crate) fn json_value_measurement(value: &Value, depth: usize) -> JsonMeasurement {
     match value {
         Value::Null => JsonMeasurement::Null { depth },

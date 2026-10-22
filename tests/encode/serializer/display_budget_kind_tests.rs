@@ -10,6 +10,7 @@
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
+use qubit_json::encode::JsonEncodeErrorKind;
 use serde::Serialize;
 use serde::Serializer;
 
@@ -35,5 +36,14 @@ fn test_display_budget_kind_checks_collected_string() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    assert!(encode(&DisplayValue, &mut session).is_err());
+    let error = encode(&DisplayValue, &mut session).expect_err("display text exceeds the string budget");
+
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
+    assert_eq!(
+        error
+            .budget_error()
+            .expect("budget failures expose their measured source")
+            .resource(),
+        &JsonResource::StringBytes,
+    );
 }

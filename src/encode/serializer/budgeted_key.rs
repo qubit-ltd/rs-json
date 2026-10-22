@@ -36,6 +36,7 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a key wrapper bound to the shared traversal context.
+    #[must_use]
     #[inline(always)]
     pub(super) const fn new(
         value: &'a T,

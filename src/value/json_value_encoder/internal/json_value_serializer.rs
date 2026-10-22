@@ -40,6 +40,11 @@ fn preallocated_capacity(len: Option<usize>) -> usize {
 }
 
 /// Strictly admits and materializes one RawValue text payload.
+///
+/// # Errors
+///
+/// Returns [`JsonSerializationErrorKind::InvalidRawValue`] when the text is
+/// invalid JSON or contains duplicate object keys.
 pub(in crate::value::json_value_encoder) fn decode_raw_value(text: &str) -> Result<Value, JsonSerializationError> {
     let value = JsonDecoder::unlimited()
         .decode_str::<DuplicateKeyRejectingJsonValue>(text)
@@ -93,6 +98,11 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Serializes a signed wide integer within the strict 64-bit range.
+    ///
+    /// # Errors
+    ///
+    /// Returns an integer range error when `value` is outside the combined
+    /// `i64` and `u64` ranges.
     fn serialize_i128(self, value: i128) -> Result<Value, Self::Error> {
         if let Ok(value) = i64::try_from(value) {
             self.serialize_i64(value)
@@ -132,6 +142,10 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Serializes an unsigned wide integer within the strict 64-bit range.
+    ///
+    /// # Errors
+    ///
+    /// Returns an integer range error when `value` exceeds `u64::MAX`.
     fn serialize_u128(self, value: u128) -> Result<Value, Self::Error> {
         u64::try_from(value)
             .map_err(|_| {
@@ -143,6 +157,11 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Serializes a finite f32 without widening its display representation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a non-finite value error for NaN or infinity, or an invalid
+    /// number representation error if the formatted value cannot be parsed.
     fn serialize_f32(self, value: f32) -> Result<Value, Self::Error> {
         if !value.is_finite() {
             return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
@@ -153,6 +172,10 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Serializes a finite 64-bit floating-point number.
+    ///
+    /// # Errors
+    ///
+    /// Returns a non-finite value error for NaN or infinity.
     fn serialize_f64(self, value: f64) -> Result<Value, Self::Error> {
         Number::from_f64(value)
             .map(Value::Number)
@@ -185,6 +208,10 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Serializes the value inside a present option.
+    ///
+    /// # Errors
+    ///
+    /// Returns any error produced while serializing `value`.
     #[inline(always)]
     fn serialize_some<T>(self, value: &T) -> Result<Value, Self::Error>
     where
@@ -217,6 +244,12 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Delegates ordinary newtype structs and materializes RawValue payloads.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error from serializing `value`, an invalid serializer state
+    /// error when a RawValue payload is not encoded as a string, or an invalid
+    /// raw value error when that string is not strict JSON.
     fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Value, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -236,6 +269,10 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Serializes a newtype variant as a single-key object.
+    ///
+    /// # Errors
+    ///
+    /// Returns any error produced while serializing `value`.
     fn serialize_newtype_variant<T>(
         self,
         _name: &'static str,
@@ -315,6 +352,10 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Serializes a displayable value as a JSON string.
+    ///
+    /// # Errors
+    ///
+    /// Returns a display formatting error if formatting `value` fails.
     fn collect_str<T>(self, value: &T) -> Result<Value, Self::Error>
     where
         T: Display + ?Sized,

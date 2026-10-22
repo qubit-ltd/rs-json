@@ -30,8 +30,8 @@ fn test_json_output_buffer_rejects_quantity_conversion_overflow() {
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
 }
 
-/// Verifies incremental output accounting rejects a narrow quantity while the
-/// destination remains untouched.
+/// Verifies incremental output accounting rejects a narrow quantity after
+/// writing a partial document to the destination.
 #[test]
 fn test_json_output_writer_rejects_quantity_conversion_overflow() {
     let limits = JsonEncodeLimits::<JsonResource, u8>::builder()

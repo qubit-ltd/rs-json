@@ -35,5 +35,8 @@ fn test_budgeted_display_collector_rejects_excess_text() {
             .build(),
     );
 
-    assert!(JsonEncoder::new(session).to_vec(&DisplayValue).is_err());
+    assert!(
+        JsonEncoder::new(session).to_vec(&DisplayValue).is_err(),
+        "display text exceeding the string budget must be rejected"
+    );
 }

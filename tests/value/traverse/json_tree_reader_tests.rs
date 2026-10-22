@@ -5,6 +5,8 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+use std::convert::Infallible;
+
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::value::traverse::JsonTreeContext;
@@ -36,7 +38,7 @@ impl JsonTreeVisitor for FailingVisitor {
 }
 
 impl JsonTreeVisitor for RecordingVisitor {
-    type Error = std::convert::Infallible;
+    type Error = Infallible;
 
     fn enter(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         self.events

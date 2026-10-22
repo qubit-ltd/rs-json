@@ -15,6 +15,7 @@ use crate::internal::JsonLexemeLength;
 ///
 /// This helper follows the crate's standard `i64`, `u64`, and finite `f64`
 /// value model and performs no allocation.
+#[must_use]
 pub(crate) fn json_number_lexeme_length(number: &Number) -> usize {
     if number.is_i64() {
         let value = number.as_i64().expect("an i64-classified JSON number must expose i64");

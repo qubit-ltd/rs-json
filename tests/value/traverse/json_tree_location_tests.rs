@@ -14,8 +14,16 @@ fn test_location_variants_retain_parent_coordinates() {
         JsonTreeLocation::ArrayElement { index: 2 },
         JsonTreeLocation::ArrayElement { index: 2 },
     );
+    assert_ne!(
+        JsonTreeLocation::ArrayElement { index: 2 },
+        JsonTreeLocation::ArrayElement { index: 3 },
+    );
     assert_eq!(
         JsonTreeLocation::ObjectValue { key: "name" },
         JsonTreeLocation::ObjectValue { key: "name" },
+    );
+    assert_ne!(
+        JsonTreeLocation::ObjectValue { key: "name" },
+        JsonTreeLocation::ObjectValue { key: "other" },
     );
 }

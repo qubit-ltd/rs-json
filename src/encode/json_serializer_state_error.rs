@@ -24,6 +24,7 @@
 ///     Some(JsonSerializerStateError::MapValueWithoutKey),
 /// );
 /// ```
+#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonSerializerStateError {
     /// A compound callback was used with the wrong compound state.

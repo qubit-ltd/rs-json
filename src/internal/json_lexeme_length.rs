@@ -17,6 +17,7 @@ pub(crate) enum JsonLexemeLength {}
 
 impl JsonLexemeLength {
     /// Returns the decimal byte length of one signed JSON integer.
+    #[must_use]
     #[inline(always)]
     pub(crate) const fn signed_integer(value: i128) -> usize {
         let sign = if value < 0 { 1 } else { 0 };
@@ -24,12 +25,14 @@ impl JsonLexemeLength {
     }
 
     /// Returns the decimal byte length of one unsigned JSON integer.
+    #[must_use]
     #[inline(always)]
     pub(crate) const fn unsigned_integer(value: u128) -> usize {
         if value < 10 { 1 } else { value.ilog10() as usize + 1 }
     }
 
     /// Returns the byte length emitted by serde_json for one finite `f32`.
+    #[must_use]
     #[inline]
     pub(crate) fn finite_f32(value: f32) -> usize {
         let mut writer = JsonLexemeLengthWriter::new();
@@ -40,6 +43,7 @@ impl JsonLexemeLength {
     }
 
     /// Returns the byte length emitted by serde_json for one finite `f64`.
+    #[must_use]
     #[inline]
     pub(crate) fn finite_f64(value: f64) -> usize {
         let mut writer = JsonLexemeLengthWriter::new();
@@ -50,6 +54,7 @@ impl JsonLexemeLength {
     }
 
     /// Returns the decimal byte length of one JSON byte-array element.
+    #[must_use]
     #[inline(always)]
     pub(crate) const fn byte(value: u8) -> usize {
         if value < 10 {

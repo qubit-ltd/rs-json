@@ -33,6 +33,7 @@ use super::JsonSerializerStateError;
 ///     },
 /// );
 /// ```
+#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
 pub enum JsonSerializationErrorKind {
     /// A signed or unsigned integer exceeded the strict 64-bit union range.

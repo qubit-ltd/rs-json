@@ -49,14 +49,20 @@ fn test_scalar_lexeme_limits_match_json_output() {
             .max_number_bytes(20)
             .build(),
     );
-    assert!(encode(&u64::MAX, &mut integers).is_ok());
+    assert!(
+        encode(&u64::MAX, &mut integers).is_ok(),
+        "the maximum `u64` must fit in a 20-byte number budget",
+    );
 
     let mut floats = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_number_bytes(4)
             .build(),
     );
-    assert!(encode(&1.25_f64, &mut floats).is_ok());
+    assert!(
+        encode(&1.25_f64, &mut floats).is_ok(),
+        "the compact `1.25` lexeme must fit in a 4-byte number budget",
+    );
 }
 
 /// Verifies finite `f64` edge cases use serde_json's exact compact length.
