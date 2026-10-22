@@ -52,6 +52,11 @@ prepare 立即且只提交一次 raw/normalized 输入消耗；每次 document d
 两个 decoder 都接收完整的 `&str` 或 `&[u8]`。输入字节限制不能追溯约束外层 transport
 或 body aggregator 已经分配的内存；有界读取或聚合上限必须设置在该外层边界。
 
+`JsonDecoder::decode_input` 则从 `Input<Item = u8>` 读取到 EOF，并返回拥有所有权的结果。输入预算
+有限时，每次读取最多包含剩余额度加一个探针字节。探针用于区分恰好到达限额时的 EOF 与后续仍有
+数据的情况；它不会计费或进入缓冲区，且 `Input` 无法将它放回输入源。即使探针导致预算错误，
+额度内已读前缀仍会计费并保留。
+
 ## Strict text
 
 严格文本接口由对象承载，避免无状态自由函数扩散：

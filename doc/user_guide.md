@@ -231,8 +231,12 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 `decode_input` accepts `Input<Item = u8>` sources; standard `Read` values such
 as `Cursor` use the `qubit-io` integration. It reads through EOF and applies
 strict checks to the complete document, including trailing whitespace and any
-second JSON value. Input bytes are charged chunk by chunk, and a configured
-`max_input_bytes` stops the read as soon as the next chunk exceeds the limit.
+second JSON value. With a configured `max_input_bytes`, each read is limited
+to the remaining budget plus at most one probe byte. The probe distinguishes
+EOF at the exact limit from additional input. Bytes within the limit are
+charged and buffered; if the probe reads data, decoding fails with a budget
+error. `Input` cannot return that probe byte to its source, and the probe is
+neither charged nor included in the buffered JSON or reported input length.
 The return type must implement `DeserializeOwned` because the decoder buffers
 the complete document internally. With no input-byte limit, that temporary
 buffer has no configured maximum. This method parses ordinary strict JSON; it

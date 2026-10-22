@@ -44,11 +44,12 @@ To enable RFC 8785 canonical output, opt into the feature explicitly:
 qubit-json = { version = "0.11", features = ["jcs"] }
 ```
 
-## Quick start: admit an HTTP request body
+## Quick start: decode an already aggregated, size-limited HTTP body
 
-This example accepts one request body containing a full-range `u64` identifier,
-then demonstrates that an oversized body is rejected before a decoded value is
-committed:
+This example decodes bytes from an HTTP body that the transport layer has
+already aggregated under a size limit. It accepts a full-range `u64`
+identifier, then demonstrates that oversized JSON input is rejected before a
+decoded value is committed:
 
 ```rust
 use qubit_budget::json::JsonDecodeLimits;
@@ -86,7 +87,14 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 
 Unlike calling `serde_json::from_slice` alone, this boundary makes resource
 admission explicit and exposes a stable error category through `kind()`. Apply
-schema validation, authorization, and domain rules after a value is admitted.
+the transport size limit before aggregating the body into the slice shown
+above. The application flow is: bounded transport aggregation → JSON admission
+with `JsonDecoder` → schema, authorization, and domain validation.
+
+`qubit-json` does not provide HTTP body aggregation. For a downstream HTTP
+integration that applies the transport limit before `BoundedJson` performs JSON
+admission, see the [`rs-web` controller example](../rs-web/examples/controller_crud.rs)
+and the [user guide's `decode_input` section](doc/user_guide.md#advanced-usage).
 
 ## Choose the decoding boundary
 

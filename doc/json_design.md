@@ -67,6 +67,13 @@ limits do not retroactively cap memory already allocated by an outer transport
 or body aggregator; a bounded read or aggregation limit belongs at that outer
 boundary.
 
+`JsonDecoder::decode_input` instead reads an `Input<Item = u8>` source through
+EOF into an owned result. With a finite input budget, each read is limited to
+the remaining budget plus at most one probe byte. The probe distinguishes EOF
+at the exact limit from additional input; it is not charged or buffered, and
+`Input` cannot return it to the source. Any prefix within the budget is charged
+and retained even when the probe causes a budget error.
+
 ## Strict text
 
 Strict text APIs are object-based so state does not spread through stateless

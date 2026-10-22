@@ -41,10 +41,10 @@ serde_json = "1.0"
 qubit-json = { version = "0.11", features = ["jcs"] }
 ```
 
-## 快速开始：准入 HTTP 请求体
+## 快速开始：解码已聚合且受大小限制的 HTTP body
 
-下面的示例先接收一个包含完整 `u64` 范围标识符的请求体，再验证超出输入上限的请求会在
-解码结果提交前被拒绝：
+下面的示例处理的是传输层已设置大小上限并聚合完成的 HTTP body 字节。它接收一个包含完整
+`u64` 范围标识符的 JSON，再验证超出 JSON 输入上限的内容会在解码结果提交前被拒绝：
 
 ```rust
 use qubit_budget::json::JsonDecodeLimits;
@@ -81,7 +81,12 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 ```
 
 与只调用 `serde_json::from_slice` 相比，这个边界会显式执行资源准入，并通过 `kind()` 返回稳定的
-错误类别。JSON 准入成功后，再执行模式校验、权限检查和领域规则。
+错误类别。上面的切片产生之前，传输层必须先限制 body 大小再进行聚合。应用调用顺序是：传输层
+有界聚合 → `JsonDecoder` 准入 JSON → 模式、权限和领域校验。
+
+`qubit-json` 不提供 HTTP body 聚合 API。需要查看下游 HTTP 接入方式时，可参考
+[`rs-web` controller 示例](../rs-web/examples/controller_crud.rs)；该示例先经过传输层限制，
+再由 `BoundedJson` 执行 JSON 准入。更多输入方式见[用户手册的 `decode_input` 章节](doc/user_guide.zh_CN.md#进阶用法)。
 
 ## 选择解码边界
 
