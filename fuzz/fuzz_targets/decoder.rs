@@ -14,6 +14,7 @@ mod internal;
 use internal::fuzz_record::FuzzRecord;
 use libfuzzer_sys::fuzz_target;
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::DiagnosticPolicy;
 use qubit_json::decode::JsonDecodeError;
 use qubit_json::decode::JsonDecodeErrorKind;
@@ -81,7 +82,7 @@ fuzz_target!(|data: &[u8]| {
 
     let mut default_decoder = NormalizingJsonDecoder::with_limits(
         NormalizingJsonDecodePolicy::default(),
-        qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
     );
     match default_decoder.decode_utf8::<serde_json::Value>(data) {
         Ok(value) => {
@@ -128,11 +129,11 @@ fuzz_target!(|data: &[u8]| {
     let decoder_configurations = [
         (
             NormalizingJsonDecodePolicy::default(),
-            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+            JsonDecodeLimits::<JsonResource, usize>::default(),
         ),
         (
             no_normalization_policy(),
-            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+            JsonDecodeLimits::<JsonResource, usize>::default(),
         ),
         (
             NormalizingJsonDecodePolicy::builder()
@@ -140,7 +141,7 @@ fuzz_target!(|data: &[u8]| {
                     closing: MarkdownFenceClosing::Optional,
                 })
                 .build(),
-            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+            JsonDecodeLimits::<JsonResource, usize>::default(),
         ),
         (
             NormalizingJsonDecodePolicy::builder()
@@ -148,7 +149,7 @@ fuzz_target!(|data: &[u8]| {
                     closing: MarkdownFenceClosing::Required,
                 })
                 .build(),
-            qubit_budget::json::JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::default(),
+            JsonDecodeLimits::<JsonResource, usize>::default(),
         ),
         (
             NormalizingJsonDecodePolicy::default(),

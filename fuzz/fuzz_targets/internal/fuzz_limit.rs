@@ -11,6 +11,7 @@
 pub(crate) const MAX_LIMIT: usize = 4 * 1024;
 
 /// Maps two fuzz bytes to the inclusive range `1..=MAX_LIMIT`.
+#[must_use]
 pub(crate) fn limit(data: &[u8], offset: usize) -> usize {
     let low = data.get(offset).copied().unwrap_or_default();
     let high = data.get(offset + 1).copied().unwrap_or_default();
