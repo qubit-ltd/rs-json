@@ -1,1 +1,3 @@
 # relative git root<TAB>repository URL<TAB>default branch
+../rs-budget	https://github.com/qubit-ltd/rs-budget	main
+../rs-io	https://github.com/qubit-ltd/rs-io	main
