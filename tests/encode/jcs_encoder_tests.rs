@@ -153,6 +153,76 @@ fn test_jcs_encoder_rounds_binary64_integer_boundaries_as_specified() {
 }
 
 #[test]
+fn test_jcs_encoder_matches_rfc8785_appendix_b_vectors() {
+    // RFC 8785 Appendix B, Table 1. Expected strings are fixed RFC vectors.
+    let cases: &[(u64, &[u8])] = &[
+        (0x0000_0000_0000_0000, b"0"),
+        (0x8000_0000_0000_0000, b"0"),
+        (0x0000_0000_0000_0001, b"5e-324"),
+        (0x8000_0000_0000_0001, b"-5e-324"),
+        (0x7fef_ffff_ffff_ffff, b"1.7976931348623157e+308"),
+        (0xffef_ffff_ffff_ffff, b"-1.7976931348623157e+308"),
+        (0x4340_0000_0000_0000, b"9007199254740992"),
+        (0xc340_0000_0000_0000, b"-9007199254740992"),
+        (0x4430_0000_0000_0000, b"295147905179352830000"),
+        (0x44b5_2d02_c7e1_4af5, b"9.999999999999997e+22"),
+        (0x44b5_2d02_c7e1_4af6, b"1e+23"),
+        (0x44b5_2d02_c7e1_4af7, b"1.0000000000000001e+23"),
+        (0x444b_1ae4_d6e2_ef4e, b"999999999999999700000"),
+        (0x444b_1ae4_d6e2_ef4f, b"999999999999999900000"),
+        (0x444b_1ae4_d6e2_ef50, b"1e+21"),
+        (0x3eb0_c6f7_a0b5_ed8c, b"9.999999999999997e-7"),
+        (0x3eb0_c6f7_a0b5_ed8d, b"0.000001"),
+        (0x41b3_de43_5555_5553, b"333333333.3333332"),
+        (0x41b3_de43_5555_5554, b"333333333.33333325"),
+        (0x41b3_de43_5555_5555, b"333333333.3333333"),
+        (0x41b3_de43_5555_5556, b"333333333.3333334"),
+        (0x41b3_de43_5555_5557, b"333333333.33333343"),
+        (0xbecb_f647_612f_3696, b"-0.0000033333333333333333"),
+        (0x4314_3ff3_c1cb_0959, b"1424953923781206.2"),
+    ];
+
+    for &(bits, expected) in cases {
+        let number = serde_json::Number::from_f64(f64::from_bits(bits))
+            .expect("RFC finite binary64 vector is representable as a JSON number");
+        let value = serde_json::Value::Number(number);
+        assert_eq!(
+            JcsEncoder::unlimited().to_vec(&value).unwrap(),
+            expected,
+            "RFC 8785 Appendix B vector {bits:016x}",
+        );
+    }
+
+    assert!(serde_json::Number::from_f64(f64::NAN).is_none());
+    assert!(serde_json::Number::from_f64(f64::INFINITY).is_none());
+    assert!(serde_json::Number::from_f64(f64::NEG_INFINITY).is_none());
+}
+
+#[test]
+fn test_jcs_preserves_unicode_forms_and_budget_independent_bytes() {
+    let value = serde_json::json!({"a": "é", "b": "e\u{301}"});
+    let expected = JcsEncoder::unlimited().to_vec(&value).unwrap();
+    assert_eq!(expected, "{\"a\":\"é\",\"b\":\"e\u{301}\"}".as_bytes());
+
+    for maximum in [expected.len(), expected.len() + 64] {
+        let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+            .max_output_bytes(maximum)
+            .build();
+        let actual = JcsEncoder::with_limits(limits, 1024 * 1024)
+            .to_vec(&value)
+            .unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_output_bytes(expected.len() - 1)
+        .build();
+    assert!(JcsEncoder::with_limits(limits, 1024 * 1024)
+        .to_vec(&value)
+        .is_err());
+}
+
+#[test]
 fn test_jcs_encoder_exercises_construction_and_session_methods() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(16)
