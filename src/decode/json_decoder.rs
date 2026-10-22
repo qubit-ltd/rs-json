@@ -28,6 +28,13 @@ use super::internal::TypedSeed;
 /// through `u64::MAX`, requires finite floating-point values, supports values
 /// borrowing from its input, and exposes caller-provided Serde seeds.
 ///
+/// # Type Parameters
+///
+/// * `'budget` - Lifetime of the resource budget borrowed by the decoder's
+///   cumulative session.
+/// * `R` - Resource identity type tracked by the session.
+/// * `Q` - Quantity type used for resource limits and accounting.
+///
 /// # Examples
 ///
 /// ```
@@ -243,6 +250,10 @@ where
     /// arrives. The complete document is buffered in memory because the
     /// returned value must not borrow from the temporary buffer. Without an
     /// input-byte limit, this buffering has no implicit size cap.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Mutable byte input read through EOF.
     ///
     /// # Errors
     ///

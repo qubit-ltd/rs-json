@@ -7,6 +7,8 @@
 // =============================================================================
 //! Verifies the new strict and normalizing decoder entry points.
 
+use std::collections::HashMap;
+
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
@@ -16,6 +18,7 @@ use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use serde::de::IgnoredAny;
+use serde_json::Value;
 
 /// Creates a policy that exercises the normalization facade without rewriting.
 fn no_normalization_policy() -> NormalizingJsonDecodePolicy {
@@ -73,10 +76,10 @@ fn test_json_decoder_validation_entry_points() {
 fn test_json_decoder_typed_root_entry_points() {
     let mut decoder = JsonDecoder::unlimited();
 
-    let object: serde_json::Value = decoder.decode_object_str("{\"ok\":true}").expect("object string");
+    let object: Value = decoder.decode_object_str("{\"ok\":true}").expect("object string");
     let array: Vec<u8> = decoder.decode_array_utf8(b"[1,2]").expect("array bytes");
     let error = decoder
-        .decode_object_utf8::<serde_json::Value>(b"[]")
+        .decode_object_utf8::<Value>(b"[]")
         .expect_err("array must not satisfy object contract");
 
     assert_eq!(object["ok"], true);
@@ -164,7 +167,14 @@ fn test_json_decoder_accumulates_owned_session_usage() {
     let mut decoder = JsonDecoder::new(JsonDecodeSession::from_limits(limits));
     decoder.decode_utf8::<bool>(b"true").expect("first value");
     decoder.decode_utf8::<bool>(b"false").expect("second value");
-    assert_eq!(decoder.session().input_budget().unwrap().used(), 9);
+    assert_eq!(
+        decoder
+            .session()
+            .input_budget()
+            .expect("input budget should be configured")
+            .used(),
+        9,
+    );
 }
 
 /// Verifies that normalizing UTF-8 byte decoding returns an owned target.
@@ -191,7 +201,7 @@ fn test_normalizing_decoder_utf8_root_entry_points() {
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
 
-    let object: serde_json::Value = decoder
+    let object: Value = decoder
         .decode_object_utf8(br#" {"ok":true} "#)
         .expect("object bytes should decode");
     let array: Vec<u8> = decoder.decode_array_utf8(b"[1,2]").expect("array bytes should decode");
@@ -298,10 +308,24 @@ fn test_normalizing_decoder_typed_failure_keeps_input_and_rolls_back_value() {
     let mut decoder = NormalizingJsonDecoder::with_limits(no_normalization_policy(), limits);
 
     let _ = decoder
-        .decode_str::<std::collections::HashMap<String, bool>>(input)
+        .decode_str::<HashMap<String, bool>>(input)
         .expect_err("number should not deserialize as bool");
 
-    assert_eq!(decoder.session().input_budget().unwrap().used(), input.len());
-    assert_eq!(decoder.session().normalized_input_budget().unwrap().used(), input.len());
+    assert_eq!(
+        decoder
+            .session()
+            .input_budget()
+            .expect("input budget should be configured")
+            .used(),
+        input.len(),
+    );
+    assert_eq!(
+        decoder
+            .session()
+            .normalized_input_budget()
+            .expect("normalized input budget should be configured")
+            .used(),
+        input.len(),
+    );
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 }

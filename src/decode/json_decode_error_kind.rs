@@ -61,6 +61,11 @@ impl FromStr for JsonDecodeErrorKind {
     type Err = &'static str;
 
     /// Parses a stable category name without ASCII case sensitivity.
+    ///
+    /// # Errors
+    ///
+    /// Returns `"unknown JsonDecodeErrorKind"` when `value` does not match a
+    /// supported category name.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.eq_ignore_ascii_case("read") {
             Ok(Self::Read)

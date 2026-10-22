@@ -286,6 +286,27 @@ where
         Ok(value)
     }
 
+    /// Admits one document, checks its optional root kind, and materializes it.
+    ///
+    /// # Parameters
+    ///
+    /// * `attempt` - Value transaction that stages input and value usage.
+    /// * `seed` - Serde seed used to construct the requested value.
+    /// * `input` - Complete JSON document borrowed for `'de`.
+    /// * `metadata` - Original input and diagnostic policy information.
+    /// * `charge_raw_input` - Whether this attempt must charge raw input bytes.
+    /// * `has_value_limits` - Whether value measurements can reject the input.
+    /// * `expected` - Optional required top-level object or array kind.
+    ///
+    /// # Returns
+    ///
+    /// The value produced by `seed` after the complete document is admitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when UTF-8 validation, lexical admission, the optional
+    /// root-kind check, or Serde materialization rejects the document. The
+    /// error retains the input lengths and diagnostic policy from `metadata`.
     fn decode_seed_attempt<'de, S>(
         attempt: &mut JsonDecodeAttempt<'_, R, Q>,
         seed: S,

@@ -7,6 +7,7 @@
 // =============================================================================
 //! Structured location-aware JSON lexical errors.
 
+use std::error::Error;
 use std::fmt;
 
 use super::JsonSyntaxErrorReason;
@@ -19,8 +20,13 @@ use crate::lexical::JsonLexicalFailure;
 /// ```
 /// use qubit_json::decode::{JsonSyntaxError, JsonSyntaxErrorReason};
 ///
-/// let error = JsonSyntaxError::new(0, 1, 1,
-/// JsonSyntaxErrorReason::UnexpectedEnd); assert_eq!(error.line(), 1);
+/// let error = JsonSyntaxError::new(
+///     0,
+///     1,
+///     1,
+///     JsonSyntaxErrorReason::UnexpectedEnd,
+/// );
+/// assert_eq!(error.line(), 1);
 /// assert_eq!(error.reason(), JsonSyntaxErrorReason::UnexpectedEnd);
 /// ```
 #[must_use]
@@ -50,7 +56,6 @@ impl JsonSyntaxError {
     ///
     /// A syntax error containing the supplied location and classification.
     #[inline]
-    #[must_use = "return or inspect the constructed syntax error"]
     pub const fn new(offset: usize, line: usize, column: usize, reason: JsonSyntaxErrorReason) -> Self {
         Self {
             offset,
@@ -60,7 +65,21 @@ impl JsonSyntaxError {
         }
     }
 
-    /// Converts one crate-private lexical failure at the text-domain boundary.
+    /// Converts a crate-private lexical failure into the text-domain syntax
+    /// error.
+    ///
+    /// The byte offset, line, and column are preserved, while the lexical
+    /// reason is mapped to its syntax-error classification.
+    ///
+    /// # Parameters
+    ///
+    /// * `failure` - The lexical failure whose location and reason are
+    ///   converted.
+    ///
+    /// # Returns
+    ///
+    /// A syntax error with the lexical failure's source coordinates and mapped
+    /// reason.
     pub(crate) fn from_lexical(failure: JsonLexicalFailure) -> Self {
         Self::new(failure.offset, failure.line, failure.column, failure.reason.into())
     }
@@ -111,7 +130,13 @@ impl JsonSyntaxError {
 }
 
 impl fmt::Display for JsonSyntaxError {
-    /// Formats the reason and complete source location.
+    /// Formats the reason and complete source location for human-readable
+    /// diagnostics.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter's error if writing the diagnostic to its output
+    /// fails.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -121,4 +146,4 @@ impl fmt::Display for JsonSyntaxError {
     }
 }
 
-impl std::error::Error for JsonSyntaxError {}
+impl Error for JsonSyntaxError {}

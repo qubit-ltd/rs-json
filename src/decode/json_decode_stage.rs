@@ -44,6 +44,10 @@ pub enum JsonDecodeStage {
 
 impl fmt::Display for JsonDecodeStage {
     /// Writes the stable snake-case stage name.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter's error if writing the stage name fails.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Input => "input",
@@ -61,6 +65,18 @@ impl FromStr for JsonDecodeStage {
     type Err = &'static str;
 
     /// Parses a stable stage name without ASCII case sensitivity.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Stage name to parse.
+    ///
+    /// # Returns
+    ///
+    /// The matching decoding stage.
+    ///
+    /// # Errors
+    ///
+    /// Returns a static diagnostic when `value` is not a known stage name.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.eq_ignore_ascii_case("input") {
             Ok(Self::Input)

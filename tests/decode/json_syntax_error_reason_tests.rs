@@ -18,25 +18,37 @@ fn test_json_syntax_error_reason_formats_unexpected_byte() {
 /// Verifies every public syntax reason has a stable display representation.
 #[test]
 fn test_json_syntax_error_reason_formats_every_variant() {
-    let reasons = [
-        JsonSyntaxErrorReason::UnexpectedEnd,
-        JsonSyntaxErrorReason::UnexpectedByte,
-        JsonSyntaxErrorReason::ExpectedColon,
-        JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd,
-        JsonSyntaxErrorReason::ExpectedCommaOrObjectEnd,
-        JsonSyntaxErrorReason::ExpectedObjectKey,
-        JsonSyntaxErrorReason::InvalidEscape,
-        JsonSyntaxErrorReason::InvalidUnicodeEscape,
-        JsonSyntaxErrorReason::UnpairedSurrogate,
-        JsonSyntaxErrorReason::InvalidUtf8,
-        JsonSyntaxErrorReason::InvalidNumber,
-        JsonSyntaxErrorReason::IntegerOutOfRange,
-        JsonSyntaxErrorReason::FloatOutOfRange,
-        JsonSyntaxErrorReason::TrailingCharacters,
-        JsonSyntaxErrorReason::NestingOverflow,
+    let reasons_and_text = [
+        (JsonSyntaxErrorReason::UnexpectedEnd, "unexpected end of input"),
+        (JsonSyntaxErrorReason::UnexpectedByte, "unexpected byte"),
+        (JsonSyntaxErrorReason::ExpectedColon, "expected ':'"),
+        (
+            JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd,
+            "expected ',' or ']' in array",
+        ),
+        (
+            JsonSyntaxErrorReason::ExpectedCommaOrObjectEnd,
+            "expected ',' or '}' in object",
+        ),
+        (JsonSyntaxErrorReason::ExpectedObjectKey, "expected object key"),
+        (JsonSyntaxErrorReason::InvalidEscape, "invalid string escape"),
+        (JsonSyntaxErrorReason::InvalidUnicodeEscape, "invalid Unicode escape"),
+        (JsonSyntaxErrorReason::UnpairedSurrogate, "unpaired Unicode surrogate"),
+        (JsonSyntaxErrorReason::InvalidUtf8, "invalid UTF-8"),
+        (JsonSyntaxErrorReason::InvalidNumber, "invalid JSON number"),
+        (
+            JsonSyntaxErrorReason::IntegerOutOfRange,
+            "JSON integer is outside the supported 64-bit range",
+        ),
+        (
+            JsonSyntaxErrorReason::FloatOutOfRange,
+            "JSON number is outside the finite f64 range",
+        ),
+        (JsonSyntaxErrorReason::TrailingCharacters, "trailing characters"),
+        (JsonSyntaxErrorReason::NestingOverflow, "JSON nesting overflow"),
     ];
 
-    for reason in reasons {
-        assert!(!reason.to_string().is_empty());
+    for (reason, expected_text) in reasons_and_text {
+        assert_eq!(reason.to_string(), expected_text);
     }
 }

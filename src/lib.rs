@@ -28,6 +28,9 @@
 
 #![deny(missing_docs)]
 
+#[cfg(test)]
+mod tests;
+
 pub mod decode;
 pub mod encode;
 mod internal;

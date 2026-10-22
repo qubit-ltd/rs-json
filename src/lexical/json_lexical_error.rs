@@ -14,6 +14,7 @@ use qubit_budget::MeasuredBudgetError;
 use super::json_lexical_failure::JsonLexicalFailure;
 
 /// Failure produced while lexically scanning and charging one JSON document.
+#[must_use]
 #[derive(Debug)]
 pub(crate) enum JsonLexicalError<R, Q>
 where

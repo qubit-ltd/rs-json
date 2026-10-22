@@ -8,4 +8,3 @@
 //! Public behavior tests for structured JSON syntax errors.
 
 mod error_tests;
-mod reason_tests;

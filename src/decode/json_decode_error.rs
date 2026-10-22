@@ -64,6 +64,12 @@ where
     Q: Copy + fmt::Debug,
 {
     /// Creates a stream-read failure and conditionally retains its source.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - I/O error produced while reading the input.
+    /// * `raw_input_bytes` - Number of input bytes read before the failure.
+    /// * `diagnostic_policy` - Whether to retain the original error details.
     #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) fn read(source: io::Error, raw_input_bytes: usize, diagnostic_policy: DiagnosticPolicy) -> Self {
         let kind = source.kind();
@@ -79,6 +85,14 @@ where
     }
 
     /// Creates a measured-budget failure at a semantic stage.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - Resource measurement that exceeded its budget.
+    /// * `stage` - Decode stage where the budget was exceeded.
+    /// * `raw_input_bytes` - Original input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length, when available.
+    /// * `diagnostic_policy` - Policy controlling retained input details.
     #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) const fn budget(
         source: MeasuredBudgetError<R, Q>,
@@ -99,6 +113,13 @@ where
     }
 
     /// Creates an empty-input failure at a semantic stage.
+    ///
+    /// # Parameters
+    ///
+    /// * `stage` - Decode stage where the empty input was detected.
+    /// * `raw_input_bytes` - Original input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length, when available.
+    /// * `diagnostic_policy` - Policy controlling retained input details.
     #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) const fn empty_input(
         stage: JsonDecodeStage,
@@ -117,6 +138,12 @@ where
     }
 
     /// Creates an invalid-UTF-8 failure and conditionally retains its source.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - UTF-8 validation failure for the input bytes.
+    /// * `raw_input_bytes` - Original input length in bytes.
+    /// * `diagnostic_policy` - Whether to retain the original error details.
     #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) fn invalid_utf8(
         source: std::str::Utf8Error,
@@ -138,6 +165,15 @@ where
     }
 
     /// Creates a stable invalid-JSON failure from lexical admission.
+    ///
+    /// # Parameters
+    ///
+    /// * `syntax_source` - Lexical failure with stable syntax details.
+    /// * `detailed_source` - Optional parser error retained for detailed
+    ///   diagnostics.
+    /// * `raw_input_bytes` - Original input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length, when available.
+    /// * `diagnostic_policy` - Policy controlling retained input details.
     #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) fn invalid_json(
         syntax_source: JsonLexicalFailure,
@@ -158,6 +194,14 @@ where
     }
 
     /// Creates an unexpected-top-level failure.
+    ///
+    /// # Parameters
+    ///
+    /// * `expected` - Required top-level JSON kind.
+    /// * `actual` - Observed top-level JSON kind.
+    /// * `raw_input_bytes` - Original input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length, when available.
+    /// * `diagnostic_policy` - Policy controlling retained input details.
     #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) const fn unexpected_top_level(
         expected: JsonRootKind,
@@ -179,6 +223,13 @@ where
 
     /// Creates a target-deserialization failure and conditionally retains its
     /// input-derived source.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - Serde error produced while materializing the target value.
+    /// * `raw_input_bytes` - Original input length in bytes.
+    /// * `normalized_input_bytes` - Normalized input length, when available.
+    /// * `diagnostic_policy` - Whether to retain the original error details.
     #[must_use = "return or inspect the constructed decoding error"]
     pub(crate) fn deserialize(
         source: JsonError,
@@ -309,6 +360,11 @@ where
     }
 
     /// Returns the retained original I/O error for detailed read diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// The original read error when detailed diagnostics retained it, or `None`
+    /// when the error is not a read failure or its source was not retained.
     #[must_use]
     #[inline(always)]
     pub fn read_error(&self) -> Option<&io::Error> {
@@ -449,6 +505,10 @@ where
     ///
     /// The structured budget, input, syntax, top-level, or deserialization
     /// source retained by this error.
+    ///
+    /// # Returns
+    ///
+    /// The complete owned source describing the decode failure.
     #[inline(always)]
     pub fn into_source(self) -> JsonDecodeErrorSource<R, Q> {
         self.failure

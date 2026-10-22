@@ -7,6 +7,8 @@
 // =============================================================================
 //! Verifies prepared normalized documents and their accounting boundary.
 
+use std::collections::HashMap;
+
 use qubit_budget::ResourceLimit;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonResource;
@@ -172,7 +174,7 @@ fn test_normalized_json_document_failure_rolls_back_only_value_usage() {
     let document = decoder.prepare_str(input).expect("prepare must succeed");
 
     let _ = decoder
-        .decode_precharged_document::<std::collections::HashMap<String, bool>>(&document)
+        .decode_precharged_document::<HashMap<String, bool>>(&document)
         .expect_err("number must not deserialize as bool");
 
     assert_eq!(

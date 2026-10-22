@@ -83,32 +83,6 @@ impl ControlCharacterEscaper {
         (normalized_len, needs_escape)
     }
 
-    /// Scans every byte without attempting block skipping.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - JSON-like text known to contain dense C0 controls.
-    ///
-    /// # Returns
-    ///
-    /// A tuple containing the repaired byte length and whether at least one
-    /// replacement is required.
-    fn scan_scalar(input: &str) -> (usize, bool) {
-        let mut in_string = false;
-        let mut in_escape = false;
-        let mut normalized_len = input.len();
-        let mut needs_escape = false;
-
-        for byte in input.bytes() {
-            if let Some(replacement) = Self::replacement(byte, &mut in_string, &mut in_escape) {
-                needs_escape = true;
-                normalized_len = normalized_len.saturating_add(replacement.len().saturating_sub(1));
-            }
-        }
-
-        (normalized_len, needs_escape)
-    }
-
     /// Escapes input using results from a preceding [`Self::scan`] call.
     ///
     /// # Parameters
@@ -130,6 +104,33 @@ impl ControlCharacterEscaper {
         Self::rewrite(input, normalized_len)
     }
 
+    /// Scans every byte without attempting block skipping.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - JSON-like text known to contain dense C0 controls.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing the repaired byte length and whether at least one
+    /// replacement is required.
+    #[must_use]
+    fn scan_scalar(input: &str) -> (usize, bool) {
+        let mut in_string = false;
+        let mut in_escape = false;
+        let mut normalized_len = input.len();
+        let mut needs_escape = false;
+
+        for byte in input.bytes() {
+            if let Some(replacement) = Self::replacement(byte, &mut in_string, &mut in_escape) {
+                needs_escape = true;
+                normalized_len = normalized_len.saturating_add(replacement.len().saturating_sub(1));
+            }
+        }
+
+        (normalized_len, needs_escape)
+    }
+
     /// Reports whether the input contains at least one ASCII C0 byte.
     ///
     /// # Parameters
@@ -140,6 +141,7 @@ impl ControlCharacterEscaper {
     ///
     /// `true` when a byte is below `0x20`; otherwise `false`. UTF-8
     /// continuation bytes are never classified as C0 controls.
+    #[must_use]
     #[inline]
     fn contains_ascii_control(input: &str) -> bool {
         let (chunks, remainder) = input.as_bytes().as_chunks::<8>();
@@ -158,6 +160,7 @@ impl ControlCharacterEscaper {
     /// # Returns
     ///
     /// `true` when any constituent byte is below `0x20`.
+    #[must_use]
     #[inline]
     fn word_contains_ascii_control(word: u64) -> bool {
         Self::ascii_control_high_bits(word) != 0
@@ -172,6 +175,7 @@ impl ControlCharacterEscaper {
     /// # Returns
     ///
     /// A word whose high bit is set for each constituent byte below `0x20`.
+    #[must_use]
     #[inline]
     fn ascii_control_high_bits(word: u64) -> u64 {
         // Setting each high bit prevents cross-byte borrows; restoring the
@@ -190,6 +194,7 @@ impl ControlCharacterEscaper {
     /// # Returns
     ///
     /// `true` when any eight-byte block contains at least two C0 bytes.
+    #[must_use]
     #[inline]
     fn contains_dense_ascii_control_chunk(input: &str) -> bool {
         let (chunks, remainder) = input.as_bytes().as_chunks::<8>();
@@ -209,6 +214,7 @@ impl ControlCharacterEscaper {
     /// # Returns
     ///
     /// `true` when at least one constituent byte equals `byte`.
+    #[must_use]
     #[inline]
     fn contains_byte(word: u64, byte: u8) -> bool {
         let repeated = u64::from(byte) * Self::LOW_BITS;
@@ -226,6 +232,7 @@ impl ControlCharacterEscaper {
     /// # Returns
     ///
     /// `true` when the chunk contains a byte that requires scalar handling.
+    #[must_use]
     #[inline]
     fn chunk_contains_interesting(chunk: [u8; 8], in_string: bool) -> bool {
         let word = u64::from_ne_bytes(chunk);
@@ -243,6 +250,7 @@ impl ControlCharacterEscaper {
     /// # Returns
     ///
     /// `true` for a quote, or for a backslash or C0 byte inside a string.
+    #[must_use]
     #[inline]
     fn is_interesting(byte: u8, in_string: bool) -> bool {
         byte == b'"' || (in_string && (byte == b'\\' || byte < 0x20))
@@ -258,6 +266,7 @@ impl ControlCharacterEscaper {
     /// # Returns
     ///
     /// Number of leading bytes that need no scalar state handling.
+    #[must_use]
     fn ordinary_prefix_len(input: &[u8], in_string: bool) -> usize {
         let (chunks, remainder) = input.as_chunks::<8>();
         for (index, chunk) in chunks.iter().enumerate() {
@@ -287,6 +296,7 @@ impl ControlCharacterEscaper {
     /// Borrowed input when state-aware scanning finds no replacement, or owned
     /// rewritten text otherwise. This state machine stays out of line to keep
     /// the disabled strict-decoding path small.
+    #[must_use]
     #[inline(never)]
     fn rewrite<'a>(input: &'a str, capacity: usize) -> Cow<'a, str> {
         if Self::contains_dense_ascii_control_chunk(input) {
@@ -352,6 +362,7 @@ impl ControlCharacterEscaper {
     ///
     /// Borrowed input when no replacement is required, or owned rewritten text
     /// otherwise.
+    #[must_use]
     fn rewrite_scalar<'a>(input: &'a str, capacity: usize) -> Cow<'a, str> {
         let mut in_string = false;
         let mut in_escape = false;

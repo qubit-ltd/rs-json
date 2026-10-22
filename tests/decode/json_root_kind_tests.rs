@@ -24,7 +24,7 @@ fn test_top_level_kind_classifies_values() {
     assert_eq!(JsonRootKind::of(&json!(true)), JsonRootKind::Other);
 }
 
-/// Verifies that top level kind from matches of.
+/// Verifies that converting a value matches explicit classification.
 ///
 /// # Panics
 ///
@@ -47,7 +47,7 @@ fn test_top_level_kind_display_uses_lowercase_names() {
     assert_eq!(JsonRootKind::Other.to_string(), "other");
 }
 
-/// Verifies that top level kind from str.
+/// Verifies that kind names parse with the expected case handling.
 ///
 /// # Panics
 ///
