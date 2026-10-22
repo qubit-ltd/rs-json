@@ -2,12 +2,12 @@ format = 1
 
 [[exceptions]]
 rule = "explicit-imports"
-path = "src/encode/serializer/budgeted_key.rs"
+path = "src/encode/serializer/internal/budgeted_key.rs"
 reason = "This file intentionally uses a legacy import shape required by its module boundary."
 
 [[exceptions]]
 rule = "explicit-imports"
-path = "src/encode/serializer/budgeted_private_value.rs"
+path = "src/encode/serializer/internal/budgeted_private_value.rs"
 reason = "This file intentionally uses a legacy import shape required by its module boundary."
 
 [[exceptions]]
@@ -22,12 +22,12 @@ reason = "This file intentionally uses a legacy import shape required by its mod
 
 [[exceptions]]
 rule = "explicit-imports"
-path = "src/encode/serializer/json_encode_compound.rs"
+path = "src/encode/serializer/internal/json_encode_compound.rs"
 reason = "This file intentionally uses a legacy import shape required by its module boundary."
 
 [[exceptions]]
 rule = "explicit-imports"
-path = "src/encode/serializer/json_encode_serializer.rs"
+path = "src/encode/serializer/internal/json_encode_serializer.rs"
 reason = "This file intentionally uses a legacy import shape required by its module boundary."
 
 [[exceptions]]
@@ -42,25 +42,25 @@ reason = "This file intentionally uses a legacy import shape required by its mod
 
 [[exceptions]]
 rule = "public-type-layout"
-path = "src/encode/output/json_output_buffer.rs"
+path = "src/encode/output/internal/json_output_buffer.rs"
 reason = "This module intentionally groups multiple public types for dispatch."
 
 [[exceptions]]
 rule = "public-type-layout"
-path = "src/encode/serializer/budgeted_key.rs"
+path = "src/encode/serializer/internal/budgeted_key.rs"
 reason = "This module intentionally groups multiple public types for dispatch."
 
 [[exceptions]]
 rule = "public-type-layout"
-path = "src/encode/serializer/budgeted_private_value.rs"
+path = "src/encode/serializer/internal/budgeted_private_value.rs"
 reason = "This module intentionally groups multiple public types for dispatch."
 
 [[exceptions]]
 rule = "public-type-layout"
-path = "src/encode/serializer/json_encode_compound.rs"
+path = "src/encode/serializer/internal/json_encode_compound.rs"
 reason = "This module intentionally groups multiple public types for dispatch."
 
 [[exceptions]]
 rule = "public-type-layout"
-path = "src/encode/serializer/json_encode_serializer.rs"
+path = "src/encode/serializer/internal/json_encode_serializer.rs"
 reason = "This module intentionally groups multiple public types for dispatch."

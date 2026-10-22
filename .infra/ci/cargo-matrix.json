@@ -2,6 +2,12 @@
   "version": 1,
   "checks": [
     {
+      "name": "default-strict",
+      "commands": ["check", "clippy"],
+      "defaultFeatures": true,
+      "features": []
+    },
+    {
       "name": "serde-json-minimum",
       "commands": ["test"],
       "allFeatures": true,

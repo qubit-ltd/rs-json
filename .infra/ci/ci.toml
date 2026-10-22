@@ -2,7 +2,7 @@ tasks = ["style", "clippy", "coverage-cfg-clippy", "verify", "strict-doc", "read
 
 [local]
 fuzz_mode = "smoke"
-fuzz_seconds_per_target = 10
+fuzz_seconds_per_target = 60
 fuzz_max_len = 4096
 coverage_cfg_clippy = false
 audit_cached_fallback = true
