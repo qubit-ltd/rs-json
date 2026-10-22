@@ -14,12 +14,12 @@
 
 ## 安装
 
-本 checkout 对应的 `0.11` 版本：
+本 checkout 对应的 `0.12` 版本：
 
 ```toml
 [dependencies]
-qubit-json = "0.11"
-qubit-budget = { version = "0.9", features = ["json"] }
+qubit-json = "0.12"
+qubit-budget = { version = "0.9.1", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -27,8 +27,8 @@ serde_json = "1.0"
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.11", path = "../rs-json" }
-qubit-budget = { version = "0.9", features = ["json"] }
+qubit-json = { version = "0.12", path = "../rs-json" }
+qubit-budget = { version = "0.9.1", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -38,7 +38,7 @@ serde_json = "1.0"
 要生成符合 RFC 8785 的规范化字节，请显式开启 `jcs` feature：
 
 ```toml
-qubit-json = { version = "0.11", features = ["jcs"] }
+qubit-json = { version = "0.12", features = ["jcs"] }
 ```
 
 ## 快速开始：解码已聚合且受大小限制的 HTTP body
@@ -134,6 +134,11 @@ JCS 数值遵循 IEEE 754 双精度语义，因此 `9007199254740993` 可能输�
 以及舍入、Unicode、深度和输入缓冲边界见[用户手册](doc/user_guide.zh_CN.md#按-jcs-规则解码原始文本)。
 `JcsDecoder` 解析输入但不验证输入字节是否已经规范化；规范输出仍由 `JcsEncoder` 生成。
 
+## 0.12 迁移指南
+
+0.12 严格处理 `serde_json::RawValue` 与 `serde_json::Number` 使用的私有 Serde 协议。
+[迁移指南](doc/migration_0_12.zh_CN.md)说明新增的 `InvalidNumberProtocol` 状态错误、预算类型身份变化及下游版本调整。
+
 ## 为什么需要这个项目
 
 语法正确的 JSON 仍可能过大、嵌套过深，或在构造内存对象时消耗过多资源。`qubit-json` 保留
@@ -160,8 +165,10 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 
 - 普通严格准入会检查 JSON 语法和数字范围，但不会自动要求对象键唯一。若唯一性属于输入契约，
   可使用 `DuplicateKeyRejectingJsonValue`；JCS 原始文本路径则使用 `JcsDecoder`。
-- 普通 `JsonDecoder` 要求负整数装入 `i64`、非负整数装入 `u64`；`JcsDecoder` 则将所有数字舍入为
+- 普通文本解码和编码要求负整数装入 `i64`、非负整数装入 `u64`；`JcsDecoder` 则将所有数字舍入为
   有限 `f64`。例如 `9007199254740993` 会变成 `9007199254740992`。要求精确保留各位数字时，使用字符串或领域类型。
+- `JsonValueEncoder` 只识别 `serde_json::Number` 对应的精确私有 Serde struct 协议；普通 map 即使字段同名也仍是对象。格式错误的 `RawValue` 与 `Number` 协议分别返回 `JsonSerializerStateError::InvalidRawValueProtocol` 和 `InvalidNumberProtocol`。seed 只看到原生数字事件，无法从普通 map 猜出私有协议来源。
+- 树遍历按现有 `serde_json::Number` 的紧凑显示长度计量。启用 `arbitrary_precision` 时，树读取器可计量已保存的宽数字（例如 `1e400`）；普通和 JCS 编码器仍按各自规则拒绝超出有限范围的数字。
 - 所有不可信边界都应设置有限资源上限。`unlimited()` 会同时取消值、输出和工作内存限制，
   只应用于可信输入或已由其他层完成准入的数据；外层输出上限不能替代解析前的输入与结构准入。
 - 严格解码和规范化解码的切片入口接收完整的 `&str` 或 `&[u8]`；需要借用输入的结果时使用它们。
@@ -188,6 +195,7 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
   [JSON number contract](doc/number_contract.md)
 - [设计文档](doc/json_design.zh_CN.md) ·
   [Design documents](doc/json_design.md)
+- [0.12 迁移指南](doc/migration_0_12.zh_CN.md) · [English migration guide](doc/migration_0_12.md)
 - [基准测试指南](doc/benchmark_baseline.zh_CN.md) ·
   [Benchmark guide](doc/benchmark_baseline.md)
 - [已发布 API 文档](https://docs.rs/qubit-json)；当前分支 API 请运行

@@ -1,6 +1,6 @@
 # Qubit JSON 用户手册
 
-本手册面向使用 `qubit-json` 0.11、Rust 1.94+ 的服务、配置读取器和数据管道。它说明如何在
+本手册面向使用 `qubit-json` 0.12、Rust 1.94+ 的服务、配置读取器和数据管道。它说明如何在
 调用方预算约束下准入 JSON，同时保留 Serde 数据模型；它不替代 `serde_json`，也不负责应用
 数据模式。
 
@@ -37,8 +37,8 @@
 
 ```toml
 [dependencies]
-qubit-json = "0.11"
-qubit-budget = { version = "0.9", features = ["json"] }
+qubit-json = "0.12"
+qubit-budget = { version = "0.9.1", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -83,9 +83,9 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 }
 ```
 
-成功分支会得到已经通过资源准入的 `serde_json::Value`。失败分支在提交解码结果前返回
-`JsonDecodeErrorKind::Budget`，同时保留测得的原始输入长度。HTTP 适配层因此可以根据稳定的
-错误类别生成响应，无须依赖解析器的私有实现细节。
+成功分支会得到已经通过资源准入的 `serde_json::Value`。失败分支返回 `JsonDecodeErrorKind::Budget`，并报告本次观察到的 11 个输入字节。这个 accessor
+描述本次调用观察到的字节数，不表示它们已提交到累计预算：被拒绝的输入计费会随失败的 value
+attempt 回滚，先前已接受的输入计费则继续保留。HTTP 适配层可以依据稳定错误类别生成响应。
 
 输出侧使用 `JsonEncoder::with_limits(JsonEncodeLimits::...)`，再调用 `to_vec`、`write_buffered` 或
 `write_incremental`：
@@ -130,7 +130,7 @@ assert_eq!(output, b"[1,2");
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.11", features = ["jcs"] }
+qubit-json = { version = "0.12", features = ["jcs"] }
 serde_json = "1.0"
 ```
 
@@ -214,7 +214,7 @@ let error = JcsDecoder::unlimited()
     .unwrap_err();
 assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
 let value = JcsDecoder::unlimited()
-    .decode_str(r#"{"x":1,"\\u0078":2}"#)
+    .decode_str(r#"{"x":1,"\u0078":2}"#)
     .unwrap();
 assert_eq!(value.as_object().unwrap().len(), 2);
 ```
@@ -443,6 +443,18 @@ assert_eq!(value, json!({"name": "qubit"}));
 预算失败不会回滚已经完成的修改。访问器可以返回 `JsonTreeControl::SkipSubtree` 跳过后代回调，
 但最终输出记账仍会覆盖修改后值树的全部后代。
 
+## 数字入口、私有协议与 Display
+
+三种数字边界要分开判断：
+
+- **普通文本与 Serde 事件：** strict 文本要求负整数在 `i64` 范围、非负整数在 `u64` 范围，小数或指数可转换为有限 `f64`。序列化器和 seed 收到 `i128`、`u128` 事件时会显式检查范围。文本解码先准入 `NumberBytes`，再检查数值范围。通用 seed 看不到原始 token，不能执行词法长度限制；遇到 map 形状事件时，也无法判断它是真对象还是上游模拟的 serde_json 私有 Number map。
+- **已经物化的 `Value` 树：** `JsonTreeReader` 按现有 Number 的紧凑显示内容长度计量，不先转 `f64`，也不改写数字。启用 `arbitrary_precision` 后，树读取器能按实际表示计量 `1e400` 或 39 位整数。这条计量规则不代表普通或 JCS encoder 会接受该数字。
+- **JCS 文本：** `JcsDecoder` 对所有 token（包括整数词法）使用有限 IEEE-754 binary64。例如 `9007199254740993` 会舍入为 `9007199254740992`；`1e400` 这类溢出会被拒绝。解码还会拒绝反转义后重复的键，并保留 127 层容器物化保护。
+
+encoder 识别 serde_json 的两种精确私有 struct 协议：`RawValue` 与 `Number`。真实 Number 协议只有一个字符串 payload，通过 `serialize_str` 或一次 `collect_str` 提交；文本在输出或 Value 构造前会完成验证。普通 map 即使含有 `$serde_json::private::Number` 键，仍按对象处理。手写协议结构不合法时返回 `JsonSerializationErrorKind::InvalidSerializerState`，其状态原因是 `JsonSerializerStateError::InvalidRawValueProtocol` 或 `InvalidNumberProtocol`。错误类型是穷举类型，下游 `match` 必须增加新变体处理。诊断不会保留私有 payload 文本。
+
+把 `Display` 编码成 JSON 字符串或对象键时，collector 会先检查本次写入后完整字符串/键的预计测量值，再追加该分块。预检成功不扣预算；格式化完成后才对完整测量准入一次。这能阻止库的 collector 在字符串或键超过限制后继续增长，但库无法控制用户 `Display::fmt` 内部的任意分配、分配器元数据或进程 RSS。`RawValue`/Number 的原始输出 payload 仍要等完整文本收集后才能校验 JSON 结构；收集期间仍受输出字节上限约束。
+
 ## 错误与诊断
 
 严格解码器与规范化解码器返回同一个泛型 `JsonDecodeError`。先根据 `kind()` 返回的稳定类别
@@ -470,7 +482,7 @@ assert_eq!(value, json!({"name": "qubit"}));
 | `ObjectKey` | `UnsupportedMapKey`、`DuplicateObjectKey` | `is_map_key_error()`、`map_key_kind()` |
 | `RawValue` | `InvalidRawValue` | `is_raw_value_error()` |
 | `Capacity` | `CollectionLengthOverflow` | `collection_kind()` |
-| `SerializerContract` | `InvalidSerializerState`、`DisplayFormattingFailed` | `is_serializer_contract_error()`、`serializer_state_error()` |
+| `SerializerContract` | `InvalidSerializerState`（含 `InvalidRawValueProtocol` 与 `InvalidNumberProtocol`）、`DisplayFormattingFailed` | `is_serializer_contract_error()`、`serializer_state_error()` |
 | `Custom` | `CustomSerialization` | 有意保持不透明：不保留序列化器提供的任意文本 |
 
 `stage()` 会准确指出公开处理边界：
@@ -526,6 +538,8 @@ assert_eq!(value, json!({"name": "qubit"}));
 反序列化器安全。
 
 ## 延伸阅读
+
+- [0.12 迁移指南](migration_0_12.zh_CN.md) · [English migration guide](migration_0_12.md)
 
 - [中文 README](../README.zh_CN.md) · [English README](../README.md)
 - [English user guide](user_guide.md)

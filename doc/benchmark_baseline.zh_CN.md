@@ -95,7 +95,7 @@ taskset -c 3 cargo bench --bench tree_bench -- --noplot
 
 ## JCS 解码定向采样记录
 
-2026-10-22 对
+2026-10-22 在 0.12 之前的基线提交 `9d821142ed844f25196b52a609eda45eeacefd35` 对
 `jcs_decode/numbers_1k/unlimited/fresh/decoder_per_decode` 完成一次定向采样：
 
 - 估计值为 38.014 µs，Criterion 区间为 37.633–38.607 µs。
@@ -113,7 +113,7 @@ taskset -c 3 cargo bench --bench tree_bench -- --noplot
 cargo bench --manifest-path /data/working/qubit/rust-common/.worktrees/rs-json/implementation-20261022/Cargo.toml --features jcs --bench decoder_bench -- jcs_decode/numbers_1k/unlimited/fresh --noplot --sample-size 10 --measurement-time 1 --warm-up-time 1
 ```
 
-这是当前 worktree 的一次观测，没有修改前对照，不能据此得出性能结论，也未测分配次数或峰值内存。
+这是 0.12 之前基线提交的一次观测，不是 0.12 候选的测量，也没有修改前后对照。本轮没有运行 0.12 benchmark，不能据此得出性能结论；该采样也未测分配次数或峰值内存。
 该 fixture 不代表转义字符串、大对象、有限预算、复用 session 或应用层工作负载。
 ## 结果解释边界
 

@@ -103,7 +103,7 @@ builder 在插入值之前检查重复键。JCS 构造固定拒绝超过 127 层
 strict 与 normalizing 文本路径共享同一数字契约：负整数装入 `i64`，非负整数装入 `u64`，
 小数或指数装入有限 `f64`。feature-gated 的 `JcsDecoder` 单独采用 binary64 模型，将所有数字
 （含整数词法）舍入为 `f64`，并在物化时拒绝对象内重复键。两种模型都先准入原始 `NumberBytes`，
-再校验范围，因此预算错误优先。实现不启用 serde_json arbitrary precision，也不识别其私有 Number marker。
+再校验范围，因此预算错误优先。crate 自身不启用 serde_json `arbitrary_precision`；但若其他依赖启用该 feature，仍会处理精确的私有 `Number` struct 协议。普通 map 即使有同名键也仍是对象。
 完整规则见 [JSON 数字契约](number_contract.zh_CN.md)。
 
 `JcsDecoder` 复用词法准入、session 与事务：第一遍完整扫描并计量，第二遍通过词法事件同步构造 Value，
@@ -113,8 +113,7 @@ JCS Value 构造最多接受 127 层容器（根容器计第 1 层，标量不�
 与第一遍包含根值的 `max_depth` 预算分别计算；低于 127 的用户深度限制先返回 Budget。`decode_input` 沿用读取到 EOF 并缓冲完整文档的流程，有限输入上限允许一个不计费的探测字节。
 预算描述被计量资源，不构成精确 malloc 上限。JCS 解码只检查并构造值，已规范字节验证须由调用方将编码结果与输入比较。
 
-该选择让合法对象的结构与预算类别保持一致：键为 `$serde_json::private::Number` 的对象始终
-按普通对象处理，不能因匹配 Serde 私有协议而变成数字。`RawValue` 的独立集成仍然保留。
+私有 Number 协议只有在 Serde struct 名称和 payload 形状完全匹配时才会识别；真实对象中名为 `$serde_json::private::Number` 的键仍是普通键。`RawValue` 私有协议也会识别并严格验证。
 有限浮点的紧凑 JSON 文本长度通过公开的 `serde_json::ser::CompactFormatter` 接口计算，
 不直接依赖其底层浮点格式化库。
 
@@ -122,10 +121,11 @@ JCS Value 构造最多接受 127 层容器（根容器计第 1 层，标量不�
 
 `AccountingJsonValueSeed` 是从 Serde 解码事件构造 `serde_json::Value` 的公开 seed。调用方将其绑定到
 `JsonValueTransaction`；它适用于原始 JSON 字节不可用而仍需对物化 value 记账的场景。词法
-准入与该 seed 的职责不同：前者验证 JSON 文本，后者观察已解码值。
-seed 无法检查原始数字 lexeme；需要数字范围和 `NumberBytes` 保证时必须使用 `JsonDecoder`。
+准入与该 seed 的职责不同：前者验证 JSON 文本，后者观察已解码值。seed 看不到原始数字 lexeme，文本级 `NumberBytes` 保证须由 `JsonDecoder` 或采用 JCS 契约的 `JcsDecoder` 提供。seed 收到的原生整数事件仍会按有符号/无符号 64 位并集检查；缺少 token 来源时，map 事件按对象处理，不猜测它是否模拟 Number 协议。
 
 ## Tree
+
+`JsonTreeReader` 按现有 `serde_json::Number` 的紧凑显示字节数计量，不转成 `f64`，也不改写当前表示。启用 `arbitrary_precision` 时可据此核算宽数字；这不代表普通或 JCS 编码器会接受它。
 
 `JsonTreeReader` 对不可变 `Value` 执行深度优先 enter/leave 遍历；`JsonTreeMutator` 对可变
 `Value` 执行 visitor 驱动的非递归遍历。两者均在回调前对节点、容器、字符串、数字和 object
@@ -155,6 +155,9 @@ key 进行准入。
 每种错误只暴露其领域能稳定提供的上下文；没有根级错误聚合或兼容别名。
 
 ## 序列化错误与输出边界
+
+`RawValue` 和 `Number` 私有协议会校验状态；形状错误分别映射为 `InvalidSerializerState` 下的 `InvalidRawValueProtocol`、`InvalidNumberProtocol`，诊断不包含私有 payload。`Display` 生成字符串或键时，先按本次写入后的预计完整长度检查，再追加分块；完成后只对完整字符串/键准入一次。这限制库 collector 的增长，但不能约束用户 `Display::fmt` 内部的分配、分配器元数据或 RSS。Raw JSON payload 仍在全文收集后校验结构。
+
 
 `JsonEncoder` 与 `JsonValueEncoder` 共用 `JsonSerializationError`。调用方通过 `kind()`
 识别精确原因，通过 `category()` 按 `Number`、`ObjectKey`、`RawValue`、`Capacity`、
@@ -200,7 +203,7 @@ renderer 前先暂存值资源用量，完整编码成功后才提交。`Budget`
 
 - 规范化策略与资源限制独立；不可信输入必须在传输层和解码层分别设置上限。
 - 解码失败后保留输入消耗，值消耗只在完整成功后提交；prepare 仅核算一次输入。
-- 私有 Number marker 是普通键；数字文本预算先于范围检查。
+- 真正的私有 Number struct 会解析为数字；普通对象中的同名键仍按对象处理。数字文本预算先于范围检查。
 - tree 遍历不依赖 Rust 递归；预算失败和 visitor 失败遵循各自的提交及修改边界。
 - 默认诊断不保留输入内容，自定义序列化错误不泄露任意来源文本。
 - 基准的成功路径必须确认 fixture 准入成功，避免累计预算耗尽后测到错误路径。
@@ -212,4 +215,5 @@ renderer 前先暂存值资源用量，完整编码成功后才提交。`Budget`
 
 - [用户手册](user_guide.zh_CN.md) · [User guide](user_guide.md)
 - [数字契约](number_contract.zh_CN.md) · [Number contract](number_contract.md)
+- [0.12 迁移指南](migration_0_12.zh_CN.md) · [English migration guide](migration_0_12.md)
 - [基准测试指南](benchmark_baseline.zh_CN.md) · [Benchmark guide](benchmark_baseline.md)

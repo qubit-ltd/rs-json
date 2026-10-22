@@ -116,7 +116,7 @@ allocation counts or peak memory.
 
 ## Recorded JCS decode sample
 
-One directed sample was collected on 2026-10-22 for
+One directed sample from the pre-0.12 baseline commit `9d821142ed844f25196b52a609eda45eeacefd35` was collected on 2026-10-22 for
 `jcs_decode/numbers_1k/unlimited/fresh/decoder_per_decode`:
 
 - Estimate: 38.014 µs; Criterion interval: 37.633–38.607 µs.
@@ -136,8 +136,7 @@ Command:
 cargo bench --manifest-path /data/working/qubit/rust-common/.worktrees/rs-json/implementation-20261022/Cargo.toml --features jcs --bench decoder_bench -- jcs_decode/numbers_1k/unlimited/fresh --noplot --sample-size 10 --measurement-time 1 --warm-up-time 1
 ```
 
-This is a single current-worktree observation, not a before/after comparison.
-It provides no performance conclusion and does not measure allocation counts
+This is a single observation from the pre-0.12 baseline commit, not a 0.12 measurement or a before/after comparison. No benchmark was run for the 0.12 candidate in this documentation task. It provides no performance conclusion and does not measure allocation counts
 or peak memory. The fixture does not represent escaped strings, large objects,
 bounded budgets, reused sessions, or application-level work.
 ## Interpretation boundaries

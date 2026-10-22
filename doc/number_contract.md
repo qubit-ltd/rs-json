@@ -52,9 +52,9 @@ Numbers that overflow to a non-finite value, such as `1e400`, are rejected.
 The original exact decimal digits of an integer cannot be recovered.
 
 Use JSON strings for IDs, amounts, or other decimal values that must retain
-every digit. Ordinary `JsonDecoder`, normalizing decoding, Serde seeds, and the
-independent `RawValue` path keep their existing contracts; this exception only
-applies when explicitly using `JcsDecoder`. JCS decoding still measures
+every digit. Ordinary `JsonDecoder`, normalizing decoding, and the `RawValue`
+protocol use the ordinary strict contract; only an explicit `JcsDecoder` uses
+the JCS binary64 model. JCS decoding still measures
 `NumberBytes` from the original token and checks that budget before its binary64
 range check. These budgets measure resources; they are not exact heap-memory
 limits.
@@ -66,19 +66,14 @@ Use a JSON string or an explicit domain representation for integers below
 object for money and other exact decimals. A bare fractional JSON number has
 binary64 semantics and is not an exact decimal wire format.
 
-## Serde boundaries
+## Already materialized trees and Serde seeds
 
-`qubit-json` does not enable serde_json's `arbitrary_precision` feature
-itself. If another dependency unifies that feature, `JcsDecoder` still uses its
-scanner's binary64 number model and preserves a real object whose key is
-`$serde_json::private::Number` as an ordinary object; it does not interpret
-that private marker as a number. This guarantee is specific to the JCS text
-decoder, not arbitrary Serde Value seeds.
-The independent `RawValue` integration remains supported.
+The numeric rule depends on the entry point:
 
-`AccountingJsonValueSeed` sees already-decoded Serde events. It can reject wide numeric
-events that do not fit the value model, but it cannot inspect the original
-number token or enforce lexical budgets. Route JSON text through `JsonDecoder`
-when its syntax, range, and `NumberBytes` guarantees are required, or through
-`JcsDecoder` when JCS binary64 rounding and duplicate-key rejection are
-required.
+- Text decoding, normalizing decoding, ordinary serialization, and native integer Serde events use the ordinary contract above. `i128`/`u128` events are explicitly rejected unless representable as `i64` or `u64` as appropriate.
+- `AccountingJsonValueSeed` and `DuplicateKeyRejectingJsonValueSeed` see decoded Serde events, not source text. They enforce the native 64-bit integer range but cannot inspect the original token or enforce `NumberBytes`. If `arbitrary_precision` presents a number as a map, the seed cannot distinguish that from a real object with the same shape; it keeps the event as an object. Use a controlled text/RawValue/JCS entry point when provenance matters.
+- `JsonTreeReader` operates on an existing `serde_json::Value`. It measures an existing Number by the byte length of its current compact display representation. It does not convert the number to `f64` or impose the ordinary text encoder range. With `arbitrary_precision`, a stored `1e400` can be accounted without panic, and a 39-digit integer counts as 39 bytes. Ordinary `JsonEncoder` and `JcsEncoder` still reject numbers outside their own contracts.
+
+The crate does not enable serde_json's `arbitrary_precision` feature itself. If another dependency unifies that feature, the encoder recognizes serde_json's exact private Number struct protocol: one string payload delivered by `serialize_str` or one `collect_str`. It validates the payload with the shared JSON number scanner before writing or constructing a Value. A normal object with a key named `$serde_json::private::Number` remains an object. The separate `RawValue` private protocol is also supported and validated. Malformed private protocol shapes return `JsonSerializationErrorKind::InvalidSerializerState` with `JsonSerializerStateError::InvalidNumberProtocol` or `InvalidRawValueProtocol`; diagnostic text does not expose the payload.
+
+JCS remains independent: raw text uses finite binary64 for every number and rejects overflow such as `1e400`; an already materialized wide `Number` under `arbitrary_precision` does not make `JcsEncoder` accept it.

@@ -137,9 +137,7 @@ exponential values must be finite `f64`. The feature-gated `JcsDecoder` uses a
 separate binary64 model, rounding every number (including integer lexemes) to
 `f64` and rejecting duplicate object keys during materialization. Both models
 admit the original `NumberBytes` before range validation, so budget failures
-have priority. The implementation does not enable serde_json arbitrary
-precision or recognize its private Number marker. See [the number
-contract](number_contract.md).
+have priority. The crate does not enable serde_json `arbitrary_precision` itself, but it handles the exact private `Number` struct protocol when another dependency enables it. A normal map with a matching key remains an object. See [the number contract](number_contract.md).
 
 `JcsDecoder` reuses lexical admission, sessions, and transactions. It performs a
 complete first scan for admission and accounting, then scans again and builds
@@ -157,10 +155,7 @@ byte with a finite input limit. Budgets describe measured resources, not an
 exact malloc ceiling. JCS decoding parses and constructs a value; verifying
 already canonical bytes requires callers to compare input with encoded output.
 
-This keeps object structure and budget categories consistent: an object with
-`$serde_json::private::Number` as a key remains an ordinary object rather than
-becoming a number through a private Serde protocol. The separate `RawValue`
-integration remains supported. Finite float lexeme lengths use the public
+The private Number protocol is recognized only by its exact Serde struct name and payload shape. A real object whose key is `$serde_json::private::Number` remains an object. The separate `RawValue` protocol is also recognized and strictly validated. Finite float lexeme lengths use the public
 `serde_json::ser::CompactFormatter` interface, without a direct dependency on
 its underlying float-formatting library.
 
@@ -171,11 +166,15 @@ its underlying float-formatting library.
 `JsonValueTransaction`; it is useful when the original JSON bytes are no
 longer available but the materialized value still needs accounting. Lexical
 admission and the seed have different responsibilities: the seed cannot
-inspect the original number lexeme, so text-level number and `NumberBytes`
-guarantees must come from `JsonDecoder`, or from `JcsDecoder` when its JCS
-number contract is required.
+inspect the original number lexeme, so text-level `NumberBytes` guarantees must
+come from `JsonDecoder`, or from `JcsDecoder` when its JCS number contract is
+required. Native integer events are still checked against the signed/unsigned
+64-bit union. A map event cannot be distinguished from a private Number payload
+without token provenance, so it remains an ordinary object.
 
 ## Tree
+
+`JsonTreeReader` counts an existing `serde_json::Number` using the byte length of its current compact display. This avoids conversion to `f64`, preserves the stored representation, and permits accounting for wide values under `arbitrary_precision`; it does not imply that ordinary or JCS encoding accepts those values.
 
 `JsonTreeReader` performs depth-first enter/leave traversal over an immutable
 `Value`; `JsonTreeMutator` performs visitor-driven, non-recursive traversal
@@ -211,6 +210,9 @@ Each error exposes only context that its domain can provide stably. There is
 no root-level error aggregate or compatibility alias.
 
 ## Serialization errors and output boundaries
+
+The exact `RawValue` and `Number` private protocols are state-checked. Their malformed shapes map to `InvalidSerializerState` with `InvalidRawValueProtocol` or `InvalidNumberProtocol`; output diagnostics omit private payload contents. `Display` string/key chunks undergo a prospective measurement check before being appended, then the complete string/key is admitted once. This bounds collector growth by configured logical limits, but cannot constrain allocations inside user `Display::fmt`, allocator metadata, or RSS. Raw JSON payload structure is still checked after its complete text has been collected.
+
 
 `JsonEncoder` and `JsonValueEncoder` share `JsonSerializationError`. Callers
 inspect `kind()` for precise causes and `category()` for recovery policies:
@@ -275,8 +277,7 @@ cover numbers, strings, objects, `RawValue`, and different tree shapes. See the
   needs limits at both the transport and decoding boundaries.
 - Failed decoding retains input charges; value charges commit only after full
   success. Preparation charges input once.
-- The private Number marker is an ordinary key. Numeric lexical budgets take
-  precedence over range checks.
+- A genuine private Number struct is parsed as a number; an ordinary map key with the same spelling stays an object. Numeric lexical budgets take precedence over range checks.
 - Tree traversal avoids Rust recursion. Budget and visitor failures preserve
   their documented commit and mutation boundaries.
 - Default diagnostics retain no input content; custom serialization errors
@@ -294,4 +295,5 @@ cover numbers, strings, objects, `RawValue`, and different tree shapes. See the
 
 - [User guide](user_guide.md) · [用户手册](user_guide.zh_CN.md)
 - [Number contract](number_contract.md) · [数字契约](number_contract.zh_CN.md)
+- [0.12 migration guide](migration_0_12.md) · [简体中文迁移指南](migration_0_12.zh_CN.md)
 - [Benchmark guide](benchmark_baseline.md) · [基准测试指南](benchmark_baseline.zh_CN.md)

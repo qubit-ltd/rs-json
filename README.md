@@ -17,12 +17,12 @@ cleanup of JSON embedded in external text.
 
 ## Installation
 
-For the `0.11` version described by this checkout:
+For the `0.12` version described by this checkout:
 
 ```toml
 [dependencies]
-qubit-json = "0.11"
-qubit-budget = { version = "0.9", features = ["json"] }
+qubit-json = "0.12"
+qubit-budget = { version = "0.9.1", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -30,8 +30,8 @@ Local checkout:
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.11", path = "../rs-json" }
-qubit-budget = { version = "0.9", features = ["json"] }
+qubit-json = { version = "0.12", path = "../rs-json" }
+qubit-budget = { version = "0.9.1", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -41,7 +41,7 @@ derived application types.
 To enable RFC 8785 canonical output, opt into the feature explicitly:
 
 ```toml
-qubit-json = { version = "0.11", features = ["jcs"] }
+qubit-json = { version = "0.12", features = ["jcs"] }
 ```
 
 ## Quick start: decode an already aggregated, size-limited HTTP body
@@ -151,6 +151,13 @@ finite-budget usage and the rounding, Unicode, depth, and input-buffering
 boundaries. `JcsDecoder` parses input; it does not verify that the input bytes
 are already canonical. `JcsEncoder` still produces canonical output.
 
+## Version 0.12 migration
+
+Version 0.12 adds strict handling for the private Serde protocols used by
+`serde_json::RawValue` and `serde_json::Number`. See the [migration guide](doc/migration_0_12.md)
+for the new `InvalidNumberProtocol` state error, the budget type identity change,
+and downstream version updates.
+
 ## Why this project exists
 
 Valid JSON can still be too large, too deep, or too expensive to materialize.
@@ -182,10 +189,12 @@ identifies the separate auxiliary-capacity limit configured with
   range; it does not require object keys to be unique. Choose a target such as
   `DuplicateKeyRejectingJsonValue`, or use `JcsDecoder` for raw JCS text, when
   uniqueness is part of the contract.
-- Ordinary `JsonDecoder` requires negative integers to fit `i64` and
+- Ordinary text decoding and encoding require negative integers to fit `i64` and
   non-negative integers to fit `u64`; `JcsDecoder` rounds every number to a
   finite `f64`. Thus `9007199254740993` becomes `9007199254740992`. Use strings
   or domain types when every decimal digit must be preserved.
+- `JsonValueEncoder` recognizes only the exact private `Number` Serde struct protocol; an ordinary map with the same field name remains an object. Malformed `RawValue` and `Number` protocols return `JsonSerializationErrorKind::InvalidSerializerState`, with `JsonSerializerStateError::InvalidRawValueProtocol` or `InvalidNumberProtocol` respectively. Seed-based value construction only sees native numeric events and cannot infer private map provenance.
+- Tree traversal counts an existing `serde_json::Number` using the length of its current compact display. Under `arbitrary_precision`, this permits accounting for a stored wide number such as `1e400`; ordinary and JCS encoders still reject numbers outside their own finite range.
 - Set finite limits at every untrusted boundary. `unlimited()` disables value,
   output, and working-memory limits; use it only for trusted input or data
   already admitted by another layer. An outer output
@@ -228,6 +237,7 @@ identifies the separate auxiliary-capacity limit configured with
   [JSON 数字契约](doc/number_contract.zh_CN.md)
 - [Design documents](doc/json_design.md) ·
   [设计文档](doc/json_design.zh_CN.md)
+- [0.12 migration guide](doc/migration_0_12.md) · [迁移指南](doc/migration_0_12.zh_CN.md)
 - [Benchmark guide](doc/benchmark_baseline.md) ·
   [基准测试指南](doc/benchmark_baseline.zh_CN.md)
 - [Released API documentation](https://docs.rs/qubit-json); for the current

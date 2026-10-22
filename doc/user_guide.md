@@ -1,6 +1,6 @@
 # Qubit JSON user guide
 
-This guide targets Rust 1.94+ applications using `qubit-json` 0.11. It is for
+This guide targets Rust 1.94+ applications using `qubit-json` 0.12. It is for
 services, configuration readers, and data pipelines that must admit JSON under
 caller-owned resource limits while keeping Serde's data model. It does not
 replace `serde_json` or impose application schemas.
@@ -47,8 +47,8 @@ while developing against unpublished changes:
 
 ```toml
 [dependencies]
-qubit-json = "0.11"
-qubit-budget = { version = "0.9", features = ["json"] }
+qubit-json = "0.12"
+qubit-budget = { version = "0.9.1", features = ["json"] }
 serde_json = "1.0"
 ```
 
@@ -94,8 +94,10 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 ```
 
 The observable success result is an admitted `serde_json::Value`. The failure
-branch returns `JsonDecodeErrorKind::Budget` and preserves the measured raw
-input length without committing a decoded value. This lets an HTTP adapter map
+branch returns `JsonDecodeErrorKind::Budget` and reports 11 observed input bytes.
+That accessor describes bytes observed by this call, not bytes committed to a
+cumulative budget: the rejected input charge is rolled back with the failed
+value attempt, while a previously accepted input charge remains committed. This lets an HTTP adapter map
 stable error categories to responses without matching private parser details.
 
 For output, create `JsonEncoder::with_limits(JsonEncodeLimits::...)` and call
@@ -147,7 +149,7 @@ Enable the optional `jcs` feature and give `JcsEncoder` a constructed
 
 ```toml
 [dependencies]
-qubit-json = { version = "0.11", features = ["jcs"] }
+qubit-json = { version = "0.12", features = ["jcs"] }
 serde_json = "1.0"
 ```
 
@@ -249,7 +251,7 @@ let error = JcsDecoder::unlimited()
     .unwrap_err();
 assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
 let value = JcsDecoder::unlimited()
-    .decode_str(r#"{"x":1,"\\u0078":2}"#)
+    .decode_str(r#"{"x":1,"\u0078":2}"#)
     .unwrap();
 assert_eq!(value.as_object().unwrap().len(), 2);
 ```
@@ -282,7 +284,7 @@ from root-inclusive `max_depth`. Public error families also include
 `JcsEncodeError`, `JsonSerializationError`, and the ordinary
 `JsonDecodeError` / `JsonEncodeError` domain errors.
 
-Keys are compared after JSON unescaping, so `"x"` and `"\\u0078"` are
+Keys are compared after JSON unescaping, so `"x"` and `"\u0078"` are
 duplicates, including in nested objects. Unicode is not normalized to NFC or
 NFD, so different code-point sequences remain distinct keys. Valid JSON
 whitespace and member ordering need not be canonical. Comments, a BOM, trailing
@@ -514,6 +516,18 @@ and output failures retain mutations already made to the value. A visitor can
 return `JsonTreeControl::SkipSubtree` to skip descendant callbacks, but final
 output accounting still covers every resulting descendant.
 
+## Numeric paths, private protocols, and Display
+
+Choose one of three numeric boundaries deliberately:
+
+- **Ordinary text and Serde events:** strict text requires negative integers in `i64`, non-negative integers in `u64`, and fractional or exponent values that convert to finite `f64`. `i128` and `u128` serializer/seed events are explicitly range-checked. Text decoding checks `NumberBytes` before numeric range. A generic seed has no original token, so it cannot enforce that lexical limit; for map-shaped Serde events it also cannot tell a real object from an upstream imitation of serde_json's private Number map.
+- **An already materialized `Value` tree:** `JsonTreeReader` counts each existing Number's actual compact display representation without converting it to `f64` or normalizing it. With `arbitrary_precision`, it can count a stored `1e400` or a 39-digit integer at its actual representation length. This accounting rule does not make the number acceptable to an ordinary or JCS encoder.
+- **JCS text:** `JcsDecoder` uses finite IEEE-754 binary64 for every token, including integer lexemes. For example, `9007199254740993` rounds to `9007199254740992`; overflow such as `1e400` is rejected. It also rejects keys duplicated after JSON unescaping and keeps the 127-container materialization guard.
+
+The encoder recognizes two exact serde_json private struct protocols: `RawValue` and `Number`. A genuine Number protocol contains one string payload, accepted through `serialize_str` or one `collect_str`; the text is validated before emission or Value construction. A normal map containing a key named `$serde_json::private::Number` remains an object. Invalid hand-written protocol shapes produce `JsonSerializationErrorKind::InvalidSerializerState` with `JsonSerializerStateError::InvalidRawValueProtocol` or `InvalidNumberProtocol`. The error type is exhaustive, so downstream `match` expressions must handle the added variant. Diagnostics do not retain the private payload text.
+
+For a `Display` value encoded as a JSON string or object key, each formatting chunk is checked against the prospective complete string/key measurement before the collector appends it. A successful preview does not consume budget; after formatting, the complete measurement is admitted once. This prevents the library collector from growing past configured string/key limits. It cannot control allocations made internally by user `Display::fmt`, allocator metadata, or process RSS. For a `RawValue`/Number raw-output payload, the JSON structure is validated only after the complete text has been collected; output-byte bounds still apply during collection.
+
 ## Errors and diagnostics
 
 Strict and normalizing decoders return the same generic `JsonDecodeError`.
@@ -543,7 +557,7 @@ typed accessors expose only applicable details:
 | `ObjectKey` | `UnsupportedMapKey`, `DuplicateObjectKey` | `is_map_key_error()`, `map_key_kind()` |
 | `RawValue` | `InvalidRawValue` | `is_raw_value_error()` |
 | `Capacity` | `CollectionLengthOverflow` | `collection_kind()` |
-| `SerializerContract` | `InvalidSerializerState`, `DisplayFormattingFailed` | `is_serializer_contract_error()`, `serializer_state_error()` |
+| `SerializerContract` | `InvalidSerializerState` (including `InvalidRawValueProtocol` and `InvalidNumberProtocol`), `DisplayFormattingFailed` | `is_serializer_contract_error()`, `serializer_state_error()` |
 | `Custom` | `CustomSerialization` | Opaque by design: arbitrary serializer text is not retained |
 
 `stage()` identifies the public processing boundary precisely:
@@ -614,6 +628,8 @@ untrusted inputs onto the Rust call stack and does not make arbitrary target
 deserializers safe.
 
 ## Further reading
+
+- [0.12 migration guide](migration_0_12.md) · [简体中文迁移指南](migration_0_12.zh_CN.md)
 
 - [English README](../README.md) · [中文 README](../README.zh_CN.md)
 - [中文用户手册](user_guide.zh_CN.md)

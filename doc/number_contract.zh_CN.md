@@ -40,7 +40,7 @@ parser。`n` 后缀仅属于 JavaScript 源码；`123n` 不是合法 JSON，绝�
 数字（如 `1e400`）被拒绝。整数的精确十进制表示不能从结果中恢复。
 
 使用 JSON 字符串承载必须精确保留的 ID、金额或其他十进制值。普通 `JsonDecoder`、normalizing
-解码、Serde seed 和独立 `RawValue` 路径继续遵守各自原有契约；该例外仅适用于显式调用 `JcsDecoder`。
+解码和 `RawValue` 协议采用普通严格契约；只有显式调用 `JcsDecoder` 才使用 JCS binary64 模型。
 JCS 解码的 `NumberBytes` 仍按原始 token 字节数计量，并先于范围检查；预算限制计量资源，不是精确堆内存上限。
 
 ## 精确值和更宽的值
@@ -49,12 +49,14 @@ JCS 解码的 `NumberBytes` 仍按原始 token 字节数计量，并先于范围
 使用十进制字符串或 coefficient/scale 对象。裸小数 JSON number 采用 binary64 语义，不是精确
 十进制 wire 格式。
 
-## Serde 边界
+## 已物化树与 Serde seed
 
-`qubit-json` 自身不启用 serde_json 的 `arbitrary_precision` feature。即使其他依赖在统一后的依赖图中启用了该 feature，
-`JcsDecoder` 仍由 scanner 按 binary64 数字模型解码；真实的 `$serde_json::private::Number` 键对象也仍是普通对象，
-不会被解释为数字。此保证仅针对 JCS 文本解码，不扩展到任意 Serde Value seed。独立的 `RawValue` 集成仍保留。
+数字规则取决于入口：
 
-`AccountingJsonValueSeed` 看到的是已解码的 Serde 事件。它可以拒绝无法装入 value 模型的宽整数事件，
-但不能检查原始 token 或执行词法预算。需要语法、范围和 `NumberBytes` 保证时，JSON 文本必须
-经过 `JsonDecoder`；若需 JCS binary64 舍入和重复键拒绝，则使用 `JcsDecoder`。
+- 文本解码、规范化解码、普通序列化及 Serde 原生整数事件采用上文普通契约。`i128`/`u128` 只有能表示为相应 `i64` 或 `u64` 时才接受。
+- `AccountingJsonValueSeed` 与 `DuplicateKeyRejectingJsonValueSeed` 接收的是已解码事件，而不是源文本。它们会检查原生整数事件是否在 64 位范围内，但看不到原始 token，也无法执行 `NumberBytes`。如果 `arbitrary_precision` 将数字呈现为 map 事件，seed 无法区分它与同形状的真实对象，因此按对象保留。需要可靠文本来源时，使用受控文本、RawValue 或 JCS 入口。
+- `JsonTreeReader` 读取的是已存在的 `serde_json::Value`，按 Number 当前紧凑显示表示的字节长度计量；不转换为 `f64`，也不套用普通文本 encoder 的范围限制。启用 `arbitrary_precision` 后，已有的 `1e400` 可安全计量，39 位整数则按 39 字节计费。普通 `JsonEncoder` 与 `JcsEncoder` 仍会拒绝超出各自契约的数字。
+
+crate 自身不启用 serde_json 的 `arbitrary_precision`。若其他依赖统一启用了该 feature，encoder 会识别 serde_json 精确的私有 Number struct 协议：只有一个字符串 payload，经 `serialize_str` 或一次 `collect_str` 提交。它会用共享 JSON 数字 scanner 校验后再输出或构造 Value。普通对象即使有 `$serde_json::private::Number` 键也仍按对象处理。单独的 `RawValue` 私有协议同样受支持并会验证。私有协议形状错误返回 `JsonSerializationErrorKind::InvalidSerializerState`，具体状态原因是 `JsonSerializerStateError::InvalidNumberProtocol` 或 `InvalidRawValueProtocol`；诊断文本不泄露 payload。
+
+JCS 保持独立：原始文本对所有数字使用有限 binary64，溢出值（例如 `1e400`）会被拒绝；在 `arbitrary_precision` 下已有宽 Number 不会让 `JcsEncoder` 接受它。
