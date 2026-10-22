@@ -97,7 +97,9 @@ where
             Ok(written) => {
                 if written == 0 && !input.is_empty() {
                     let error = io::Error::new(io::ErrorKind::WriteZero, "JSON output writer accepted no bytes");
-                    self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
+                    if self.io_error.is_none() {
+                        self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
+                    }
                     return Err(error);
                 }
                 if self.has_output_budget {
@@ -110,7 +112,9 @@ where
                 Ok(written)
             }
             Err(error) => {
-                self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
+                if error.kind() != io::ErrorKind::Interrupted && self.io_error.is_none() {
+                    self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
+                }
                 Err(error)
             }
         }
@@ -121,7 +125,9 @@ where
         match Output::flush(&mut self.writer) {
             Ok(()) => Ok(()),
             Err(error) => {
-                self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
+                if self.io_error.is_none() {
+                    self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
+                }
                 Err(error)
             }
         }
