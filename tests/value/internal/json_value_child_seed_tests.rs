@@ -20,16 +20,19 @@ use serde_json::Deserializer;
 fn test_json_value_child_seed_checks_prospective_array_item() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .structure_limits(
-            StructureLimits::builder().sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, 1)),
+            StructureLimits::builder()
+                .sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, 1)),
         )
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"[null,null]"#);
 
-    assert!(
-        AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(&mut deserializer)
-            .is_err()
-    );
+    AccountingJsonValueSeed::new(&mut transaction)
+        .deserialize(&mut deserializer)
+        .expect_err("the second array item must exceed the one-item sequence limit");
+    let error = transaction
+        .commit()
+        .expect_err("failed admission must poison the transaction");
+    assert_eq!(error.resource(), &JsonResource::SequenceItems);
 }

@@ -84,15 +84,24 @@ impl JsonSerializationError {
         match self.kind {
             JsonSerializationErrorKind::IntegerOutOfRange { .. }
             | JsonSerializationErrorKind::NonFiniteFloat
-            | JsonSerializationErrorKind::InvalidNumberRepresentation => JsonSerializationErrorCategory::Number,
-            JsonSerializationErrorKind::UnsupportedMapKey { .. } | JsonSerializationErrorKind::DuplicateObjectKey => {
+            | JsonSerializationErrorKind::InvalidNumberRepresentation => {
+                JsonSerializationErrorCategory::Number
+            }
+            JsonSerializationErrorKind::UnsupportedMapKey { .. }
+            | JsonSerializationErrorKind::DuplicateObjectKey => {
                 JsonSerializationErrorCategory::ObjectKey
             }
             JsonSerializationErrorKind::InvalidRawValue => JsonSerializationErrorCategory::RawValue,
-            JsonSerializationErrorKind::CollectionLengthOverflow { .. } => JsonSerializationErrorCategory::Capacity,
+            JsonSerializationErrorKind::CollectionLengthOverflow { .. } => {
+                JsonSerializationErrorCategory::Capacity
+            }
             JsonSerializationErrorKind::InvalidSerializerState { .. }
-            | JsonSerializationErrorKind::DisplayFormattingFailed => JsonSerializationErrorCategory::SerializerContract,
-            JsonSerializationErrorKind::CustomSerialization => JsonSerializationErrorCategory::Custom,
+            | JsonSerializationErrorKind::DisplayFormattingFailed => {
+                JsonSerializationErrorCategory::SerializerContract
+            }
+            JsonSerializationErrorKind::CustomSerialization => {
+                JsonSerializationErrorCategory::Custom
+            }
         }
     }
 
@@ -139,7 +148,10 @@ impl JsonSerializationError {
     #[must_use]
     #[inline(always)]
     pub const fn is_serializer_contract_error(&self) -> bool {
-        matches!(self.category(), JsonSerializationErrorCategory::SerializerContract)
+        matches!(
+            self.category(),
+            JsonSerializationErrorCategory::SerializerContract
+        )
     }
 
     /// Returns the signedness of an out-of-range integer, when applicable.

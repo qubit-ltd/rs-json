@@ -7,6 +7,8 @@
 // =============================================================================
 //! Budget categories used by strict display-based JSON encoding.
 
+use qubit_budget::json::JsonMeasurement;
+
 /// Resource checked while a `Display` implementation emits text chunks.
 #[derive(Clone, Copy)]
 pub(super) enum DisplayBudgetKind {
@@ -18,4 +20,16 @@ pub(super) enum DisplayBudgetKind {
 
     /// Raw JSON source, bounded by the complete output limit while collected.
     RawOutput,
+}
+
+impl DisplayBudgetKind {
+    /// Returns the budget measurement for prospective text, if it is a JSON
+    /// string or key payload.
+    pub(super) fn measurement(self, depth: usize, bytes: usize) -> Option<JsonMeasurement> {
+        match self {
+            Self::String => Some(JsonMeasurement::String { depth, bytes }),
+            Self::Key => Some(JsonMeasurement::Key { bytes }),
+            Self::RawOutput => None,
+        }
+    }
 }

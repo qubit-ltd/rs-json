@@ -18,4 +18,4 @@ pub use json_value_encoder::JsonValueEncoder;
 
 pub mod traverse;
 
-mod internal;
+pub(crate) mod internal;

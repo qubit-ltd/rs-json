@@ -27,6 +27,7 @@ use serde_json::Value;
 use super::JsonKeySeed;
 use super::JsonValueChildSeed;
 use super::json_number_lexeme_length;
+use crate::internal::StrictJsonNumber;
 
 /// Visitor used to construct and account one JSON value.
 pub(in crate::value) struct JsonValueVisitor<'transaction, 'budget, R, Q>
@@ -110,7 +111,8 @@ where
     }
 }
 
-impl<'de, 'transaction, 'budget, R, Q> Visitor<'de> for JsonValueVisitor<'transaction, 'budget, R, Q>
+impl<'de, 'transaction, 'budget, R, Q> Visitor<'de>
+    for JsonValueVisitor<'transaction, 'budget, R, Q>
 where
     R: Clone + Debug,
     Q: ResourceQuantity,
@@ -146,8 +148,7 @@ where
     where
         E: Error,
     {
-        let number =
-            Number::from_i128(value).ok_or_else(|| E::custom("JSON integer is outside the supported 64-bit range"))?;
+        let number = StrictJsonNumber::from_i128(value).map_err(E::custom)?;
         self.enter_number(number)
     }
 
@@ -166,8 +167,7 @@ where
     where
         E: Error,
     {
-        let number =
-            Number::from_u128(value).ok_or_else(|| E::custom("JSON integer is outside the supported 64-bit range"))?;
+        let number = StrictJsonNumber::from_u128(value).map_err(E::custom)?;
         self.enter_number(number)
     }
 
@@ -176,8 +176,8 @@ where
     where
         E: Error,
     {
-        let number =
-            Number::from_f64(value).ok_or_else(|| E::custom("non-finite float is not representable as JSON"))?;
+        let number = Number::from_f64(value)
+            .ok_or_else(|| E::custom("non-finite float is not representable as JSON"))?;
         self.enter_number(number)
     }
 
@@ -253,7 +253,8 @@ where
                 .len()
                 .checked_add(1)
                 .ok_or_else(|| A::Error::custom("JSON sequence item count overflowed usize"))?;
-            let Some(value) = sequence.next_element_seed(self.prospective_child(JsonContainerKind::Sequence, next))?
+            let Some(value) = sequence
+                .next_element_seed(self.prospective_child(JsonContainerKind::Sequence, next))?
             else {
                 break;
             };

@@ -19,6 +19,8 @@ use serde_json::Map;
 use serde_json::Number;
 use serde_json::Value;
 
+use crate::internal::StrictJsonNumber;
+
 use super::super::DuplicateKeyRejectingJsonValue;
 
 /// Builds one duplicate-key-free JSON value from Serde events.
@@ -47,9 +49,9 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
     where
         E: de::Error,
     {
-        Number::from_i128(value)
+        StrictJsonNumber::from_i128(value)
+            .map_err(de::Error::custom)
             .map(|number| DuplicateKeyRejectingJsonValue(Value::Number(number)))
-            .ok_or_else(|| de::Error::custom("JSON number out of range"))
     }
 
     /// Decodes an unsigned JSON integer.
@@ -62,9 +64,9 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
     where
         E: de::Error,
     {
-        Number::from_u128(value)
+        StrictJsonNumber::from_u128(value)
+            .map_err(de::Error::custom)
             .map(|number| DuplicateKeyRejectingJsonValue(Value::Number(number)))
-            .ok_or_else(|| de::Error::custom("JSON number out of range"))
     }
 
     /// Decodes a finite JSON floating-point number.
@@ -79,7 +81,9 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
 
     /// Decodes a borrowed JSON string into owned storage.
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
-        Ok(DuplicateKeyRejectingJsonValue(Value::String(value.to_owned())))
+        Ok(DuplicateKeyRejectingJsonValue(Value::String(
+            value.to_owned(),
+        )))
     }
 
     /// Decodes an owned JSON string without another allocation.
@@ -226,7 +230,11 @@ mod tests {
                 .into_inner(),
             Value::from(i64::MIN),
         );
-        assert!(DuplicateKeyRejectingJsonVisitor.visit_i128::<Error>(i128::MIN).is_err());
+        assert!(
+            DuplicateKeyRejectingJsonVisitor
+                .visit_i128::<Error>(i128::MIN)
+                .is_err()
+        );
         assert_eq!(
             DuplicateKeyRejectingJsonVisitor
                 .visit_u128::<Error>(u64::MAX.into())
@@ -234,6 +242,10 @@ mod tests {
                 .into_inner(),
             Value::from(u64::MAX),
         );
-        assert!(DuplicateKeyRejectingJsonVisitor.visit_u128::<Error>(u128::MAX).is_err());
+        assert!(
+            DuplicateKeyRejectingJsonVisitor
+                .visit_u128::<Error>(u128::MAX)
+                .is_err()
+        );
     }
 }

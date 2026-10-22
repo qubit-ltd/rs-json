@@ -59,7 +59,10 @@ where
     }
 
     /// Records one failed check before converting it into a Serde error.
-    pub(super) fn record<E>(&mut self, result: Result<(), MeasuredBudgetError<R, Q>>) -> Result<(), E>
+    pub(super) fn record<E>(
+        &mut self,
+        result: Result<(), MeasuredBudgetError<R, Q>>,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -81,8 +84,35 @@ where
         self.record(result)
     }
 
+    /// Checks prospective display text without charging the value transaction.
+    ///
+    /// Returns a serializer error and records the budget violation when the
+    /// prospective string or key exceeds its configured limits.
+    pub(super) fn check_display<E>(
+        &mut self,
+        kind: DisplayBudgetKind,
+        depth: usize,
+        bytes: usize,
+    ) -> Result<(), E>
+    where
+        E: Error,
+    {
+        if !self.has_value_limits {
+            return Ok(());
+        }
+        let Some(measurement) = kind.measurement(depth, bytes) else {
+            return Ok(());
+        };
+        let result = self.transaction.check_admit(measurement);
+        self.record(result)
+    }
+
     /// Checks and charges a container before requesting its Serde compound.
-    pub(super) fn enter_container<E>(&mut self, kind: JsonContainerKind, depth: usize) -> Result<(), E>
+    pub(super) fn enter_container<E>(
+        &mut self,
+        kind: JsonContainerKind,
+        depth: usize,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -94,7 +124,11 @@ where
     }
 
     /// Checks one prospective container count without charging value usage.
-    pub(super) fn check_container_count<E>(&mut self, kind: JsonContainerKind, prospective: usize) -> Result<(), E>
+    pub(super) fn check_container_count<E>(
+        &mut self,
+        kind: JsonContainerKind,
+        prospective: usize,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -118,7 +152,8 @@ where
         let output = self.output.borrow().check_available(value.len());
         self.record(output)?;
         let result = {
-            let mut scanner = JsonLexicalScanner::at_depth(&mut *self.transaction, depth, self.has_value_limits);
+            let mut scanner =
+                JsonLexicalScanner::at_depth(&mut *self.transaction, depth, self.has_value_limits);
             scanner.scan(value.as_bytes())
         };
         match result {
@@ -144,23 +179,15 @@ where
         E: Error,
         T: Display + ?Sized,
     {
-        let mut collector = BudgetedDisplayCollector::new(context);
+        let mut collector = BudgetedDisplayCollector::new(context, kind, depth);
         write!(&mut collector, "{value}").map_err(|_| {
             context
                 .borrow_mut()
                 .serialization_error(JsonSerializationErrorKind::DisplayFormattingFailed)
         })?;
         let text = collector.text;
-        {
-            let mut context = collector.context.borrow_mut();
-            match kind {
-                DisplayBudgetKind::String => context.admit(JsonMeasurement::String {
-                    depth,
-                    bytes: text.len(),
-                }),
-                DisplayBudgetKind::Key => context.admit(JsonMeasurement::Key { bytes: text.len() }),
-                DisplayBudgetKind::RawOutput => Ok(()),
-            }?;
+        if let Some(measurement) = kind.measurement(depth, text.len()) {
+            collector.context.borrow_mut().admit(measurement)?;
         }
         Ok(text)
     }

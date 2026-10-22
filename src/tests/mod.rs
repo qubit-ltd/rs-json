@@ -7,4 +7,5 @@
 // =============================================================================
 //! Crate-internal tests for contracts unavailable through the public API.
 
+mod internal;
 mod lexical;

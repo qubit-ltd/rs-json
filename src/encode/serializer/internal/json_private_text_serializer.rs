@@ -17,17 +17,27 @@ use serde::Serializer;
 use super::super::display_budget_kind::DisplayBudgetKind;
 use super::super::json_encode_context::JsonEncodeContext;
 use super::PrivateTextKind;
+use super::json_private_number_preflight;
+use crate::encode::JsonSerializationErrorKind;
+use crate::encode::JsonSerializerStateError;
 
 /// Checks the string token emitted by a serde_json private serializer.
-pub(in crate::encode::serializer) struct JsonPrivateTextSerializer<'context, 'transaction, 'budget, S, R, Q>
-where
+pub(in crate::encode::serializer) struct JsonPrivateTextSerializer<
+    'context,
+    'transaction,
+    'budget,
+    S,
+    R,
+    Q,
+> where
     Q: ResourceQuantity,
 {
     /// serde_json private string emitter.
     pub(in crate::encode::serializer) inner: S,
 
     /// Shared traversal context.
-    pub(in crate::encode::serializer) context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+    pub(in crate::encode::serializer) context:
+        &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 
     /// Budget semantics represented by the emitted text.
     pub(in crate::encode::serializer) kind: PrivateTextKind,
@@ -37,9 +47,29 @@ macro_rules! delegate_number_method {
     ($name:ident, $type:ty) => {
         #[doc = "Forwards the scalar to the underlying serializer unchanged."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
+            self.reject_non_text_number_payload()?;
             self.inner.$name(value)
         }
     };
+}
+
+impl<S, R, Q> JsonPrivateTextSerializer<'_, '_, '_, S, R, Q>
+where
+    S: Serializer,
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    /// Rejects non-text payload methods for the Number protocol.
+    fn reject_non_text_number_payload(&self) -> Result<(), S::Error> {
+        if matches!(self.kind, PrivateTextKind::Number { .. }) {
+            return Err(self.context.borrow_mut().serialization_error(
+                JsonSerializationErrorKind::InvalidSerializerState {
+                    reason: JsonSerializerStateError::InvalidNumberProtocol,
+                },
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl<'context, 'transaction, 'budget, S, R, Q> Serializer
@@ -76,18 +106,26 @@ where
 
     /// Preflights raw JSON text before forwarding the string token.
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
-        let PrivateTextKind::RawValue { depth } = self.kind;
-        self.context.borrow_mut().preflight_raw(value, depth)?;
+        match self.kind {
+            PrivateTextKind::RawValue { depth } => {
+                self.context.borrow_mut().preflight_raw(value, depth)?;
+            }
+            PrivateTextKind::Number { depth } => {
+                json_private_number_preflight::preflight(&self.context, value, depth)?;
+            }
+        }
         self.inner.serialize_str(value)
     }
 
     /// Forwards byte payloads unchanged.
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_bytes(value)
     }
 
     /// Forwards an absent optional payload unchanged.
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_none()
     }
 
@@ -96,16 +134,19 @@ where
     where
         T: Serialize + ?Sized,
     {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_some(value)
     }
 
     /// Forwards a unit payload unchanged.
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_unit()
     }
 
     /// Forwards a unit-struct payload unchanged.
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_unit_struct(name)
     }
 
@@ -116,14 +157,21 @@ where
         variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        self.inner.serialize_unit_variant(name, variant_index, variant)
+        self.reject_non_text_number_payload()?;
+        self.inner
+            .serialize_unit_variant(name, variant_index, variant)
     }
 
     /// Forwards a newtype-struct payload unchanged.
-    fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T>(
+        self,
+        name: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_newtype_struct(name, value)
     }
 
@@ -138,22 +186,30 @@ where
     where
         T: Serialize + ?Sized,
     {
+        self.reject_non_text_number_payload()?;
         self.inner
             .serialize_newtype_variant(name, variant_index, variant, value)
     }
 
     /// Creates a sequence serializer through the underlying serializer.
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_seq(len)
     }
 
     /// Creates a tuple serializer through the underlying serializer.
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_tuple(len)
     }
 
     /// Creates a tuple-struct serializer through the underlying serializer.
-    fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    fn serialize_tuple_struct(
+        self,
+        name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_tuple_struct(name, len)
     }
 
@@ -165,16 +221,24 @@ where
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        self.inner.serialize_tuple_variant(name, variant_index, variant, len)
+        self.reject_non_text_number_payload()?;
+        self.inner
+            .serialize_tuple_variant(name, variant_index, variant, len)
     }
 
     /// Creates a map serializer through the underlying serializer.
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_map(len)
     }
 
     /// Creates a struct serializer through the underlying serializer.
-    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(
+        self,
+        name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
+        self.reject_non_text_number_payload()?;
         self.inner.serialize_struct(name, len)
     }
 
@@ -186,7 +250,9 @@ where
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        self.inner.serialize_struct_variant(name, variant_index, variant, len)
+        self.reject_non_text_number_payload()?;
+        self.inner
+            .serialize_struct_variant(name, variant_index, variant, len)
     }
 
     /// Formats, preflights, and forwards a display-based raw payload.
@@ -194,14 +260,23 @@ where
     where
         T: Display + ?Sized,
     {
-        let PrivateTextKind::RawValue { depth } = self.kind;
+        let depth = match self.kind {
+            PrivateTextKind::RawValue { depth } | PrivateTextKind::Number { depth } => depth,
+        };
         let text = JsonEncodeContext::collect_display::<S::Error, _>(
             self.context,
             value,
             DisplayBudgetKind::RawOutput,
             depth,
         )?;
-        self.context.borrow_mut().preflight_raw(&text, depth)?;
+        match self.kind {
+            PrivateTextKind::RawValue { .. } => {
+                self.context.borrow_mut().preflight_raw(&text, depth)?;
+            }
+            PrivateTextKind::Number { .. } => {
+                json_private_number_preflight::preflight(&self.context, &text, depth)?;
+            }
+        }
         self.inner.serialize_str(&text)
     }
 

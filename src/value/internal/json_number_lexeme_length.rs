@@ -7,25 +7,22 @@
 // =============================================================================
 //! Measures representable serde_json number lexemes without allocation.
 
+use std::fmt::Write as _;
+
 use serde_json::Number;
 
-use crate::internal::JsonLexemeLength;
+use super::JsonNumberLengthWriter;
 
 /// Returns the compact JSON byte length emitted for one representable number.
 ///
-/// This helper follows the crate's standard `i64`, `u64`, and finite `f64`
-/// value model and performs no allocation.
+/// This helper counts the exact representation used by `Number` and performs no allocation.
 #[must_use]
 pub(crate) fn json_number_lexeme_length(number: &Number) -> usize {
-    if number.is_i64() {
-        let value = number.as_i64().expect("an i64-classified JSON number must expose i64");
-        let sign = usize::from(value.is_negative());
-        return sign + JsonLexemeLength::unsigned_integer(value.unsigned_abs().into());
-    }
-    if number.is_u64() {
-        let value = number.as_u64().expect("a u64-classified JSON number must expose u64");
-        return JsonLexemeLength::unsigned_integer(value.into());
-    }
-    let value = number.as_f64().expect("a finite JSON number must expose f64");
-    JsonLexemeLength::finite_f64(value)
+    let mut writer = JsonNumberLengthWriter::new();
+    let result = write!(&mut writer, "{number}");
+    debug_assert!(
+        result.is_ok(),
+        "Number Display only writes to an infallible counter"
+    );
+    writer.len()
 }

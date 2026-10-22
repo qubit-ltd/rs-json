@@ -17,8 +17,16 @@ use super::internal::JsonKeyBudgetSerializer;
 use super::json_encode_context::JsonEncodeContext;
 
 /// Wraps a map key so it is traversed once through a key-aware decorator.
-pub(super) struct BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q, const VALUE_LIMITS: bool>
-where
+pub(super) struct BudgetedKey<
+    'a,
+    'transaction,
+    'budget,
+    'context,
+    T,
+    R,
+    Q,
+    const VALUE_LIMITS: bool,
+> where
     T: ?Sized,
     Q: ResourceQuantity,
 {
@@ -46,7 +54,8 @@ where
     }
 }
 
-impl<T, R, Q, const VALUE_LIMITS: bool> Serialize for BudgetedKey<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
+impl<T, R, Q, const VALUE_LIMITS: bool> Serialize
+    for BudgetedKey<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
 where
     T: Serialize + ?Sized,
     R: Clone,
@@ -58,9 +67,10 @@ where
     where
         S: Serializer,
     {
-        self.value.serialize(JsonKeyBudgetSerializer::<S, R, Q, VALUE_LIMITS> {
-            inner: serializer,
-            context: self.context,
-        })
+        self.value
+            .serialize(JsonKeyBudgetSerializer::<S, R, Q, VALUE_LIMITS> {
+                inner: serializer,
+                context: self.context,
+            })
     }
 }

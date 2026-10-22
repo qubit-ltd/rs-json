@@ -22,7 +22,9 @@ fn test_jcs_roundtrip_reads_encoder_integer_boundary_output() {
 
 #[test]
 fn test_jcs_roundtrip_fixed_rfc_binary64_vector() {
-    let value = serde_json::Value::Number(serde_json::Number::from_f64(f64::from_bits(0x4430_0000_0000_0000)).unwrap());
+    let value = serde_json::Value::Number(
+        serde_json::Number::from_f64(f64::from_bits(0x4430_0000_0000_0000)).unwrap(),
+    );
     let expected = b"295147905179352830000";
     let first = JcsEncoder::unlimited().to_vec(&value).unwrap();
     assert_eq!(first, expected);
@@ -81,6 +83,9 @@ fn test_jcs_roundtrip_nested_value_and_number_forms() {
         let decoded = JcsDecoder::unlimited().decode_str(input).unwrap();
         let canonical = JcsEncoder::unlimited().to_vec(&decoded).unwrap();
         let reparsed = JcsDecoder::unlimited().decode_utf8(&canonical).unwrap();
-        assert_eq!(JcsEncoder::unlimited().to_vec(&reparsed).unwrap(), canonical);
+        assert_eq!(
+            JcsEncoder::unlimited().to_vec(&reparsed).unwrap(),
+            canonical
+        );
     }
 }

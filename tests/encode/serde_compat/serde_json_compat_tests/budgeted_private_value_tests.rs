@@ -10,6 +10,8 @@
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
+use qubit_json::encode::JsonSerializationErrorKind;
+use qubit_json::encode::JsonSerializerStateError;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeMap;
@@ -22,7 +24,7 @@ use serde::ser::SerializeTupleVariant;
 
 use crate::encode::json_encode_test_support::encode;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum PrivateScalar {
     Bool,
     I8,
@@ -83,7 +85,9 @@ impl Serialize for PrivateScalar {
             Self::UnitStruct => serializer.serialize_unit_struct("Value"),
             Self::UnitVariant => serializer.serialize_unit_variant("Value", 0, "Unit"),
             Self::Newtype => serializer.serialize_newtype_struct("Value", &"text"),
-            Self::NewtypeVariant => serializer.serialize_newtype_variant("Value", 0, "Variant", &"text"),
+            Self::NewtypeVariant => {
+                serializer.serialize_newtype_variant("Value", 0, "Variant", &"text")
+            }
             Self::Seq => serializer.serialize_seq(Some(0)).and_then(|seq| seq.end()),
             Self::Tuple => serializer.serialize_tuple(0).and_then(|tuple| tuple.end()),
             Self::TupleStruct => serializer
@@ -93,7 +97,9 @@ impl Serialize for PrivateScalar {
                 .serialize_tuple_variant("Value", 0, "Tuple", 0)
                 .and_then(|tuple| tuple.end()),
             Self::Map => serializer.serialize_map(Some(0)).and_then(|map| map.end()),
-            Self::Struct => serializer.serialize_struct("Value", 0).and_then(|value| value.end()),
+            Self::Struct => serializer
+                .serialize_struct("Value", 0)
+                .and_then(|value| value.end()),
             Self::StructVariant => serializer
                 .serialize_struct_variant("Value", 0, "Struct", 0)
                 .and_then(|value| value.end()),
@@ -125,6 +131,9 @@ impl Serialize for PrivateShape {
 /// serializer method, while preserving the public encoding entry point.
 #[test]
 fn test_budgeted_private_value_delegates_scalar_serializer_paths() {
+    let invalid_protocol = JsonSerializationErrorKind::InvalidSerializerState {
+        reason: JsonSerializerStateError::InvalidRawValueProtocol,
+    };
     let values = [
         PrivateScalar::Bool,
         PrivateScalar::I8,
@@ -158,7 +167,25 @@ fn test_budgeted_private_value_delegates_scalar_serializer_paths() {
         PrivateScalar::HumanReadable,
     ];
     for value in values {
-        let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
-        let _ = encode(&PrivateShape { value }, &mut session);
+        let mut session = JsonEncodeSession::from_limits(
+            JsonEncodeLimits::<JsonResource, usize>::builder().build(),
+        );
+        let result = encode(&PrivateShape { value }, &mut session);
+        if matches!(value, PrivateScalar::HumanReadable) {
+            assert_eq!(
+                result.expect("a string raw-value payload must encode"),
+                br#""text"#
+            );
+        } else {
+            assert_eq!(
+                result
+                    .expect_err("non-string raw-value protocol payload must be rejected")
+                    .serialization_error()
+                    .expect("raw-value protocol rejection is a serialization error")
+                    .kind(),
+                invalid_protocol,
+                "case={value:?}",
+            );
+        }
     }
 }

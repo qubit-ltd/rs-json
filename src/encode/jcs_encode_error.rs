@@ -94,20 +94,24 @@ where
     /// Converts a strict JSON encoder failure to its corresponding JCS class.
     pub(crate) fn from_json_encode(error: JsonEncodeError<R, Q>) -> Self {
         match error.kind() {
-            JsonEncodeErrorKind::Budget => {
-                Self::budget(error.into_budget_error().expect("budget kind retains a budget source"))
-            }
+            JsonEncodeErrorKind::Budget => Self::budget(
+                error
+                    .into_budget_error()
+                    .expect("budget kind retains a budget source"),
+            ),
             JsonEncodeErrorKind::Serialize => Self::serialization(
                 error
                     .into_serialization_error()
                     .expect("serialize kind retains a source"),
             ),
-            JsonEncodeErrorKind::Write => {
-                Self::write(error.into_write_error().expect("write kind retains an I/O source"))
-            }
-            JsonEncodeErrorKind::InvalidRawJson => Self::serialization(JsonSerializationError::new(
-                JsonSerializationErrorKind::CustomSerialization,
-            )),
+            JsonEncodeErrorKind::Write => Self::write(
+                error
+                    .into_write_error()
+                    .expect("write kind retains an I/O source"),
+            ),
+            JsonEncodeErrorKind::InvalidRawJson => Self::serialization(
+                JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization),
+            ),
         }
     }
 

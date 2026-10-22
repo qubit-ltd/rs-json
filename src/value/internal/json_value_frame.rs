@@ -6,13 +6,13 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-//! One open array or object in a JCS value builder.
+//! One open array or object in a lexical JSON value builder.
 
 use serde_json::Map;
 use serde_json::Value;
 
 /// The container currently being materialized.
-pub(in crate::decode) enum JcsValueFrame {
+pub(crate) enum JsonValueFrame {
     /// An array whose children are appended in source order.
     Array(Vec<Value>),
     /// An object with a decoded key awaiting its corresponding value.

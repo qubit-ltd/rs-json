@@ -96,7 +96,8 @@ where
     where
         F: FnMut(JsonLexicalEvent<'input>),
     {
-        let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
+        let mut cursor =
+            JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         cursor.set_number_model(self.number_model);
         let mut stack: Vec<JsonLexicalContainerFrame> = Vec::new();
         cursor.skip_whitespace();

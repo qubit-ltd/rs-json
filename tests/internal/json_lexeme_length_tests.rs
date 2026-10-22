@@ -27,8 +27,12 @@ where
             .max_number_bytes(expected.len())
             .build(),
     );
-    let encoded = encode(&value, &mut exact).expect("exact number-byte budget must admit the value");
-    assert_eq!(encoded, expected, "compact output must match serde_json for {value:?}");
+    let encoded =
+        encode(&value, &mut exact).expect("exact number-byte budget must admit the value");
+    assert_eq!(
+        encoded, expected,
+        "compact output must match serde_json for {value:?}"
+    );
 
     let mut short = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()

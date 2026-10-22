@@ -8,6 +8,7 @@
 //! Private serializer helper types.
 
 mod json_key_budget_serializer;
+mod json_private_number_preflight;
 mod json_private_text_serializer;
 mod private_text_kind;
 

@@ -94,19 +94,35 @@ fn assert_no_secret_fields(value: &Value) {
     }
 }
 
-/// Mutates object nodes in the same shape as a redaction visitor.
-struct SuccessVisitor;
+/// Removes secret fields and selects whether traversal enters containers.
+struct ControlVisitor {
+    skip_subtree: bool,
+}
 
-impl JsonTreeMutVisitor for SuccessVisitor {
+impl JsonTreeMutVisitor for ControlVisitor {
     type Error = std::convert::Infallible;
 
-    /// Removes secret fields and descends into every admitted container.
+    /// Applies redaction and returns the fuzz-selected subtree control.
     fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
         if let Value::Object(entries) = value {
             entries.remove("secret");
         }
-        Ok(JsonTreeControl::Descend)
+        Ok(if self.skip_subtree {
+            JsonTreeControl::SkipSubtree
+        } else {
+            JsonTreeControl::Descend
+        })
     }
+}
+
+/// Counts every JSON value and container in the completed tree.
+fn node_count(value: &Value) -> usize {
+    let children = match value {
+        Value::Array(values) => values.iter().map(node_count).sum(),
+        Value::Object(entries) => entries.values().map(node_count).sum(),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => 0,
+    };
+    1 + children
 }
 
 /// Returns a visitor error after a byte-selected number of callbacks.
@@ -155,10 +171,11 @@ impl JsonTreeMutVisitor for PanicVisitor {
 }
 
 fuzz_target!(|data: &[u8]| {
-    let Some(input) = bounded_input(data) else {
+    let Some(data) = bounded_input(data) else {
         return;
     };
-    let original = make_tree(input);
+    let (control, payload) = data.split_first().map_or((0, data), |(control, payload)| (*control, payload));
+    let original = serde_json::from_slice::<Value>(payload).unwrap_or_else(|_| make_tree(payload));
 
     let mut success_value = original.clone();
     let mut success_input_budget = generous_budget();
@@ -167,13 +184,47 @@ fuzz_target!(|data: &[u8]| {
         let mut input_transaction = success_input_budget.transaction();
         let mut output_transaction = success_output_budget.transaction();
         JsonTreeMutator::new(&mut input_transaction, &mut output_transaction)
-            .process(&mut success_value, &mut SuccessVisitor)
+            .process(
+                &mut success_value,
+                &mut ControlVisitor {
+                    skip_subtree: control & 1 != 0,
+                },
+            )
             .expect("generous success traversal must complete");
+        assert_eq!(output_transaction.used_nodes(), Some(node_count(&success_value)));
         input_transaction.commit().expect("input transaction commits");
         output_transaction.commit().expect("output transaction commits");
     }
     assert_serializable(&success_value);
-    assert_no_secret_fields(&success_value);
+    if control & 1 == 0 {
+        assert_no_secret_fields(&success_value);
+    }
+
+    let mut limited_value = original.clone();
+    let mut limited_input_budget = generous_budget();
+    let mut limited_output_budget = JsonValueBudget::new(
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)))
+            .build(),
+    );
+    let limited_error = {
+        let mut input_transaction = limited_input_budget.transaction();
+        let mut output_transaction = limited_output_budget.transaction();
+        JsonTreeMutator::new(&mut input_transaction, &mut output_transaction).process(
+            &mut limited_value,
+            &mut ControlVisitor {
+                skip_subtree: control & 1 != 0,
+            },
+        )
+    };
+    if node_count(&limited_value) > 1 {
+        assert!(matches!(
+            limited_error,
+            Err(JsonTreeMutateError::OutputBudget(error)) if error.resource() == &JsonResource::Nodes
+        ));
+    } else {
+        assert!(limited_error.is_ok(), "a one-node result must fit the one-node output budget");
+    }
 
     // Even an empty fuzz input produces the root object, two scalar fields,
     // and the items array, so a maximum of three nodes always rejects input.
@@ -190,7 +241,12 @@ fuzz_target!(|data: &[u8]| {
         let mut input_transaction = rejected_input_budget.transaction();
         let mut output_transaction = rejected_output_budget.transaction();
         let result = JsonTreeMutator::new(&mut input_transaction, &mut output_transaction)
-            .process(&mut rejected_value, &mut SuccessVisitor);
+            .process(
+                &mut rejected_value,
+                &mut ControlVisitor {
+                    skip_subtree: control & 1 != 0,
+                },
+            );
         assert!(matches!(result, Err(JsonTreeMutateError::InputBudget(_))));
     }
     assert_eq!(rejected_value, original);

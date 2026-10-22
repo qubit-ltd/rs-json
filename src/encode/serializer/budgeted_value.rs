@@ -17,8 +17,16 @@ use super::json_encode_context::JsonEncodeContext;
 use super::json_encode_serializer::JsonEncodeSerializer;
 
 /// Re-enters the budget-aware serializer for one nested value.
-pub(super) struct BudgetedValue<'a, 'transaction, 'budget, 'context, T, R, Q, const VALUE_LIMITS: bool>
-where
+pub(super) struct BudgetedValue<
+    'a,
+    'transaction,
+    'budget,
+    'context,
+    T,
+    R,
+    Q,
+    const VALUE_LIMITS: bool,
+> where
     T: ?Sized,
     Q: ResourceQuantity,
 {
@@ -45,11 +53,16 @@ where
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         depth: usize,
     ) -> Self {
-        Self { value, context, depth }
+        Self {
+            value,
+            context,
+            depth,
+        }
     }
 }
 
-impl<T, R, Q, const VALUE_LIMITS: bool> Serialize for BudgetedValue<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
+impl<T, R, Q, const VALUE_LIMITS: bool> Serialize
+    for BudgetedValue<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
 where
     T: Serialize + ?Sized,
     R: Clone,

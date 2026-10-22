@@ -61,7 +61,11 @@ impl JcsWorkingMemory {
     /// Returns `JcsReserveError::Limit` if the resulting tracked capacity
     /// exceeds the configured limit, or `JcsReserveError::Allocation` if
     /// reservation fails.
-    pub(super) fn reserve_stack<T>(&mut self, values: &mut Vec<T>, additional: usize) -> Result<(), JcsReserveError> {
+    pub(super) fn reserve_stack<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+    ) -> Result<(), JcsReserveError> {
         self.reserve(values, additional, true)
     }
 
@@ -98,7 +102,10 @@ impl JcsWorkingMemory {
     /// The caller must invoke this before dropping the corresponding vector.
     /// Returns a limit error if its capacity cannot be represented or is
     /// not currently tracked.
-    pub(super) fn release_object_entries<T>(&mut self, values: &Vec<T>) -> Result<(), JcsReserveError> {
+    pub(super) fn release_object_entries<T>(
+        &mut self,
+        values: &Vec<T>,
+    ) -> Result<(), JcsReserveError> {
         let bytes = values
             .capacity()
             .checked_mul(size_of::<T>())
@@ -131,7 +138,12 @@ impl JcsWorkingMemory {
     /// Returns a limit error on arithmetic overflow or when the requested or
     /// actual capacity exceeds the configured limit, and an allocation
     /// error if reserving memory fails.
-    fn reserve<T>(&mut self, values: &mut Vec<T>, additional: usize, is_stack: bool) -> Result<(), JcsReserveError> {
+    fn reserve<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+        is_stack: bool,
+    ) -> Result<(), JcsReserveError> {
         let required_capacity = values
             .len()
             .checked_add(additional)
@@ -246,14 +258,18 @@ mod tests {
         memory.reserve_stack(&mut stack, 1).unwrap();
 
         let mut first_entries = Vec::<u64>::new();
-        memory.reserve_object_entries(&mut first_entries, 2).unwrap();
+        memory
+            .reserve_object_entries(&mut first_entries, 2)
+            .unwrap();
         let total = memory.stack_bytes + memory.object_bytes;
         memory.limit = total;
         memory.release_object_entries(&first_entries).unwrap();
         drop(first_entries);
 
         let mut second_entries = Vec::<u64>::new();
-        memory.reserve_object_entries(&mut second_entries, 2).unwrap();
+        memory
+            .reserve_object_entries(&mut second_entries, 2)
+            .unwrap();
         assert_eq!(
             memory.object_bytes,
             second_entries.capacity() * std::mem::size_of::<u64>()

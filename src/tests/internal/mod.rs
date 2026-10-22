@@ -5,10 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Compatibility adapters for serde_json's private JSON shapes.
+//! Tests for shared crate-internal JSON contracts.
 
-pub(super) mod private_struct_kind;
-pub(super) mod serde_json_compat;
-
-pub(super) use private_struct_kind::PrivateStructKind;
-pub(super) use serde_json_compat::SerdeJsonCompat;
+mod json_private_protocol_state_tests;
+mod strict_json_number_tests;

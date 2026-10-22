@@ -76,7 +76,11 @@ impl ScriptedWriter {
 impl Write for ScriptedWriter {
     fn write(&mut self, bytes: &[u8]) -> IoResult<usize> {
         self.calls += 1;
-        match self.actions.pop_front().unwrap_or(WriteAction::Accept(bytes.len())) {
+        match self
+            .actions
+            .pop_front()
+            .unwrap_or(WriteAction::Accept(bytes.len()))
+        {
             WriteAction::Accept(maximum) => {
                 let accepted = bytes.len().min(maximum);
                 self.bytes.extend_from_slice(&bytes[..accepted]);
@@ -121,7 +125,8 @@ impl Serialize for MaskedWriteFailures {
 /// Verifies the incremental writer forwards accepted JSON bytes.
 #[test]
 fn test_json_output_writer_writes_incremental_document() {
-    let session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let session =
+        JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let mut output = Vec::new();
 
     JsonEncoder::new(session)
@@ -151,13 +156,26 @@ fn test_json_writer_recovers_interrupted_write() {
                 encoder.write_incremental(&mut output, &true)
             };
 
-            assert!(result.is_ok(), "buffered={buffered}, limited={limited}: {result:?}");
+            assert!(
+                result.is_ok(),
+                "buffered={buffered}, limited={limited}: {result:?}"
+            );
             assert_eq!(output.bytes, b"true");
             assert_eq!(output.calls, 3);
             assert_eq!(output.flushes, usize::from(!buffered));
-            assert_eq!(encoder.session().value_budget().used_nodes(), limited.then_some(1));
+            assert_eq!(
+                encoder.session().value_budget().used_nodes(),
+                limited.then_some(1)
+            );
             if limited {
-                assert_eq!(encoder.session().output_budget().expect("output budget").used(), 4);
+                assert_eq!(
+                    encoder
+                        .session()
+                        .output_budget()
+                        .expect("output budget")
+                        .used(),
+                    4
+                );
             }
         }
     }
@@ -188,13 +206,26 @@ fn test_jcs_writer_recovers_interrupted_write() {
                 encoder.write_incremental(&mut output, &value)
             };
 
-            assert!(result.is_ok(), "buffered={buffered}, limited={limited}: {result:?}");
+            assert!(
+                result.is_ok(),
+                "buffered={buffered}, limited={limited}: {result:?}"
+            );
             assert_eq!(output.bytes, b"true");
             assert_eq!(output.calls, 3);
             assert_eq!(output.flushes, usize::from(!buffered));
-            assert_eq!(encoder.session().value_budget().used_nodes(), limited.then_some(1));
+            assert_eq!(
+                encoder.session().value_budget().used_nodes(),
+                limited.then_some(1)
+            );
             if limited {
-                assert_eq!(encoder.session().output_budget().expect("output budget").used(), 4);
+                assert_eq!(
+                    encoder
+                        .session()
+                        .output_budget()
+                        .expect("output budget")
+                        .used(),
+                    4
+                );
             }
         }
     }
@@ -216,7 +247,14 @@ fn test_json_writer_recovers_after_short_write_and_interrupted() {
     assert_eq!(output.bytes, b"true");
     assert_eq!(output.calls, 3);
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(1));
-    assert_eq!(encoder.session().output_budget().expect("output budget").used(), 4);
+    assert_eq!(
+        encoder
+            .session()
+            .output_budget()
+            .expect("output budget")
+            .used(),
+        4
+    );
 }
 
 #[test]
@@ -235,7 +273,14 @@ fn test_json_writer_recovers_after_consecutive_interrupted_writes() {
     assert_eq!(output.bytes, b"true");
     assert_eq!(output.calls, 3);
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(1));
-    assert_eq!(encoder.session().output_budget().expect("output budget").used(), 4);
+    assert_eq!(
+        encoder
+            .session()
+            .output_budget()
+            .expect("output budget")
+            .used(),
+        4
+    );
 }
 
 #[test]
@@ -260,7 +305,14 @@ fn test_json_writer_preserves_interrupted_then_broken_pipe_failure() {
     assert_eq!(output.calls, 3);
     assert_eq!(output.flushes, 0);
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
-    assert_eq!(encoder.session().output_budget().expect("output budget").used(), 2);
+    assert_eq!(
+        encoder
+            .session()
+            .output_budget()
+            .expect("output budget")
+            .used(),
+        2
+    );
 }
 
 #[test]
@@ -281,7 +333,14 @@ fn test_json_writer_preserves_write_zero_failure() {
     assert_eq!(output.calls, 1);
     assert_eq!(output.flushes, 0);
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
-    assert_eq!(encoder.session().output_budget().expect("output budget").used(), 0);
+    assert_eq!(
+        encoder
+            .session()
+            .output_budget()
+            .expect("output budget")
+            .used(),
+        0
+    );
 }
 
 #[test]
@@ -303,7 +362,14 @@ fn test_json_incremental_writer_preserves_flush_interrupted_failure() {
     assert_eq!(output.calls, 1);
     assert_eq!(output.flushes, 1);
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
-    assert_eq!(encoder.session().output_budget().expect("output budget").used(), 4);
+    assert_eq!(
+        encoder
+            .session()
+            .output_budget()
+            .expect("output budget")
+            .used(),
+        4
+    );
 }
 
 #[test]
@@ -334,5 +400,12 @@ fn test_json_writer_preserves_first_terminal_io_error() {
     assert_eq!(output.calls, 3);
     assert_eq!(output.flushes, 0);
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
-    assert_eq!(encoder.session().output_budget().expect("output budget").used(), 1);
+    assert_eq!(
+        encoder
+            .session()
+            .output_budget()
+            .expect("output budget")
+            .used(),
+        1
+    );
 }

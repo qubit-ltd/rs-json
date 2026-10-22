@@ -109,7 +109,10 @@ where
     /// A finite input budget permits one uncharged probe byte to detect
     /// overflow; accepted input bytes remain charged when later decoding
     /// fails.
-    pub fn decode_input<I>(&mut self, input: &mut I) -> Result<serde_json::Value, JcsDecodeError<R, Q>>
+    pub fn decode_input<I>(
+        &mut self,
+        input: &mut I,
+    ) -> Result<serde_json::Value, JcsDecodeError<R, Q>>
     where
         I: Input<Item = u8> + ?Sized,
     {

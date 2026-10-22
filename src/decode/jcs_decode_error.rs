@@ -63,9 +63,16 @@ where
         match self {
             Self::Decode(error) => error.fmt(formatter),
             Self::DuplicateKey { line, column } => {
-                write!(formatter, "duplicate JSON object key at line {line}, column {column}")
+                write!(
+                    formatter,
+                    "duplicate JSON object key at line {line}, column {column}"
+                )
             }
-            Self::MaterializationDepthLimit { limit, line, column } => write!(
+            Self::MaterializationDepthLimit {
+                limit,
+                line,
+                column,
+            } => write!(
                 formatter,
                 "JCS value construction depth exceeds {limit} at line {line}, column {column}"
             ),

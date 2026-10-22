@@ -33,7 +33,8 @@ where
     kind: PrivateTextKind,
 }
 
-impl<'a, 'transaction, 'budget, 'context, T, R, Q> BudgetedPrivateValue<'a, 'transaction, 'budget, 'context, T, R, Q>
+impl<'a, 'transaction, 'budget, 'context, T, R, Q>
+    BudgetedPrivateValue<'a, 'transaction, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,
@@ -50,6 +51,21 @@ where
             value,
             context,
             kind: PrivateTextKind::RawValue { depth },
+        }
+    }
+
+    /// Creates a private number payload wrapper at its final depth.
+    #[must_use]
+    #[inline]
+    pub(super) const fn number(
+        value: &'a T,
+        context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+        depth: usize,
+    ) -> Self {
+        Self {
+            value,
+            context,
+            kind: PrivateTextKind::Number { depth },
         }
     }
 }

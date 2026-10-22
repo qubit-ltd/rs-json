@@ -15,4 +15,9 @@ pub(in crate::encode::serializer) enum PrivateTextKind {
         /// Final root-inclusive depth of the raw JSON fragment.
         depth: usize,
     },
+    /// Finite JSON number lexeme rooted at the specified final depth.
+    Number {
+        /// Final root-inclusive depth of the number.
+        depth: usize,
+    },
 }

@@ -8,10 +8,12 @@ publish = false
 default = []
 arbitrary_precision = ["serde_json/arbitrary_precision"]
 preserve_order = ["serde_json/preserve_order"]
+jcs = ["qubit-json/jcs"]
 
 [dependencies]
-qubit-json = { path = "../../..", features = ["jcs"] }
-qubit-budget = { version = "0.9", features = ["json"] }
+qubit-json = { path = "../../.." }
+qubit-budget = { version = "0.9.1", features = ["json"] }
+serde = "1.0"
 serde_json = "1.0"
 
 [workspace]

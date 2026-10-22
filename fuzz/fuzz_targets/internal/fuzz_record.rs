@@ -9,6 +9,11 @@
 
 use serde::Deserialize;
 
-/// Minimal typed payload used to exercise typed decoder entry points.
+/// Representative object payload used to exercise typed decoder entry points.
 #[derive(Deserialize)]
-pub(crate) struct FuzzRecord;
+pub(crate) struct FuzzRecord {
+    pub(crate) id: u64,
+    pub(crate) label: String,
+    pub(crate) enabled: bool,
+    pub(crate) tags: Vec<String>,
+}

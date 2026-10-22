@@ -19,15 +19,20 @@ use serde_json::Deserializer;
 #[test]
 fn test_json_key_seed_checks_prospective_object_entry() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)))
+        .structure_limits(
+            StructureLimits::builder()
+                .map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)),
+        )
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"{"a":null,"b":null}"#);
 
-    assert!(
-        AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(&mut deserializer)
-            .is_err()
-    );
+    AccountingJsonValueSeed::new(&mut transaction)
+        .deserialize(&mut deserializer)
+        .expect_err("the second key must exceed the one-entry map limit");
+    let error = transaction
+        .commit()
+        .expect_err("failed admission must poison the transaction");
+    assert_eq!(error.resource(), &JsonResource::MapEntries);
 }

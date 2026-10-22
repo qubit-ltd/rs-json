@@ -68,11 +68,17 @@ where
         if !self.has_value_limits {
             return Ok(());
         }
-        self.transaction.try_admit(measurement).map_err(JsonLexicalError::from)
+        self.transaction
+            .try_admit(measurement)
+            .map_err(JsonLexicalError::from)
     }
 
     /// Enters one container when value limits are configured.
-    fn enter_container(&mut self, kind: JsonContainerKind, depth: usize) -> Result<(), JsonLexicalError<R, Q>> {
+    fn enter_container(
+        &mut self,
+        kind: JsonContainerKind,
+        depth: usize,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.has_value_limits {
             return Ok(());
         }
@@ -82,7 +88,11 @@ where
     }
 
     /// Checks one observed container count when value limits are configured.
-    fn check_container_count(&mut self, kind: JsonContainerKind, count: usize) -> Result<(), JsonLexicalError<R, Q>> {
+    fn check_container_count(
+        &mut self,
+        kind: JsonContainerKind,
+        count: usize,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.has_value_limits {
             return Ok(());
         }
@@ -204,7 +214,11 @@ where
     }
 
     /// Charges and consumes one scalar literal.
-    fn literal(&mut self, literal: &[u8], measurement: JsonMeasurement) -> Result<(), JsonLexicalError<R, Q>> {
+    fn literal(
+        &mut self,
+        literal: &[u8],
+        measurement: JsonMeasurement,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.input[self.offset..].starts_with(literal) {
             return Err(match self.peek() {
                 None => self.syntax(JsonLexicalErrorReason::UnexpectedEnd),
@@ -500,7 +514,11 @@ where
 
     /// Validates one syntactically complete number against the supported
     /// integer and floating-point representation ranges.
-    fn validate_number_range(&self, start: usize, end: usize) -> Result<(), JsonLexicalError<R, Q>> {
+    fn validate_number_range(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         let Ok(token) = std::str::from_utf8(&self.input[start..end]) else {
             return Err(self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber));
         };
@@ -541,7 +559,10 @@ where
 
     /// Tests whether the next byte can follow a complete JSON scalar value.
     const fn is_value_delimiter(byte: Option<u8>) -> bool {
-        matches!(byte, None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}'))
+        matches!(
+            byte,
+            None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}')
+        )
     }
 
     /// Computes one-based line and UTF-8 character column at the cursor.
@@ -572,7 +593,11 @@ pub(crate) fn line_column_at(input: &[u8], offset: usize) -> (usize, usize) {
     line_column_at_with_inspection(input, offset, |_| {})
 }
 
-fn line_column_at_with_inspection<F>(input: &[u8], offset: usize, mut record_examined_bytes: F) -> (usize, usize)
+fn line_column_at_with_inspection<F>(
+    input: &[u8],
+    offset: usize,
+    mut record_examined_bytes: F,
+) -> (usize, usize)
 where
     F: FnMut(usize),
 {
@@ -665,7 +690,11 @@ mod jcs_number_model_tests {
     use super::super::JsonLexicalScanner;
     use super::super::JsonNumberModel;
 
-    fn scan(input: &[u8], model: JsonNumberModel, limits: JsonDecodeLimits<JsonResource, usize>) -> bool {
+    fn scan(
+        input: &[u8],
+        model: JsonNumberModel,
+        limits: JsonDecodeLimits<JsonResource, usize>,
+    ) -> bool {
         let mut session = JsonDecodeSession::from_limits(limits);
         let mut attempt = session.begin_value();
         JsonLexicalScanner::new(attempt.value_transaction_mut(), true)
@@ -679,8 +708,16 @@ mod jcs_number_model_tests {
         let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
             .value_limits(JsonValueLimits::builder().build())
             .build();
-        assert!(scan(b"100000000000000000000", JsonNumberModel::Binary64, limits));
-        assert!(!scan(b"100000000000000000000", JsonNumberModel::Integer64, limits));
+        assert!(scan(
+            b"100000000000000000000",
+            JsonNumberModel::Binary64,
+            limits
+        ));
+        assert!(!scan(
+            b"100000000000000000000",
+            JsonNumberModel::Integer64,
+            limits
+        ));
     }
 
     #[test]

@@ -183,15 +183,19 @@ where
             match JcsRenderer::render(value, &mut writer, self.max_working_bytes) {
                 Ok(()) => {
                     let result = Write::flush(&mut writer).map_err(serde_json::Error::io);
-                    writer.into_result(result).map_err(JcsEncodeError::from_json_encode)
+                    writer
+                        .into_result(result)
+                        .map_err(JcsEncodeError::from_json_encode)
                 }
-                Err(JcsRendererError::WorkingMemory(error)) => Err(JcsEncodeError::working_memory(error)),
-                Err(JcsRendererError::Allocation) => Err(JcsEncodeError::serialization(JsonSerializationError::new(
-                    JsonSerializationErrorKind::CustomSerialization,
-                ))),
-                Err(JcsRendererError::Serialize(error)) => {
-                    writer.into_result(Err(error)).map_err(JcsEncodeError::from_json_encode)
+                Err(JcsRendererError::WorkingMemory(error)) => {
+                    Err(JcsEncodeError::working_memory(error))
                 }
+                Err(JcsRendererError::Allocation) => Err(JcsEncodeError::serialization(
+                    JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization),
+                )),
+                Err(JcsRendererError::Serialize(error)) => writer
+                    .into_result(Err(error))
+                    .map_err(JcsEncodeError::from_json_encode),
             }
         };
         result?;
@@ -211,14 +215,18 @@ where
         let accounting = RefCell::new(JsonOutputAccounting::new(output_budget));
         let mut output = JsonOutputBuffer::new(&accounting);
         match JcsRenderer::render(value, &mut output, max_working_bytes) {
-            Ok(()) => output.into_result(Ok(())).map_err(JcsEncodeError::from_json_encode),
-            Err(JcsRendererError::WorkingMemory(error)) => Err(JcsEncodeError::working_memory(error)),
-            Err(JcsRendererError::Allocation) => Err(JcsEncodeError::serialization(JsonSerializationError::new(
-                JsonSerializationErrorKind::CustomSerialization,
-            ))),
-            Err(JcsRendererError::Serialize(error)) => {
-                output.into_result(Err(error)).map_err(JcsEncodeError::from_json_encode)
+            Ok(()) => output
+                .into_result(Ok(()))
+                .map_err(JcsEncodeError::from_json_encode),
+            Err(JcsRendererError::WorkingMemory(error)) => {
+                Err(JcsEncodeError::working_memory(error))
             }
+            Err(JcsRendererError::Allocation) => Err(JcsEncodeError::serialization(
+                JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization),
+            )),
+            Err(JcsRendererError::Serialize(error)) => output
+                .into_result(Err(error))
+                .map_err(JcsEncodeError::from_json_encode),
         }
     }
 
@@ -232,6 +240,8 @@ where
         let accounting = RefCell::new(JsonOutputAccounting::new(output_budget));
         let mut writer = JsonOutputWriter::new(output, &accounting);
         let result = writer.write_all(bytes).map_err(serde_json::Error::io);
-        writer.into_result(result).map_err(JcsEncodeError::from_json_encode)
+        writer
+            .into_result(result)
+            .map_err(JcsEncodeError::from_json_encode)
     }
 }

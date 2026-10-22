@@ -21,7 +21,11 @@ struct ExpandingVisitor;
 impl JsonTreeMutVisitor for ExpandingVisitor {
     type Error = std::convert::Infallible;
 
-    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
         *value = json!([null]);
         Ok(JsonTreeControl::SkipSubtree)
     }
@@ -36,8 +40,11 @@ impl JsonTreeMutVisitor for ExpandingVisitor {
 #[test]
 fn test_output_budget_error_identifies_mutation_phase() {
     let mut input_budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
-    let mut output_budget =
-        JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().max_nodes(1).build());
+    let mut output_budget = JsonValueBudget::new(
+        JsonValueLimits::<JsonResource, usize>::builder()
+            .max_nodes(1)
+            .build(),
+    );
     let mut input = input_budget.transaction();
     let mut output = output_budget.transaction();
     let mut value = Value::Null;

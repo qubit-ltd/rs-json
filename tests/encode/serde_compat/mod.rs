@@ -6,5 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+mod private_protocol_tests;
 mod private_struct_kind_tests;
 mod serde_json_compat_tests;

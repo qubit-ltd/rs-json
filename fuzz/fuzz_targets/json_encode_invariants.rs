@@ -18,6 +18,8 @@ use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::encode::JsonEncoder;
 use qubit_json_fuzz::input_limit::bounded_input;
+use qubit_json_fuzz::json_encode_output::FuzzOutput;
+use qubit_json_fuzz::json_encode_output::OutputMode;
 use qubit_json_fuzz::json_reference::parse_literal_value;
 use serde_json::Value;
 
@@ -89,5 +91,41 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(decoded, value);
         assert_eq!(buffered_output, encoded);
         assert_eq!(incremental_output, encoded);
+    }
+
+    let mode = match data.get(6).copied().unwrap_or(0) % 3 {
+        0 => OutputMode::Complete,
+        1 => OutputMode::InterruptOnce,
+        _ => OutputMode::BrokenPipe,
+    };
+    let accepted_limit = usize::from(data.get(7).copied().unwrap_or(0));
+    let max_chunk = 1 + usize::from(data.get(8).copied().unwrap_or(0) % 16);
+    let remaining = if matches!(mode, OutputMode::BrokenPipe) {
+        accepted_limit
+    } else {
+        usize::MAX
+    };
+    let expected = serde_json::to_vec(&value).expect("accepted JSON value must serialize");
+    let mut output = FuzzOutput::new(mode, remaining, max_chunk);
+    let value_limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(usize::MAX)
+        .max_payload_bytes(usize::MAX)
+        .build();
+    let output_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, usize::MAX))
+        .value_limits(value_limits)
+        .build();
+    let session = JsonEncodeSession::from_limits(output_limits);
+    let mut encoder = JsonEncoder::new(session);
+    let write_result = encoder.write_incremental(&mut output, &value);
+    let session = encoder.into_session();
+    assert_eq!(session.output_budget().map(|budget| budget.used()), Some(output.bytes().len()));
+    if write_result.is_ok() {
+        assert_eq!(output.bytes(), expected);
+        assert!(session.value_budget().used_nodes().is_some_and(|nodes| nodes > 0));
+    } else {
+        assert!(matches!(mode, OutputMode::BrokenPipe));
+        assert_eq!(session.value_budget().used_nodes(), Some(0));
+        assert!(output.bytes().len() <= accepted_limit);
     }
 });

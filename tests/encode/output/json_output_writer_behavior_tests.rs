@@ -59,9 +59,12 @@ impl Serialize for MaskedInvalidRawValue {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
+        let mut state = serializer
+            .serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
         state.serialize_field(concat!("$", "serde_json", ":", ":private::RawValue"), "[")?;
-        state.end().map_err(|_| S::Error::custom("masked raw JSON error"))
+        state
+            .end()
+            .map_err(|_| S::Error::custom("masked raw JSON error"))
     }
 }
 
@@ -116,7 +119,9 @@ fn test_json_encoder_preserves_chronological_budget_error_precedence() {
     let error = encode(&ValueThenOutputViolation, &mut session)
         .expect_err("the encoder must preserve the first ignored budget error");
 
-    let error = error.into_budget_error().expect("expected the first budget error");
+    let error = error
+        .into_budget_error()
+        .expect("expected the first budget error");
     assert_eq!(
         error
             .budget_error()

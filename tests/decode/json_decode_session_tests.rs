@@ -38,7 +38,10 @@ fn run_with_session<'a, T>(
 where
     T: DeserializeOwned,
 {
-    let owned_session = std::mem::replace(session, JsonDecodeSession::from_limits(JsonDecodeLimits::new()));
+    let owned_session = std::mem::replace(
+        session,
+        JsonDecodeSession::from_limits(JsonDecodeLimits::new()),
+    );
     let mut stateful = NormalizingJsonDecoder::new(decoder.policy().clone(), owned_session);
     let result = stateful.decode_str(input);
     *session = stateful.into_session();
@@ -73,7 +76,9 @@ fn test_decode_attempt_consumes_input_bytes_atomically() {
     );
 
     let mut attempt = session.begin_value();
-    attempt.try_consume_input_bytes(3).expect("exact input fits");
+    attempt
+        .try_consume_input_bytes(3)
+        .expect("exact input fits");
     let error = attempt
         .try_consume_input_bytes(1)
         .expect_err("input budget is exhausted");
@@ -98,7 +103,10 @@ fn test_decode_session_borrowing_reuses_caller_owned_budgets() {
             .expect("borrowed session should admit the document");
         assert_eq!(decoder.session().max_input_bytes(), Some(16_usize));
         assert_eq!(
-            decoder.session().input_budget().map(|budget| budget.limit()),
+            decoder
+                .session()
+                .input_budget()
+                .map(|budget| budget.limit()),
             Some(16_usize)
         );
     }
@@ -112,7 +120,9 @@ fn test_decode_session_preserves_embedded_value_limits() {
     let value_limits = JsonValueLimits::<JsonResource, usize>::builder()
         .string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 2))
         .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, 3))
-        .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)))
+        .structure_limits(
+            StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+        )
         .build();
     let mut session = JsonDecodeSession::from_limits(
         JsonDecodeLimits::<JsonResource, usize>::builder()
@@ -132,7 +142,9 @@ fn test_decode_session_preserves_embedded_value_limits() {
         .try_admit(JsonMeasurement::Number { depth: 1, bytes: 1 })
         .expect_err("poisoned attempt rejects later values");
     assert_eq!(repeated_error.resource(), first_error.resource());
-    let commit_error = attempt.commit().expect_err("poisoned attempt cannot commit");
+    let commit_error = attempt
+        .commit()
+        .expect_err("poisoned attempt cannot commit");
     assert_eq!(commit_error.resource(), first_error.resource());
     assert_eq!(session.value_budget().used_nodes(), Some(0));
     assert_eq!(session.value_budget().used_payload_bytes(), Some(0));
@@ -153,11 +165,17 @@ fn test_failed_second_value_preserves_first_commit_and_accumulates_input() {
     );
 
     let mut decoder = JsonDecoder::new(session);
-    decoder.decode_utf8::<IgnoredAny>(first).expect("first value must fit");
+    decoder
+        .decode_utf8::<IgnoredAny>(first)
+        .expect("first value must fit");
     assert!(decoder.decode_utf8::<IgnoredAny>(second).is_err());
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
     assert_eq!(
-        decoder.session().input_budget().expect("input budget").used(),
+        decoder
+            .session()
+            .input_budget()
+            .expect("input budget")
+            .used(),
         first.len() + second.len(),
     );
 
@@ -218,7 +236,10 @@ fn test_lenient_typed_failure_retains_normalized_input_and_reuses_value_capacity
     );
 
     assert!(run_with_session::<u8>(&decoder, rejected, &mut session).is_err());
-    assert_eq!(session.input_budget().expect("input budget").used(), rejected.len(),);
+    assert_eq!(
+        session.input_budget().expect("input budget").used(),
+        rejected.len(),
+    );
     assert_eq!(
         session
             .normalized_input_budget()

@@ -28,7 +28,6 @@ mod json_serialization_error_category;
 mod json_serialization_error_kind;
 mod json_serializer_state_error;
 mod output;
-mod serde_compat;
 mod serializer;
 
 #[cfg(feature = "jcs")]

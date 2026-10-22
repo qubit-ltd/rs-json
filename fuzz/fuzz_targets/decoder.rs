@@ -126,6 +126,13 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
+    if let Ok(record) = JsonDecoder::unlimited().decode_utf8::<FuzzRecord>(data) {
+        assert!(record.id > 0);
+        assert!(!record.label.is_empty());
+        assert!(record.enabled);
+        assert_eq!(record.tags, ["fuzz", "record"]);
+    }
+
     let decoder_configurations = [
         (
             NormalizingJsonDecodePolicy::default(),

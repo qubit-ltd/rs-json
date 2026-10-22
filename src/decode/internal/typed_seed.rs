@@ -25,7 +25,9 @@ impl<T> TypedSeed<T> {
     #[must_use]
     #[inline(always)]
     pub(in crate::decode) const fn new() -> Self {
-        Self { marker: PhantomData }
+        Self {
+            marker: PhantomData,
+        }
     }
 }
 

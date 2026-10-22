@@ -37,4 +37,6 @@ pub enum JsonSerializerStateError {
     MapEndedWithPendingKey,
     /// The private serde_json RawValue protocol had an invalid shape.
     InvalidRawValueProtocol,
+    /// The private serde_json Number protocol had an invalid shape.
+    InvalidNumberProtocol,
 }

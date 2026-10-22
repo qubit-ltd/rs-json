@@ -41,7 +41,9 @@ impl JcsRenderer {
                 match value {
                     Value::Array(values) => {
                         if let Some(first) = values.first() {
-                            memory.reserve_stack(&mut stack, 1).map_err(map_reserve_error)?;
+                            memory
+                                .reserve_stack(&mut stack, 1)
+                                .map_err(map_reserve_error)?;
                             write(writer, b"[")?;
                             stack.push(Frame::Array { values, next: 1 });
                             current = Some(first);
@@ -61,17 +63,21 @@ impl JcsRenderer {
                             write(writer, b"{")?;
                             write(writer, b"}")?;
                         } else {
-                            memory.reserve_stack(&mut stack, 1).map_err(map_reserve_error)?;
+                            memory
+                                .reserve_stack(&mut stack, 1)
+                                .map_err(map_reserve_error)?;
                             write(writer, b"{")?;
                             let (key, child) = entries[0];
                             stack.push(Frame::Object { entries, next: 1 });
-                            serde_json_canonicalizer::to_writer(&key, writer).map_err(JcsRendererError::Serialize)?;
+                            serde_json_canonicalizer::to_writer(&key, writer)
+                                .map_err(JcsRendererError::Serialize)?;
                             write(writer, b":")?;
                             current = Some(child);
                         }
                     }
                     Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-                        serde_json_canonicalizer::to_writer(value, writer).map_err(JcsRendererError::Serialize)?;
+                        serde_json_canonicalizer::to_writer(value, writer)
+                            .map_err(JcsRendererError::Serialize)?;
                     }
                 }
                 continue;
@@ -94,7 +100,8 @@ impl JcsRenderer {
                     }
                     let (key, child) = entries[*next];
                     *next += 1;
-                    serde_json_canonicalizer::to_writer(&key, writer).map_err(JcsRendererError::Serialize)?;
+                    serde_json_canonicalizer::to_writer(&key, writer)
+                        .map_err(JcsRendererError::Serialize)?;
                     write(writer, b":")?;
                     current = Some(child);
                 }
@@ -104,7 +111,9 @@ impl JcsRenderer {
                 }
                 Frame::Object { .. } => {
                     if let Some(Frame::Object { entries, .. }) = stack.pop() {
-                        memory.release_object_entries(&entries).map_err(map_reserve_error)?;
+                        memory
+                            .release_object_entries(&entries)
+                            .map_err(map_reserve_error)?;
                         write(writer, b"}")?;
                     }
                 }

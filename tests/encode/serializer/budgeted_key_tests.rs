@@ -12,6 +12,8 @@ use std::collections::BTreeMap;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
+use qubit_json::encode::JsonMapKeyKind;
+use qubit_json::encode::JsonSerializationErrorKind;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeMap;
@@ -36,7 +38,7 @@ fn test_budgeted_key_checks_key_bytes() {
     assert!(encode(&values, &mut session).is_err());
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum ScalarKey {
     Bool,
     I8,
@@ -51,6 +53,7 @@ enum ScalarKey {
     U128,
     F32,
     F64,
+    F64NonFinite,
     Char,
     Str,
     Bytes,
@@ -90,6 +93,7 @@ impl Serialize for ScalarKey {
             Self::U128 => serializer.serialize_u128(128),
             Self::F32 => serializer.serialize_f32(1.25),
             Self::F64 => serializer.serialize_f64(2.5),
+            Self::F64NonFinite => serializer.serialize_f64(f64::INFINITY),
             Self::Char => serializer.serialize_char('x'),
             Self::Str => serializer.serialize_str("key"),
             Self::Bytes => serializer.serialize_bytes(b"key"),
@@ -98,7 +102,9 @@ impl Serialize for ScalarKey {
             Self::UnitStruct => serializer.serialize_unit_struct("Key"),
             Self::UnitVariant => serializer.serialize_unit_variant("Key", 0, "Unit"),
             Self::NewtypeStruct => serializer.serialize_newtype_struct("Key", &"value"),
-            Self::NewtypeVariant => serializer.serialize_newtype_variant("Key", 0, "Variant", &"value"),
+            Self::NewtypeVariant => {
+                serializer.serialize_newtype_variant("Key", 0, "Variant", &"value")
+            }
             Self::Some => serializer.serialize_some(&"value"),
             Self::Seq => serializer.serialize_seq(Some(0)).and_then(|seq| seq.end()),
             Self::Tuple => serializer.serialize_tuple(0).and_then(|tuple| tuple.end()),
@@ -109,7 +115,9 @@ impl Serialize for ScalarKey {
                 .serialize_tuple_variant("Key", 0, "Tuple", 0)
                 .and_then(|tuple| tuple.end()),
             Self::Map => serializer.serialize_map(Some(0)).and_then(|map| map.end()),
-            Self::Struct => serializer.serialize_struct("Key", 0).and_then(|value| value.end()),
+            Self::Struct => serializer
+                .serialize_struct("Key", 0)
+                .and_then(|value| value.end()),
             Self::StructVariant => serializer
                 .serialize_struct_variant("Key", 0, "Struct", 0)
                 .and_then(|value| value.end()),
@@ -138,41 +146,104 @@ impl Serialize for OneKey {
 /// budgeted JSON encoder.
 #[test]
 fn test_budgeted_key_checks_each_scalar_serializer_path() {
-    let keys = [
-        ScalarKey::Bool,
-        ScalarKey::I8,
-        ScalarKey::I16,
-        ScalarKey::I32,
-        ScalarKey::I64,
-        ScalarKey::I128,
-        ScalarKey::U8,
-        ScalarKey::U16,
-        ScalarKey::U32,
-        ScalarKey::U64,
-        ScalarKey::U128,
-        ScalarKey::F32,
-        ScalarKey::F64,
-        ScalarKey::Char,
-        ScalarKey::Str,
-        ScalarKey::Bytes,
-        ScalarKey::None,
-        ScalarKey::Unit,
-        ScalarKey::UnitStruct,
-        ScalarKey::UnitVariant,
-        ScalarKey::NewtypeStruct,
-        ScalarKey::NewtypeVariant,
-        ScalarKey::Some,
-        ScalarKey::Seq,
-        ScalarKey::Tuple,
-        ScalarKey::TupleStruct,
-        ScalarKey::TupleVariant,
-        ScalarKey::Map,
-        ScalarKey::Struct,
-        ScalarKey::StructVariant,
-        ScalarKey::HumanReadable,
+    enum Expected {
+        Bytes(&'static [u8]),
+        KeyError(JsonMapKeyKind),
+        Error(JsonSerializationErrorKind),
+    }
+    let cases = [
+        (ScalarKey::Bool, Expected::Bytes(br#"{"true":true}"#)),
+        (ScalarKey::I8, Expected::Bytes(br#"{"-8":true}"#)),
+        (ScalarKey::I16, Expected::Bytes(br#"{"-16":true}"#)),
+        (ScalarKey::I32, Expected::Bytes(br#"{"-32":true}"#)),
+        (ScalarKey::I64, Expected::Bytes(br#"{"-64":true}"#)),
+        (ScalarKey::I128, Expected::Bytes(br#"{"-128":true}"#)),
+        (ScalarKey::U8, Expected::Bytes(br#"{"8":true}"#)),
+        (ScalarKey::U16, Expected::Bytes(br#"{"16":true}"#)),
+        (ScalarKey::U32, Expected::Bytes(br#"{"32":true}"#)),
+        (ScalarKey::U64, Expected::Bytes(br#"{"64":true}"#)),
+        (ScalarKey::U128, Expected::Bytes(br#"{"128":true}"#)),
+        (ScalarKey::F32, Expected::Bytes(br#"{"1.25":true}"#)),
+        (ScalarKey::F64, Expected::Bytes(br#"{"2.5":true}"#)),
+        (
+            ScalarKey::F64NonFinite,
+            Expected::Error(JsonSerializationErrorKind::NonFiniteFloat),
+        ),
+        (ScalarKey::Char, Expected::Bytes(br#"{"x":true}"#)),
+        (ScalarKey::Str, Expected::Bytes(br#"{"key":true}"#)),
+        (ScalarKey::Bytes, Expected::KeyError(JsonMapKeyKind::Bytes)),
+        (ScalarKey::None, Expected::KeyError(JsonMapKeyKind::None)),
+        (ScalarKey::Unit, Expected::KeyError(JsonMapKeyKind::Unit)),
+        (
+            ScalarKey::UnitStruct,
+            Expected::KeyError(JsonMapKeyKind::UnitStruct),
+        ),
+        (ScalarKey::UnitVariant, Expected::Bytes(br#"{"Unit":true}"#)),
+        (
+            ScalarKey::NewtypeStruct,
+            Expected::Bytes(br#"{"value":true}"#),
+        ),
+        (
+            ScalarKey::NewtypeVariant,
+            Expected::KeyError(JsonMapKeyKind::NewtypeVariant),
+        ),
+        (ScalarKey::Some, Expected::Bytes(br#"{"value":true}"#)),
+        (ScalarKey::Seq, Expected::KeyError(JsonMapKeyKind::Sequence)),
+        (ScalarKey::Tuple, Expected::KeyError(JsonMapKeyKind::Tuple)),
+        (
+            ScalarKey::TupleStruct,
+            Expected::KeyError(JsonMapKeyKind::TupleStruct),
+        ),
+        (
+            ScalarKey::TupleVariant,
+            Expected::KeyError(JsonMapKeyKind::TupleVariant),
+        ),
+        (ScalarKey::Map, Expected::KeyError(JsonMapKeyKind::Map)),
+        (
+            ScalarKey::Struct,
+            Expected::KeyError(JsonMapKeyKind::Struct),
+        ),
+        (
+            ScalarKey::StructVariant,
+            Expected::KeyError(JsonMapKeyKind::StructVariant),
+        ),
+        (
+            ScalarKey::HumanReadable,
+            Expected::Bytes(br#"{"human":true}"#),
+        ),
     ];
-    for key in keys {
-        let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
-        let _ = encode(&OneKey(key), &mut session);
+    for (key, expected) in cases {
+        let mut session = JsonEncodeSession::from_limits(
+            JsonEncodeLimits::<JsonResource, usize>::builder().build(),
+        );
+        let result = encode(&OneKey(key), &mut session);
+        match expected {
+            Expected::Bytes(bytes) => assert_eq!(
+                result.expect("supported scalar key must encode"),
+                bytes,
+                "case={key:?}"
+            ),
+            Expected::KeyError(kind)
+            | Expected::Error(JsonSerializationErrorKind::UnsupportedMapKey { kind }) => {
+                assert_eq!(
+                    result
+                        .expect_err("unsupported scalar key must be rejected")
+                        .serialization_error()
+                        .expect("key rejection is a serialization error")
+                        .kind(),
+                    JsonSerializationErrorKind::UnsupportedMapKey { kind },
+                    "case={key:?}",
+                )
+            }
+            Expected::Error(kind) => assert_eq!(
+                result
+                    .expect_err("invalid scalar key must be rejected")
+                    .serialization_error()
+                    .expect("key rejection is a serialization error")
+                    .kind(),
+                kind,
+                "case={key:?}",
+            ),
+        }
     }
 }

@@ -34,7 +34,12 @@ impl ScriptedJcsInput {
 impl Input for ScriptedJcsInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
         self.reads += 1;
         if self.interrupt_once {
             self.interrupt_once = false;
@@ -48,7 +53,8 @@ impl Input for ScriptedJcsInput {
         }
         let read_limit = self.fail_at.unwrap_or(self.bytes.len());
         let read_len = count.min(read_limit - self.position);
-        output[index..index + read_len].copy_from_slice(&self.bytes[self.position..self.position + read_len]);
+        output[index..index + read_len]
+            .copy_from_slice(&self.bytes[self.position..self.position + read_len]);
         self.position += read_len;
         Ok(read_len)
     }
@@ -57,10 +63,17 @@ impl Input for ScriptedJcsInput {
 #[test]
 fn test_jcs_decoder_accepts_binary64_integer_text() {
     let input = "100000000000000000000";
-    assert!(JsonDecoder::unlimited().decode_str::<serde_json::Value>(input).is_err());
+    assert!(
+        JsonDecoder::unlimited()
+            .decode_str::<serde_json::Value>(input)
+            .is_err()
+    );
     let value = JcsDecoder::unlimited().decode_str(input).unwrap();
     assert!(value.as_number().unwrap().is_f64());
-    assert_eq!(JcsEncoder::unlimited().to_vec(&value).unwrap(), input.as_bytes());
+    assert_eq!(
+        JcsEncoder::unlimited().to_vec(&value).unwrap(),
+        input.as_bytes()
+    );
 }
 
 #[test]
@@ -76,7 +89,11 @@ fn test_jcs_decoder_rejects_decoded_duplicate_key_without_leaking_key() {
 
 #[test]
 fn test_jcs_decoder_rounds_all_number_forms_to_binary64() {
-    for input in ["9007199254740993", "9007199254740993.0", "9007199254740993e0"] {
+    for input in [
+        "9007199254740993",
+        "9007199254740993.0",
+        "9007199254740993e0",
+    ] {
         let value = JcsDecoder::unlimited().decode_str(input).unwrap();
         assert_eq!(value.as_f64().unwrap().to_bits(), 0x4340_0000_0000_0000);
     }
@@ -91,7 +108,9 @@ fn test_jcs_decoder_preserves_number_and_real_marker_object() {
         let expected: f64 = token.parse().unwrap();
         assert_eq!(number.to_bits(), expected.to_bits());
     }
-    let object = decoder.decode_str(r#"{"$serde_json::private::Number":"1.5"}"#).unwrap();
+    let object = decoder
+        .decode_str(r#"{"$serde_json::private::Number":"1.5"}"#)
+        .unwrap();
     assert!(object.is_object());
     assert_eq!(object["$serde_json::private::Number"].as_str(), Some("1.5"));
 }
@@ -121,8 +140,14 @@ fn test_jcs_decoder_entry_points_share_binary64_value_semantics() {
     let by_utf8 = JcsDecoder::unlimited().decode_utf8(b"1.5").unwrap();
     let mut input = std::io::Cursor::new(b"1.5".to_vec());
     let by_input = JcsDecoder::unlimited().decode_input(&mut input).unwrap();
-    assert_eq!(by_str.as_f64().unwrap().to_bits(), by_utf8.as_f64().unwrap().to_bits());
-    assert_eq!(by_str.as_f64().unwrap().to_bits(), by_input.as_f64().unwrap().to_bits());
+    assert_eq!(
+        by_str.as_f64().unwrap().to_bits(),
+        by_utf8.as_f64().unwrap().to_bits()
+    );
+    assert_eq!(
+        by_str.as_f64().unwrap().to_bits(),
+        by_input.as_f64().unwrap().to_bits()
+    );
 }
 
 #[test]
@@ -139,7 +164,10 @@ fn test_jcs_decoder_input_materialization_failure_keeps_input_and_allows_reuse()
     let mut failed_input = std::io::Cursor::new(duplicate.as_bytes().to_vec());
     assert!(decoder.decode_input(&mut failed_input).is_err());
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
-    assert_eq!(decoder.session().input_budget().unwrap().used(), duplicate.len());
+    assert_eq!(
+        decoder.session().input_budget().unwrap().used(),
+        duplicate.len()
+    );
 
     let mut next_input = std::io::Cursor::new(b"true".to_vec());
     assert_eq!(
@@ -147,7 +175,10 @@ fn test_jcs_decoder_input_materialization_failure_keeps_input_and_allows_reuse()
         serde_json::Value::Bool(true)
     );
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
-    assert_eq!(decoder.session().input_budget().unwrap().used(), duplicate.len() + 4);
+    assert_eq!(
+        decoder.session().input_budget().unwrap().used(),
+        duplicate.len() + 4
+    );
 }
 
 #[test]
@@ -163,7 +194,10 @@ fn test_jcs_decoder_input_retries_interrupted_read_and_commits_once() {
     let mut input = ScriptedJcsInput::new(b"true");
     input.interrupt_once = true;
 
-    assert_eq!(decoder.decode_input(&mut input).unwrap(), serde_json::Value::Bool(true));
+    assert_eq!(
+        decoder.decode_input(&mut input).unwrap(),
+        serde_json::Value::Bool(true)
+    );
     assert_eq!(input.reads, 3);
     assert_eq!(input.position, 4);
     assert_eq!(decoder.session().input_budget().unwrap().used(), 4);
@@ -212,7 +246,10 @@ fn test_jcs_decoder_input_read_failure_keeps_input_and_allows_reuse() {
 fn test_jcs_decoder_reports_second_key_token_coordinates() {
     let input = "{\r\n  \"é\":1,\r\n  \"\\u00e9\":2}";
     let error = JcsDecoder::unlimited().decode_str(input).unwrap_err();
-    assert!(matches!(error, JcsDecodeError::DuplicateKey { line: 3, column: 3 }));
+    assert!(matches!(
+        error,
+        JcsDecodeError::DuplicateKey { line: 3, column: 3 }
+    ));
 }
 
 #[test]
@@ -222,15 +259,23 @@ fn test_jcs_decoder_complete_admission_precedes_materialization_errors() {
     use qubit_json::decode::JsonDecodeErrorKind;
 
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
-        .value_limits(qubit_budget::json::JsonValueLimits::builder().max_depth(2).build())
+        .value_limits(
+            qubit_budget::json::JsonValueLimits::builder()
+                .max_depth(2)
+                .build(),
+        )
         .build();
-    let error = JcsDecoder::with_limits(limits).decode_str("[[0]]").unwrap_err();
+    let error = JcsDecoder::with_limits(limits)
+        .decode_str("[[0]]")
+        .unwrap_err();
     let JcsDecodeError::Decode(error) = error else {
         panic!("lexical depth budget must precede construction depth")
     };
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
 
-    let error = JcsDecoder::unlimited().decode_str(r#"{"x":1,"x":2,]"#).unwrap_err();
+    let error = JcsDecoder::unlimited()
+        .decode_str(r#"{"x":1,"x":2,]"#)
+        .unwrap_err();
     let JcsDecodeError::Decode(error) = error else {
         panic!("whole-document syntax admission must precede duplicate-key materialization")
     };
@@ -305,7 +350,11 @@ fn test_jcs_decoder_checks_duplicate_keys_per_decoded_object() {
             assert!(result.is_ok());
         }
     }
-    assert!(JcsDecoder::unlimited().decode_str(r#"{"é":1,"e\u0301":2}"#).is_ok());
+    assert!(
+        JcsDecoder::unlimited()
+            .decode_str(r#"{"é":1,"e\u0301":2}"#)
+            .is_ok()
+    );
 }
 
 #[test]
@@ -325,13 +374,21 @@ fn test_jcs_decoder_rejects_invalid_utf8_and_unpaired_surrogate() {
         JcsDecoder::unlimited().decode_str(r#""\uDEAD""#),
         Err(JcsDecodeError::Decode(_))
     ));
-    assert_eq!(JcsDecoder::unlimited().decode_str(r#""\uD834\uDD1E""#).unwrap(), "𝄞");
+    assert_eq!(
+        JcsDecoder::unlimited()
+            .decode_str(r#""\uD834\uDD1E""#)
+            .unwrap(),
+        "𝄞"
+    );
 }
 
 #[test]
 fn test_jcs_decoder_duplicate_error_stays_redacted_with_detailed_policy() {
-    let mut decoder = JcsDecoder::unlimited().with_diagnostic_policy(qubit_json::decode::DiagnosticPolicy::Detailed);
-    let error = decoder.decode_str(r#"{"secret":1,"secret":2}"#).unwrap_err();
+    let mut decoder = JcsDecoder::unlimited()
+        .with_diagnostic_policy(qubit_json::decode::DiagnosticPolicy::Detailed);
+    let error = decoder
+        .decode_str(r#"{"secret":1,"secret":2}"#)
+        .unwrap_err();
     assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
     assert!(!format!("{error:?}").contains("secret"));
     assert!(!error.to_string().contains("secret"));
@@ -356,7 +413,10 @@ fn test_jcs_decoder_reports_strict_syntax_reasons() {
         let JcsDecodeError::Decode(error) = error else {
             panic!("expected strict syntax rejection")
         };
-        assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::InvalidJson);
+        assert_eq!(
+            error.kind(),
+            qubit_json::decode::JsonDecodeErrorKind::InvalidJson
+        );
         assert_eq!(error.syntax_error().unwrap().reason(), expected_reason);
     }
 }
@@ -374,7 +434,10 @@ fn test_jcs_decoder_accepts_json_whitespace_and_reports_binary64_range_errors() 
     let JcsDecodeError::Decode(error) = error else {
         panic!("expected a structured range error")
     };
-    assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(
+        error.kind(),
+        qubit_json::decode::JsonDecodeErrorKind::InvalidJson
+    );
     assert_eq!(
         error.syntax_error().unwrap().reason(),
         JsonSyntaxErrorReason::FloatOutOfRange
@@ -384,16 +447,25 @@ fn test_jcs_decoder_accepts_json_whitespace_and_reports_binary64_range_errors() 
 #[test]
 fn test_jcs_decoder_nested_duplicate_key_failure_recovers_and_preserves_source_policy() {
     let mut decoder = JcsDecoder::unlimited();
-    let error = decoder.decode_str(r#"{"outer":{"x":1,"x":2}}"#).unwrap_err();
+    let error = decoder
+        .decode_str(r#"{"outer":{"x":1,"x":2}}"#)
+        .unwrap_err();
     assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
-    assert_eq!(decoder.decode_str("true").unwrap(), serde_json::Value::Bool(true));
+    assert_eq!(
+        decoder.decode_str("true").unwrap(),
+        serde_json::Value::Bool(true)
+    );
 
-    let mut detailed = JcsDecoder::unlimited().with_diagnostic_policy(qubit_json::decode::DiagnosticPolicy::Detailed);
+    let mut detailed = JcsDecoder::unlimited()
+        .with_diagnostic_policy(qubit_json::decode::DiagnosticPolicy::Detailed);
     let error = detailed.decode_str("{").unwrap_err();
     let JcsDecodeError::Decode(inner) = error else {
         panic!("expected invalid JSON decode error")
     };
-    assert_eq!(inner.kind(), qubit_json::decode::JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(
+        inner.kind(),
+        qubit_json::decode::JsonDecodeErrorKind::InvalidJson
+    );
     assert!(std::error::Error::source(&inner).is_some());
 
     let redacted = JcsDecoder::unlimited().decode_str("{").unwrap_err();

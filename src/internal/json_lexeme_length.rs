@@ -28,7 +28,11 @@ impl JsonLexemeLength {
     #[must_use]
     #[inline(always)]
     pub(crate) const fn unsigned_integer(value: u128) -> usize {
-        if value < 10 { 1 } else { value.ilog10() as usize + 1 }
+        if value < 10 {
+            1
+        } else {
+            value.ilog10() as usize + 1
+        }
     }
 
     /// Returns the byte length emitted by serde_json for one finite `f32`.
