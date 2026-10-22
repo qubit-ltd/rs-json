@@ -64,6 +64,9 @@ impl JcsWorkingMemoryError {
 }
 
 impl fmt::Display for JcsWorkingMemoryError {
+    /// Formats the configured limit and rejected request for diagnostics.
+    ///
+    /// Returns a formatting error if the destination rejects the output.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,

@@ -38,6 +38,15 @@ pub enum JcsEncodeErrorKind {
 }
 
 impl fmt::Display for JcsEncodeErrorKind {
+    /// Writes the stable lowercase snake-case category name.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination that receives the category name.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter's error if writing the name fails.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Budget => "budget",
@@ -51,6 +60,19 @@ impl fmt::Display for JcsEncodeErrorKind {
 impl FromStr for JcsEncodeErrorKind {
     type Err = &'static str;
 
+    /// Parses a category name without ASCII case sensitivity.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Category name to parse.
+    ///
+    /// # Returns
+    ///
+    /// The matching JCS encoding error category.
+    ///
+    /// # Errors
+    ///
+    /// Returns a static diagnostic when `value` is not a known category.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.eq_ignore_ascii_case("budget") {
             Ok(Self::Budget)

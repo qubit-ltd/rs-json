@@ -69,9 +69,5 @@ pub trait JsonTreeMutVisitor {
     ///
     /// Returns the visitor's [`Self::Error`] when the visitor cannot process
     /// the current node.
-    fn visit(
-        &mut self,
-        value: &mut Value,
-        context: JsonTreeContext<'_>,
-    ) -> Result<JsonTreeControl, Self::Error>;
+    fn visit(&mut self, value: &mut Value, context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error>;
 }

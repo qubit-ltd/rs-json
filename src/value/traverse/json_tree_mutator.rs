@@ -72,14 +72,8 @@ use super::internal::MutFrame;
 /// let mut value = Value::Null;
 /// assert!(mutator.process(&mut value, &mut Visitor).is_ok());
 /// ```
-pub struct JsonTreeMutator<
-    'input_transaction,
-    'input_budget,
-    'output_transaction,
-    'output_budget,
-    R,
-    Q,
-> where
+pub struct JsonTreeMutator<'input_transaction, 'input_budget, 'output_transaction, 'output_budget, R, Q>
+where
     Q: ResourceQuantity,
 {
     /// Transaction receiving the complete original-tree charges.
@@ -141,11 +135,7 @@ where
     /// callback failure, or [`JsonTreeMutateError::OutputBudget`] after a
     /// complete mutation whose result is rejected. Visitor and output failures
     /// retain mutations already made to `root`.
-    pub fn process<V>(
-        &mut self,
-        root: &mut Value,
-        visitor: &mut V,
-    ) -> Result<(), JsonTreeMutateError<R, Q, V::Error>>
+    pub fn process<V>(&mut self, root: &mut Value, visitor: &mut V) -> Result<(), JsonTreeMutateError<R, Q, V::Error>>
     where
         V: JsonTreeMutVisitor,
     {
@@ -159,6 +149,37 @@ where
     }
 
     /// Runs mutable visitor callbacks without budget side effects.
+    ///
+    /// An explicit frame stack visits each node before its children. The
+    /// visitor may replace the current value or skip its descendants; its first
+    /// error stops traversal and is returned to the caller. Parent cursors
+    /// remain suspended while a child frame is active, preserving the
+    /// pointer-safety invariant documented for this module.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `V` - Visitor receiving each mutable value and its location context.
+    ///
+    /// # Parameters
+    ///
+    /// * `root` - Root value whose nodes are visited and may be replaced.
+    /// * `visitor` - Callback applied before descending into each node's
+    ///   children.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after all selected callbacks complete, or the first visitor
+    /// error before traversal finishes.
+    ///
+    /// # Errors
+    ///
+    /// Returns the visitor's error unchanged when a callback fails; mutations
+    /// already made to `root` remain in place.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the traversal stack invariant is violated and its active
+    /// frame is unexpectedly absent.
     fn mutate<V>(root: &mut Value, visitor: &mut V) -> Result<(), V::Error>
     where
         V: JsonTreeMutVisitor,

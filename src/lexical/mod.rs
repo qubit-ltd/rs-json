@@ -7,8 +7,7 @@
 // =============================================================================
 //! Shared crate-private lexical infrastructure.
 
-mod json_lexical_container_frame;
-mod json_lexical_cursor;
+mod internal;
 mod json_lexical_error;
 mod json_lexical_error_reason;
 mod json_lexical_event;
@@ -16,7 +15,8 @@ mod json_lexical_failure;
 mod json_lexical_scanner;
 mod json_number_model;
 
-pub(crate) use json_lexical_cursor::line_column_at;
+#[cfg(any(feature = "jcs", test))]
+pub(crate) use internal::json_lexical_cursor::line_column_at;
 pub(crate) use json_lexical_error::JsonLexicalError;
 pub(crate) use json_lexical_error_reason::JsonLexicalErrorReason;
 pub(crate) use json_lexical_event::JsonLexicalEvent;

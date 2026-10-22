@@ -14,10 +14,7 @@ use crate::lexical::JsonLexicalErrorReason;
 #[test]
 fn test_json_lexical_error_reason_formats_every_variant() {
     let cases = [
-        (
-            JsonLexicalErrorReason::UnexpectedEnd,
-            "unexpected end of input",
-        ),
+        (JsonLexicalErrorReason::UnexpectedEnd, "unexpected end of input"),
         (JsonLexicalErrorReason::UnexpectedByte, "unexpected byte"),
         (JsonLexicalErrorReason::ExpectedColon, "expected ':'"),
         (
@@ -28,22 +25,10 @@ fn test_json_lexical_error_reason_formats_every_variant() {
             JsonLexicalErrorReason::ExpectedCommaOrObjectEnd,
             "expected ',' or '}' in object",
         ),
-        (
-            JsonLexicalErrorReason::ExpectedObjectKey,
-            "expected object key",
-        ),
-        (
-            JsonLexicalErrorReason::InvalidEscape,
-            "invalid string escape",
-        ),
-        (
-            JsonLexicalErrorReason::InvalidUnicodeEscape,
-            "invalid Unicode escape",
-        ),
-        (
-            JsonLexicalErrorReason::UnpairedSurrogate,
-            "unpaired Unicode surrogate",
-        ),
+        (JsonLexicalErrorReason::ExpectedObjectKey, "expected object key"),
+        (JsonLexicalErrorReason::InvalidEscape, "invalid string escape"),
+        (JsonLexicalErrorReason::InvalidUnicodeEscape, "invalid Unicode escape"),
+        (JsonLexicalErrorReason::UnpairedSurrogate, "unpaired Unicode surrogate"),
         (JsonLexicalErrorReason::InvalidUtf8, "invalid UTF-8"),
         (JsonLexicalErrorReason::InvalidNumber, "invalid JSON number"),
         (
@@ -54,14 +39,8 @@ fn test_json_lexical_error_reason_formats_every_variant() {
             JsonLexicalErrorReason::FloatOutOfRange,
             "JSON number is outside the finite f64 range",
         ),
-        (
-            JsonLexicalErrorReason::TrailingCharacters,
-            "trailing characters",
-        ),
-        (
-            JsonLexicalErrorReason::NestingOverflow,
-            "JSON nesting overflow",
-        ),
+        (JsonLexicalErrorReason::TrailingCharacters, "trailing characters"),
+        (JsonLexicalErrorReason::NestingOverflow, "JSON nesting overflow"),
     ];
 
     for (reason, expected) in cases {

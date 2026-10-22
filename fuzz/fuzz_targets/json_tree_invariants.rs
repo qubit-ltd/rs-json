@@ -9,6 +9,7 @@
 
 #![no_main]
 
+use std::convert::Infallible;
 #[cfg(all(not(fuzzing), panic = "unwind"))]
 use std::panic::AssertUnwindSafe;
 #[cfg(all(not(fuzzing), panic = "unwind"))]
@@ -27,7 +28,9 @@ use qubit_json::value::traverse::JsonTreeMutateError;
 use qubit_json::value::traverse::JsonTreeMutator;
 use qubit_json_fuzz::input_limit::bounded_input;
 use serde_json::Value;
+use serde_json::from_slice;
 use serde_json::json;
+use serde_json::to_vec;
 
 const MAX_TREE_DEPTH: usize = 64;
 const GENEROUS_LIMIT: usize = 1_000_000;
@@ -74,8 +77,8 @@ fn generous_budget() -> JsonValueBudget<JsonResource, usize> {
 
 /// Ensures a restored tree remains a valid JSON value after a traversal path.
 fn assert_serializable(value: &Value) {
-    let encoded = serde_json::to_vec(value).expect("tree restoration must preserve a serializable JSON value");
-    let decoded = serde_json::from_slice::<Value>(&encoded).expect("restored tree must remain valid JSON");
+    let encoded = to_vec(value).expect("tree restoration must preserve a serializable JSON value");
+    let decoded = from_slice::<Value>(&encoded).expect("restored tree must remain valid JSON");
     assert_eq!(decoded, *value);
 }
 
@@ -100,7 +103,7 @@ struct ControlVisitor {
 }
 
 impl JsonTreeMutVisitor for ControlVisitor {
-    type Error = std::convert::Infallible;
+    type Error = Infallible;
 
     /// Applies redaction and returns the fuzz-selected subtree control.
     fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
@@ -157,7 +160,7 @@ struct PanicVisitor {
 
 #[cfg(all(not(fuzzing), panic = "unwind"))]
 impl JsonTreeMutVisitor for PanicVisitor {
-    type Error = std::convert::Infallible;
+    type Error = Infallible;
 
     /// Mutates objects and then deliberately panics at the selected callback.
     fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
@@ -174,8 +177,10 @@ fuzz_target!(|data: &[u8]| {
     let Some(data) = bounded_input(data) else {
         return;
     };
-    let (control, payload) = data.split_first().map_or((0, data), |(control, payload)| (*control, payload));
-    let original = serde_json::from_slice::<Value>(payload).unwrap_or_else(|_| make_tree(payload));
+    let (control, payload) = data
+        .split_first()
+        .map_or((0, data), |(control, payload)| (*control, payload));
+    let original = from_slice::<Value>(payload).unwrap_or_else(|_| make_tree(payload));
 
     let mut success_value = original.clone();
     let mut success_input_budget = generous_budget();
@@ -223,13 +228,15 @@ fuzz_target!(|data: &[u8]| {
             Err(JsonTreeMutateError::OutputBudget(error)) if error.resource() == &JsonResource::Nodes
         ));
     } else {
-        assert!(limited_error.is_ok(), "a one-node result must fit the one-node output budget");
+        assert!(
+            limited_error.is_ok(),
+            "a one-node result must fit the one-node output budget"
+        );
     }
 
-    // Even an empty fuzz input produces the root object, two scalar fields,
-    // and the items array, so a maximum of three nodes always rejects input.
-    let node_limit = 1 + usize::from(data.first().copied().unwrap_or(0)) % 3;
-    let structure = StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, node_limit));
+    // Every JSON value contains a root node, so a zero-node limit always
+    // rejects input before the visitor can mutate the tree.
+    let structure = StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 0));
     let mut rejected_value = original.clone();
     let mut rejected_input_budget = JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
@@ -240,13 +247,12 @@ fuzz_target!(|data: &[u8]| {
     {
         let mut input_transaction = rejected_input_budget.transaction();
         let mut output_transaction = rejected_output_budget.transaction();
-        let result = JsonTreeMutator::new(&mut input_transaction, &mut output_transaction)
-            .process(
-                &mut rejected_value,
-                &mut ControlVisitor {
-                    skip_subtree: control & 1 != 0,
-                },
-            );
+        let result = JsonTreeMutator::new(&mut input_transaction, &mut output_transaction).process(
+            &mut rejected_value,
+            &mut ControlVisitor {
+                skip_subtree: control & 1 != 0,
+            },
+        );
         assert!(matches!(result, Err(JsonTreeMutateError::InputBudget(_))));
     }
     assert_eq!(rejected_value, original);

@@ -7,20 +7,17 @@
 // =============================================================================
 //! Regression checks for the typed decoder fuzz payload.
 
-#[path = "../fuzz_targets/internal/fuzz_record.rs"]
-mod fuzz_record;
-
-use fuzz_record::FuzzRecord;
+use serde_json::Value;
+use serde_json::from_str;
+use serde_json::json;
 
 #[test]
 fn test_fuzz_record_decodes_representative_object_fields() {
-    let record: FuzzRecord = serde_json::from_str(
-        r#"{"id":7,"label":"representative","enabled":true,"tags":["fuzz","record"]}"#,
-    )
-    .expect("the corpus object must construct the typed record");
+    let record: Value = from_str(r#"{"id":7,"label":"representative","enabled":true,"tags":["fuzz","record"]}"#)
+        .expect("the corpus object must decode as a JSON object");
 
-    assert_eq!(record.id, 7);
-    assert_eq!(record.label, "representative");
-    assert!(record.enabled);
-    assert_eq!(record.tags, ["fuzz", "record"]);
+    assert_eq!(record["id"], 7);
+    assert_eq!(record["label"], "representative");
+    assert_eq!(record["enabled"], true);
+    assert_eq!(record["tags"], json!(["fuzz", "record"]));
 }

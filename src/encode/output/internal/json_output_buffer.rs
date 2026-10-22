@@ -66,7 +66,10 @@ where
     ///
     /// Returns [`JsonEncodeErrorKind::Budget`](crate::encode::JsonEncodeErrorKind::Budget) for a recorded output violation,
     /// taking precedence over its erased I/O representation. Otherwise returns
-    /// [`JsonEncodeErrorKind::Serialize`](crate::encode::JsonEncodeErrorKind::Serialize) for the serializer failure.
+    /// [`JsonEncodeErrorKind::InvalidRawJson`](crate::encode::JsonEncodeErrorKind::InvalidRawJson)
+    /// for invalid raw JSON, or
+    /// [`JsonEncodeErrorKind::Serialize`](crate::encode::JsonEncodeErrorKind::Serialize)
+    /// for the serializer failure, in that order.
     pub(in crate::encode) fn into_result(
         self,
         result: Result<(), serde_json::Error>,
@@ -80,10 +83,7 @@ where
             return Err(JsonEncodeError::<R, Q>::invalid_raw_json(error));
         }
         if result.is_err() {
-            let error = self
-                .accounting
-                .borrow_mut()
-                .take_serialization_error_or_custom();
+            let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
             return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         Ok(self.bytes)
@@ -100,6 +100,15 @@ where
     /// The buffer does not charge the output budget. Its caller consumes the
     /// complete length only after successful serialization, so a failed Vec or
     /// buffered-writer encode leaves output usage unchanged.
+    ///
+    /// # Returns
+    ///
+    /// The number of input bytes appended when the whole slice is accepted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error if the resulting length overflows `usize` or if
+    /// appending the complete slice would exceed the remaining output budget.
     fn write(&mut self, input: &[u8]) -> io::Result<usize> {
         let next = match self.bytes.len().checked_add(input.len()) {
             Some(next) => next,
@@ -129,6 +138,14 @@ where
     }
 
     /// Flushes the in-memory buffer without performing external I/O.
+    ///
+    /// # Returns
+    ///
+    /// Always returns `Ok(())`; all accepted bytes remain in the buffer.
+    ///
+    /// # Errors
+    ///
+    /// This implementation does not produce an error.
     #[inline(always)]
     fn flush(&mut self) -> io::Result<()> {
         Ok(())

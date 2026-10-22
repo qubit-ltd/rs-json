@@ -17,6 +17,14 @@ pub(crate) enum JsonLexemeLength {}
 
 impl JsonLexemeLength {
     /// Returns the decimal byte length of one signed JSON integer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Signed integer whose decimal representation is measured.
+    ///
+    /// # Returns
+    ///
+    /// The decimal digit count, including one byte for a negative sign.
     #[must_use]
     #[inline(always)]
     pub(crate) const fn signed_integer(value: i128) -> usize {
@@ -25,17 +33,35 @@ impl JsonLexemeLength {
     }
 
     /// Returns the decimal byte length of one unsigned JSON integer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Unsigned integer whose decimal representation is measured.
+    ///
+    /// # Returns
+    ///
+    /// The decimal digit count; zero has a length of one byte.
     #[must_use]
     #[inline(always)]
     pub(crate) const fn unsigned_integer(value: u128) -> usize {
-        if value < 10 {
-            1
-        } else {
-            value.ilog10() as usize + 1
-        }
+        if value < 10 { 1 } else { value.ilog10() as usize + 1 }
     }
 
     /// Returns the byte length emitted by serde_json for one finite `f32`.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Finite single-precision value to format with serde_json's
+    ///   compact formatter.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes emitted by the compact formatter.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the formatter rejects the value or the internal length writer
+    /// rejects output; finite values and this writer are expected to succeed.
     #[must_use]
     #[inline]
     pub(crate) fn finite_f32(value: f32) -> usize {
@@ -47,6 +73,20 @@ impl JsonLexemeLength {
     }
 
     /// Returns the byte length emitted by serde_json for one finite `f64`.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Finite double-precision value to format with serde_json's
+    ///   compact formatter.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes emitted by the compact formatter.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the formatter rejects the value or the internal length writer
+    /// rejects output; finite values and this writer are expected to succeed.
     #[must_use]
     #[inline]
     pub(crate) fn finite_f64(value: f64) -> usize {
@@ -58,6 +98,14 @@ impl JsonLexemeLength {
     }
 
     /// Returns the decimal byte length of one JSON byte-array element.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Unsigned byte whose decimal JSON representation is measured.
+    ///
+    /// # Returns
+    ///
+    /// The number of decimal digits in the byte's JSON number representation.
     #[must_use]
     #[inline(always)]
     pub(crate) const fn byte(value: u8) -> usize {

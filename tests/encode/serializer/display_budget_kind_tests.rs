@@ -20,10 +20,11 @@ use serde::Serializer;
 
 use crate::encode::json_encode_test_support::encode;
 
+/// Wraps a displayable value for Serde string collection tests.
 struct DisplayValue<T>(T);
 
 impl<T: fmt::Display> Serialize for DisplayValue<T> {
-    /// Emits text through Serde's display collection hook.
+    /// Collects the wrapped value's display representation as a JSON string.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -32,18 +33,22 @@ impl<T: fmt::Display> Serialize for DisplayValue<T> {
     }
 }
 
+/// Displays a string in separate UTF-8 chunks for preview accounting tests.
 struct ChunkedDisplay;
 
 impl fmt::Display for ChunkedDisplay {
+    /// Writes two multi-byte segments in separate formatter calls.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("é")?;
         formatter.write_str("🙂")
     }
 }
 
+/// Serializes ChunkedDisplay through Serde's collected-string path.
 struct ChunkedValue;
 
 impl Serialize for ChunkedValue {
+    /// Delegates serialization to the multi-chunk display fixture.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -52,10 +57,12 @@ impl Serialize for ChunkedValue {
     }
 }
 
+/// Supplies displayed text as an ordered map key in budget tests.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 struct DisplayKey(&'static str);
 
 impl Serialize for DisplayKey {
+    /// Emits the key text through Serde's display collection hook.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -72,8 +79,7 @@ fn test_display_budget_kind_checks_collected_string() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let error = encode(&DisplayValue("display"), &mut session)
-        .expect_err("display text exceeds the string budget");
+    let error = encode(&DisplayValue("display"), &mut session).expect_err("display text exceeds the string budget");
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert_eq!(
@@ -94,8 +100,7 @@ fn test_display_preview_charges_string_once_after_collection() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let output =
-        encode(&ChunkedValue, &mut session).expect("both chunks fit the complete string budget");
+    let output = encode(&ChunkedValue, &mut session).expect("both chunks fit the complete string budget");
 
     assert_eq!(output, "\"é🙂\"".as_bytes());
     assert_eq!(session.value_budget().used_nodes(), Some(1));
@@ -111,8 +116,7 @@ fn test_display_preview_admits_empty_string_once() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let output =
-        encode(&DisplayValue(""), &mut session).expect("empty text fits zero payload bytes");
+    let output = encode(&DisplayValue(""), &mut session).expect("empty text fits zero payload bytes");
 
     assert_eq!(output, b"\"\"");
     assert_eq!(session.value_budget().used_nodes(), Some(1));
@@ -135,7 +139,8 @@ fn test_display_preview_uses_remaining_payload_capacity() {
     assert_eq!(session.value_budget().used_payload_bytes(), Some(5));
 }
 
-/// Verifies a prospective UTF-8 string is rejected before the failed chunk is accepted.
+/// Verifies a prospective UTF-8 string is rejected before the failed chunk is
+/// accepted.
 #[test]
 fn test_display_preview_rejects_prospective_utf8_overflow() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
@@ -144,15 +149,11 @@ fn test_display_preview_rejects_prospective_utf8_overflow() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let error = encode(&ChunkedValue, &mut session)
-        .expect_err("six UTF-8 bytes exceed the five-byte limit");
+    let error = encode(&ChunkedValue, &mut session).expect_err("six UTF-8 bytes exceed the five-byte limit");
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert_eq!(
-        error
-            .budget_error()
-            .expect("budget error is retained")
-            .resource(),
+        error.budget_error().expect("budget error is retained").resource(),
         &JsonResource::StringBytes,
     );
     assert_eq!(session.value_budget().used_nodes(), Some(0));
@@ -182,20 +183,17 @@ fn test_display_preview_checks_output_lower_bound_before_growth() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let error = encode(&ChunkedValue, &mut session)
-        .expect_err("the three-byte payload exceeds output capacity");
+    let error = encode(&ChunkedValue, &mut session).expect_err("the three-byte payload exceeds output capacity");
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert_eq!(
-        error
-            .budget_error()
-            .expect("budget error is retained")
-            .resource(),
+        error.budget_error().expect("budget error is retained").resource(),
         &JsonResource::OutputBytes,
     );
 }
 
-/// Verifies display payload conversion errors remain typed for narrow quantities.
+/// Verifies display payload conversion errors remain typed for narrow
+/// quantities.
 #[test]
 fn test_display_preview_preserves_narrow_quantity_error() {
     let limits = JsonEncodeLimits::<JsonResource, u8>::builder()

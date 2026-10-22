@@ -18,6 +18,13 @@ use serde::de::DeserializeSeed;
 use serde::de::Error;
 
 /// A map-key seed that checks the prospective entry before decoding its key.
+///
+/// # Type Parameters
+///
+/// * `'transaction` - Lifetime of the value transaction that receives charges.
+/// * `'budget` - Lifetime of the resource budget backing that transaction.
+/// * `R` - Resource identity used for budget accounting.
+/// * `Q` - Quantity representation used for budget accounting.
 pub(in crate::value) struct JsonKeySeed<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
@@ -34,9 +41,19 @@ where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
+    /// Decoded object key text produced by this seed.
     type Value = String;
 
     /// Checks the map-entry limit before delegating key decoding to Serde.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` - Deserializer providing the object-key text.
+    ///
+    /// # Errors
+    ///
+    /// Returns the deserializer error if the entry exceeds its budget or the
+    /// key text cannot be decoded as a string.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,

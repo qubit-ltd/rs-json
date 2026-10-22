@@ -14,6 +14,7 @@ use qubit_json::encode::JsonIntegerSignedness;
 use qubit_json::encode::JsonMapKeyKind;
 use qubit_json::encode::JsonSerializationErrorCategory;
 use qubit_json::encode::JsonSerializationErrorKind;
+use qubit_json::encode::JsonSerializerStateError;
 use qubit_json::value::JsonValueEncoder;
 use serde::Serialize;
 use serde::Serializer;
@@ -329,6 +330,49 @@ impl fmt::Display for DisplayProbe {
     }
 }
 
+#[derive(Serialize)]
+struct UnitStruct;
+
+#[derive(Serialize)]
+struct Coordinate(i32, bool);
+
+#[derive(Serialize)]
+struct NamedRecord {
+    id: u32,
+    active: bool,
+}
+
+#[derive(Serialize)]
+struct OptionalRecord {
+    name: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<&'static str>,
+}
+
+#[derive(Serialize)]
+enum CompoundVariant {
+    Unit,
+    Newtype(i32),
+    Tuple(i32, bool),
+    Struct { id: u32, active: bool },
+}
+
+/// Exercises Serde's explicit skipped-field callback for struct serializers.
+struct ExplicitSkipFieldProbe;
+
+impl Serialize for ExplicitSkipFieldProbe {
+    /// Skips one field before serializing the retained field.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut record = serializer.serialize_struct("Record", 2)?;
+        record.skip_field("omitted")?;
+        record.serialize_field("kept", &7_u8)?;
+        record.end()
+    }
+}
+
 /// Exercises the recommended encoder construction and successful projection.
 #[test]
 fn test_json_value_encoder_encodes_nested_value() {
@@ -353,12 +397,8 @@ fn test_json_value_encoder_preserves_integer_boundaries() {
 #[test]
 fn test_json_value_encoder_rejects_wide_integers() {
     let encoder = JsonValueEncoder::new();
-    let signed = encoder
-        .encode(&i128::MAX)
-        .expect_err("wide signed integer must fail");
-    let unsigned = encoder
-        .encode(&u128::MAX)
-        .expect_err("wide unsigned integer must fail");
+    let signed = encoder.encode(&i128::MAX).expect_err("wide signed integer must fail");
+    let unsigned = encoder.encode(&u128::MAX).expect_err("wide unsigned integer must fail");
     assert_eq!(
         signed.kind(),
         JsonSerializationErrorKind::IntegerOutOfRange {
@@ -367,10 +407,7 @@ fn test_json_value_encoder_rejects_wide_integers() {
     );
     assert_eq!(signed.category(), JsonSerializationErrorCategory::Number);
     assert!(signed.is_number_error());
-    assert_eq!(
-        signed.integer_signedness(),
-        Some(JsonIntegerSignedness::Signed)
-    );
+    assert_eq!(signed.integer_signedness(), Some(JsonIntegerSignedness::Signed));
     assert_eq!(
         unsigned.kind(),
         JsonSerializationErrorKind::IntegerOutOfRange {
@@ -384,24 +421,15 @@ fn test_json_value_encoder_rejects_wide_integers() {
 fn test_json_value_encoder_rejects_non_finite_floats() {
     let encoder = JsonValueEncoder::new();
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        let error = encoder
-            .encode(&value)
-            .expect_err("non-finite float must fail");
+        let error = encoder.encode(&value).expect_err("non-finite float must fail");
         assert_eq!(error.kind(), JsonSerializationErrorKind::NonFiniteFloat);
     }
     let custom = encoder
         .encode(&NestedNonFiniteProbe)
         .expect_err("custom serializer failure must remain custom");
-    assert_eq!(
-        custom.kind(),
-        JsonSerializationErrorKind::CustomSerialization
-    );
+    assert_eq!(custom.kind(), JsonSerializationErrorKind::CustomSerialization);
     assert_eq!(custom.category(), JsonSerializationErrorCategory::Custom);
-    assert!(
-        !custom
-            .to_string()
-            .contains("non-finite floating-point value")
-    );
+    assert!(!custom.to_string().contains("non-finite floating-point value"));
 }
 
 /// Keeps f32 serialization short enough to round-trip as the original f32.
@@ -416,10 +444,7 @@ fn test_json_value_encoder_preserves_float32_semantics() {
         from_value::<f32>(projected).expect("projected f32 should decode"),
         source
     );
-    assert_ne!(
-        text,
-        to_string(&widened).expect("widened number should render")
-    );
+    assert_ne!(text, to_string(&widened).expect("widened number should render"));
 }
 
 /// Accepts finite map keys using the same text as the strict text encoder.
@@ -438,13 +463,9 @@ fn test_json_value_encoder_matches_text_encoder_float_map_keys() {
     let mut text_encoder = JsonEncoder::unlimited();
     for key in [-0.0, 1.0, 1.5, f64::MIN_POSITIVE, f64::MAX] {
         let probe = FloatKeyProbe(key);
-        let value = value_encoder
-            .encode(&probe)
-            .expect("finite key should encode");
+        let value = value_encoder.encode(&probe).expect("finite key should encode");
         let value_text = to_vec(&value).expect("JSON value should render");
-        let direct_text = text_encoder
-            .to_vec(&probe)
-            .expect("finite key should encode as text");
+        let direct_text = text_encoder.to_vec(&probe).expect("finite key should encode as text");
 
         assert_eq!(value_text, direct_text, "map key differs for {key}");
     }
@@ -492,8 +513,8 @@ fn test_json_value_encoder_rejects_non_finite_float_map_key() {
 #[test]
 fn test_json_value_encoder_supports_scalar_map_key_entry_points() {
     const EXPECTED_KEYS: [&str; 19] = [
-        "true", "-8", "-16", "-32", "-64", "-128", "8", "16", "32", "64", "128", "1.5", "2.5", "x",
-        "text", "1", "Unit", "-1", "display",
+        "true", "-8", "-16", "-32", "-64", "-128", "8", "16", "32", "64", "128", "1.5", "2.5", "x", "text", "1",
+        "Unit", "-1", "display",
     ];
     let encoder = JsonValueEncoder::new();
     let supported_indices = (0_u8..=14).chain([17, 20, 21, 30]);
@@ -576,15 +597,16 @@ fn test_json_value_encoder_rejects_duplicate_object_key() {
 /// Materializes a strict RawValue payload into its represented JSON value.
 #[test]
 fn test_json_value_encoder_materializes_raw_value() {
-    let raw = RawValue::from_string(String::from(r#"{"ok":true,"values":[1,2]}"#))
-        .expect("fixture should be valid raw JSON");
+    let raw =
+        RawValue::from_string(String::from(r#"{"ok":true,"values":[1,2]}"#)).expect("fixture should be valid raw JSON");
     let actual = JsonValueEncoder::new()
         .encode(&raw)
         .expect("strict RawValue should materialize");
     assert_eq!(actual, json!({"ok": true, "values": [1, 2]}));
 }
 
-/// Materializes real RawValue numbers as numbers rather than private marker maps.
+/// Materializes real RawValue numbers as numbers rather than private marker
+/// maps.
 #[test]
 fn test_json_value_encoder_materializes_raw_value_numbers() {
     for (text, expected) in [
@@ -619,21 +641,13 @@ fn test_json_value_encoder_classifies_display_formatting_failure() {
     let error = JsonValueEncoder::new()
         .encode(&FailingDisplayProbe)
         .expect_err("failing Display must produce an error");
-    assert_eq!(
-        error.kind(),
-        JsonSerializationErrorKind::DisplayFormattingFailed
-    );
-    assert_eq!(
-        error.category(),
-        JsonSerializationErrorCategory::SerializerContract
-    );
+    assert_eq!(error.kind(), JsonSerializationErrorKind::DisplayFormattingFailed);
+    assert_eq!(error.category(), JsonSerializationErrorCategory::SerializerContract);
 }
 
 /// Classifies each externally reachable invalid map call sequence.
 #[test]
 fn test_json_value_encoder_classifies_invalid_map_states() {
-    use qubit_json::encode::JsonSerializerStateError;
-
     let encoder = JsonValueEncoder::new();
     let expected = [
         JsonSerializerStateError::MapValueWithoutKey,
@@ -670,4 +684,57 @@ fn test_json_value_encoder_supports_all_serde_entry_points() {
             .encode(&SerializerProbe(index))
             .expect("supported Serde entry point should encode");
     }
+}
+
+/// Checks the JSON shapes emitted by derived unit, tuple, newtype, and enum
+/// serializers.
+#[test]
+fn test_json_value_encoder_materializes_derived_compound_shapes() {
+    let encoder = JsonValueEncoder::new();
+
+    assert_eq!(encoder.encode(&UnitStruct), Ok(Value::Null));
+    assert_eq!(encoder.encode(&(7_i32, true)), Ok(json!([7, true])));
+    assert_eq!(encoder.encode(&Coordinate(8, false)), Ok(json!([8, false])));
+    assert_eq!(
+        encoder.encode(&NamedRecord { id: 9, active: true }),
+        Ok(json!({"id": 9, "active": true})),
+    );
+    assert_eq!(
+        encoder.encode(&OptionalRecord {
+            name: "Ada",
+            note: None,
+        }),
+        Ok(json!({"name": "Ada"})),
+    );
+    assert_eq!(
+        encoder.encode(&OptionalRecord {
+            name: "Ada",
+            note: Some("memo"),
+        }),
+        Ok(json!({"name": "Ada", "note": "memo"})),
+    );
+
+    assert_eq!(encoder.encode(&CompoundVariant::Unit), Ok(json!("Unit")));
+    assert_eq!(
+        encoder.encode(&CompoundVariant::Newtype(10)),
+        Ok(json!({"Newtype": 10}))
+    );
+    assert_eq!(
+        encoder.encode(&CompoundVariant::Tuple(11, false)),
+        Ok(json!({"Tuple": [11, false]})),
+    );
+    assert_eq!(
+        encoder.encode(&CompoundVariant::Struct { id: 12, active: true }),
+        Ok(json!({"Struct": {"id": 12, "active": true}})),
+    );
+}
+
+/// Accepts the Serde struct skip-field callback and preserves remaining fields.
+#[test]
+fn test_json_value_encoder_accepts_explicit_struct_skip_field() {
+    let actual = JsonValueEncoder::new()
+        .encode(&ExplicitSkipFieldProbe)
+        .expect("a skipped struct field should not alter the object");
+
+    assert_eq!(actual, json!({"kept": 7}));
 }

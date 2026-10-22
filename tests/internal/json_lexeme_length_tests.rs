@@ -13,6 +13,7 @@ use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use serde::Serialize;
+use serde_json::to_vec;
 
 use crate::encode::json_encode_test_support::encode;
 
@@ -21,18 +22,14 @@ fn assert_number_lexeme_budget<T>(value: T)
 where
     T: Debug + Serialize,
 {
-    let expected = serde_json::to_vec(&value).expect("finite test number must serialize");
+    let expected = to_vec(&value).expect("finite test number must serialize");
     let mut exact = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()
             .max_number_bytes(expected.len())
             .build(),
     );
-    let encoded =
-        encode(&value, &mut exact).expect("exact number-byte budget must admit the value");
-    assert_eq!(
-        encoded, expected,
-        "compact output must match serde_json for {value:?}"
-    );
+    let encoded = encode(&value, &mut exact).expect("exact number-byte budget must admit the value");
+    assert_eq!(encoded, expected, "compact output must match serde_json for {value:?}");
 
     let mut short = JsonEncodeSession::from_limits(
         JsonEncodeLimits::<JsonResource, usize>::builder()

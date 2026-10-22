@@ -87,6 +87,16 @@ fn record_allocation(pointer: *mut u8, size: usize) {
 
 /// Counts allocations made by one operation, excluding report formatting and
 /// Criterion samples.
+///
+/// # Parameters
+///
+/// * `shape` — the fixture shape label.
+/// * `path` — the encoding path label.
+/// * `operation` — the operation whose allocations are measured.
+///
+/// # Returns
+///
+/// This function returns after printing the allocation report.
 #[cfg(feature = "jcs-allocation-diagnostics")]
 fn report_allocations(shape: &str, path: &str, operation: impl FnOnce() -> Vec<u8>) {
     ALLOCATION_COUNT.store(0, Ordering::Relaxed);
@@ -105,6 +115,10 @@ fn report_allocations(shape: &str, path: &str, operation: impl FnOnce() -> Vec<u
 }
 
 /// Builds an object with many members to exercise sorting-table capacity.
+///
+/// # Returns
+///
+/// The large object fixture.
 fn large_object() -> Value {
     let mut entries = Map::with_capacity(LARGE_OBJECT_ENTRIES);
     for index in 0..LARGE_OBJECT_ENTRIES {
@@ -117,6 +131,10 @@ fn large_object() -> Value {
 }
 
 /// Builds a nested object without recursive construction.
+///
+/// # Returns
+///
+/// The deeply nested object fixture.
 fn deep_object() -> Value {
     let mut value = serde_json::json!({"leaf": true});
     for depth in (0..DEEP_OBJECT_DEPTH).rev() {
@@ -126,11 +144,23 @@ fn deep_object() -> Value {
 }
 
 /// Builds a wide scalar array.
+///
+/// # Returns
+///
+/// The large scalar array fixture.
 fn large_array() -> Value {
     Value::Array((0..LARGE_ARRAY_ITEMS).map(Value::from).collect())
 }
 
 /// Counts the nodes used to configure a generous finite value budget.
+///
+/// # Parameters
+///
+/// * `root` — the value whose nodes are counted.
+///
+/// # Returns
+///
+/// The number of value nodes reachable from `root`.
 fn node_count(root: &Value) -> usize {
     let mut count = 0;
     let mut pending = vec![root];
@@ -146,6 +176,14 @@ fn node_count(root: &Value) -> usize {
 }
 
 /// Registers comparisons using a fresh encoder session for each sample.
+///
+/// # Parameters
+///
+/// * `criterion` — the Criterion harness that receives the benchmark group.
+///
+/// # Returns
+///
+/// This function returns after registering and finishing the benchmark group.
 fn benchmark_jcs_encoding(criterion: &mut Criterion) {
     let fixtures = [
         ("large-object", large_object()),
@@ -165,19 +203,14 @@ fn benchmark_jcs_encoding(criterion: &mut Criterion) {
                 .build();
             report_allocations(shape, "jcs-unlimited", || {
                 let mut encoder = JcsEncoder::unlimited();
-                encoder
-                    .to_vec(value)
-                    .expect("unlimited JCS encoding must succeed")
+                encoder.to_vec(value).expect("unlimited JCS encoding must succeed")
             });
             report_allocations(shape, "jcs-finite-budgets", || {
                 let mut encoder = JcsEncoder::with_limits(finite_limits, FINITE_WORKING_BYTES);
-                encoder
-                    .to_vec(value)
-                    .expect("fixture must fit finite budgets")
+                encoder.to_vec(value).expect("fixture must fit finite budgets")
             });
             report_allocations(shape, "legacy-canonicalizer", || {
-                serde_json_canonicalizer::to_vec(value)
-                    .expect("legacy canonicalizer must encode the fixture")
+                serde_json_canonicalizer::to_vec(value).expect("legacy canonicalizer must encode the fixture")
             });
         }
         return;

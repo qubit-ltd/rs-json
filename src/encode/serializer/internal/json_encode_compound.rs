@@ -22,10 +22,10 @@ use serde::ser::SerializeTuple;
 use serde::ser::SerializeTupleStruct;
 use serde::ser::SerializeTupleVariant;
 
-use super::budgeted_key::BudgetedKey;
-use super::budgeted_private_value::BudgetedPrivateValue;
-use super::budgeted_value::BudgetedValue;
-use super::json_encode_context::JsonEncodeContext;
+use super::BudgetedKey;
+use super::BudgetedPrivateValue;
+use super::BudgetedValue;
+use super::JsonEncodeContext;
 use crate::encode::JsonSerializationErrorKind;
 use crate::encode::JsonSerializerStateError;
 use crate::internal::JsonPrivateProtocolKind;
@@ -34,15 +34,15 @@ use crate::internal::SERDE_JSON_RAW_VALUE_TOKEN;
 
 /// Wraps a Serde compound serializer and checks container operations before
 /// delegating them.
-pub(in crate::encode) struct JsonEncodeCompound<
-    'transaction,
-    'budget,
-    'context,
-    C,
-    R,
-    Q,
-    const VALUE_LIMITS: bool,
-> where
+///
+/// # Type Parameters
+///
+/// * `C` - Underlying Serde compound serializer.
+/// * `R` - Resource identifier used by the shared encode budget.
+/// * `Q` - Quantity representation used by the shared encode budget.
+/// * `VALUE_LIMITS` - Whether value-level limits are enforced.
+pub(in crate::encode) struct JsonEncodeCompound<'transaction, 'budget, 'context, C, R, Q, const VALUE_LIMITS: bool>
+where
     Q: ResourceQuantity,
 {
     /// Underlying Serde compound serializer.
@@ -74,6 +74,17 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a wrapper for a regular JSON array or object compound.
+    ///
+    /// # Parameters
+    ///
+    /// * `inner` - Serde compound serializer that receives admitted values.
+    /// * `context` - Shared mutable state for this serialization traversal.
+    /// * `child_depth` - Root-inclusive depth assigned to child values.
+    ///
+    /// # Returns
+    ///
+    /// A compound wrapper with regular JSON protocol state initialized.
+    #[must_use]
     #[inline]
     pub(super) const fn new(
         inner: C,
@@ -92,6 +103,19 @@ where
     }
 
     /// Creates a wrapper for serde_json's private raw-value compound.
+    ///
+    /// # Parameters
+    ///
+    /// * `inner` - Serde struct serializer for the private compound.
+    /// * `context` - Shared mutable state for this serialization traversal.
+    /// * `depth` - Root-inclusive depth assigned to the private payload.
+    /// * `kind` - Private serde_json protocol represented by the compound.
+    /// * `state` - Validated lifecycle state for the private protocol.
+    ///
+    /// # Returns
+    ///
+    /// A compound wrapper initialized for the selected private protocol.
+    #[must_use]
     pub(super) const fn private(
         inner: C,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
@@ -111,6 +135,18 @@ where
     }
 
     /// Checks the next observed sequence element.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Serde error type used to report count failures.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when limits are disabled or the next element is admitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns `E` when the count overflows or the sequence limit is exceeded.
     #[inline(always)]
     fn next_sequence<E>(&mut self) -> Result<(), E>
     where
@@ -131,6 +167,18 @@ where
     }
 
     /// Checks the next observed map or struct entry.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Serde error type used to report count failures.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when limits are disabled or the next entry is admitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns `E` when the count overflows or the map limit is exceeded.
     #[inline(always)]
     fn next_map_entry<E>(&mut self) -> Result<(), E>
     where
@@ -150,15 +198,19 @@ where
         Ok(())
     }
 
-    /// Confirms the final observed sequence length before completion.
-    fn finish_sequence<E>(&mut self) -> Result<(), E>
-    where
-        E: Error,
-    {
-        Ok(())
-    }
-
-    /// Confirms the final observed map length before completion.
+    /// Rejects completion when a map key has no matching value.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Serde error type used to report an incomplete map entry.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when no key is pending.
+    ///
+    /// # Errors
+    ///
+    /// Returns `E` when a key was serialized without its corresponding value.
     fn finish_map<E>(&mut self) -> Result<(), E>
     where
         E: Error,
@@ -170,6 +222,18 @@ where
     }
 
     /// Records and returns one invalid map serializer state.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Serde error type constructed from the recorded state error.
+    ///
+    /// # Parameters
+    ///
+    /// * `reason` - Invalid map state to preserve in the serialization error.
+    ///
+    /// # Returns
+    ///
+    /// An `E` containing the recorded invalid-state reason.
     fn serialization_error<E>(&self, reason: JsonSerializerStateError) -> E
     where
         E: Error,
@@ -180,21 +244,32 @@ where
     }
 
     /// Records the current private protocol's stable failure.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Serde error type constructed from the protocol error.
+    ///
+    /// # Returns
+    ///
+    /// An `E` containing the private protocol's stable invalid-state reason.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called for a regular compound without a private protocol kind.
     fn private_protocol_error<E>(&self) -> E
     where
         E: Error,
     {
         let kind = self.private_kind.expect("private protocol kind must exist");
-        self.context.borrow_mut().serialization_error(
-            JsonSerializationErrorKind::InvalidSerializerState {
+        self.context
+            .borrow_mut()
+            .serialization_error(JsonSerializationErrorKind::InvalidSerializerState {
                 reason: kind.invalid_state(),
-            },
-        )
+            })
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeSeq
-    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeSeq for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeSeq,
     R: Clone,
@@ -204,27 +279,49 @@ where
     type Error = C::Error;
 
     /// Checks the observed count, then serializes one decorated child value.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value serialized as the next sequence element.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Element whose serialization is budgeted before delegation.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the underlying serializer accepts the element.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serializer error for an exceeded count or rejected element.
     #[inline(always)]
     fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value =
-            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_element(&value)
     }
 
     /// Completes the underlying sequence.
+    ///
+    /// # Returns
+    ///
+    /// The underlying serializer's completed sequence result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying serializer cannot finish the
+    /// sequence.
     #[inline(always)]
-    fn end(mut self) -> Result<Self::Ok, Self::Error> {
-        self.finish_sequence()?;
+    fn end(self) -> Result<Self::Ok, Self::Error> {
         self.inner.end()
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTuple
-    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTuple for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeTuple,
     R: Clone,
@@ -234,27 +331,48 @@ where
     type Error = C::Error;
 
     /// Serializes one decorated tuple element.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value serialized as the next tuple element.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Element whose serialization is budgeted before delegation.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the underlying serializer accepts the element.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serializer error for an exceeded count or rejected element.
     #[inline(always)]
     fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value =
-            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_element(&value)
     }
 
     /// Completes the underlying tuple.
+    ///
+    /// # Returns
+    ///
+    /// The underlying serializer's completed tuple result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying serializer cannot finish the tuple.
     #[inline(always)]
-    fn end(mut self) -> Result<Self::Ok, Self::Error> {
-        self.finish_sequence()?;
+    fn end(self) -> Result<Self::Ok, Self::Error> {
         self.inner.end()
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleStruct
-    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleStruct for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeTupleStruct,
     R: Clone,
@@ -264,26 +382,48 @@ where
     type Error = C::Error;
 
     /// Serializes one decorated tuple-struct field.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value serialized as the next tuple-struct field.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Field whose serialization is budgeted before delegation.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the underlying serializer accepts the field.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serializer error for an exceeded count or rejected field.
     fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value =
-            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(&value)
     }
 
     /// Completes the underlying tuple struct.
+    ///
+    /// # Returns
+    ///
+    /// The underlying serializer's completed tuple-struct result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying serializer cannot finish the tuple
+    /// struct.
     #[inline(always)]
-    fn end(mut self) -> Result<Self::Ok, Self::Error> {
-        self.finish_sequence()?;
+    fn end(self) -> Result<Self::Ok, Self::Error> {
         self.inner.end()
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleVariant
-    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleVariant for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeTupleVariant,
     R: Clone,
@@ -293,26 +433,48 @@ where
     type Error = C::Error;
 
     /// Serializes one decorated tuple-variant field.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value serialized as the next tuple-variant field.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Field whose serialization is budgeted before delegation.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the underlying serializer accepts the field.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serializer error for an exceeded count or rejected field.
     fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         self.next_sequence()?;
-        let value =
-            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(&value)
     }
 
     /// Completes the underlying tuple variant.
+    ///
+    /// # Returns
+    ///
+    /// The underlying serializer's completed tuple-variant result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying serializer cannot finish the tuple
+    /// variant.
     #[inline(always)]
-    fn end(mut self) -> Result<Self::Ok, Self::Error> {
-        self.finish_sequence()?;
+    fn end(self) -> Result<Self::Ok, Self::Error> {
         self.inner.end()
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeMap
-    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeMap for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeMap,
     R: Clone,
@@ -322,6 +484,24 @@ where
     type Error = C::Error;
 
     /// Checks the entry count and key before delegating key serialization.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value serialized as the map key.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Key whose count and serialization are checked before
+    ///   delegation.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` and marks the map as awaiting a value after key acceptance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a key is already pending, the count is rejected,
+    /// or the underlying serializer rejects the key.
     fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
@@ -337,6 +517,23 @@ where
     }
 
     /// Serializes one map value through a child budget decorator.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value serialized for the pending map key.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Value whose serialization is budgeted before delegation.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the underlying serializer accepts the value and clears
+    /// the pending-key state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when no key is pending or serialization fails.
     fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
@@ -344,14 +541,31 @@ where
         if !self.map_key_pending {
             return Err(self.serialization_error(JsonSerializerStateError::MapValueWithoutKey));
         }
-        let value =
-            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_value(&value)?;
         self.map_key_pending = false;
         Ok(())
     }
 
     /// Checks and serializes one complete map entry.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `K` - Value serialized as the key.
+    /// * `V` - Value serialized as the entry value.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Key to serialize before the entry value.
+    /// * `value` - Value serialized after the key is accepted.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after both parts are accepted by the underlying serializer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the count, key, or value is rejected.
     fn serialize_entry<K, V>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
     where
         K: Serialize + ?Sized,
@@ -362,6 +576,14 @@ where
     }
 
     /// Completes the underlying map.
+    ///
+    /// # Returns
+    ///
+    /// The underlying serializer's completed map result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a key has no matching value or the serializer fails.
     #[inline(always)]
     fn end(mut self) -> Result<Self::Ok, Self::Error> {
         self.finish_map()?;
@@ -369,8 +591,7 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStruct
-    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStruct for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeStruct,
     R: Clone,
@@ -380,16 +601,31 @@ where
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value serialized for this struct field.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Static field name admitted against the key budget.
+    /// * `value` - Field value serialized through its child budget decorator.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the field is accepted by the underlying serializer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an invalid private protocol, exceeded field count,
+    /// rejected key/value, or underlying serializer failure.
     #[inline(always)]
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         if let Some(kind) = self.private_kind {
-            let state = self
-                .private_state
-                .as_mut()
-                .expect("private state must exist");
+            let state = self.private_state.as_mut().expect("private state must exist");
             if state.begin(key).is_err() {
                 return Err(self.private_protocol_error());
             }
@@ -397,9 +633,7 @@ where
                 JsonPrivateProtocolKind::RawValue => {
                     BudgetedPrivateValue::raw_value(value, self.context, self.child_depth)
                 }
-                JsonPrivateProtocolKind::Number => {
-                    BudgetedPrivateValue::number(value, self.context, self.child_depth)
-                }
+                JsonPrivateProtocolKind::Number => BudgetedPrivateValue::number(value, self.context, self.child_depth),
             };
             let inner_key = if kind == JsonPrivateProtocolKind::Number {
                 SERDE_JSON_RAW_VALUE_TOKEN
@@ -407,10 +641,7 @@ where
                 key
             };
             if let Err(error) = self.inner.serialize_field(inner_key, &payload) {
-                self.private_state
-                    .as_mut()
-                    .expect("private state must exist")
-                    .fail();
+                self.private_state.as_mut().expect("private state must exist").fail();
                 let _: Self::Error = self.private_protocol_error();
                 return Err(error);
             }
@@ -431,25 +662,43 @@ where
                 .borrow_mut()
                 .admit(JsonMeasurement::Key { bytes: key.len() })?;
         }
-        let value =
-            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(key, &value)
     }
 
     /// Skips one field exactly as the underlying serializer requests.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Static field name the underlying serializer elects to skip.
+    ///
+    /// # Returns
+    ///
+    /// The underlying serializer's skip result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a private protocol field is skipped or the
+    /// underlying serializer rejects the operation.
     #[inline(always)]
     fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
-        if self.private_state.is_some() {
-            self.private_state
-                .as_mut()
-                .expect("private state must exist")
-                .fail();
+        if let Some(state) = self.private_state.as_mut() {
+            state.fail();
             return Err(self.private_protocol_error());
         }
         self.inner.skip_field(key)
     }
 
     /// Completes the underlying struct.
+    ///
+    /// # Returns
+    ///
+    /// The underlying serializer's completed struct result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an incomplete private protocol, pending map key,
+    /// or underlying serializer failure.
     #[inline(always)]
     fn end(mut self) -> Result<Self::Ok, Self::Error> {
         if let Some(state) = self.private_state.take() {
@@ -463,8 +712,7 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStructVariant
-    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStructVariant for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeStructVariant,
     R: Clone,
@@ -474,6 +722,24 @@ where
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value serialized for this struct-variant field.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Static field name admitted against the key budget.
+    /// * `value` - Field value serialized through its child budget decorator.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the field is accepted by the underlying serializer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an exceeded field count, rejected key/value, or
+    /// underlying serializer failure.
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
@@ -484,18 +750,37 @@ where
                 .borrow_mut()
                 .admit(JsonMeasurement::Key { bytes: key.len() })?;
         }
-        let value =
-            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(key, &value)
     }
 
     /// Skips one variant field exactly as the underlying serializer requests.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Static field name the underlying serializer elects to skip.
+    ///
+    /// # Returns
+    ///
+    /// The underlying serializer's skip result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying serializer rejects the operation.
     #[inline(always)]
     fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
         self.inner.skip_field(key)
     }
 
     /// Completes the underlying struct variant.
+    ///
+    /// # Returns
+    ///
+    /// The underlying serializer's completed struct-variant result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for a pending map key or underlying serializer failure.
     #[inline(always)]
     fn end(mut self) -> Result<Self::Ok, Self::Error> {
         self.finish_map()?;

@@ -14,6 +14,10 @@ use serde::Deserializer;
 use serde::de::DeserializeSeed;
 
 /// Seed adapter that delegates to [`Deserialize`] without allocating state.
+///
+/// # Type Parameters
+///
+/// * `T` - Target type requested from the deserializer.
 pub(in crate::decode) struct TypedSeed<T> {
     /// Type marker carrying the requested deserialization target without
     /// storage.
@@ -25,9 +29,7 @@ impl<T> TypedSeed<T> {
     #[must_use]
     #[inline(always)]
     pub(in crate::decode) const fn new() -> Self {
-        Self {
-            marker: PhantomData,
-        }
+        Self { marker: PhantomData }
     }
 }
 
@@ -35,6 +37,7 @@ impl<'de, T> DeserializeSeed<'de> for TypedSeed<T>
 where
     T: Deserialize<'de>,
 {
+    /// The target type produced by deserializing with this seed.
     type Value = T;
 
     /// Delegates the seed operation to the target type's `Deserialize`

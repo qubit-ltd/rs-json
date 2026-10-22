@@ -10,7 +10,7 @@
 use serde::Deserialize;
 
 /// Representative object payload used to exercise typed decoder entry points.
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq)]
 pub(crate) struct FuzzRecord {
     pub(crate) id: u64,
     pub(crate) label: String,

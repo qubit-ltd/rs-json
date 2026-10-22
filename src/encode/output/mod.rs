@@ -7,10 +7,8 @@
 // =============================================================================
 //! Budget-aware JSON output sinks.
 
-pub(super) mod json_output_accounting;
-pub(super) mod json_output_buffer;
-pub(super) mod json_output_writer;
+mod internal;
 
-pub(super) use json_output_accounting::JsonOutputAccounting;
-pub(super) use json_output_buffer::JsonOutputBuffer;
-pub(super) use json_output_writer::JsonOutputWriter;
+pub(super) use internal::JsonOutputAccounting;
+pub(super) use internal::JsonOutputBuffer;
+pub(super) use internal::JsonOutputWriter;

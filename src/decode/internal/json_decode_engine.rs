@@ -38,12 +38,17 @@ use crate::lexical::JsonNumberModel;
 #[cfg(feature = "jcs")]
 use crate::lexical::line_column_at;
 #[cfg(feature = "jcs")]
-#[cfg(feature = "jcs")]
 use crate::value::internal::JsonValueMaterializationError as JcsMaterializationError;
 #[cfg(feature = "jcs")]
 use crate::value::internal::LexicalJsonValueBuilder;
 
 /// Shared generic execution core used by both public decoder facades.
+///
+/// # Type Parameters
+///
+/// * `'budget` - Lifetime of any caller-owned budget borrowed by the session.
+/// * `R` - Resource identity tracked by the decoder session.
+/// * `Q` - Quantity representation used for resource accounting.
 #[derive(Debug)]
 pub(in crate::decode) struct JsonDecodeEngine<'budget, R, Q>
 where
@@ -59,6 +64,14 @@ where
     Q: ResourceQuantity,
 {
     /// Creates an engine around one reusable decode session.
+    ///
+    /// # Parameters
+    ///
+    /// * `session` - Accounting session reused by subsequent decode operations.
+    ///
+    /// # Returns
+    ///
+    /// An engine that owns the supplied session.
     #[inline]
     #[must_use]
     pub(in crate::decode) const fn new(session: JsonDecodeSession<'budget, R, Q>) -> Self {
@@ -66,6 +79,10 @@ where
     }
 
     /// Returns the cumulative session for read-only inspection.
+    ///
+    /// # Returns
+    ///
+    /// A shared reference to the session and its cumulative accounting state.
     #[inline(always)]
     #[must_use]
     pub(in crate::decode) const fn session(&self) -> &JsonDecodeSession<'budget, R, Q> {
@@ -73,6 +90,10 @@ where
     }
 
     /// Returns mutable access to the cumulative session.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to the session used by future decode operations.
     #[inline(always)]
     #[must_use]
     pub(in crate::decode) const fn session_mut(&mut self) -> &mut JsonDecodeSession<'budget, R, Q> {
@@ -80,6 +101,10 @@ where
     }
 
     /// Consumes the engine and returns its cumulative session.
+    ///
+    /// # Returns
+    ///
+    /// The session previously owned by the engine.
     #[inline(always)]
     #[must_use]
     pub(in crate::decode) fn into_session(self) -> JsonDecodeSession<'budget, R, Q> {
@@ -87,6 +112,19 @@ where
     }
 
     /// Prepares one string with immediate raw and normalized input accounting.
+    ///
+    /// # Parameters
+    ///
+    /// * `normalizer` - Policy and normalization pipeline for the input.
+    /// * `input` - UTF-8 JSON-like text to normalize and account.
+    ///
+    /// # Returns
+    ///
+    /// A normalized document that retains both raw and normalized lengths.
+    ///
+    /// # Errors
+    ///
+    /// Returns a normalization or budget error when processing is rejected.
     pub(in crate::decode) fn prepare_str<'input>(
         &mut self,
         normalizer: &JsonNormalizer,
@@ -103,6 +141,19 @@ where
     }
 
     /// Prepares one byte slice after charging raw input and validating UTF-8.
+    ///
+    /// # Parameters
+    ///
+    /// * `normalizer` - Policy and normalization pipeline for the input.
+    /// * `input` - Raw bytes that must be charged and decoded as UTF-8.
+    ///
+    /// # Returns
+    ///
+    /// A normalized document retaining the original byte count.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input-budget, UTF-8, normalization, or value-budget error.
     pub(in crate::decode) fn prepare_utf8<'input>(
         &mut self,
         normalizer: &JsonNormalizer,
@@ -111,25 +162,34 @@ where
         let raw_input_bytes = input.len();
         let diagnostic_policy = normalizer.policy().diagnostic_policy();
         let mut attempt = self.session.begin_value();
-        attempt
-            .try_consume_input_bytes(raw_input_bytes)
-            .map_err(|source| {
-                JsonDecodeError::budget(
-                    source,
-                    JsonDecodeStage::Input,
-                    raw_input_bytes,
-                    None,
-                    diagnostic_policy,
-                )
-            })?;
-        let input = std::str::from_utf8(input).map_err(|source| {
-            JsonDecodeError::invalid_utf8(source, raw_input_bytes, diagnostic_policy)
+        attempt.try_consume_input_bytes(raw_input_bytes).map_err(|source| {
+            JsonDecodeError::budget(source, JsonDecodeStage::Input, raw_input_bytes, None, diagnostic_policy)
         })?;
+        let input = std::str::from_utf8(input)
+            .map_err(|source| JsonDecodeError::invalid_utf8(source, raw_input_bytes, diagnostic_policy))?;
         let normalized = normalizer.normalize_after_raw_charge(input, &mut attempt)?;
         Ok(NormalizedJsonDocument::new(normalized, raw_input_bytes))
     }
 
     /// Strictly validates and deserializes one complete byte document.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `S` - Serde seed that constructs the requested result.
+    ///
+    /// # Parameters
+    ///
+    /// * `seed` - Deserializer seed for the result value.
+    /// * `input` - Complete JSON document bytes.
+    /// * `diagnostic_policy` - Policy controlling retained source details.
+    ///
+    /// # Returns
+    ///
+    /// The value produced by `seed` after strict admission succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input, UTF-8, syntax, budget, or Serde deserialization error.
     pub(in crate::decode) fn decode_seed_utf8<'de, S>(
         &mut self,
         seed: S,
@@ -139,15 +199,29 @@ where
     where
         S: DeserializeSeed<'de>,
     {
-        self.decode_seed_utf8_with_number_model(
-            seed,
-            input,
-            diagnostic_policy,
-            JsonNumberModel::Integer64,
-        )
+        self.decode_seed_utf8_with_number_model(seed, input, diagnostic_policy, JsonNumberModel::Integer64)
     }
 
     /// Decodes a complete document with an explicit internal number contract.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `S` - Serde seed that constructs the requested result.
+    ///
+    /// # Parameters
+    ///
+    /// * `seed` - Deserializer seed for the result value.
+    /// * `input` - Complete JSON document bytes.
+    /// * `diagnostic_policy` - Policy controlling retained source details.
+    /// * `number_model` - Numeric representation contract applied at admission.
+    ///
+    /// # Returns
+    ///
+    /// The value produced by `seed` after admission succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input, UTF-8, syntax, budget, or Serde deserialization error.
     pub(in crate::decode) fn decode_seed_utf8_with_number_model<'de, S>(
         &mut self,
         seed: S,
@@ -169,6 +243,25 @@ where
 
     /// Strictly validates and deserializes one complete byte document while
     /// enforcing an optional top-level kind.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `S` - Serde seed that constructs the requested result.
+    ///
+    /// # Parameters
+    ///
+    /// * `seed` - Deserializer seed for the result value.
+    /// * `input` - Complete JSON document bytes.
+    /// * `diagnostic_policy` - Policy controlling retained source details.
+    /// * `expected` - Optional required root object or array kind.
+    ///
+    /// # Returns
+    ///
+    /// The value produced by `seed` after document and root-kind checks.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input, UTF-8, syntax, budget, root-kind, or Serde error.
     pub(in crate::decode) fn decode_seed_utf8_with_top_level<'de, S>(
         &mut self,
         seed: S,
@@ -189,6 +282,25 @@ where
     }
 
     /// Deserializes one prepared document without charging its input again.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `S` - Serde seed that constructs the requested result.
+    ///
+    /// # Parameters
+    ///
+    /// * `document` - Previously normalized and charged document.
+    /// * `seed` - Deserializer seed for the result value.
+    /// * `diagnostic_policy` - Policy controlling retained source details.
+    /// * `expected` - Optional required root object or array kind.
+    ///
+    /// # Returns
+    ///
+    /// The value produced by `seed` after the prepared document is admitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax, budget, root-kind, or Serde deserialization error.
     pub(in crate::decode) fn decode_document_seed<'de, S>(
         &mut self,
         document: &'de NormalizedJsonDocument<'_>,
@@ -205,16 +317,23 @@ where
             diagnostic_policy,
             number_model: JsonNumberModel::Integer64,
         };
-        self.decode_seed(
-            seed,
-            document.as_str().as_bytes(),
-            metadata,
-            false,
-            expected,
-        )
+        self.decode_seed(seed, document.as_str().as_bytes(), metadata, false, expected)
     }
 
     /// Strictly validates one complete byte document and commits value usage.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Complete UTF-8 JSON document bytes.
+    /// * `diagnostic_policy` - Policy controlling retained source details.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after strict admission and accounting commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input, UTF-8, syntax, or budget error.
     pub(in crate::decode) fn validate_utf8(
         &mut self,
         input: &[u8],
@@ -230,6 +349,20 @@ where
     }
 
     /// Validates one prepared document without charging its input again.
+    ///
+    /// # Parameters
+    ///
+    /// * `document` - Previously normalized and charged document.
+    /// * `diagnostic_policy` - Policy controlling retained source details.
+    /// * `expected` - Optional required root object or array kind.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after admission and optional root-kind checks succeed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax, budget, or root-kind error.
     pub(in crate::decode) fn validate_document(
         &mut self,
         document: &NormalizedJsonDocument<'_>,
@@ -247,6 +380,25 @@ where
 
     /// Reads and accounts one complete input before applying the shared strict
     /// document decoder. Bytes are buffered because returned values are owned.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Owned value produced from the input document.
+    /// * `I` - Byte input source read through EOF.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Source of the complete JSON document.
+    /// * `diagnostic_policy` - Policy controlling retained error details.
+    ///
+    /// # Returns
+    ///
+    /// The owned value deserialized from the input.
+    ///
+    /// # Errors
+    ///
+    /// Returns a read, input-budget, UTF-8, syntax, budget, or deserialization
+    /// error.
     pub(in crate::decode) fn decode_input<T, I>(
         &mut self,
         input: &mut I,
@@ -266,6 +418,27 @@ where
 
     /// Reads an owned value through a supplied seed and one selected number
     /// contract.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `S` - Seed that constructs the owned result value.
+    /// * `T` - Owned result type produced by `S`.
+    /// * `I` - Byte input source read through EOF.
+    ///
+    /// # Parameters
+    ///
+    /// * `seed` - Deserializer seed for the result value.
+    /// * `input` - Source of the complete JSON document.
+    /// * `diagnostic_policy` - Policy controlling retained error details.
+    /// * `number_model` - Numeric representation contract applied at admission.
+    ///
+    /// # Returns
+    ///
+    /// The owned value produced by `seed`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a read, input-budget, UTF-8, syntax, budget, or seed error.
     pub(in crate::decode) fn decode_input_seed<S, T, I>(
         &mut self,
         seed: S,
@@ -287,15 +460,7 @@ where
             diagnostic_policy,
             number_model,
         };
-        let value = Self::decode_seed_attempt(
-            &mut attempt,
-            seed,
-            &bytes,
-            metadata,
-            false,
-            has_value_limits,
-            None,
-        )?;
+        let value = Self::decode_seed_attempt(&mut attempt, seed, &bytes, metadata, false, has_value_limits, None)?;
         attempt.commit().map_err(|source| {
             JsonDecodeError::budget(
                 source,
@@ -314,6 +479,10 @@ where
     ///
     /// * `input` - Complete JSON document bytes.
     /// * `diagnostic_policy` - Policy for retaining input-derived error detail.
+    ///
+    /// # Returns
+    ///
+    /// The materialized JSON value using the JCS binary64 number contract.
     ///
     /// # Errors
     ///
@@ -344,6 +513,10 @@ where
     /// * `input` - Input stream read through EOF, subject to its configured
     ///   budget.
     /// * `diagnostic_policy` - Policy for retaining input-derived error detail.
+    ///
+    /// # Returns
+    ///
+    /// The materialized JSON value using the JCS binary64 number contract.
     ///
     /// # Errors
     ///
@@ -383,6 +556,10 @@ where
     /// * `has_value_limits` - Whether the first lexical scan enforces value
     ///   limits.
     ///
+    /// # Returns
+    ///
+    /// The materialized JCS JSON value after admission and accounting commit.
+    ///
     /// # Errors
     ///
     /// Returns lexical or budget admission failures, duplicate keys, a fixed
@@ -395,21 +572,13 @@ where
         charge_raw_input: bool,
         has_value_limits: bool,
     ) -> Result<serde_json::Value, JcsDecodeError<R, Q>> {
-        Self::prepare_attempt(
-            &mut attempt,
-            input,
-            metadata,
-            charge_raw_input,
-            has_value_limits,
-        )?;
+        Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
         let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Binary64);
         let scan = JsonLexicalScanner::new(attempt.value_transaction_mut(), false)
             .with_number_model(JsonNumberModel::Binary64)
             .scan_with_events(input, |event| builder.accept(event));
         if let Err(error) = scan {
-            return Err(JcsDecodeError::Decode(Self::map_lexical_error(
-                error, input, metadata,
-            )));
+            return Err(JcsDecodeError::Decode(Self::map_lexical_error(error, input, metadata)));
         }
         let value = match builder.finish() {
             Ok(value) => value,
@@ -419,11 +588,7 @@ where
             }
             Err(JcsMaterializationError::DepthLimit { offset, limit }) => {
                 let (line, column) = line_column_at(input, offset);
-                return Err(JcsDecodeError::MaterializationDepthLimit {
-                    limit,
-                    line,
-                    column,
-                });
+                return Err(JcsDecodeError::MaterializationDepthLimit { limit, line, column });
             }
             Err(JcsMaterializationError::InvalidNumber { offset }) => {
                 let (line, column) = line_column_at(input, offset);
@@ -434,7 +599,9 @@ where
                     reason: crate::lexical::JsonLexicalErrorReason::FloatOutOfRange,
                 };
                 return Err(JcsDecodeError::Decode(Self::map_lexical_error(
-                    JsonLexicalError::Syntax(failure), input, metadata,
+                    JsonLexicalError::Syntax(failure),
+                    input,
+                    metadata,
                 )));
             }
         };
@@ -493,11 +660,7 @@ where
                 Ok(count) => count,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                 Err(error) => {
-                    return Err(JsonDecodeError::read(
-                        error,
-                        raw_input_bytes,
-                        diagnostic_policy,
-                    ));
+                    return Err(JsonDecodeError::read(error, raw_input_bytes, diagnostic_policy));
                 }
             };
             let charged = admitted.map_or(count, |admitted| count.min(admitted));
@@ -509,13 +672,7 @@ where
                 )
             })?;
             attempt.try_consume_input_bytes(charged).map_err(|source| {
-                JsonDecodeError::budget(
-                    source,
-                    JsonDecodeStage::Input,
-                    raw_input_bytes,
-                    None,
-                    diagnostic_policy,
-                )
+                JsonDecodeError::budget(source, JsonDecodeStage::Input, raw_input_bytes, None, diagnostic_policy)
             })?;
             bytes.extend_from_slice(&scratch[..charged]);
             raw_input_bytes = next_total;
@@ -529,10 +686,7 @@ where
                         diagnostic_policy,
                     )),
                     Ok(()) => Err(JsonDecodeError::read(
-                        io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "input budget probe invariant violated",
-                        ),
+                        io::Error::new(io::ErrorKind::InvalidData, "input budget probe invariant violated"),
                         raw_input_bytes,
                         diagnostic_policy,
                     )),
@@ -543,6 +697,16 @@ where
     }
 
     /// Finds the largest native input length that fits the remaining budget.
+    ///
+    /// # Parameters
+    ///
+    /// * `remaining` — The remaining input budget quantity.
+    ///
+    /// # Returns
+    ///
+    /// The greatest `usize` input length representable within `remaining` and
+    /// the fixed read buffer capacity.
+    #[must_use]
     fn max_admitted_input_bytes(remaining: Q) -> usize {
         let mut lower = 0_usize;
         let mut upper = 8192_usize;
@@ -559,6 +723,27 @@ where
 
     /// Runs admission, an optional root check, Serde materialization, and value
     /// commit for one document.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `S` — The Serde seed used to create the result.
+    ///
+    /// # Parameters
+    ///
+    /// * `seed` — Deserializer seed for the requested value.
+    /// * `input` — Complete JSON document bytes.
+    /// * `metadata` — Input and diagnostic metadata.
+    /// * `charge_raw_input` — Whether raw input bytes need charging.
+    /// * `expected` — Optional required root kind.
+    ///
+    /// # Returns
+    ///
+    /// The materialized value after admission and accounting commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input, admission, root-kind, deserialization, or commit
+    /// error.
     fn decode_seed<'de, S>(
         &mut self,
         seed: S,
@@ -641,6 +826,21 @@ where
 
     /// Runs admission, an optional root check, and value commit without Serde
     /// materialization.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` — Complete JSON document bytes.
+    /// * `metadata` — Input and diagnostic metadata.
+    /// * `charge_raw_input` — Whether raw input bytes need charging.
+    /// * `expected` — Optional required root kind.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after admission and accounting commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input, admission, root-kind, or commit error.
     fn validate(
         &mut self,
         input: &[u8],
@@ -650,13 +850,7 @@ where
     ) -> Result<(), JsonDecodeError<R, Q>> {
         let has_value_limits = self.session.value_budget().limits().has_limits();
         let mut attempt = self.session.begin_value();
-        Self::prepare_attempt(
-            &mut attempt,
-            input,
-            metadata,
-            charge_raw_input,
-            has_value_limits,
-        )?;
+        Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
         Self::check_top_level(input, metadata, expected)?;
         attempt.commit().map_err(|source| {
             JsonDecodeError::budget(
@@ -671,6 +865,22 @@ where
     }
 
     /// Charges input when requested, validates UTF-8, and stages value usage.
+    ///
+    /// # Parameters
+    ///
+    /// * `attempt` — Active transaction receiving input and value charges.
+    /// * `input` — Complete input document bytes.
+    /// * `metadata` — Input and diagnostic metadata.
+    /// * `charge_raw_input` — Whether raw input bytes need charging.
+    /// * `has_value_limits` — Whether value admission must enforce limits.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the input is charged and admitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input-budget, UTF-8, lexical, or value-budget error.
     fn prepare_attempt(
         attempt: &mut JsonDecodeAttempt<'_, R, Q>,
         input: &[u8],
@@ -692,27 +902,28 @@ where
                 })?;
         }
         std::str::from_utf8(input).map_err(|source| {
-            JsonDecodeError::invalid_utf8(
-                source,
-                metadata.raw_input_bytes,
-                metadata.diagnostic_policy,
-            )
+            JsonDecodeError::invalid_utf8(source, metadata.raw_input_bytes, metadata.diagnostic_policy)
         })?;
         let admission = if matches!(metadata.number_model, JsonNumberModel::Integer64) {
             admit_json_document(attempt, input, has_value_limits)
         } else {
-            admit_json_document_with_number_model(
-                attempt,
-                input,
-                has_value_limits,
-                metadata.number_model,
-            )
+            admit_json_document_with_number_model(attempt, input, has_value_limits, metadata.number_model)
         };
         admission.map_err(|error| Self::map_lexical_error(error, input, metadata))
     }
 
     /// Converts a scanner failure while retaining the existing diagnostic
     /// policy.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` — Scanner syntax or budget failure.
+    /// * `input` — Original input used to recover detailed Serde diagnostics.
+    /// * `metadata` — Input lengths and diagnostic policy.
+    ///
+    /// # Returns
+    ///
+    /// The corresponding structured decode error.
     fn map_lexical_error(
         error: JsonLexicalError<R, Q>,
         input: &[u8],
@@ -727,13 +938,12 @@ where
                 metadata.diagnostic_policy,
             ),
             JsonLexicalError::Syntax(source) => {
-                let detailed_source = (metadata.diagnostic_policy == DiagnosticPolicy::Detailed)
-                    .then(|| {
-                        from_slice::<&RawValue>(input).err().map_or_else(
-                            || Arc::new(source) as Arc<dyn Error + Send + Sync>,
-                            |error| Arc::new(error) as Arc<dyn Error + Send + Sync>,
-                        )
-                    });
+                let detailed_source = (metadata.diagnostic_policy == DiagnosticPolicy::Detailed).then(|| {
+                    from_slice::<&RawValue>(input).err().map_or_else(
+                        || Arc::new(source) as Arc<dyn Error + Send + Sync>,
+                        |error| Arc::new(error) as Arc<dyn Error + Send + Sync>,
+                    )
+                });
                 JsonDecodeError::invalid_json(
                     source,
                     detailed_source,
@@ -746,6 +956,25 @@ where
     }
 
     /// Enforces an optional top-level object or array contract after admission.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` — Admitted UTF-8 JSON document bytes.
+    /// * `metadata` — Input lengths and diagnostic policy.
+    /// * `expected` — Optional required top-level kind.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when no kind is required or the actual kind matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns an unexpected-top-level error when the actual kind differs.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `input` is not valid UTF-8, which violates the admission
+    /// invariant required by this helper.
     fn check_top_level(
         input: &[u8],
         metadata: DecodeMetadata,

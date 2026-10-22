@@ -25,8 +25,8 @@ use super::JsonEncodeError;
 use super::output::JsonOutputAccounting;
 use super::output::JsonOutputBuffer;
 use super::output::JsonOutputWriter;
-use super::serializer::json_encode_context::JsonEncodeContext;
-use super::serializer::json_encode_serializer::JsonEncodeSerializer;
+use super::serializer::JsonEncodeContext;
+use super::serializer::JsonEncodeSerializer;
 
 /// Encodes strict JSON text while owning cumulative accounting state.
 ///
@@ -38,6 +38,7 @@ use super::serializer::json_encode_serializer::JsonEncodeSerializer;
 ///
 /// # Type Parameters
 ///
+/// * `'budget` - Lifetime of the caller-provided cumulative encode session.
 /// * `R` - Resource identity tracked by the encode session.
 /// * `Q` - Quantity representation used for resource accounting.
 ///
@@ -194,7 +195,7 @@ where
     ///
     /// # Type Parameters
     ///
-    /// * `W` - Destination writer type.
+    /// * `O` - Destination output type.
     /// * `T` - Source type serialized into JSON.
     ///
     /// # Parameters
@@ -211,11 +212,7 @@ where
     ///
     /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects the value
     /// or output, or a serialization/writer error on failure.
-    pub fn write_buffered<O, T>(
-        &mut self,
-        writer: O,
-        value: &T,
-    ) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_buffered<O, T>(&mut self, writer: O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         O: Output<Item = u8>,
         T: Serialize + ?Sized,
@@ -236,7 +233,7 @@ where
     ///
     /// # Type Parameters
     ///
-    /// * `W` - Destination writer type.
+    /// * `O` - Destination output type.
     /// * `T` - Source type serialized into JSON.
     ///
     /// # Parameters
@@ -253,11 +250,7 @@ where
     /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects output,
     /// or a serialization/writer error on failure. Accepted output prefixes
     /// remain written when a later operation fails.
-    pub fn write_incremental<O, T>(
-        &mut self,
-        writer: O,
-        value: &T,
-    ) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_incremental<O, T>(&mut self, writer: O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         O: Output<Item = u8>,
         T: Serialize + ?Sized,
@@ -278,13 +271,9 @@ where
                     value_limits,
                 });
                 if has_value_limits {
-                    value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(
-                        &mut inner, &context,
-                    ))
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
                 } else {
-                    value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(
-                        &mut inner, &context,
-                    ))
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(&mut inner, &context))
                 }
             };
             if result.is_ok() {
@@ -298,6 +287,26 @@ where
     }
 
     /// Serializes one value into an output-bounded byte buffer.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Source type serialized into JSON.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Value to serialize.
+    /// * `attempt` - Encode attempt receiving staged value and output charges.
+    /// * `has_value_limits` - Whether serialized values have active limits.
+    ///
+    /// # Returns
+    ///
+    /// The serialized JSON bytes after all applicable output checks pass.
+    ///
+    /// # Errors
+    ///
+    /// Returns a budget error when value or output accounting rejects the
+    /// serialization, an invalid-raw-JSON error for malformed private raw
+    /// values, or a serialization error from Serde.
     fn serialize_buffer<T>(
         value: &T,
         attempt: &mut JsonEncodeAttempt<'_, R, Q>,
@@ -320,13 +329,9 @@ where
                     value_limits,
                 });
                 if has_value_limits {
-                    value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(
-                        &mut inner, &context,
-                    ))
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
                 } else {
-                    value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(
-                        &mut inner, &context,
-                    ))
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(&mut inner, &context))
                 }
             };
             if let Some(error) = accounting.borrow_mut().take_violation() {
@@ -352,13 +357,9 @@ where
                 value_limits,
             });
             if has_value_limits {
-                value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(
-                    &mut inner, &context,
-                ))
+                value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
             } else {
-                value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(
-                    &mut inner, &context,
-                ))
+                value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(&mut inner, &context))
             }
         };
         if result.is_ok() {
@@ -368,6 +369,25 @@ where
     }
 
     /// Writes buffered bytes and charges each accepted prefix.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `O` - Destination output type.
+    ///
+    /// # Parameters
+    ///
+    /// * `writer` - Destination receiving the buffered JSON bytes.
+    /// * `bytes` - Complete serialized document to write.
+    /// * `attempt` - Encode attempt receiving output charges.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after all bytes are written and accounted for.
+    ///
+    /// # Errors
+    ///
+    /// Returns a budget error if output accounting rejects a written prefix,
+    /// or a writer error if the destination cannot accept the bytes.
     fn write_buffer<O>(
         writer: O,
         bytes: &[u8],

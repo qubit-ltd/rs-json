@@ -15,9 +15,7 @@ use crate::internal::SERDE_JSON_RAW_VALUE_TOKEN;
 
 fn success(kind: JsonPrivateProtocolKind) {
     let mut state = JsonPrivateProtocolState::new(kind, 1).expect("one field is valid");
-    state
-        .begin(kind.field_name())
-        .expect("matching field begins payload");
+    state.begin(kind.field_name()).expect("matching field begins payload");
     state.complete().expect("payload completes");
     assert_eq!(state.finish(), Ok(()));
 }
@@ -54,20 +52,14 @@ fn test_protocol_rejects_invalid_declared_lengths() {
 #[test]
 fn test_protocol_rejects_empty_second_wrong_and_in_flight_end() {
     let empty = JsonPrivateProtocolState::new(JsonPrivateProtocolKind::Number, 1).unwrap();
-    assert_eq!(
-        empty.finish(),
-        Err(JsonSerializerStateError::InvalidNumberProtocol)
-    );
+    assert_eq!(empty.finish(), Err(JsonSerializerStateError::InvalidNumberProtocol));
 
     let mut wrong = JsonPrivateProtocolState::new(JsonPrivateProtocolKind::RawValue, 1).unwrap();
     assert_eq!(
         wrong.begin("other"),
         Err(JsonSerializerStateError::InvalidRawValueProtocol)
     );
-    assert_eq!(
-        wrong.finish(),
-        Err(JsonSerializerStateError::InvalidRawValueProtocol)
-    );
+    assert_eq!(wrong.finish(), Err(JsonSerializerStateError::InvalidRawValueProtocol));
 
     let mut second = JsonPrivateProtocolState::new(JsonPrivateProtocolKind::Number, 1).unwrap();
     second.begin(SERDE_JSON_NUMBER_TOKEN).unwrap();
@@ -76,13 +68,9 @@ fn test_protocol_rejects_empty_second_wrong_and_in_flight_end() {
         second.begin(SERDE_JSON_NUMBER_TOKEN),
         Err(JsonSerializerStateError::InvalidNumberProtocol)
     );
-    assert_eq!(
-        second.finish(),
-        Err(JsonSerializerStateError::InvalidNumberProtocol)
-    );
+    assert_eq!(second.finish(), Err(JsonSerializerStateError::InvalidNumberProtocol));
 
-    let mut in_flight =
-        JsonPrivateProtocolState::new(JsonPrivateProtocolKind::RawValue, 1).unwrap();
+    let mut in_flight = JsonPrivateProtocolState::new(JsonPrivateProtocolKind::RawValue, 1).unwrap();
     in_flight.begin(SERDE_JSON_RAW_VALUE_TOKEN).unwrap();
     assert_eq!(
         in_flight.finish(),
@@ -94,8 +82,5 @@ fn test_protocol_rejects_empty_second_wrong_and_in_flight_end() {
 fn test_protocol_failure_is_sticky() {
     let mut state = JsonPrivateProtocolState::new(JsonPrivateProtocolKind::Number, 1).unwrap();
     state.fail();
-    assert_eq!(
-        state.finish(),
-        Err(JsonSerializerStateError::InvalidNumberProtocol)
-    );
+    assert_eq!(state.finish(), Err(JsonSerializerStateError::InvalidNumberProtocol));
 }

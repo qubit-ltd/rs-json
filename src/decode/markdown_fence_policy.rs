@@ -17,10 +17,21 @@ use super::MarkdownFenceClosing;
 /// # Examples
 ///
 /// ```
+/// use qubit_json::decode::MarkdownFenceClosing;
 /// use qubit_json::decode::MarkdownFencePolicy;
+/// use qubit_json::decode::NormalizingJsonDecodePolicyBuilder;
 ///
-/// let fence_policy = MarkdownFencePolicy::Disabled;
-/// assert_eq!(fence_policy, MarkdownFencePolicy::Disabled);
+/// let policy = NormalizingJsonDecodePolicyBuilder::new()
+///     .markdown_fence_policy(MarkdownFencePolicy::JsonOnly {
+///         closing: MarkdownFenceClosing::Required,
+///     })
+///     .build();
+/// assert_eq!(
+///     policy.markdown_fence_policy(),
+///     &MarkdownFencePolicy::JsonOnly {
+///         closing: MarkdownFenceClosing::Required,
+///     }
+/// );
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MarkdownFencePolicy {

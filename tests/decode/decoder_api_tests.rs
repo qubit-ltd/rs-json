@@ -76,9 +76,7 @@ fn test_json_decoder_validation_entry_points() {
 fn test_json_decoder_typed_root_entry_points() {
     let mut decoder = JsonDecoder::unlimited();
 
-    let object: Value = decoder
-        .decode_object_str("{\"ok\":true}")
-        .expect("object string");
+    let object: Value = decoder.decode_object_str("{\"ok\":true}").expect("object string");
     let array: Vec<u8> = decoder.decode_array_utf8(b"[1,2]").expect("array bytes");
     let error = decoder
         .decode_object_utf8::<Value>(b"[]")
@@ -115,10 +113,7 @@ fn test_json_decoder_owned_uses_explicit_limits() {
     let decoder = JsonDecoder::with_limits(limits);
 
     assert_eq!(decoder.session().max_input_bytes(), Some(8));
-    assert_eq!(
-        decoder.session().value_budget().limits().max_nodes(),
-        Some(2)
-    );
+    assert_eq!(decoder.session().value_budget().limits().max_nodes(), Some(2));
 }
 
 /// Verifies unlimited construction is explicit and leaves every budget
@@ -143,18 +138,10 @@ fn test_json_decoder_session_mut_and_into_session_preserve_usage() {
     attempt
         .try_consume_input_bytes(1)
         .expect("the direct session charge should fit");
-    attempt
-        .commit()
-        .expect("the empty value transaction should commit");
+    attempt.commit().expect("the empty value transaction should commit");
 
     let session = decoder.into_session();
-    assert_eq!(
-        session
-            .input_budget()
-            .expect("configured input budget")
-            .used(),
-        1
-    );
+    assert_eq!(session.input_budget().expect("configured input budget").used(), 1);
 }
 
 /// Verifies that normalizing string decoding returns an owned target.
@@ -217,9 +204,7 @@ fn test_normalizing_decoder_utf8_root_entry_points() {
     let object: Value = decoder
         .decode_object_utf8(br#" {"ok":true} "#)
         .expect("object bytes should decode");
-    let array: Vec<u8> = decoder
-        .decode_array_utf8(b"[1,2]")
-        .expect("array bytes should decode");
+    let array: Vec<u8> = decoder.decode_array_utf8(b"[1,2]").expect("array bytes should decode");
     let error = decoder
         .decode_array_utf8::<u8>(b"{}")
         .expect_err("an object must not satisfy the array contract");
@@ -237,8 +222,7 @@ fn test_normalizing_decoder_session_mut_and_into_session_preserve_usage() {
         .max_input_bytes(4)
         .max_normalized_input_bytes(4)
         .build();
-    let mut decoder =
-        NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
+    let mut decoder = NormalizingJsonDecoder::with_limits(NormalizingJsonDecodePolicy::lenient(), limits);
     let mut attempt = decoder.session_mut().begin_value();
     attempt
         .try_consume_input_bytes(1)
@@ -246,18 +230,10 @@ fn test_normalizing_decoder_session_mut_and_into_session_preserve_usage() {
     attempt
         .try_consume_normalized_input_bytes(1)
         .expect("the direct normalized-input charge should fit");
-    attempt
-        .commit()
-        .expect("the empty value transaction should commit");
+    attempt.commit().expect("the empty value transaction should commit");
 
     let session = decoder.into_session();
-    assert_eq!(
-        session
-            .input_budget()
-            .expect("configured input budget")
-            .used(),
-        1
-    );
+    assert_eq!(session.input_budget().expect("configured input budget").used(), 1);
     assert_eq!(
         session
             .normalized_input_budget()
@@ -282,10 +258,7 @@ fn test_normalizing_decoder_owned_separates_policy_and_limits() {
     assert_eq!(decoder.policy(), &policy);
     assert_eq!(decoder.session().max_input_bytes(), Some(8));
     assert_eq!(decoder.session().max_normalized_input_bytes(), Some(6));
-    assert_eq!(
-        decoder.session().value_budget().limits().max_nodes(),
-        Some(1)
-    );
+    assert_eq!(decoder.session().value_budget().limits().max_nodes(), Some(1));
 }
 
 /// Verifies that a caller-provided session remains the decoder's sole source
@@ -306,10 +279,7 @@ fn test_normalizing_decoder_new_preserves_session() {
 /// limits.
 #[test]
 fn test_normalizing_decoder_policies_do_not_change_session_limits() {
-    for policy in [
-        no_normalization_policy(),
-        NormalizingJsonDecodePolicy::lenient(),
-    ] {
+    for policy in [no_normalization_policy(), NormalizingJsonDecodePolicy::lenient()] {
         let session = JsonDecodeSession::from_limits(
             JsonDecodeLimits::<JsonResource, usize>::builder()
                 .max_input_bytes(7)
@@ -321,10 +291,7 @@ fn test_normalizing_decoder_policies_do_not_change_session_limits() {
 
         assert_eq!(decoder.session().max_input_bytes(), Some(7));
         assert_eq!(decoder.session().max_normalized_input_bytes(), Some(5));
-        assert_eq!(
-            decoder.session().value_budget().limits().max_nodes(),
-            Some(2)
-        );
+        assert_eq!(decoder.session().value_budget().limits().max_nodes(), Some(2));
     }
 }
 

@@ -11,7 +11,7 @@ use qubit_budget::json::JsonMeasurement;
 
 /// Resource checked while a `Display` implementation emits text chunks.
 #[derive(Clone, Copy)]
-pub(super) enum DisplayBudgetKind {
+pub(in crate::encode) enum DisplayBudgetKind {
     /// Ordinary JSON string payload.
     String,
 
@@ -25,6 +25,18 @@ pub(super) enum DisplayBudgetKind {
 impl DisplayBudgetKind {
     /// Returns the budget measurement for prospective text, if it is a JSON
     /// string or key payload.
+    ///
+    /// # Parameters
+    ///
+    /// * `self` - Budget category selecting how text is measured.
+    /// * `depth` - Nesting depth used when measuring a JSON string payload.
+    /// * `bytes` - Number of emitted bytes in the prospective text chunk.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some` with a string or key measurement for `String` and `Key`.
+    /// Returns `None` for `RawOutput`, which is bounded by the complete output
+    /// limit instead of a JSON payload measurement.
     pub(super) fn measurement(self, depth: usize, bytes: usize) -> Option<JsonMeasurement> {
         match self {
             Self::String => Some(JsonMeasurement::String { depth, bytes }),

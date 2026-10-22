@@ -27,9 +27,7 @@ use serde_json::json;
 #[test]
 fn test_accounting_json_value_seed_rejects_decoded_nodes_incrementally() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(
-            StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
-        )
+        .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)))
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
@@ -39,7 +37,10 @@ fn test_accounting_json_value_seed_rejects_decoded_nodes_incrementally() {
         .deserialize(&mut deserializer)
         .expect_err("the third decoded node should exceed the budget");
 
-    assert!(error.to_string().contains("Nodes"));
+    assert!(
+        error.to_string().contains("Nodes"),
+        "node limit error should name the exceeded resource"
+    );
     assert_eq!(budget.used_nodes(), Some(0));
 }
 
@@ -62,15 +63,16 @@ fn test_accounting_json_value_seed_admits_containers_before_descending() {
         .deserialize(&mut deserializer)
         .expect_err("the nested array must exceed the depth limit before decoding its child");
 
-    assert!(error.to_string().contains("Depth"));
+    assert!(
+        error.to_string().contains("Depth"),
+        "depth limit error should name the exceeded resource"
+    );
     assert_eq!(transaction.used_nodes(), Some(1));
 }
 
 #[test]
 fn test_accounting_json_value_seed_returns_the_admitted_value() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
-        .build()
-        .budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"{"key":[true]}"#);
 
@@ -85,10 +87,7 @@ fn test_accounting_json_value_seed_returns_the_admitted_value() {
 #[test]
 fn test_accounting_json_value_seed_counts_duplicate_object_entries() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(
-            StructureLimits::builder()
-                .map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)),
-        )
+        .structure_limits(StructureLimits::builder().map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)))
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
@@ -98,16 +97,17 @@ fn test_accounting_json_value_seed_counts_duplicate_object_entries() {
         .deserialize(&mut deserializer)
         .expect_err("the duplicate second entry must exceed the object-entry limit");
 
-    assert!(error.to_string().contains("MapEntries"));
+    assert!(
+        error.to_string().contains("MapEntries"),
+        "map-entry limit error should name the exceeded resource"
+    );
 }
 
 /// Exercises scalar and optional serde visitor branches that JSON text does
 /// not necessarily dispatch to consistently across serde_json versions.
 #[test]
 fn test_accounting_json_value_seed_accepts_all_scalar_deserializer_shapes() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
-        .build()
-        .budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
     let mut transaction = budget.transaction();
 
     assert_eq!(
@@ -142,9 +142,7 @@ fn test_accounting_json_value_seed_accepts_all_scalar_deserializer_shapes() {
     );
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(value::StringDeserializer::<value::Error>::new(
-                String::from("owned")
-            ))
+            .deserialize(value::StringDeserializer::<value::Error>::new(String::from("owned")))
             .expect("owned strings are accepted"),
         json!("owned"),
     );
@@ -164,9 +162,7 @@ fn test_accounting_json_value_seed_supports_u8_resource_quantities() {
 
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(value::StringDeserializer::<value::Error>::new(
-                String::from("owned-u8"),
-            ))
+            .deserialize(value::StringDeserializer::<value::Error>::new(String::from("owned-u8"),))
             .expect("owned strings should be admitted"),
         json!("owned-u8"),
     );
@@ -178,6 +174,8 @@ fn test_accounting_json_value_seed_supports_u8_resource_quantities() {
     );
 }
 
+/// Dispatches the option visitor's `visit_none` branch and boolean newtype
+/// data.
 struct NoneDeserializer;
 
 impl<'de> SerdeDeserializer<'de> for NoneDeserializer {
@@ -197,11 +195,7 @@ impl<'de> SerdeDeserializer<'de> for NoneDeserializer {
         visitor.visit_none()
     }
 
-    fn deserialize_newtype_struct<V>(
-        self,
-        _name: &'static str,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error>
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
@@ -215,6 +209,7 @@ impl<'de> SerdeDeserializer<'de> for NoneDeserializer {
     }
 }
 
+/// Dispatches a boolean child through the option visitor's `visit_some` branch.
 struct SomeDeserializer;
 
 impl<'de> SerdeDeserializer<'de> for SomeDeserializer {
@@ -245,55 +240,55 @@ impl<'de> SerdeDeserializer<'de> for SomeDeserializer {
 /// non-representable numeric values.
 #[test]
 fn test_accounting_json_value_seed_handles_option_newtype_and_numeric_errors() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
-        .build()
-        .budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
     let mut transaction = budget.transaction();
     assert!(
         AccountingJsonValueSeed::new(&mut transaction)
             .deserialize(value::I128Deserializer::<value::Error>::new(i128::MAX))
-            .is_err()
+            .is_err(),
+        "i128::MAX should exceed the supported JSON integer range"
     );
     assert!(
         AccountingJsonValueSeed::new(&mut transaction)
             .deserialize(value::U128Deserializer::<value::Error>::new(u128::MAX))
-            .is_err()
+            .is_err(),
+        "u128::MAX should exceed the supported JSON integer range"
     );
     assert!(
         AccountingJsonValueSeed::new(&mut transaction)
             .deserialize(I128DispatchDeserializer)
-            .is_err()
+            .is_err(),
+        "the custom i128 visitor branch should reject an out-of-range value"
     );
     assert!(
         AccountingJsonValueSeed::new(&mut transaction)
             .deserialize(U128DispatchDeserializer)
-            .is_err()
+            .is_err(),
+        "the custom u128 visitor branch should reject an out-of-range value"
     );
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(value::I128Deserializer::<value::Error>::new(
-                i64::MIN.into()
-            ))
+            .deserialize(value::I128Deserializer::<value::Error>::new(i64::MIN.into()))
             .expect("i64 minimum must remain representable"),
         json!(i64::MIN),
     );
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(value::U128Deserializer::<value::Error>::new(
-                u64::MAX.into()
-            ))
+            .deserialize(value::U128Deserializer::<value::Error>::new(u64::MAX.into()))
             .expect("u64 maximum must remain representable"),
         json!(u64::MAX),
     );
     assert!(
         AccountingJsonValueSeed::new(&mut transaction)
             .deserialize(value::F64Deserializer::<value::Error>::new(f64::NAN))
-            .is_err()
+            .is_err(),
+        "non-finite floats must not become JSON numbers"
     );
     assert!(
         AccountingJsonValueSeed::new(&mut transaction)
             .deserialize(ExpectingDeserializer)
-            .is_err()
+            .is_err(),
+        "unsupported visitor types should return a serde error"
     );
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
@@ -315,10 +310,13 @@ fn test_accounting_json_value_seed_handles_option_newtype_and_numeric_errors() {
     );
 }
 
+/// Dispatches a boolean through the visitor's newtype delegation branch.
 struct NewtypeDeserializer;
 
+/// Delivers an out-of-range signed integer through `visit_i128`.
 struct I128DispatchDeserializer;
 
+/// Delivers an out-of-range unsigned integer through `visit_u128`.
 struct U128DispatchDeserializer;
 
 impl<'de> SerdeDeserializer<'de> for I128DispatchDeserializer {
@@ -355,6 +353,7 @@ impl<'de> SerdeDeserializer<'de> for U128DispatchDeserializer {
     }
 }
 
+/// Supplies unit to exercise the visitor's unexpected-type error path.
 struct ExpectingDeserializer;
 
 impl<'de> SerdeDeserializer<'de> for ExpectingDeserializer {

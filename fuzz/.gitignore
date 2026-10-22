@@ -3,6 +3,7 @@ corpus/*
 !corpus/decoder/
 corpus/decoder/*
 !corpus/decoder/typed-fuzz-record
+!corpus/decoder/regression-repro-95cd574a335b5775014494438499760f4cf732e8
 !corpus/json_budget_invariants/
 corpus/json_budget_invariants/*
 !corpus/json_budget_invariants/decimal-boundaries
@@ -15,4 +16,5 @@ corpus/json_encode_invariants/*
 !corpus/json_tree_invariants/
 corpus/json_tree_invariants/*
 !corpus/json_tree_invariants/nested-redaction
+!corpus/json_tree_invariants/regression-repro-1396173dd49756199687b03656ed506586bd9c7e
 artifacts

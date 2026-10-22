@@ -30,6 +30,12 @@ use super::internal::TypedSeed;
 /// borrowed results, custom seeds, or repeated materialization first create a
 /// [`NormalizedJsonDocument`] and then use a document decoding method.
 ///
+/// # Type Parameters
+///
+/// * `'budget` - Lifetime of the cumulative session borrowed by this decoder.
+/// * `R` - Resource kind tracked by the decoding session.
+/// * `Q` - Quantity type used for resource accounting.
+///
 /// # Examples
 ///
 /// ```
@@ -77,10 +83,7 @@ where
     /// A decoder whose accounting starts empty and is constrained by `limits`.
     #[inline]
     #[must_use]
-    pub fn with_limits(
-        policy: NormalizingJsonDecodePolicy,
-        limits: JsonDecodeLimits<R, Q>,
-    ) -> Self {
+    pub fn with_limits(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits<R, Q>) -> Self {
         Self::new(policy, JsonDecodeSession::from_limits(limits))
     }
 }
@@ -105,10 +108,7 @@ where
     /// [`Self::into_session`].
     #[inline]
     #[must_use]
-    pub const fn new(
-        policy: NormalizingJsonDecodePolicy,
-        session: JsonDecodeSession<'budget, R, Q>,
-    ) -> Self {
+    pub const fn new(policy: NormalizingJsonDecodePolicy, session: JsonDecodeSession<'budget, R, Q>) -> Self {
         Self {
             normalizer: JsonNormalizer::new(policy),
             engine: JsonDecodeEngine::new(session),
@@ -437,6 +437,10 @@ where
 
     /// Normalizes and decodes one string while requiring a top-level object.
     ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Owned object type deserialized from the normalized document.
+    ///
     /// # Parameters
     ///
     /// * `input` - JSON text whose normalized root must be an object.
@@ -460,6 +464,10 @@ where
     /// Normalizes and decodes one UTF-8 byte slice while requiring a top-level
     /// object.
     ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Owned object type deserialized from the normalized document.
+    ///
     /// # Parameters
     ///
     /// * `input` - UTF-8 JSON bytes whose normalized root must be an object.
@@ -481,6 +489,10 @@ where
     }
 
     /// Normalizes and decodes one string while requiring a top-level array.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Owned element type deserialized from the normalized document.
     ///
     /// # Parameters
     ///
@@ -504,6 +516,10 @@ where
 
     /// Normalizes and decodes one UTF-8 byte slice while requiring a top-level
     /// array.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Owned element type deserialized from the normalized document.
     ///
     /// # Parameters
     ///

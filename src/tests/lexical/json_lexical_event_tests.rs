@@ -18,11 +18,16 @@ use crate::lexical::line_column_at;
 
 const INPUT: &[u8] = br#"{"x":[null,true,-0,"\u0078"],"empty":{}}"#;
 
+/// Creates a decode session with default resource limits for scanner tests.
 fn scanner() -> JsonDecodeSession<'static, JsonResource, usize> {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder().build();
     JsonDecodeSession::from_limits(limits)
 }
 
+/// Runs a lexical scan and returns its error and staged resource usage.
+///
+/// The tuple contains the formatted scan outcome, used node count, and used
+/// payload byte count, respectively.
 fn scan_outcome(
     input: &[u8],
     limits: JsonDecodeLimits<JsonResource, usize>,
@@ -40,11 +45,7 @@ fn scan_outcome(
         };
         format!("{result:?}")
     };
-    (
-        error,
-        transaction.used_nodes(),
-        transaction.used_payload_bytes(),
-    )
+    (error, transaction.used_nodes(), transaction.used_payload_bytes())
 }
 
 #[test]
@@ -63,9 +64,7 @@ fn test_json_lexical_events_preserve_token_sequence_and_offsets() {
             JsonLexicalEvent::Key { token, offset } => ("key", *offset, Some(*token)),
             JsonLexicalEvent::BeginArray { offset } => ("begin-array", *offset, None),
             JsonLexicalEvent::Null { offset } => ("null", *offset, None),
-            JsonLexicalEvent::Boolean { value, offset } => {
-                (if *value { "true" } else { "false" }, *offset, None)
-            }
+            JsonLexicalEvent::Boolean { value, offset } => (if *value { "true" } else { "false" }, *offset, None),
             JsonLexicalEvent::Number { token, offset } => ("number", *offset, Some(*token)),
             JsonLexicalEvent::String { token, offset } => ("string", *offset, Some(*token)),
             JsonLexicalEvent::EndArray { offset } => ("end-array", *offset, None),
@@ -109,13 +108,12 @@ fn test_json_lexical_scan_and_event_scan_share_syntax_errors() {
     for input in [&b"[true] trailing"[..], &br#"["\uD800"]"#[..], &b"01"[..]] {
         let mut plain_session = scanner();
         let mut plain_attempt = plain_session.begin_value();
-        let plain =
-            JsonLexicalScanner::new(plain_attempt.value_transaction_mut(), false).scan(input);
+        let plain = JsonLexicalScanner::new(plain_attempt.value_transaction_mut(), false).scan(input);
 
         let mut event_session = scanner();
         let mut event_attempt = event_session.begin_value();
-        let event = JsonLexicalScanner::new(event_attempt.value_transaction_mut(), false)
-            .scan_with_events(input, |_| {});
+        let event =
+            JsonLexicalScanner::new(event_attempt.value_transaction_mut(), false).scan_with_events(input, |_| {});
 
         match (plain, event) {
             (Err(JsonLexicalError::Syntax(left)), Err(JsonLexicalError::Syntax(right))) => {
@@ -150,17 +148,13 @@ fn test_json_lexical_scan_paths_share_budget_failures_and_staged_usage() {
         ),
         (
             b"[null]".as_slice(),
-            JsonDecodeLimits::<JsonResource, usize>::builder()
-                .max_nodes(1)
-                .build(),
+            JsonDecodeLimits::<JsonResource, usize>::builder().max_nodes(1).build(),
             "node limit",
             "Nodes",
         ),
         (
             b"[null]".as_slice(),
-            JsonDecodeLimits::<JsonResource, usize>::builder()
-                .max_depth(1)
-                .build(),
+            JsonDecodeLimits::<JsonResource, usize>::builder().max_depth(1).build(),
             "depth limit",
             "Depth",
         ),
@@ -170,10 +164,7 @@ fn test_json_lexical_scan_paths_share_budget_failures_and_staged_usage() {
         let plain = scan_outcome(input, limits, false);
         let with_events = scan_outcome(input, limits, true);
 
-        assert_eq!(
-            plain, with_events,
-            "scanner paths diverged at {description}"
-        );
+        assert_eq!(plain, with_events, "scanner paths diverged at {description}");
         assert!(
             plain.0.contains("Budget"),
             "expected a budget error at {description}: {}",

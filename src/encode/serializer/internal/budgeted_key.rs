@@ -13,20 +13,19 @@ use qubit_budget::ResourceQuantity;
 use serde::Serialize;
 use serde::Serializer;
 
-use super::internal::JsonKeyBudgetSerializer;
-use super::json_encode_context::JsonEncodeContext;
+use super::JsonEncodeContext;
+use super::JsonKeyBudgetSerializer;
 
 /// Wraps a map key so it is traversed once through a key-aware decorator.
-pub(super) struct BudgetedKey<
-    'a,
-    'transaction,
-    'budget,
-    'context,
-    T,
-    R,
-    Q,
-    const VALUE_LIMITS: bool,
-> where
+///
+/// # Type Parameters
+///
+/// * `T` - Map key type to serialize.
+/// * `R` - Resource identifier used by the shared encode budget.
+/// * `Q` - Quantity representation used by the shared encode budget.
+/// * `VALUE_LIMITS` - Whether value-level limits apply to the key.
+pub(in crate::encode) struct BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q, const VALUE_LIMITS: bool>
+where
     T: ?Sized,
     Q: ResourceQuantity,
 {
@@ -44,6 +43,15 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a key wrapper bound to the shared traversal context.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Map key whose serialization will be decorated.
+    /// * `context` - Shared traversal context for key accounting.
+    ///
+    /// # Returns
+    ///
+    /// A wrapper that serializes the key through the key-aware decorator.
     #[must_use]
     #[inline(always)]
     pub(super) const fn new(
@@ -54,23 +62,39 @@ where
     }
 }
 
-impl<T, R, Q, const VALUE_LIMITS: bool> Serialize
-    for BudgetedKey<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
+impl<T, R, Q, const VALUE_LIMITS: bool> Serialize for BudgetedKey<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
 where
     T: Serialize + ?Sized,
     R: Clone,
     Q: ResourceQuantity,
 {
     /// Serializes the original key once through a key-aware decorator.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `S` - Serializer receiving the decorated key.
+    ///
+    /// # Parameters
+    ///
+    /// * `self` - Key wrapper containing the original key and traversal
+    ///   context.
+    /// * `serializer` - Serializer used to encode the key.
+    ///
+    /// # Returns
+    ///
+    /// The wrapped serializer's success value.
+    ///
+    /// # Errors
+    ///
+    /// Returns errors produced while the wrapped serializer encodes the key.
     #[inline(always)]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        self.value
-            .serialize(JsonKeyBudgetSerializer::<S, R, Q, VALUE_LIMITS> {
-                inner: serializer,
-                context: self.context,
-            })
+        self.value.serialize(JsonKeyBudgetSerializer::<S, R, Q, VALUE_LIMITS> {
+            inner: serializer,
+            context: self.context,
+        })
     }
 }

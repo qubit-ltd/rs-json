@@ -11,7 +11,8 @@ use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Write;
 
-/// Controls whether a writer completes, interrupts once, or fails after a prefix.
+/// Controls whether a writer completes, interrupts once, or fails after a
+/// prefix.
 #[derive(Clone, Copy)]
 pub enum OutputMode {
     /// Accept every byte, optionally in short writes.
@@ -32,7 +33,9 @@ pub struct FuzzOutput {
 }
 
 impl FuzzOutput {
-    /// Creates a writer with an optional byte limit and per-call short-write cap.
+    /// Creates a writer with an optional byte limit and per-call short-write
+    /// cap.
+    #[must_use]
     pub fn new(mode: OutputMode, remaining: usize, max_chunk: usize) -> Self {
         Self {
             mode,
@@ -44,6 +47,8 @@ impl FuzzOutput {
     }
 
     /// Returns the bytes accepted by the external writer.
+    #[must_use]
+    #[inline]
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
@@ -64,6 +69,7 @@ impl Write for FuzzOutput {
         Ok(count)
     }
 
+    #[inline]
     fn flush(&mut self) -> Result<(), Error> {
         Ok(())
     }

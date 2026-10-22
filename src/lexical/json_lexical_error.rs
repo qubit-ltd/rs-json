@@ -14,6 +14,11 @@ use qubit_budget::MeasuredBudgetError;
 use super::json_lexical_failure::JsonLexicalFailure;
 
 /// Failure produced while lexically scanning and charging one JSON document.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity attached to a rejected budget measurement.
+/// * `Q` - Quantity representation used by that measurement.
 #[must_use]
 #[derive(Debug)]
 pub(crate) enum JsonLexicalError<R, Q>

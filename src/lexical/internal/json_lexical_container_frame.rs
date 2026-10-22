@@ -8,7 +8,7 @@
 //! Continuation state for non-recursive JSON lexical scanning.
 
 /// Continuation for one JSON container being scanned iteratively.
-pub(super) enum JsonLexicalContainerFrame {
+pub(in crate::lexical) enum JsonLexicalContainerFrame {
     /// An array ready for its first or next value.
     ArrayValue {
         /// Root-inclusive depth of the array.

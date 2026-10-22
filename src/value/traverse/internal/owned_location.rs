@@ -29,6 +29,7 @@ pub(in crate::value::traverse) enum OwnedLocation {
 
 impl OwnedLocation {
     /// Borrows this owned location for a visitor context.
+    #[must_use]
     #[inline(always)]
     pub(in crate::value::traverse) fn context(&self, depth: usize) -> JsonTreeContext<'_> {
         let location = match self {

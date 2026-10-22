@@ -34,6 +34,20 @@ pub(in crate::value::traverse) enum ChildCursor<'value> {
 
 impl<'value> ChildCursor<'value> {
     /// Creates a cursor for the immediate children of `value`.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Container or scalar whose immediate children are traversed.
+    /// * `depth` - Root-inclusive depth assigned to `value`.
+    ///
+    /// # Returns
+    ///
+    /// A cursor that yields array or object children at the next depth, or
+    /// remains empty when `value` is a scalar.
+    ///
+    /// # Panics
+    ///
+    /// Panics if incrementing `depth` overflows `usize`.
     #[inline]
     pub(in crate::value::traverse) fn new(value: &'value Value, depth: usize) -> Self {
         let child_depth = depth
@@ -53,9 +67,12 @@ impl<'value> ChildCursor<'value> {
     }
 
     /// Returns the next child, its location, and its root-inclusive depth.
-    pub(in crate::value::traverse) fn next(
-        &mut self,
-    ) -> Option<(&'value Value, JsonTreeLocation<'value>, usize)> {
+    ///
+    /// # Returns
+    ///
+    /// The next child with its path location and depth, or `None` after all
+    /// children have been yielded.
+    pub(in crate::value::traverse) fn next(&mut self) -> Option<(&'value Value, JsonTreeLocation<'value>, usize)> {
         match self {
             Self::Array { iter, depth } => iter
                 .next()

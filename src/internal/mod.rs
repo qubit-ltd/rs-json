@@ -22,6 +22,7 @@ pub(crate) use json_map_key::JsonMapKey;
 pub(crate) use json_private_protocol_kind::JsonPrivateProtocolKind;
 pub(crate) use json_private_protocol_phase::JsonPrivateProtocolPhase;
 pub(crate) use json_private_protocol_state::JsonPrivateProtocolState;
+#[cfg(test)]
 pub(crate) use serde_json_compat::SERDE_JSON_NUMBER_TOKEN;
 pub(crate) use serde_json_compat::SERDE_JSON_RAW_VALUE_TOKEN;
 pub(crate) use strict_json_number::StrictJsonNumber;

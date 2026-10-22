@@ -14,17 +14,13 @@ use crate::internal::StrictJsonNumber;
 #[test]
 fn test_from_i128_accepts_signed_and_unsigned_64_bit_range() {
     assert_eq!(
-        StrictJsonNumber::from_i128(i64::MIN as i128)
-            .unwrap()
-            .as_i64(),
+        StrictJsonNumber::from_i128(i64::MIN as i128).unwrap().as_i64(),
         Some(i64::MIN)
     );
     assert_eq!(StrictJsonNumber::from_i128(-1).unwrap().as_i64(), Some(-1));
     assert_eq!(StrictJsonNumber::from_i128(0).unwrap().as_i64(), Some(0));
     assert_eq!(
-        StrictJsonNumber::from_i128(u64::MAX as i128)
-            .unwrap()
-            .as_u64(),
+        StrictJsonNumber::from_i128(u64::MAX as i128).unwrap().as_u64(),
         Some(u64::MAX)
     );
 }
@@ -44,9 +40,7 @@ fn test_from_i128_rejects_values_outside_integer_union() {
 #[test]
 fn test_from_u128_enforces_u64_range() {
     assert_eq!(
-        StrictJsonNumber::from_u128(u64::MAX as u128)
-            .unwrap()
-            .as_u64(),
+        StrictJsonNumber::from_u128(u64::MAX as u128).unwrap().as_u64(),
         Some(u64::MAX)
     );
     assert_eq!(
@@ -60,10 +54,7 @@ fn test_from_u128_enforces_u64_range() {
 #[test]
 fn test_parse_preserves_negative_zero_and_finite_fraction() {
     let negative_zero = StrictJsonNumber::parse("-0").unwrap();
-    assert_eq!(
-        negative_zero.as_f64().unwrap().to_bits(),
-        (-0.0_f64).to_bits()
-    );
+    assert_eq!(negative_zero.as_f64().unwrap().to_bits(), (-0.0_f64).to_bits());
     assert_eq!(StrictJsonNumber::parse("1.5").unwrap().as_f64(), Some(1.5));
 }
 
@@ -76,15 +67,11 @@ fn test_parse_maps_numeric_range_errors() {
         );
     }
     assert_eq!(
-        StrictJsonNumber::parse("18446744073709551615")
-            .unwrap()
-            .as_u64(),
+        StrictJsonNumber::parse("18446744073709551615").unwrap().as_u64(),
         Some(u64::MAX)
     );
     assert_eq!(
-        StrictJsonNumber::parse("18446744073709551616")
-            .unwrap_err()
-            .kind(),
+        StrictJsonNumber::parse("18446744073709551616").unwrap_err().kind(),
         JsonSerializationErrorKind::IntegerOutOfRange {
             signedness: JsonIntegerSignedness::Unsigned
         },

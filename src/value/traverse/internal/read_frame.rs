@@ -13,6 +13,11 @@ use super::super::JsonTreeContext;
 use super::ReadFrameState;
 
 /// Represents one stack-held frame in a read-only depth-first traversal.
+///
+/// # Type Parameters
+///
+/// * `'value` - Borrow lifetime shared by the value, callback context, and
+///   traversal state.
 pub(in crate::value::traverse) struct ReadFrame<'value> {
     /// Borrowed value associated with this frame.
     pub(in crate::value::traverse) value: &'value Value,
@@ -24,12 +29,18 @@ pub(in crate::value::traverse) struct ReadFrame<'value> {
 
 impl<'value> ReadFrame<'value> {
     /// Creates a frame that will enter `value` before scheduling children.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - JSON value visited by this frame.
+    /// * `context` - Location and depth supplied to callbacks for this value.
+    ///
+    /// # Returns
+    ///
+    /// A frame in the enter phase for the supplied value.
     #[must_use]
     #[inline(always)]
-    pub(in crate::value::traverse) fn enter(
-        value: &'value Value,
-        context: JsonTreeContext<'value>,
-    ) -> Self {
+    pub(in crate::value::traverse) fn enter(value: &'value Value, context: JsonTreeContext<'value>) -> Self {
         Self {
             value,
             context,

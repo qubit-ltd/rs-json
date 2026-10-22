@@ -7,14 +7,10 @@
 // =============================================================================
 //! Assertions shared by private serde_json protocol tests.
 
-use qubit_budget::json::JsonResource;
-use qubit_json::encode::JsonEncodeError;
-use qubit_json::encode::JsonSerializerStateError;
-
 /// Asserts the precise private protocol state surfaced by a public error.
 pub(super) fn assert_private_state_error(
-    error: &JsonEncodeError<JsonResource>,
-    expected: JsonSerializerStateError,
+    error: &qubit_json::encode::JsonEncodeError<qubit_budget::json::JsonResource>,
+    expected: qubit_json::encode::JsonSerializerStateError,
 ) {
     assert_eq!(
         error

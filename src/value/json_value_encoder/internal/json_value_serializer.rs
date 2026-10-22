@@ -11,6 +11,9 @@ use std::fmt::Display;
 use std::fmt::Write as _;
 use std::str::FromStr;
 
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueBudget;
+use qubit_budget::json::JsonValueLimits;
 use serde::Serialize;
 use serde::Serializer;
 use serde_json::Map;
@@ -29,9 +32,6 @@ use crate::lexical::JsonLexicalScanner;
 use crate::lexical::JsonNumberModel;
 use crate::value::internal::JsonValueMaterializationError;
 use crate::value::internal::LexicalJsonValueBuilder;
-use qubit_budget::json::JsonResource;
-use qubit_budget::json::JsonValueBudget;
-use qubit_budget::json::JsonValueLimits;
 
 /// Maximum compound capacity reserved from an untrusted Serde length hint.
 const MAX_PREALLOCATED_ITEMS: usize = 1_024;
@@ -52,9 +52,7 @@ fn preallocated_capacity(len: Option<usize>) -> usize {
 ///
 /// Returns [`JsonSerializationErrorKind::InvalidRawValue`] when the text is
 /// invalid JSON or contains duplicate object keys.
-pub(in crate::value::json_value_encoder) fn decode_raw_value(
-    text: &str,
-) -> Result<Value, JsonSerializationError> {
+pub(in crate::value::json_value_encoder) fn decode_raw_value(text: &str) -> Result<Value, JsonSerializationError> {
     let limits = JsonValueLimits::<JsonResource, usize>::new();
     let mut budget = JsonValueBudget::new(limits);
     {
@@ -62,9 +60,7 @@ pub(in crate::value::json_value_encoder) fn decode_raw_value(
         JsonLexicalScanner::new(&mut transaction, false)
             .with_number_model(JsonNumberModel::Integer64)
             .scan(text.as_bytes())
-            .map_err(|_| {
-                JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue)
-            })?;
+            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue))?;
     }
     let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Integer64);
     let mut transaction = budget.transaction();
@@ -198,15 +194,11 @@ impl Serializer for JsonValueSerializer {
     /// number representation error if the formatted value cannot be parsed.
     fn serialize_f32(self, value: f32) -> Result<Value, Self::Error> {
         if !value.is_finite() {
-            return Err(JsonSerializationError::new(
-                JsonSerializationErrorKind::NonFiniteFloat,
-            ));
+            return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
         }
         Number::from_str(&value.to_string())
             .map(Value::Number)
-            .map_err(|_| {
-                JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation)
-            })
+            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))
     }
 
     /// Serializes a finite 64-bit floating-point number.
@@ -235,10 +227,7 @@ impl Serializer for JsonValueSerializer {
     /// Serializes bytes as an array of unsigned integer values.
     fn serialize_bytes(self, value: &[u8]) -> Result<Value, Self::Error> {
         Ok(Value::Array(
-            value
-                .iter()
-                .map(|value| Value::Number((*value).into()))
-                .collect(),
+            value.iter().map(|value| Value::Number((*value).into())).collect(),
         ))
     }
 
@@ -291,11 +280,7 @@ impl Serializer for JsonValueSerializer {
     /// Returns an error from serializing `value`, an invalid serializer state
     /// error when a RawValue payload is not encoded as a string, or an invalid
     /// raw value error when that string is not strict JSON.
-    fn serialize_newtype_struct<T>(
-        self,
-        name: &'static str,
-        value: &T,
-    ) -> Result<Value, Self::Error>
+    fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Value, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -374,16 +359,10 @@ impl Serializer for JsonValueSerializer {
     }
 
     /// Creates a struct serializer with a bounded initial capacity.
-    fn serialize_struct(
-        self,
-        name: &'static str,
-        len: usize,
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         if let Some(kind) = JsonPrivateProtocolKind::from_struct_name(name) {
             let state = JsonPrivateProtocolState::new(kind, len).map_err(|reason| {
-                JsonSerializationError::new(JsonSerializationErrorKind::InvalidSerializerState {
-                    reason,
-                })
+                JsonSerializationError::new(JsonSerializationErrorKind::InvalidSerializerState { reason })
             })?;
             Ok(JsonValueCompound::private(kind, state))
         } else {
@@ -415,9 +394,8 @@ impl Serializer for JsonValueSerializer {
         T: Display + ?Sized,
     {
         let mut text = String::new();
-        write!(&mut text, "{value}").map_err(|_| {
-            JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed)
-        })?;
+        write!(&mut text, "{value}")
+            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
         self.serialize_str(&text)
     }
 }

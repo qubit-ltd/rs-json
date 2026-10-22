@@ -119,7 +119,10 @@ fuzz_target!(|data: &[u8]| {
     let mut encoder = JsonEncoder::new(session);
     let write_result = encoder.write_incremental(&mut output, &value);
     let session = encoder.into_session();
-    assert_eq!(session.output_budget().map(|budget| budget.used()), Some(output.bytes().len()));
+    assert_eq!(
+        session.output_budget().map(|budget| budget.used()),
+        Some(output.bytes().len())
+    );
     if write_result.is_ok() {
         assert_eq!(output.bytes(), expected);
         assert!(session.value_budget().used_nodes().is_some_and(|nodes| nodes > 0));

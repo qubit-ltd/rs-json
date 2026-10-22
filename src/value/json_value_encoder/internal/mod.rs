@@ -10,6 +10,7 @@
 mod json_value_compound;
 mod json_value_map_key_serializer;
 mod json_value_serializer;
+mod private_text_serializer;
 
 pub(super) use json_value_compound::JsonValueCompound;
 pub(super) use json_value_map_key_serializer::JsonValueMapKeySerializer;

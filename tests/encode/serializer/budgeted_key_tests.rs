@@ -102,9 +102,7 @@ impl Serialize for ScalarKey {
             Self::UnitStruct => serializer.serialize_unit_struct("Key"),
             Self::UnitVariant => serializer.serialize_unit_variant("Key", 0, "Unit"),
             Self::NewtypeStruct => serializer.serialize_newtype_struct("Key", &"value"),
-            Self::NewtypeVariant => {
-                serializer.serialize_newtype_variant("Key", 0, "Variant", &"value")
-            }
+            Self::NewtypeVariant => serializer.serialize_newtype_variant("Key", 0, "Variant", &"value"),
             Self::Some => serializer.serialize_some(&"value"),
             Self::Seq => serializer.serialize_seq(Some(0)).and_then(|seq| seq.end()),
             Self::Tuple => serializer.serialize_tuple(0).and_then(|tuple| tuple.end()),
@@ -115,9 +113,7 @@ impl Serialize for ScalarKey {
                 .serialize_tuple_variant("Key", 0, "Tuple", 0)
                 .and_then(|tuple| tuple.end()),
             Self::Map => serializer.serialize_map(Some(0)).and_then(|map| map.end()),
-            Self::Struct => serializer
-                .serialize_struct("Key", 0)
-                .and_then(|value| value.end()),
+            Self::Struct => serializer.serialize_struct("Key", 0).and_then(|value| value.end()),
             Self::StructVariant => serializer
                 .serialize_struct_variant("Key", 0, "Struct", 0)
                 .and_then(|value| value.end()),
@@ -174,15 +170,9 @@ fn test_budgeted_key_checks_each_scalar_serializer_path() {
         (ScalarKey::Bytes, Expected::KeyError(JsonMapKeyKind::Bytes)),
         (ScalarKey::None, Expected::KeyError(JsonMapKeyKind::None)),
         (ScalarKey::Unit, Expected::KeyError(JsonMapKeyKind::Unit)),
-        (
-            ScalarKey::UnitStruct,
-            Expected::KeyError(JsonMapKeyKind::UnitStruct),
-        ),
+        (ScalarKey::UnitStruct, Expected::KeyError(JsonMapKeyKind::UnitStruct)),
         (ScalarKey::UnitVariant, Expected::Bytes(br#"{"Unit":true}"#)),
-        (
-            ScalarKey::NewtypeStruct,
-            Expected::Bytes(br#"{"value":true}"#),
-        ),
+        (ScalarKey::NewtypeStruct, Expected::Bytes(br#"{"value":true}"#)),
         (
             ScalarKey::NewtypeVariant,
             Expected::KeyError(JsonMapKeyKind::NewtypeVariant),
@@ -190,41 +180,27 @@ fn test_budgeted_key_checks_each_scalar_serializer_path() {
         (ScalarKey::Some, Expected::Bytes(br#"{"value":true}"#)),
         (ScalarKey::Seq, Expected::KeyError(JsonMapKeyKind::Sequence)),
         (ScalarKey::Tuple, Expected::KeyError(JsonMapKeyKind::Tuple)),
-        (
-            ScalarKey::TupleStruct,
-            Expected::KeyError(JsonMapKeyKind::TupleStruct),
-        ),
+        (ScalarKey::TupleStruct, Expected::KeyError(JsonMapKeyKind::TupleStruct)),
         (
             ScalarKey::TupleVariant,
             Expected::KeyError(JsonMapKeyKind::TupleVariant),
         ),
         (ScalarKey::Map, Expected::KeyError(JsonMapKeyKind::Map)),
-        (
-            ScalarKey::Struct,
-            Expected::KeyError(JsonMapKeyKind::Struct),
-        ),
+        (ScalarKey::Struct, Expected::KeyError(JsonMapKeyKind::Struct)),
         (
             ScalarKey::StructVariant,
             Expected::KeyError(JsonMapKeyKind::StructVariant),
         ),
-        (
-            ScalarKey::HumanReadable,
-            Expected::Bytes(br#"{"human":true}"#),
-        ),
+        (ScalarKey::HumanReadable, Expected::Bytes(br#"{"human":true}"#)),
     ];
     for (key, expected) in cases {
-        let mut session = JsonEncodeSession::from_limits(
-            JsonEncodeLimits::<JsonResource, usize>::builder().build(),
-        );
+        let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
         let result = encode(&OneKey(key), &mut session);
         match expected {
-            Expected::Bytes(bytes) => assert_eq!(
-                result.expect("supported scalar key must encode"),
-                bytes,
-                "case={key:?}"
-            ),
-            Expected::KeyError(kind)
-            | Expected::Error(JsonSerializationErrorKind::UnsupportedMapKey { kind }) => {
+            Expected::Bytes(bytes) => {
+                assert_eq!(result.expect("supported scalar key must encode"), bytes, "case={key:?}")
+            }
+            Expected::KeyError(kind) | Expected::Error(JsonSerializationErrorKind::UnsupportedMapKey { kind }) => {
                 assert_eq!(
                     result
                         .expect_err("unsupported scalar key must be rejected")

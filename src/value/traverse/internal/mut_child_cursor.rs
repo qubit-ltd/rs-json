@@ -45,6 +45,17 @@ pub(in crate::value::traverse) enum MutChildCursor {
 
 impl MutChildCursor {
     /// Creates a cursor whose references remain inside the borrowed root.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Non-null pointer to the root value borrowed exclusively for
+    ///   this traversal. The root must remain alive and structurally unchanged
+    ///   while the cursor is in use.
+    ///
+    /// # Returns
+    ///
+    /// A cursor over the root's direct children, or an empty cursor for a
+    /// scalar value.
     pub(in crate::value::traverse) fn new(mut value: NonNull<Value>) -> Self {
         // SAFETY: the pointer originates from the caller's exclusive root
         // borrow, and no child cursor or visitor borrow of this node is live.
@@ -65,6 +76,21 @@ impl MutChildCursor {
         }
     }
     /// Returns the next child and its traversal metadata.
+    ///
+    /// # Parameters
+    ///
+    /// * `parent_depth` - Depth assigned to the node whose children this cursor
+    ///   visits.
+    ///
+    /// # Returns
+    ///
+    /// `Some` with the next child frame, or `None` when the cursor is empty or
+    /// has no remaining children.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `parent_depth` is `usize::MAX` and the child depth cannot be
+    /// represented.
     pub(in crate::value::traverse) fn next(&mut self, parent_depth: usize) -> Option<MutFrame> {
         let depth = parent_depth
             .checked_add(1)
@@ -78,15 +104,11 @@ impl MutChildCursor {
                 let index = *next;
                 let child = values.get_mut(index)?;
                 *next = next.checked_add(1)?;
-                Some(MutFrame::child(
-                    OwnedLocation::ArrayElement(index),
-                    depth,
-                    child,
-                ))
+                Some(MutFrame::child(OwnedLocation::ArrayElement(index), depth, child))
             }
-            Self::Object { iter } => iter.next().map(|(key, child)| {
-                MutFrame::child(OwnedLocation::ObjectValue(key.clone()), depth, child)
-            }),
+            Self::Object { iter } => iter
+                .next()
+                .map(|(key, child)| MutFrame::child(OwnedLocation::ObjectValue(key.clone()), depth, child)),
             Self::Empty => None,
         }
     }

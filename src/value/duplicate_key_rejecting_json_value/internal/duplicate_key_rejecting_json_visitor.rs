@@ -19,14 +19,14 @@ use serde_json::Map;
 use serde_json::Number;
 use serde_json::Value;
 
-use crate::internal::StrictJsonNumber;
-
 use super::super::DuplicateKeyRejectingJsonValue;
+use crate::internal::StrictJsonNumber;
 
 /// Builds one duplicate-key-free JSON value from Serde events.
 pub(in crate::value::duplicate_key_rejecting_json_value) struct DuplicateKeyRejectingJsonVisitor;
 
 impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
+    /// JSON value wrapper produced after each Serde value is validated.
     type Value = DuplicateKeyRejectingJsonValue;
 
     /// Describes the expected JSON value shape.
@@ -81,9 +81,7 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
 
     /// Decodes a borrowed JSON string into owned storage.
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
-        Ok(DuplicateKeyRejectingJsonValue(Value::String(
-            value.to_owned(),
-        )))
+        Ok(DuplicateKeyRejectingJsonValue(Value::String(value.to_owned())))
     }
 
     /// Decodes an owned JSON string without another allocation.
@@ -230,11 +228,7 @@ mod tests {
                 .into_inner(),
             Value::from(i64::MIN),
         );
-        assert!(
-            DuplicateKeyRejectingJsonVisitor
-                .visit_i128::<Error>(i128::MIN)
-                .is_err()
-        );
+        assert!(DuplicateKeyRejectingJsonVisitor.visit_i128::<Error>(i128::MIN).is_err());
         assert_eq!(
             DuplicateKeyRejectingJsonVisitor
                 .visit_u128::<Error>(u64::MAX.into())
@@ -242,10 +236,6 @@ mod tests {
                 .into_inner(),
             Value::from(u64::MAX),
         );
-        assert!(
-            DuplicateKeyRejectingJsonVisitor
-                .visit_u128::<Error>(u128::MAX)
-                .is_err()
-        );
+        assert!(DuplicateKeyRejectingJsonVisitor.visit_u128::<Error>(u128::MAX).is_err());
     }
 }

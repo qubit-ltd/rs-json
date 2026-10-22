@@ -8,6 +8,10 @@
 //! Shared public-API adapters for encoder tests.
 
 use std::fmt::Debug;
+use std::mem::replace;
+use std::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
+use std::panic::resume_unwind;
 
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonEncodeLimits;
@@ -18,6 +22,9 @@ use qubit_json::encode::JsonEncoder;
 use serde::Serialize;
 
 /// Encodes one value through the stateful encoder API.
+///
+/// The session is temporarily moved into the encoder. If encoding panics, the
+/// updated session is restored before the panic is resumed.
 pub(crate) fn encode<T, R, Q>(
     value: &T,
     session: &mut JsonEncodeSession<'_, R, Q>,
@@ -28,17 +35,20 @@ where
     Q: ResourceQuantity + 'static,
 {
     let placeholder = JsonEncodeSession::from_limits(JsonEncodeLimits::<R, Q>::builder().build());
-    let owned = std::mem::replace(session, placeholder);
+    let owned = replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| encoder.to_vec(value)));
+    let result = catch_unwind(AssertUnwindSafe(|| encoder.to_vec(value)));
     *session = encoder.into_session();
     match result {
         Ok(result) => result,
-        Err(payload) => std::panic::resume_unwind(payload),
+        Err(payload) => resume_unwind(payload),
     }
 }
 
 /// Writes one buffered document through the stateful encoder API.
+///
+/// The session is temporarily moved into the encoder. If writing panics, the
+/// updated session is restored before the panic is resumed.
 pub(crate) fn write_buffered<W, T, R, Q>(
     writer: W,
     value: &T,
@@ -51,19 +61,20 @@ where
     Q: ResourceQuantity + 'static,
 {
     let placeholder = JsonEncodeSession::from_limits(JsonEncodeLimits::<R, Q>::builder().build());
-    let owned = std::mem::replace(session, placeholder);
+    let owned = replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        encoder.write_buffered(writer, value)
-    }));
+    let result = catch_unwind(AssertUnwindSafe(|| encoder.write_buffered(writer, value)));
     *session = encoder.into_session();
     match result {
         Ok(result) => result,
-        Err(payload) => std::panic::resume_unwind(payload),
+        Err(payload) => resume_unwind(payload),
     }
 }
 
 /// Streams one document through the stateful encoder API.
+///
+/// The session is temporarily moved into the encoder. If writing panics, the
+/// updated session is restored before the panic is resumed.
 pub(crate) fn write_incremental<W, T, R, Q>(
     writer: W,
     value: &T,
@@ -76,14 +87,12 @@ where
     Q: ResourceQuantity + 'static,
 {
     let placeholder = JsonEncodeSession::from_limits(JsonEncodeLimits::<R, Q>::builder().build());
-    let owned = std::mem::replace(session, placeholder);
+    let owned = replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        encoder.write_incremental(writer, value)
-    }));
+    let result = catch_unwind(AssertUnwindSafe(|| encoder.write_incremental(writer, value)));
     *session = encoder.into_session();
     match result {
         Ok(result) => result,
-        Err(payload) => std::panic::resume_unwind(payload),
+        Err(payload) => resume_unwind(payload),
     }
 }

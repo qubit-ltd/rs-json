@@ -18,6 +18,8 @@ mod jcs_renderer_error;
 #[cfg(feature = "jcs")]
 mod jcs_renderer_frame;
 #[cfg(feature = "jcs")]
+mod jcs_reserve_error;
+#[cfg(feature = "jcs")]
 mod jcs_working_memory;
 
 #[cfg(feature = "jcs")]

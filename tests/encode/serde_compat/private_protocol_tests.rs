@@ -7,8 +7,10 @@
 // =============================================================================
 //! Exercises the exact RawValue and Number private serializer protocols.
 
-#[path = "support/mod.rs"]
-mod support;
+use std::fmt::Display;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
@@ -21,14 +23,11 @@ use qubit_json::encode::JsonSerializerStateError;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::SerializeStruct;
-use std::fmt::Display;
-use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
 
 const RAW: &str = concat!("$", "serde_json", ":", ":private::RawValue");
 const NUMBER: &str = concat!("$", "serde_json", ":", ":private::Number");
 
+/// Selects the private payload token used by protocol conformance cases.
 #[derive(Clone, Copy)]
 enum PrivateKind {
     Raw,
@@ -36,6 +35,7 @@ enum PrivateKind {
 }
 
 impl PrivateKind {
+    /// Returns the serde_json private struct token for this payload kind.
     fn token(self) -> &'static str {
         match self {
             Self::Raw => RAW,
@@ -43,6 +43,7 @@ impl PrivateKind {
         }
     }
 
+    /// Returns a valid text payload for the selected private protocol.
     fn payload(self) -> &'static str {
         match self {
             Self::Raw => "null",
@@ -50,6 +51,7 @@ impl PrivateKind {
         }
     }
 
+    /// Returns the serializer-state error expected for a malformed payload.
     fn error(self) -> JsonSerializerStateError {
         match self {
             Self::Raw => JsonSerializerStateError::InvalidRawValueProtocol,
@@ -58,6 +60,7 @@ impl PrivateKind {
     }
 }
 
+/// Serializes a configurable private protocol shape for state-machine tests.
 struct PrivateProtocol {
     kind: PrivateKind,
     declared_len: usize,
@@ -67,6 +70,7 @@ struct PrivateProtocol {
 }
 
 impl Serialize for PrivateProtocol {
+    /// Emits the configured field count, name, and payload through Serde.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -81,6 +85,7 @@ impl Serialize for PrivateProtocol {
     }
 }
 
+/// Selects the output path used to compare protocol failure behavior.
 #[derive(Clone, Copy)]
 enum OutputMode {
     Vec,
@@ -88,6 +93,7 @@ enum OutputMode {
     Incremental,
 }
 
+/// Creates an encoder with optional finite output and node limits.
 fn encoder(finite: bool) -> JsonEncoder<'static, JsonResource, usize> {
     let limits = if finite {
         JsonEncodeLimits::builder()
@@ -95,8 +101,7 @@ fn encoder(finite: bool) -> JsonEncoder<'static, JsonResource, usize> {
             .value_limits(
                 JsonValueLimits::builder()
                     .structure_limits(
-                        StructureLimits::builder()
-                            .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 64)),
+                        StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 64)),
                     )
                     .build(),
             )
@@ -107,6 +112,8 @@ fn encoder(finite: bool) -> JsonEncoder<'static, JsonResource, usize> {
     JsonEncoder::new(JsonEncodeSession::from_limits(limits))
 }
 
+/// Encodes one private-protocol value and returns both result and written
+/// bytes.
 fn encode(
     encoder: &mut JsonEncoder<'static, JsonResource, usize>,
     mode: OutputMode,
@@ -119,16 +126,12 @@ fn encode(
         OutputMode::Vec => (encoder.to_vec(value), Vec::new()),
         OutputMode::Buffered => {
             let mut output = Vec::new();
-            let result = encoder
-                .write_buffered(&mut output, value)
-                .map(|()| output.clone());
+            let result = encoder.write_buffered(&mut output, value).map(|()| output.clone());
             (result, output)
         }
         OutputMode::Incremental => {
             let mut output = Vec::new();
-            let result = encoder
-                .write_incremental(&mut output, value)
-                .map(|()| output.clone());
+            let result = encoder.write_incremental(&mut output, value).map(|()| output.clone());
             (result, output)
         }
     }
@@ -136,11 +139,7 @@ fn encode(
 
 #[test]
 fn test_private_protocol_shape_matrix() {
-    let modes = [
-        OutputMode::Vec,
-        OutputMode::Buffered,
-        OutputMode::Incremental,
-    ];
+    let modes = [OutputMode::Vec, OutputMode::Buffered, OutputMode::Incremental];
     for kind in [PrivateKind::Raw, PrivateKind::Number] {
         for fields in 0..=2 {
             for declared in 0..=2 {
@@ -161,37 +160,25 @@ fn test_private_protocol_shape_matrix() {
                                 result.expect("one well-formed payload must encode"),
                                 value.payload.as_bytes()
                             );
+                            assert_eq!(encoder.session().value_budget().used_nodes(), finite.then_some(1));
                             assert_eq!(
-                                encoder.session().value_budget().used_nodes(),
-                                finite.then_some(1)
-                            );
-                            assert_eq!(
-                                encoder
-                                    .session()
-                                    .output_budget()
-                                    .map(|budget| budget.used()),
+                                encoder.session().output_budget().map(|budget| budget.used()),
                                 finite.then_some(value.payload.len())
                             );
                         } else {
                             let error = result.expect_err("malformed private protocol must fail");
-                            support::assert_private_state_error(&error, kind.error());
                             assert_eq!(
-                                encoder.session().value_budget().used_nodes(),
-                                finite.then_some(0)
+                                error
+                                    .serialization_error()
+                                    .and_then(|error| error.serializer_state_error()),
+                                Some(kind.error()),
                             );
-                            let expected_output = matches!(mode, OutputMode::Incremental)
-                                && fields == 2
-                                && declared == 1;
+                            assert_eq!(encoder.session().value_budget().used_nodes(), finite.then_some(0));
+                            let expected_output =
+                                matches!(mode, OutputMode::Incremental) && fields == 2 && declared == 1;
                             assert_eq!(
-                                encoder
-                                    .session()
-                                    .output_budget()
-                                    .map(|budget| budget.used()),
-                                finite.then_some(if expected_output {
-                                    value.payload.len()
-                                } else {
-                                    0
-                                }),
+                                encoder.session().output_budget().map(|budget| budget.used()),
+                                finite.then_some(if expected_output { value.payload.len() } else { 0 }),
                             );
                             match mode {
                                 OutputMode::Vec | OutputMode::Buffered => {
@@ -221,10 +208,13 @@ fn test_private_protocol_wrong_field_and_invalid_payloads_are_classified() {
             wrong_field: true,
             payload: kind.payload(),
         };
-        let error = encoder
-            .to_vec(&wrong_field)
-            .expect_err("wrong field must fail");
-        support::assert_private_state_error(&error, kind.error());
+        let error = encoder.to_vec(&wrong_field).expect_err("wrong field must fail");
+        assert_eq!(
+            error
+                .serialization_error()
+                .and_then(|error| error.serializer_state_error()),
+            Some(kind.error()),
+        );
     }
 
     let malformed_number = PrivateProtocol {
@@ -272,9 +262,11 @@ fn test_private_number_keeps_valid_lexeme_and_does_not_leak_invalid_text() {
     assert!(!format!("{error:?}").contains(secret));
 }
 
+/// Wraps a number in Serde newtype form to test non-text payload rejection.
 struct NumberNewtype(u64);
 
 impl Serialize for NumberNewtype {
+    /// Serializes the wrapped integer as a newtype payload.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -283,9 +275,11 @@ impl Serialize for NumberNewtype {
     }
 }
 
+/// Emits a private Number protocol whose payload is a numeric newtype.
 struct NonTextNumberPayload;
 
 impl Serialize for NonTextNumberPayload {
+    /// Sends a non-text value through the private Number field.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -309,9 +303,11 @@ fn test_private_number_rejects_non_text_newtype_payload() {
     );
 }
 
+/// Counts callbacks while emitting an out-of-range numeric lexeme.
 struct CountedMalformedNumber(Arc<AtomicUsize>);
 
 impl Serialize for CountedMalformedNumber {
+    /// Increments the shared counter, then emits a malformed numeric string.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -321,9 +317,12 @@ impl Serialize for CountedMalformedNumber {
     }
 }
 
+/// Attempts a second number callback after the first callback has failed.
 struct SwallowedNumberFailure(Arc<AtomicUsize>);
 
 impl Serialize for SwallowedNumberFailure {
+    /// Suppresses both callback results to verify protocol failure stays
+    /// sticky.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -352,9 +351,11 @@ fn test_failed_number_payload_stays_failed_and_never_runs_second_callback() {
     );
 }
 
+/// Counts formatting attempts and always returns a formatting error.
 struct CountedDisplayFailure(Arc<AtomicUsize>);
 
 impl Display for CountedDisplayFailure {
+    /// Records the attempt and rejects formatting the value.
     fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fetch_add(1, Ordering::SeqCst);
         Err(std::fmt::Error)
@@ -362,6 +363,7 @@ impl Display for CountedDisplayFailure {
 }
 
 impl Serialize for CountedDisplayFailure {
+    /// Sends the failing display value through Serde text collection.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -370,9 +372,11 @@ impl Serialize for CountedDisplayFailure {
     }
 }
 
+/// Tries formatting a second display value after the first attempt fails.
 struct SwallowedDisplayFailure(Arc<AtomicUsize>);
 
 impl Serialize for SwallowedDisplayFailure {
+    /// Suppresses both callback results to test sticky Display failure state.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

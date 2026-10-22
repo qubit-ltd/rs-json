@@ -74,8 +74,7 @@ impl ControlCharacterEscaper {
                 let byte = bytes[index];
                 if let Some(replacement) = Self::replacement(byte, &mut in_string, &mut in_escape) {
                     needs_escape = true;
-                    normalized_len =
-                        normalized_len.saturating_add(replacement.len().saturating_sub(1));
+                    normalized_len = normalized_len.saturating_add(replacement.len().saturating_sub(1));
                 }
                 index += 1;
             }
@@ -96,12 +95,13 @@ impl ControlCharacterEscaper {
     ///
     /// Borrowed input when no replacement is needed, or owned rewritten text
     /// with exact preallocated capacity otherwise.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `needs_escape` says a replacement exists but `input` has no
+    /// replacement, violating the preceding scan result.
     #[must_use]
-    pub(super) fn escape_with_scan<'a>(
-        input: &'a str,
-        normalized_len: usize,
-        needs_escape: bool,
-    ) -> Cow<'a, str> {
+    pub(super) fn escape_with_scan<'a>(input: &'a str, normalized_len: usize, needs_escape: bool) -> Cow<'a, str> {
         if !needs_escape {
             return Cow::Borrowed(input);
         }
@@ -203,14 +203,10 @@ impl ControlCharacterEscaper {
     #[inline]
     fn contains_dense_ascii_control_chunk(input: &str) -> bool {
         let (chunks, remainder) = input.as_bytes().as_chunks::<8>();
-        chunks.iter().any(|chunk| {
-            Self::ascii_control_high_bits(u64::from_ne_bytes(*chunk)).count_ones() >= 2
-        }) || remainder
+        chunks
             .iter()
-            .filter(|byte| **byte < 0x20)
-            .take(2)
-            .count()
-            >= 2
+            .any(|chunk| Self::ascii_control_high_bits(u64::from_ne_bytes(*chunk)).count_ones() >= 2)
+            || remainder.iter().filter(|byte| **byte < 0x20).take(2).count() >= 2
     }
 
     /// Reports whether a machine word contains the requested byte.
@@ -246,8 +242,7 @@ impl ControlCharacterEscaper {
     fn chunk_contains_interesting(chunk: [u8; 8], in_string: bool) -> bool {
         let word = u64::from_ne_bytes(chunk);
         Self::contains_byte(word, b'"')
-            || (in_string
-                && (Self::contains_byte(word, b'\\') || Self::word_contains_ascii_control(word)))
+            || (in_string && (Self::contains_byte(word, b'\\') || Self::word_contains_ascii_control(word)))
     }
 
     /// Reports whether one byte requires scalar state handling.
@@ -306,6 +301,10 @@ impl ControlCharacterEscaper {
     /// Borrowed input when state-aware scanning finds no replacement, or owned
     /// rewritten text otherwise. This state machine stays out of line to keep
     /// the disabled strict-decoding path small.
+    ///
+    /// # Panics
+    ///
+    /// Panics when called without a prior scan result indicating a replacement.
     #[must_use]
     #[inline(never)]
     fn rewrite<'a>(input: &'a str, capacity: usize) -> Cow<'a, str> {
@@ -372,6 +371,11 @@ impl ControlCharacterEscaper {
     ///
     /// Borrowed input when no replacement is required, or owned rewritten text
     /// otherwise.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `input` contains no replacement, which violates the
+    /// preceding scan invariant.
     #[must_use]
     fn rewrite_scalar<'a>(input: &'a str, capacity: usize) -> Cow<'a, str> {
         let mut in_string = false;
@@ -416,6 +420,7 @@ impl ControlCharacterEscaper {
     ///
     /// `Some(replacement)` when `byte` is a raw C0 control character
     /// requiring repair, or `None` when it should be copied unchanged.
+    #[must_use]
     fn replacement(byte: u8, in_string: &mut bool, in_escape: &mut bool) -> Option<&'static str> {
         if *in_string {
             if *in_escape {
@@ -444,6 +449,7 @@ impl ControlCharacterEscaper {
     /// # Returns
     ///
     /// `Some(escape)` for `0x00..=0x1f`, or `None` for other bytes.
+    #[must_use]
     fn escaped_control_byte(byte: u8) -> Option<&'static str> {
         match byte {
             b'\x08' => Some("\\b"),

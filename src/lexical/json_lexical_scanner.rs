@@ -10,14 +10,20 @@
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonValueTransaction;
 
-use super::json_lexical_container_frame::JsonLexicalContainerFrame;
-use super::json_lexical_cursor::JsonLexicalCursor;
+use super::internal::JsonLexicalContainerFrame;
+use super::internal::json_lexical_cursor::JsonLexicalCursor;
 use super::json_lexical_error::JsonLexicalError;
 use super::json_lexical_error_reason::JsonLexicalErrorReason;
 use super::json_lexical_event::JsonLexicalEvent;
 use super::json_number_model::JsonNumberModel;
 
 /// Lexically validates and charges one JSON document without recursion.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity type used by the value transaction.
+/// * `Q` - Quantity representation used for resource accounting.
+#[must_use]
 pub(crate) struct JsonLexicalScanner<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
@@ -38,6 +44,15 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a lexical scanner bound to one value transaction.
+    ///
+    /// # Parameters
+    ///
+    /// * `transaction` - Value transaction charged for admitted measurements.
+    /// * `has_value_limits` - Whether scanning stages value measurements.
+    ///
+    /// # Returns
+    ///
+    /// A scanner rooted at depth one using the `Integer64` number model.
     #[inline(always)]
     pub(crate) const fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
@@ -52,6 +67,16 @@ where
     }
 
     /// Creates a lexical scanner rooted at an enclosing serializer depth.
+    ///
+    /// # Parameters
+    ///
+    /// * `transaction` - Value transaction charged for admitted measurements.
+    /// * `root_depth` - Root-inclusive depth assigned to the scanned value.
+    /// * `has_value_limits` - Whether scanning stages value measurements.
+    ///
+    /// # Returns
+    ///
+    /// A scanner using the specified root depth and the `Integer64` model.
     #[inline(always)]
     pub(crate) const fn at_depth(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
@@ -67,6 +92,14 @@ where
     }
 
     /// Selects the number range contract for this scan.
+    ///
+    /// # Parameters
+    ///
+    /// * `number_model` - Integer or feature-selected binary64 range contract.
+    ///
+    /// # Returns
+    ///
+    /// This scanner with the selected number model.
     #[inline(always)]
     pub(crate) const fn with_number_model(mut self, number_model: JsonNumberModel) -> Self {
         self.number_model = number_model;
@@ -75,11 +108,20 @@ where
 
     /// Validates and charges one complete JSON document.
     ///
+    /// # Parameters
+    ///
+    /// * `input` - Byte sequence containing exactly one JSON document.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the entire input is valid and all measurements are staged.
+    ///
     /// # Errors
     ///
     /// Returns [`JsonLexicalError::Budget`] for the first resource violation,
     /// or [`JsonLexicalError::Syntax`] when `input` is not one complete JSON
     /// value. All value measurements remain staged in the caller's transaction.
+    #[inline]
     pub(crate) fn scan(&mut self, input: &[u8]) -> Result<(), JsonLexicalError<R, Q>> {
         self.scan_with_events(input, |_| {})
     }
@@ -88,6 +130,24 @@ where
     ///
     /// Events may precede a later document error; consumers must only
     /// materialize input after a complete admission pass has succeeded.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `F` - Callback type used to receive lexical events.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Byte sequence containing exactly one JSON document.
+    /// * `emit` - Synchronous callback invoked for each admitted token.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after complete validation and event emission.
+    ///
+    /// # Errors
+    ///
+    /// Returns a budget error for the first resource violation or a syntax
+    /// error when the input is not one complete JSON value.
     pub(crate) fn scan_with_events<'input, F>(
         &mut self,
         input: &'input [u8],
@@ -96,8 +156,7 @@ where
     where
         F: FnMut(JsonLexicalEvent<'input>),
     {
-        let mut cursor =
-            JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
+        let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         cursor.set_number_model(self.number_model);
         let mut stack: Vec<JsonLexicalContainerFrame> = Vec::new();
         cursor.skip_whitespace();

@@ -60,6 +60,14 @@ where
     Q: Copy + fmt::Debug,
 {
     /// Wraps a budget-accounting failure without changing its source.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - Measured budget failure to retain.
+    ///
+    /// # Returns
+    ///
+    /// A JCS encoding error classified as a budget failure.
     #[inline]
     pub(crate) const fn budget(source: MeasuredBudgetError<R, Q>) -> Self {
         Self {
@@ -68,6 +76,14 @@ where
     }
 
     /// Wraps a canonicalization failure while preserving its safe category.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - Privacy-safe serialization failure to retain.
+    ///
+    /// # Returns
+    ///
+    /// A JCS encoding error classified as a serialization failure.
     #[inline]
     pub(crate) const fn serialization(source: JsonSerializationError) -> Self {
         Self {
@@ -76,6 +92,14 @@ where
     }
 
     /// Wraps a working-memory limit failure.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - Working-memory limit failure to retain.
+    ///
+    /// # Returns
+    ///
+    /// A JCS encoding error classified as a working-memory failure.
     #[inline]
     pub(crate) const fn working_memory(source: JcsWorkingMemoryError) -> Self {
         Self {
@@ -84,6 +108,14 @@ where
     }
 
     /// Wraps an output destination failure.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - I/O failure returned by the output destination.
+    ///
+    /// # Returns
+    ///
+    /// A JCS encoding error classified as a writer failure.
     #[inline]
     pub(crate) fn write(source: io::Error) -> Self {
         Self {
@@ -92,30 +124,45 @@ where
     }
 
     /// Converts a strict JSON encoder failure to its corresponding JCS class.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - Strict encoder failure to classify as a JCS error.
+    ///
+    /// # Returns
+    ///
+    /// The corresponding budget, serialization, or writer failure; invalid raw
+    /// JSON becomes a privacy-safe serialization failure.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the strict encoder reports a category without its required
+    /// retained source, which violates the encoder error invariant.
     pub(crate) fn from_json_encode(error: JsonEncodeError<R, Q>) -> Self {
         match error.kind() {
-            JsonEncodeErrorKind::Budget => Self::budget(
-                error
-                    .into_budget_error()
-                    .expect("budget kind retains a budget source"),
-            ),
+            JsonEncodeErrorKind::Budget => {
+                Self::budget(error.into_budget_error().expect("budget kind retains a budget source"))
+            }
             JsonEncodeErrorKind::Serialize => Self::serialization(
                 error
                     .into_serialization_error()
                     .expect("serialize kind retains a source"),
             ),
-            JsonEncodeErrorKind::Write => Self::write(
-                error
-                    .into_write_error()
-                    .expect("write kind retains an I/O source"),
-            ),
-            JsonEncodeErrorKind::InvalidRawJson => Self::serialization(
-                JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization),
-            ),
+            JsonEncodeErrorKind::Write => {
+                Self::write(error.into_write_error().expect("write kind retains an I/O source"))
+            }
+            JsonEncodeErrorKind::InvalidRawJson => Self::serialization(JsonSerializationError::new(
+                JsonSerializationErrorKind::CustomSerialization,
+            )),
         }
     }
 
     /// Returns the stable failure category.
+    ///
+    /// # Returns
+    ///
+    /// The category identifying the retained budget, memory, serialization, or
+    /// writer failure.
     #[must_use]
     #[inline]
     pub const fn kind(&self) -> JcsEncodeErrorKind {
@@ -131,6 +178,10 @@ where
     ///
     /// `Some` contains the retained accounting source; `None` means the error
     /// belongs to another category.
+    ///
+    /// # Returns
+    ///
+    /// The retained budget error for a budget failure, or `None` otherwise.
     #[must_use]
     #[inline]
     pub const fn budget_error(&self) -> Option<&MeasuredBudgetError<R, Q>> {
@@ -144,6 +195,11 @@ where
     ///
     /// `Some` contains the retained limit source; `None` means another failure
     /// occurred.
+    ///
+    /// # Returns
+    ///
+    /// The retained working-memory failure for that category, or `None`
+    /// otherwise.
     #[must_use]
     #[inline]
     pub const fn working_memory_error(&self) -> Option<&JcsWorkingMemoryError> {
@@ -157,6 +213,11 @@ where
     ///
     /// `Some` contains its stable category without canonicalizer details;
     /// `None` means another failure occurred.
+    ///
+    /// # Returns
+    ///
+    /// The privacy-safe serialization failure for that category, or `None`
+    /// otherwise.
     #[must_use]
     #[inline]
     pub const fn serialization_error(&self) -> Option<&JsonSerializationError> {
@@ -170,6 +231,10 @@ where
     ///
     /// `Some` contains the writer's I/O source; `None` means another failure
     /// occurred.
+    ///
+    /// # Returns
+    ///
+    /// The retained writer error for that category, or `None` otherwise.
     #[must_use]
     #[inline]
     pub const fn write_error(&self) -> Option<&io::Error> {
@@ -185,6 +250,19 @@ where
     R: fmt::Debug,
     Q: Copy + fmt::Debug + fmt::Display,
 {
+    /// Formats a stable message that does not expose canonicalizer details.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination that receives the error message.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the message is written.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter error if writing the message fails.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.failure {
             JcsEncodeFailure::Budget(source) => fmt::Display::fmt(source, formatter),
@@ -200,6 +278,11 @@ where
     R: fmt::Debug + 'static,
     Q: Copy + fmt::Debug + fmt::Display + 'static,
 {
+    /// Returns the retained source associated with the error category.
+    ///
+    /// # Returns
+    ///
+    /// The retained budget, working-memory, serialization, or writer source.
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.failure {
             JcsEncodeFailure::Budget(source) => Some(source),
@@ -214,6 +297,15 @@ impl<R, Q> From<MeasuredBudgetError<R, Q>> for JcsEncodeError<R, Q>
 where
     Q: Copy + fmt::Debug,
 {
+    /// Converts a measured budget failure into a JCS encoding error.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - Budget failure to preserve.
+    ///
+    /// # Returns
+    ///
+    /// A JCS error classified as a budget failure.
     fn from(source: MeasuredBudgetError<R, Q>) -> Self {
         Self::budget(source)
     }

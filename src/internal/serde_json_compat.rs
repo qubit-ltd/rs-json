@@ -12,9 +12,8 @@
 ///
 /// This is intentionally the only production definition of the private token.
 /// Upgrade audits for `serde_json` must verify the RawValue protocol here.
-pub(crate) const SERDE_JSON_RAW_VALUE_TOKEN: &str =
-    concat!("$", "serde_json", ":", ":private::RawValue");
+pub(crate) const SERDE_JSON_RAW_VALUE_TOKEN: &str = concat!("$", "serde_json", ":", ":private::RawValue");
 
-/// Struct and field token emitted by `serde_json::Number` with arbitrary precision.
-pub(crate) const SERDE_JSON_NUMBER_TOKEN: &str =
-    concat!("$", "serde_json", ":", ":private::Number");
+/// Struct and field token emitted by `serde_json::Number` with arbitrary
+/// precision.
+pub(crate) const SERDE_JSON_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");

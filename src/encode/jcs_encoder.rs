@@ -39,6 +39,13 @@ use crate::value::traverse::JsonTreeReader;
 /// stack and active object member tables, but excludes the input [`Value`] and
 /// buffered output bytes.
 ///
+/// # Type Parameters
+///
+/// * `'budget` - Lifetime of the resource budget borrowed by the encoder
+///   session.
+/// * `R` - Resource identity type tracked by the session.
+/// * `Q` - Quantity type used for resource limits and accounting.
+///
 /// # Examples
 ///
 /// ```
@@ -69,6 +76,21 @@ where
     ///
     /// `max_working_bytes` caps the capacity of the renderer's traversal stack
     /// and active object member tables.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `R` - Resource identity type tracked by the session.
+    /// * `Q` - Quantity type used for resource limits and accounting.
+    ///
+    /// # Parameters
+    ///
+    /// * `limits` supplies cumulative value and output limits.
+    /// * `max_working_bytes` limits auxiliary traversal and member-table
+    ///   memory.
+    ///
+    /// # Returns
+    ///
+    /// An encoder that owns a session initialized from `limits`.
     pub fn with_limits(limits: JsonEncodeLimits<R, Q>, max_working_bytes: usize) -> Self {
         Self::new(JsonEncodeSession::from_limits(limits), max_working_bytes)
     }
@@ -77,6 +99,10 @@ where
 impl JcsEncoder<'static, JsonResource, usize> {
     /// Creates an encoder with effectively unlimited value, output, and
     /// working memory limits.
+    ///
+    /// # Returns
+    ///
+    /// An encoder backed by a fresh session without configured resource limits.
     pub fn unlimited() -> Self {
         Self::with_limits(JsonEncodeLimits::new(), usize::MAX)
     }
@@ -91,6 +117,22 @@ where
     ///
     /// `max_working_bytes` caps the capacity of the renderer's traversal stack
     /// and active object member tables.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `'budget` - Lifetime of the resource budget borrowed by `session`.
+    /// * `R` - Resource identity type tracked by `session`.
+    /// * `Q` - Quantity type used for resource limits and accounting.
+    ///
+    /// # Parameters
+    ///
+    /// * `session` is the cumulative accounting session to retain.
+    /// * `max_working_bytes` limits auxiliary traversal and member-table
+    ///   memory.
+    ///
+    /// # Returns
+    ///
+    /// An encoder using the supplied session and working-memory limit.
     pub fn new(session: JsonEncodeSession<'budget, R, Q>, max_working_bytes: usize) -> Self {
         Self {
             session,
@@ -99,6 +141,10 @@ where
     }
 
     /// Returns the maximum auxiliary working memory in bytes.
+    ///
+    /// # Returns
+    ///
+    /// The configured maximum working-memory capacity.
     #[must_use]
     #[inline]
     pub const fn max_working_bytes(&self) -> usize {
@@ -106,6 +152,10 @@ where
     }
 
     /// Returns the cumulative accounting session.
+    ///
+    /// # Returns
+    ///
+    /// A shared reference to this encoder's session.
     #[must_use]
     #[inline]
     pub const fn session(&self) -> &JsonEncodeSession<'budget, R, Q> {
@@ -113,6 +163,10 @@ where
     }
 
     /// Returns mutable access to the cumulative accounting session.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to this encoder's session.
     #[must_use]
     #[inline]
     pub const fn session_mut(&mut self) -> &mut JsonEncodeSession<'budget, R, Q> {
@@ -120,12 +174,30 @@ where
     }
 
     /// Consumes the encoder and returns its cumulative accounting session.
+    ///
+    /// # Returns
+    ///
+    /// The session containing the cumulative resource accounting state.
     #[must_use]
     pub fn into_session(self) -> JsonEncodeSession<'budget, R, Q> {
         self.session
     }
 
     /// Encodes a value and commits its accounting only after full success.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` is the JSON value to encode.
+    ///
+    /// # Returns
+    ///
+    /// The complete canonical JSON bytes on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns `JcsEncodeError` if rendering, memory allocation, or resource
+    /// accounting fails. The value and output accounting is committed only on
+    /// success.
     pub fn to_vec(&mut self, value: &Value) -> Result<Vec<u8>, JcsEncodeError<R, Q>> {
         let mut attempt = self.session.begin_value();
         let bytes = Self::serialize_buffer(value, &mut attempt, self.max_working_bytes)?;
@@ -138,6 +210,23 @@ where
 
     /// Encodes a value as UTF-8 text, committing only after successful
     /// encoding.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` is the JSON value to encode.
+    ///
+    /// # Returns
+    ///
+    /// The complete canonical JSON document as a UTF-8 string.
+    ///
+    /// # Errors
+    ///
+    /// Returns `JcsEncodeError` if encoding or resource accounting fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the renderer produces bytes that are not valid UTF-8,
+    /// which violates the encoder's JSON output invariant.
     pub fn to_string(&mut self, value: &Value) -> Result<String, JcsEncodeError<R, Q>> {
         let bytes = self.to_vec(value)?;
         Ok(String::from_utf8(bytes).expect("JCS output must be UTF-8"))
@@ -148,6 +237,26 @@ where
     /// Output budget is checked against the complete document before external
     /// I/O. If the destination fails, accepted bytes remain written and remain
     /// charged, while the value transaction is not committed.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `O` - Output destination receiving the complete buffered document.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` receives the complete buffered document.
+    /// * `value` is the JSON value to encode.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after all bytes are written and accounting is committed.
+    ///
+    /// # Errors
+    ///
+    /// Returns `JcsEncodeError` if rendering, output budgeting, destination
+    /// I/O, or session accounting fails. A destination failure preserves
+    /// accepted output bytes and their output charges without committing the
+    /// value transaction.
     pub fn write_buffered<O: Output<Item = u8>>(
         &mut self,
         output: O,
@@ -167,6 +276,26 @@ where
     /// Accepted bytes are charged immediately and remain written if rendering,
     /// flushing, or destination I/O later fails. A failed operation does not
     /// commit the value budget.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `O` - Output destination receiving bytes as they are rendered.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` receives bytes as they are rendered.
+    /// * `value` is the JSON value to encode.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after rendering, flushing, and accounting all succeed.
+    ///
+    /// # Errors
+    ///
+    /// Returns `JcsEncodeError` if rendering, working-memory allocation,
+    /// destination I/O, or session accounting fails. Accepted output bytes
+    /// remain written and charged, while failed operations do not commit the
+    /// value budget.
     pub fn write_incremental<O: Output<Item = u8>>(
         &mut self,
         output: O,
@@ -183,19 +312,15 @@ where
             match JcsRenderer::render(value, &mut writer, self.max_working_bytes) {
                 Ok(()) => {
                     let result = Write::flush(&mut writer).map_err(serde_json::Error::io);
-                    writer
-                        .into_result(result)
-                        .map_err(JcsEncodeError::from_json_encode)
+                    writer.into_result(result).map_err(JcsEncodeError::from_json_encode)
                 }
-                Err(JcsRendererError::WorkingMemory(error)) => {
-                    Err(JcsEncodeError::working_memory(error))
+                Err(JcsRendererError::WorkingMemory(error)) => Err(JcsEncodeError::working_memory(error)),
+                Err(JcsRendererError::Allocation) => Err(JcsEncodeError::serialization(JsonSerializationError::new(
+                    JsonSerializationErrorKind::CustomSerialization,
+                ))),
+                Err(JcsRendererError::Serialize(error)) => {
+                    writer.into_result(Err(error)).map_err(JcsEncodeError::from_json_encode)
                 }
-                Err(JcsRendererError::Allocation) => Err(JcsEncodeError::serialization(
-                    JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization),
-                )),
-                Err(JcsRendererError::Serialize(error)) => writer
-                    .into_result(Err(error))
-                    .map_err(JcsEncodeError::from_json_encode),
             }
         };
         result?;
@@ -203,6 +328,21 @@ where
     }
 
     /// Produces a complete canonical document in an output-bounded buffer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - JSON value whose canonical representation is produced.
+    /// * `attempt` - In-progress value transaction that accounts the value.
+    /// * `max_working_bytes` - Maximum auxiliary memory used by the renderer.
+    ///
+    /// # Returns
+    ///
+    /// The complete canonical JSON bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JCS error if value accounting, rendering, output budgeting,
+    /// or working-memory allocation fails.
     fn serialize_buffer(
         value: &Value,
         attempt: &mut JsonEncodeAttempt<'_, R, Q>,
@@ -215,22 +355,36 @@ where
         let accounting = RefCell::new(JsonOutputAccounting::new(output_budget));
         let mut output = JsonOutputBuffer::new(&accounting);
         match JcsRenderer::render(value, &mut output, max_working_bytes) {
-            Ok(()) => output
-                .into_result(Ok(()))
-                .map_err(JcsEncodeError::from_json_encode),
-            Err(JcsRendererError::WorkingMemory(error)) => {
-                Err(JcsEncodeError::working_memory(error))
+            Ok(()) => output.into_result(Ok(())).map_err(JcsEncodeError::from_json_encode),
+            Err(JcsRendererError::WorkingMemory(error)) => Err(JcsEncodeError::working_memory(error)),
+            Err(JcsRendererError::Allocation) => Err(JcsEncodeError::serialization(JsonSerializationError::new(
+                JsonSerializationErrorKind::CustomSerialization,
+            ))),
+            Err(JcsRendererError::Serialize(error)) => {
+                output.into_result(Err(error)).map_err(JcsEncodeError::from_json_encode)
             }
-            Err(JcsRendererError::Allocation) => Err(JcsEncodeError::serialization(
-                JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization),
-            )),
-            Err(JcsRendererError::Serialize(error)) => output
-                .into_result(Err(error))
-                .map_err(JcsEncodeError::from_json_encode),
         }
     }
 
     /// Writes buffered bytes and charges destination-accepted prefixes.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `O` - Output destination that accepts the buffered bytes.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination receiving the buffered document.
+    /// * `bytes` - Complete document bytes to write.
+    /// * `attempt` - In-progress transaction whose output budget is charged.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after all bytes are accepted by the destination.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JCS error if destination writing or output accounting fails.
     fn write_buffer<O: Output<Item = u8>>(
         output: O,
         bytes: &[u8],
@@ -240,8 +394,6 @@ where
         let accounting = RefCell::new(JsonOutputAccounting::new(output_budget));
         let mut writer = JsonOutputWriter::new(output, &accounting);
         let result = writer.write_all(bytes).map_err(serde_json::Error::io);
-        writer
-            .into_result(result)
-            .map_err(JcsEncodeError::from_json_encode)
+        writer.into_result(result).map_err(JcsEncodeError::from_json_encode)
     }
 }

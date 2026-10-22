@@ -7,20 +7,28 @@
 // =============================================================================
 //! Byte cursor for iterative lexical JSON scanning.
 
+use std::str::from_utf8;
+
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonContainerKind;
 use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonValueTransaction;
 
+use super::super::json_lexical_error::JsonLexicalError;
+use super::super::json_lexical_error_reason::JsonLexicalErrorReason;
+use super::super::json_lexical_event::JsonLexicalEvent;
+use super::super::json_lexical_failure::JsonLexicalFailure;
+use super::super::json_number_model::JsonNumberModel;
 use super::json_lexical_container_frame::JsonLexicalContainerFrame;
-use super::json_lexical_error::JsonLexicalError;
-use super::json_lexical_error_reason::JsonLexicalErrorReason;
-use super::json_lexical_event::JsonLexicalEvent;
-use super::json_lexical_failure::JsonLexicalFailure;
-use super::json_number_model::JsonNumberModel;
 
 /// Iterative cursor over the JSON bytes being admitted.
-pub(super) struct JsonLexicalCursor<'input, 'transaction, 'budget, R, Q>
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identifier type used by the value budget transaction.
+/// * `Q` - Quantity type used by the value budget transaction.
+#[must_use]
+pub(in crate::lexical) struct JsonLexicalCursor<'input, 'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -42,8 +50,19 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a cursor positioned at the beginning of `input`.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Complete JSON byte sequence to scan.
+    /// * `transaction` - Budget transaction charged as values are admitted.
+    /// * `has_value_limits` - Whether measurements should be staged in the
+    ///   transaction.
+    ///
+    /// # Returns
+    ///
+    /// A cursor at byte offset zero using the `Integer64` number model.
     #[inline(always)]
-    pub(super) const fn new(
+    pub(in crate::lexical) const fn new(
         input: &'input [u8],
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
         has_value_limits: bool,
@@ -57,59 +76,31 @@ where
         }
     }
 
-    /// Selects the numeric range contract for this cursor.
-    #[inline(always)]
-    pub(super) const fn set_number_model(&mut self, number_model: JsonNumberModel) {
-        self.number_model = number_model;
-    }
-
-    /// Stages one native measurement when value limits are configured.
-    fn admit(&mut self, measurement: JsonMeasurement) -> Result<(), JsonLexicalError<R, Q>> {
-        if !self.has_value_limits {
-            return Ok(());
-        }
-        self.transaction
-            .try_admit(measurement)
-            .map_err(JsonLexicalError::from)
-    }
-
-    /// Enters one container when value limits are configured.
-    fn enter_container(
-        &mut self,
-        kind: JsonContainerKind,
-        depth: usize,
-    ) -> Result<(), JsonLexicalError<R, Q>> {
-        if !self.has_value_limits {
-            return Ok(());
-        }
-        self.transaction
-            .try_enter_container(kind, depth)
-            .map_err(JsonLexicalError::from)
-    }
-
-    /// Checks one observed container count when value limits are configured.
-    fn check_container_count(
-        &mut self,
-        kind: JsonContainerKind,
-        count: usize,
-    ) -> Result<(), JsonLexicalError<R, Q>> {
-        if !self.has_value_limits {
-            return Ok(());
-        }
-        self.transaction
-            .check_container_count(kind, count)
-            .map_err(JsonLexicalError::from)
-    }
-
     /// Returns whether the cursor has consumed the complete input.
+    ///
+    /// # Returns
+    ///
+    /// `true` when the current byte offset equals the input length; otherwise
+    /// `false`.
     #[must_use]
     #[inline(always)]
-    pub(super) fn is_at_end(&self) -> bool {
+    pub(in crate::lexical) fn is_at_end(&self) -> bool {
         self.offset == self.input.len()
     }
 
+    /// Selects the numeric range contract for this cursor.
+    ///
+    /// # Parameters
+    ///
+    /// * `number_model` - Integer or feature-selected binary64 range contract
+    ///   to apply when scanning numbers.
+    #[inline(always)]
+    pub(in crate::lexical) const fn set_number_model(&mut self, number_model: JsonNumberModel) {
+        self.number_model = number_model;
+    }
+
     /// Advances past JSON whitespace.
-    pub(super) fn skip_whitespace(&mut self) {
+    pub(in crate::lexical) fn skip_whitespace(&mut self) {
         let tail = &self.input[self.offset..];
         let skipped = tail
             .iter()
@@ -118,15 +109,17 @@ where
         self.offset += skipped;
     }
 
-    /// Returns the current byte without advancing.
-    #[must_use]
-    #[inline(always)]
-    fn peek(&self) -> Option<u8> {
-        self.input.get(self.offset).copied()
-    }
-
     /// Builds a structured syntax error at the current cursor position.
-    pub(super) fn syntax(&self, reason: JsonLexicalErrorReason) -> JsonLexicalError<R, Q> {
+    ///
+    /// # Parameters
+    ///
+    /// * `reason` - Stable lexical reason to attach to the current position.
+    ///
+    /// # Returns
+    ///
+    /// A syntax error containing the cursor's byte offset, line, column, and
+    /// supplied reason.
+    pub(in crate::lexical) fn syntax(&self, reason: JsonLexicalErrorReason) -> JsonLexicalError<R, Q> {
         let (line, column) = self.line_column();
         JsonLexicalError::Syntax(JsonLexicalFailure {
             offset: self.offset,
@@ -137,7 +130,25 @@ where
     }
 
     /// Admits one JSON value and schedules any container continuation.
-    pub(super) fn value<F>(
+    ///
+    /// # Parameters
+    ///
+    /// * `depth` - Nesting depth of the value being admitted.
+    /// * `stack` - Explicit container continuation stack updated for arrays and
+    ///   objects.
+    /// * `emit` - Callback receiving each lexical event discovered in the
+    ///   value.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` when one value has been admitted and its events
+    /// emitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax or budget error when the next value is malformed, its
+    /// range is unsupported, or an active value limit is exceeded.
+    pub(in crate::lexical) fn value<F>(
         &mut self,
         depth: usize,
         stack: &mut Vec<JsonLexicalContainerFrame>,
@@ -213,30 +224,24 @@ where
         }
     }
 
-    /// Charges and consumes one scalar literal.
-    fn literal(
-        &mut self,
-        literal: &[u8],
-        measurement: JsonMeasurement,
-    ) -> Result<(), JsonLexicalError<R, Q>> {
-        if !self.input[self.offset..].starts_with(literal) {
-            return Err(match self.peek() {
-                None => self.syntax(JsonLexicalErrorReason::UnexpectedEnd),
-                Some(_) => self.syntax(JsonLexicalErrorReason::UnexpectedByte),
-            });
-        }
-        let end = self.offset.saturating_add(literal.len());
-        if !Self::is_value_delimiter(self.input.get(end).copied()) {
-            self.offset = end;
-            return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
-        }
-        self.admit(measurement)?;
-        self.offset = end;
-        Ok(())
-    }
-
     /// Resumes a container after its child value has completed.
-    pub(super) fn resume<F>(
+    ///
+    /// # Parameters
+    ///
+    /// * `frame` - Container state whose child has just completed.
+    /// * `stack` - Explicit continuation stack updated for the next child or
+    ///   container end.
+    /// * `emit` - Callback receiving lexical events discovered while resuming.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` when the container state has been resumed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax or budget error when the container is malformed, its
+    /// counts or depth overflow, or an active value limit is exceeded.
+    pub(in crate::lexical) fn resume<F>(
         &mut self,
         frame: JsonLexicalContainerFrame,
         stack: &mut Vec<JsonLexicalContainerFrame>,
@@ -345,6 +350,59 @@ where
         }
     }
 
+    /// Stages one native measurement when value limits are configured.
+    fn admit(&mut self, measurement: JsonMeasurement) -> Result<(), JsonLexicalError<R, Q>> {
+        if !self.has_value_limits {
+            return Ok(());
+        }
+        self.transaction.try_admit(measurement).map_err(JsonLexicalError::from)
+    }
+
+    /// Enters one container when value limits are configured.
+    fn enter_container(&mut self, kind: JsonContainerKind, depth: usize) -> Result<(), JsonLexicalError<R, Q>> {
+        if !self.has_value_limits {
+            return Ok(());
+        }
+        self.transaction
+            .try_enter_container(kind, depth)
+            .map_err(JsonLexicalError::from)
+    }
+
+    /// Checks one observed container count when value limits are configured.
+    fn check_container_count(&mut self, kind: JsonContainerKind, count: usize) -> Result<(), JsonLexicalError<R, Q>> {
+        if !self.has_value_limits {
+            return Ok(());
+        }
+        self.transaction
+            .check_container_count(kind, count)
+            .map_err(JsonLexicalError::from)
+    }
+
+    /// Returns the current byte without advancing.
+    #[must_use]
+    #[inline(always)]
+    fn peek(&self) -> Option<u8> {
+        self.input.get(self.offset).copied()
+    }
+
+    /// Charges and consumes one scalar literal.
+    fn literal(&mut self, literal: &[u8], measurement: JsonMeasurement) -> Result<(), JsonLexicalError<R, Q>> {
+        if !self.input[self.offset..].starts_with(literal) {
+            return Err(match self.peek() {
+                None => self.syntax(JsonLexicalErrorReason::UnexpectedEnd),
+                Some(_) => self.syntax(JsonLexicalErrorReason::UnexpectedByte),
+            });
+        }
+        let end = self.offset.saturating_add(literal.len());
+        if !Self::is_value_delimiter(self.input.get(end).copied()) {
+            self.offset = end;
+            return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
+        }
+        self.admit(measurement)?;
+        self.offset = end;
+        Ok(())
+    }
+
     /// Consumes one JSON string and returns its decoded UTF-8 byte length.
     fn string_bytes(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
         debug_assert_eq!(self.peek(), Some(b'"'));
@@ -400,7 +458,7 @@ where
                     let Some(text) = self.input.get(self.offset..end) else {
                         return Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd));
                     };
-                    let Some(character) = std::str::from_utf8(text)
+                    let Some(character) = from_utf8(text)
                         .ok()
                         .and_then(|text| text.chars().next())
                         .filter(|character| character.len_utf8() == width)
@@ -514,12 +572,8 @@ where
 
     /// Validates one syntactically complete number against the supported
     /// integer and floating-point representation ranges.
-    fn validate_number_range(
-        &self,
-        start: usize,
-        end: usize,
-    ) -> Result<(), JsonLexicalError<R, Q>> {
-        let Ok(token) = std::str::from_utf8(&self.input[start..end]) else {
+    fn validate_number_range(&self, start: usize, end: usize) -> Result<(), JsonLexicalError<R, Q>> {
+        let Ok(token) = from_utf8(&self.input[start..end]) else {
             return Err(self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber));
         };
         let binary64 = match self.number_model {
@@ -558,14 +612,15 @@ where
     }
 
     /// Tests whether the next byte can follow a complete JSON scalar value.
+    #[must_use]
+    #[inline]
     const fn is_value_delimiter(byte: Option<u8>) -> bool {
-        matches!(
-            byte,
-            None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}')
-        )
+        matches!(byte, None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}'))
     }
 
     /// Computes one-based line and UTF-8 character column at the cursor.
+    #[must_use]
+    #[inline]
     fn line_column(&self) -> (usize, usize) {
         self.line_column_at(self.offset)
     }
@@ -582,22 +637,48 @@ where
     }
 
     /// Computes one-based line and UTF-8 character column at `offset`.
+    #[must_use]
+    #[inline]
     fn line_column_at(&self, offset: usize) -> (usize, usize) {
         line_column_at(self.input, offset)
     }
 }
 
-/// Computes source coordinates while reporting how many bytes each scan step
-/// examines.
+/// Computes the source coordinates associated with a byte offset.
+///
+/// # Parameters
+///
+/// * `input` - Source bytes containing the location to measure.
+/// * `offset` - Byte offset whose source coordinates are requested; values
+///   beyond the input are clamped to its end.
+///
+/// # Returns
+///
+/// A pair of one-based `(line, UTF-8 character column)` coordinates.
+#[must_use]
+#[inline]
 pub(crate) fn line_column_at(input: &[u8], offset: usize) -> (usize, usize) {
     line_column_at_with_inspection(input, offset, |_| {})
 }
 
-fn line_column_at_with_inspection<F>(
-    input: &[u8],
-    offset: usize,
-    mut record_examined_bytes: F,
-) -> (usize, usize)
+/// Computes source coordinates while reporting the bytes examined to a
+/// caller-provided inspection callback.
+///
+/// The callback receives the number of input bytes examined in each scan step.
+///
+/// # Parameters
+///
+/// * `input` - Source bytes containing the location to measure.
+/// * `offset` - Byte offset whose source coordinates are requested; values
+///   beyond the input are clamped to its end.
+/// * `record_examined_bytes` - Callback that observes how many bytes each step
+///   examines.
+///
+/// # Returns
+///
+/// A pair of one-based `(line, UTF-8 character column)` coordinates.
+#[must_use]
+fn line_column_at_with_inspection<F>(input: &[u8], offset: usize, mut record_examined_bytes: F) -> (usize, usize)
 where
     F: FnMut(usize),
 {
@@ -627,7 +708,7 @@ where
             _ => {
                 let character_bytes = utf8_width(input[index])
                     .and_then(|width| input.get(index..index.saturating_add(width)))
-                    .filter(|text| std::str::from_utf8(text).is_ok())
+                    .filter(|text| from_utf8(text).is_ok())
                     .map_or(1, <[u8]>::len)
                     .min(end - index);
                 record_examined_bytes(character_bytes);
@@ -640,6 +721,7 @@ where
 }
 
 /// Returns the UTF-8 width encoded by one valid leading byte.
+#[inline]
 const fn utf8_width(byte: u8) -> Option<usize> {
     match byte {
         0xC2..=0xDF => Some(2),
@@ -664,7 +746,11 @@ mod tests {
             examined_bytes = examined_bytes.saturating_add(bytes);
         });
 
-        assert_eq!(coordinates, (2, 2));
+        assert_eq!(
+            coordinates,
+            (2, 2),
+            "CRLF and the final marker must produce the expected source coordinate"
+        );
         assert!(
             examined_bytes <= input.len(),
             "line/column calculation examined {examined_bytes} bytes for an {}-byte input",
@@ -687,14 +773,13 @@ mod jcs_number_model_tests {
     use qubit_budget::json::JsonResource;
     use qubit_budget::json::JsonValueLimits;
 
-    use super::super::JsonLexicalScanner;
-    use super::super::JsonNumberModel;
+    use crate::lexical::JsonLexicalError;
+    use crate::lexical::JsonLexicalScanner;
+    use crate::lexical::JsonNumberModel;
 
-    fn scan(
-        input: &[u8],
-        model: JsonNumberModel,
-        limits: JsonDecodeLimits<JsonResource, usize>,
-    ) -> bool {
+    /// Checks whether the scanner admits one input under the selected number
+    /// model and limits.
+    fn scan(input: &[u8], model: JsonNumberModel, limits: JsonDecodeLimits<JsonResource, usize>) -> bool {
         let mut session = JsonDecodeSession::from_limits(limits);
         let mut attempt = session.begin_value();
         JsonLexicalScanner::new(attempt.value_transaction_mut(), true)
@@ -708,16 +793,14 @@ mod jcs_number_model_tests {
         let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
             .value_limits(JsonValueLimits::builder().build())
             .build();
-        assert!(scan(
-            b"100000000000000000000",
-            JsonNumberModel::Binary64,
-            limits
-        ));
-        assert!(!scan(
-            b"100000000000000000000",
-            JsonNumberModel::Integer64,
-            limits
-        ));
+        assert!(
+            scan(b"100000000000000000000", JsonNumberModel::Binary64, limits),
+            "binary64 mode must admit an integer outside the i64/u64 range"
+        );
+        assert!(
+            !scan(b"100000000000000000000", JsonNumberModel::Integer64, limits),
+            "integer64 mode must reject an integer outside the i64/u64 range"
+        );
     }
 
     #[test]
@@ -725,7 +808,10 @@ mod jcs_number_model_tests {
         let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
             .value_limits(JsonValueLimits::builder().build())
             .build();
-        assert!(!scan(b"1e400", JsonNumberModel::Binary64, limits));
+        assert!(
+            !scan(b"1e400", JsonNumberModel::Binary64, limits),
+            "binary64 mode must reject a non-finite numeric value"
+        );
     }
 
     #[test]
@@ -739,6 +825,9 @@ mod jcs_number_model_tests {
             .with_number_model(JsonNumberModel::Binary64)
             .scan(b"1e400")
             .expect_err("token length budget rejects before range parsing");
-        assert!(matches!(error, super::super::JsonLexicalError::Budget(_)));
+        assert!(
+            matches!(error, JsonLexicalError::Budget(_)),
+            "the number-byte budget must reject the token before range parsing"
+        );
     }
 }

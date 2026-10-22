@@ -13,6 +13,16 @@ use serde_json::Value;
 use super::json_number_lexeme_length;
 
 /// Builds the resource measurement for one JSON node at a root-inclusive depth.
+///
+/// # Parameters
+///
+/// * `value` - Materialized JSON node whose resource usage is measured.
+/// * `depth` - Root-inclusive nesting depth assigned to this node.
+///
+/// # Returns
+///
+/// A measurement variant matching the node, including its depth and relevant
+/// byte or child-count quantity.
 #[must_use]
 #[inline]
 pub(crate) fn json_value_measurement(value: &Value, depth: usize) -> JsonMeasurement {

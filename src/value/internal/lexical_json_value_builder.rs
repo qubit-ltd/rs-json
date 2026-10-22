@@ -23,14 +23,26 @@ const MAX_MATERIALIZATION_DEPTH: usize = 127;
 
 /// Constructs one owned value from a complete scanner event sequence.
 pub(crate) struct LexicalJsonValueBuilder {
+    /// Numeric representation selected for materialized values.
     model: JsonNumberModel,
+    /// Open array and object frames awaiting completion events.
     frames: Vec<JsonValueFrame>,
+    /// Completed top-level value, populated by the root event.
     root: Option<Value>,
+    /// First materialization error, after which incoming events are ignored.
     error: Option<JsonValueMaterializationError>,
 }
 
 impl LexicalJsonValueBuilder {
     /// Creates an empty value builder.
+    ///
+    /// # Parameters
+    ///
+    /// * `model` - Numeric representation used for admitted number tokens.
+    ///
+    /// # Returns
+    ///
+    /// A builder ready to consume lexical events.
     #[inline]
     #[must_use]
     pub(crate) fn new(model: JsonNumberModel) -> Self {
@@ -43,6 +55,15 @@ impl LexicalJsonValueBuilder {
     }
 
     /// Consumes one event from a document admitted by the lexical scanner.
+    ///
+    /// # Parameters
+    ///
+    /// * `event` - Next event in the scanner's admitted document sequence.
+    ///
+    /// # Panics
+    ///
+    /// Panics when an event violates scanner guarantees, such as an invalid
+    /// string token, a key outside an object, or a mismatched container end.
     pub(crate) fn accept(&mut self, event: JsonLexicalEvent<'_>) {
         if self.error.is_some() {
             return;
@@ -77,18 +98,12 @@ impl LexicalJsonValueBuilder {
             }
             JsonLexicalEvent::String { token, offset } => {
                 let _ = offset;
-                let value = serde_json::from_slice::<String>(token)
-                    .expect("admitted JSON string must decode");
+                let value = serde_json::from_slice::<String>(token).expect("admitted JSON string must decode");
                 self.push_value(Value::String(value));
             }
             JsonLexicalEvent::Key { token, offset } => {
-                let key =
-                    serde_json::from_slice::<String>(token).expect("admitted JSON key must decode");
-                let Some(JsonValueFrame::Object {
-                    values,
-                    pending_key,
-                }) = self.frames.last_mut()
-                else {
+                let key = serde_json::from_slice::<String>(token).expect("admitted JSON key must decode");
+                let Some(JsonValueFrame::Object { values, pending_key }) = self.frames.last_mut() else {
                     unreachable!("scanner emits keys only inside objects");
                 };
                 if values.contains_key(&key) {
@@ -119,11 +134,7 @@ impl LexicalJsonValueBuilder {
             }
             JsonLexicalEvent::EndObject { offset } => {
                 let _ = offset;
-                let Some(JsonValueFrame::Object {
-                    values,
-                    pending_key,
-                }) = self.frames.pop()
-                else {
+                let Some(JsonValueFrame::Object { values, pending_key }) = self.frames.pop() else {
                     unreachable!("scanner emits matching object events");
                 };
                 debug_assert!(pending_key.is_none());
@@ -133,16 +144,28 @@ impl LexicalJsonValueBuilder {
     }
 
     /// Returns the complete value or the first materialization failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first recorded error when an admitted number cannot be
+    /// represented, an object key is duplicated, or the container depth limit
+    /// is exceeded.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the event sequence is incomplete and has not produced a
+    /// root value.
     pub(crate) fn finish(self) -> Result<Value, JsonValueMaterializationError> {
         if let Some(error) = self.error {
             return Err(error);
         }
         debug_assert!(self.frames.is_empty());
-        Ok(self
-            .root
-            .expect("complete admitted event stream has a root value"))
+        Ok(self.root.expect("complete admitted event stream has a root value"))
     }
 
+    /// Rejects a container event when another frame would exceed the fixed
+    /// limit.
+    #[must_use]
     fn check_depth(&mut self, offset: usize) -> bool {
         if self.frames.len() == MAX_MATERIALIZATION_DEPTH {
             self.error = Some(JsonValueMaterializationError::DepthLimit {
@@ -155,16 +178,12 @@ impl LexicalJsonValueBuilder {
         }
     }
 
+    /// Attaches a completed value to its parent frame or stores it as the root.
     fn push_value(&mut self, value: Value) {
         match self.frames.last_mut() {
             Some(JsonValueFrame::Array(values)) => values.push(value),
-            Some(JsonValueFrame::Object {
-                values,
-                pending_key,
-            }) => {
-                let key = pending_key
-                    .take()
-                    .expect("object value must follow a key event");
+            Some(JsonValueFrame::Object { values, pending_key }) => {
+                let key = pending_key.take().expect("object value must follow a key event");
                 values.insert(key, value);
             }
             None => {

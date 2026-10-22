@@ -35,6 +35,10 @@ impl JsonLexemeLengthWriter {
 impl Write for JsonLexemeLengthWriter {
     /// Adds the complete input length to the counter.
     ///
+    /// # Returns
+    ///
+    /// The number of bytes accepted, which is always `input.len()` on success.
+    ///
     /// # Errors
     ///
     /// Returns an [`io::ErrorKind::FileTooLarge`] error if the accumulated

@@ -25,6 +25,11 @@ use crate::lexical::JsonNumberModel;
 /// * `input` - Complete JSON document bytes to scan.
 /// * `has_value_limits` - Whether value measurements can reject the document.
 ///
+/// # Returns
+///
+/// Returns `Ok(())` after the scanner admits the complete document and leaves
+/// its successful value measurements staged in `attempt`.
+///
 /// # Errors
 ///
 /// Returns a syntax failure or the first value-budget rejection reported by
@@ -43,6 +48,23 @@ where
 }
 
 /// Admits a JSON document using an explicitly selected number range contract.
+///
+/// # Parameters
+///
+/// * `attempt` - Decode attempt whose value transaction receives staged usage.
+/// * `input` - Complete JSON document bytes to scan.
+/// * `has_value_limits` - Whether value measurements can reject the document.
+/// * `model` - Number range contract applied while scanning number tokens.
+///
+/// # Returns
+///
+/// Returns `Ok(())` after the scanner admits the complete document and leaves
+/// its successful value measurements staged in `attempt`.
+///
+/// # Errors
+///
+/// Returns a syntax failure or the first value-budget rejection reported by
+/// the lexical scanner under the selected number model.
 pub(in crate::decode) fn admit_json_document_with_number_model<R, Q>(
     attempt: &mut JsonDecodeAttempt<'_, R, Q>,
     input: &[u8],
@@ -78,10 +100,7 @@ where
 /// # Panics
 ///
 /// Panics raised by the seed's visitor propagate to the caller.
-pub(in crate::decode) fn deserialize_json_document<'de, S>(
-    seed: S,
-    input: &'de [u8],
-) -> Result<S::Value, Error>
+pub(in crate::decode) fn deserialize_json_document<'de, S>(seed: S, input: &'de [u8]) -> Result<S::Value, Error>
 where
     S: DeserializeSeed<'de>,
 {

@@ -112,11 +112,7 @@ where
     ///
     /// Returns [`JsonTreeProcessError::Budget`] when resource admission fails,
     /// or [`JsonTreeProcessError::Visitor`] when the visitor rejects a node.
-    pub fn process<V>(
-        &mut self,
-        value: &Value,
-        visitor: &mut V,
-    ) -> Result<(), JsonTreeProcessError<R, Q, V::Error>>
+    pub fn process<V>(&mut self, value: &Value, visitor: &mut V) -> Result<(), JsonTreeProcessError<R, Q, V::Error>>
     where
         V: JsonTreeVisitor,
     {
@@ -134,14 +130,11 @@ where
                     let context = frame.context;
                     if self.enforce_limits {
                         if let JsonTreeLocation::ObjectValue { key } = context.location {
-                            self.transaction
-                                .try_admit(JsonMeasurement::Key { bytes: key.len() })?;
+                            self.transaction.try_admit(JsonMeasurement::Key { bytes: key.len() })?;
                         }
                         self.admit(value, context.depth)?;
                     }
-                    visitor
-                        .enter(value, context)
-                        .map_err(JsonTreeProcessError::Visitor)?;
+                    visitor.enter(value, context).map_err(JsonTreeProcessError::Visitor)?;
                     frame.state = ReadFrameState::Children(ChildCursor::new(value, context.depth));
                 }
                 ReadFrameState::Children(cursor) => {
@@ -192,8 +185,22 @@ where
     }
 
     /// Admits one node before any visitor callback.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - JSON node whose resource use is measured.
+    /// * `depth` - Root-inclusive depth used by the measurement.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after staging the node's measured resource use in the
+    /// borrowed transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns a measured budget error when the transaction cannot admit the
+    /// node within its configured resource limits.
     fn admit(&mut self, value: &Value, depth: usize) -> Result<(), MeasuredBudgetError<R, Q>> {
-        self.transaction
-            .try_admit(json_value_measurement(value, depth))
+        self.transaction.try_admit(json_value_measurement(value, depth))
     }
 }

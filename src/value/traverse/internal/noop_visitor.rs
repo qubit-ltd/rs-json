@@ -16,6 +16,7 @@ use super::super::JsonTreeVisitor;
 pub(in crate::value::traverse) struct NoopVisitor;
 
 impl JsonTreeVisitor for NoopVisitor {
+    /// Error type proving this visitor has no failing operation.
     type Error = std::convert::Infallible;
 
     /// Accepts an entered node.

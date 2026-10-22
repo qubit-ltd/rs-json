@@ -22,10 +22,20 @@ pub(crate) struct JsonPrivateProtocolState {
 
 impl JsonPrivateProtocolState {
     /// Creates a protocol state after validating its declared field count.
-    pub(crate) fn new(
-        kind: JsonPrivateProtocolKind,
-        declared_len: usize,
-    ) -> Result<Self, JsonSerializerStateError> {
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - Private protocol whose compound shape is validated.
+    /// * `declared_len` - Number of fields announced by the serializer.
+    ///
+    /// # Returns
+    ///
+    /// A pending protocol state when exactly one field was declared.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-state error unless `declared_len` is one.
+    pub(crate) fn new(kind: JsonPrivateProtocolKind, declared_len: usize) -> Result<Self, JsonSerializerStateError> {
         if declared_len != 1 {
             return Err(kind.invalid_state());
         }
@@ -36,6 +46,19 @@ impl JsonPrivateProtocolState {
     }
 
     /// Starts the only permitted payload field.
+    ///
+    /// # Parameters
+    ///
+    /// * `field` - Field name announced by the serializer.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after transitioning from Pending to InFlight.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-state error and marks the protocol failed when the
+    /// state or field name does not match the protocol contract.
     pub(crate) fn begin(&mut self, field: &str) -> Result<(), JsonSerializerStateError> {
         if self.phase != JsonPrivateProtocolPhase::Pending || field != self.kind.field_name() {
             self.phase = JsonPrivateProtocolPhase::Failed;
@@ -46,6 +69,15 @@ impl JsonPrivateProtocolState {
     }
 
     /// Marks the payload complete or poisons an invalid transition.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after transitioning from InFlight to Complete.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-state error and marks the protocol failed unless the
+    /// payload is currently InFlight.
     pub(crate) fn complete(&mut self) -> Result<(), JsonSerializerStateError> {
         if self.phase != JsonPrivateProtocolPhase::InFlight {
             self.phase = JsonPrivateProtocolPhase::Failed;
@@ -56,11 +88,22 @@ impl JsonPrivateProtocolState {
     }
 
     /// Marks the protocol failed after its payload callback returns an error.
+    ///
+    /// This terminal state prevents a failed payload from being accepted by
+    /// [`Self::finish`].
     pub(crate) fn fail(&mut self) {
         self.phase = JsonPrivateProtocolPhase::Failed;
     }
 
     /// Confirms that exactly one payload completed successfully.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` only when the payload reached the Complete phase.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-state error for any other phase.
     pub(crate) fn finish(self) -> Result<(), JsonSerializerStateError> {
         if self.phase == JsonPrivateProtocolPhase::Complete {
             Ok(())

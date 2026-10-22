@@ -23,6 +23,7 @@ use super::MutChildCursor;
 use super::OwnedLocation;
 
 /// Tracks one in-place mutable traversal position.
+#[must_use]
 pub(in crate::value::traverse) struct MutFrame {
     /// Owned location reported to the mutation visitor.
     pub(in crate::value::traverse) location: OwnedLocation,
@@ -40,6 +41,14 @@ pub(in crate::value::traverse) struct MutFrame {
 
 impl MutFrame {
     /// Creates the root frame from the exclusive mutable root borrow.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Exclusively borrowed root JSON value tracked by this frame.
+    ///
+    /// # Returns
+    ///
+    /// An unentered, unfinished root frame at depth one.
     #[inline(always)]
     pub(in crate::value::traverse) fn root(value: &mut Value) -> Self {
         Self {
@@ -52,12 +61,18 @@ impl MutFrame {
         }
     }
     /// Creates one child frame retaining the parent-derived value pointer.
+    ///
+    /// # Parameters
+    ///
+    /// * `location` - Root-relative path identifying the child.
+    /// * `depth` - Root-inclusive nesting depth of the child value.
+    /// * `value` - Exclusively borrowed child value retained by this frame.
+    ///
+    /// # Returns
+    ///
+    /// An unentered, unfinished child frame at the supplied location and depth.
     #[inline(always)]
-    pub(in crate::value::traverse) fn child(
-        location: OwnedLocation,
-        depth: usize,
-        value: &mut Value,
-    ) -> Self {
+    pub(in crate::value::traverse) fn child(location: OwnedLocation, depth: usize, value: &mut Value) -> Self {
         Self {
             location,
             depth,
@@ -68,13 +83,16 @@ impl MutFrame {
         }
     }
     /// Returns the next mutable child while preserving the parent container.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some` with the next child frame when an unvisited child exists,
+    /// or `None` when this frame is finished or has no remaining children.
     pub(in crate::value::traverse) fn next_child(&mut self) -> Option<Self> {
         if self.finished {
             return None;
         }
-        let cursor = self
-            .cursor
-            .get_or_insert_with(|| MutChildCursor::new(self.value));
+        let cursor = self.cursor.get_or_insert_with(|| MutChildCursor::new(self.value));
         cursor.next(self.depth)
     }
 }

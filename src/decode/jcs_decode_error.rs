@@ -18,6 +18,11 @@ use super::JsonDecodeError;
 /// JCS decoding failure with explicit duplicate-key and construction-depth
 /// cases.
 ///
+/// # Type Parameters
+///
+/// * `R` - Resource identity used by the wrapped budget error.
+/// * `Q` - Quantity representation used for resource accounting.
+///
 /// # Examples
 ///
 /// ```
@@ -35,7 +40,10 @@ where
     Q: Copy + fmt::Debug,
 {
     /// An input, UTF-8, budget, or lexical admission failure.
-    Decode(JsonDecodeError<R, Q>),
+    Decode(
+        /// Shared decode error with stable category and input diagnostics.
+        JsonDecodeError<R, Q>,
+    ),
     /// An object contains two keys equal after JSON escape decoding.
     DuplicateKey {
         /// One-based source line of the second key token.
@@ -59,20 +67,26 @@ where
     R: fmt::Debug,
     Q: ResourceQuantity,
 {
+    /// Formats the decoding failure with its source location when applicable.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination that receives the formatted message.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the message is written.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter error if writing the message fails.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Decode(error) => error.fmt(formatter),
             Self::DuplicateKey { line, column } => {
-                write!(
-                    formatter,
-                    "duplicate JSON object key at line {line}, column {column}"
-                )
+                write!(formatter, "duplicate JSON object key at line {line}, column {column}")
             }
-            Self::MaterializationDepthLimit {
-                limit,
-                line,
-                column,
-            } => write!(
+            Self::MaterializationDepthLimit { limit, line, column } => write!(
                 formatter,
                 "JCS value construction depth exceeds {limit} at line {line}, column {column}"
             ),
@@ -85,6 +99,12 @@ where
     R: fmt::Debug + 'static,
     Q: ResourceQuantity + 'static,
 {
+    /// Returns the wrapped decoding error for the standard error chain.
+    ///
+    /// # Returns
+    ///
+    /// The wrapped decode error for `Decode`, or `None` for the JCS-specific
+    /// duplicate-key and construction-depth failures.
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Decode(error) => Some(error),
@@ -97,6 +117,15 @@ impl<R, Q> From<JsonDecodeError<R, Q>> for JcsDecodeError<R, Q>
 where
     Q: Copy + fmt::Debug,
 {
+    /// Wraps a regular decoding failure as a JCS decoding failure.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - Regular decoding failure to wrap.
+    ///
+    /// # Returns
+    ///
+    /// A JCS error containing the supplied decoding failure.
     fn from(error: JsonDecodeError<R, Q>) -> Self {
         Self::Decode(error)
     }

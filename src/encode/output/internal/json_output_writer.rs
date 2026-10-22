@@ -18,6 +18,16 @@ use super::json_output_accounting::JsonOutputAccounting;
 use crate::encode::JsonEncodeError;
 
 /// Writes accepted JSON bytes directly to an external destination.
+///
+/// # Lifetime Parameters
+///
+/// * `'a` - Lifetime of the shared output accounting borrow.
+///
+/// # Type Parameters
+///
+/// * `W` - Destination that accepts byte slices.
+/// * `R` - Resource identity used by output accounting.
+/// * `Q` - Quantity representation used by output accounting.
 pub(in crate::encode) struct JsonOutputWriter<'a, W, R, Q>
 where
     Q: ResourceQuantity,
@@ -41,11 +51,17 @@ where
     Q: ResourceQuantity,
 {
     /// Creates an incremental writer over shared output accounting.
+    ///
+    /// # Parameters
+    ///
+    /// * `writer` - Destination that receives accepted JSON bytes.
+    /// * `accounting` - Shared budget and failure state for this operation.
+    ///
+    /// # Returns
+    ///
+    /// A writer that records the first destination error for later conversion.
     #[inline]
-    pub(in crate::encode) fn new(
-        writer: W,
-        accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
-    ) -> Self {
+    pub(in crate::encode) fn new(writer: W, accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>) -> Self {
         Self {
             writer,
             accounting,
@@ -55,6 +71,20 @@ where
     }
 
     /// Converts the serializer result while preserving typed failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `result` - Result returned by the JSON serializer.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, or the budget, syntax, writer, or serialization
+    /// failure with its original category preserved.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first recorded budget, syntax, or destination error;
+    /// otherwise it converts a serializer error to a serialization failure.
     pub(in crate::encode) fn into_result(
         self,
         result: Result<(), serde_json::Error>,
@@ -71,10 +101,7 @@ where
             return Err(JsonEncodeError::<R, Q>::write(error));
         }
         if result.is_err() {
-            let error = self
-                .accounting
-                .borrow_mut()
-                .take_serialization_error_or_custom();
+            let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
             return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         Ok(())
@@ -89,6 +116,20 @@ where
 {
     /// Checks capacity, writes one slice, and charges only bytes accepted by
     /// the destination.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Bytes requested by the serializer.
+    ///
+    /// # Returns
+    ///
+    /// The number of accepted bytes, or an I/O error when the destination or
+    /// output budget rejects the write.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error when the destination fails, writes zero bytes for
+    /// a non-empty input, or the output budget rejects the requested bytes.
     fn write(&mut self, input: &[u8]) -> io::Result<usize> {
         if self.has_output_budget {
             let accounting = self.accounting.borrow();
@@ -102,10 +143,7 @@ where
         match Output::write(&mut self.writer, input) {
             Ok(written) => {
                 if written == 0 && !input.is_empty() {
-                    let error = io::Error::new(
-                        io::ErrorKind::WriteZero,
-                        "JSON output writer accepted no bytes",
-                    );
+                    let error = io::Error::new(io::ErrorKind::WriteZero, "JSON output writer accepted no bytes");
                     if self.io_error.is_none() {
                         self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
                     }
@@ -130,6 +168,14 @@ where
     }
 
     /// Flushes the destination and preserves any resulting I/O error.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the destination flushes, or its I/O error otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Returns the destination's flush error.
     fn flush(&mut self) -> io::Result<()> {
         match Output::flush(&mut self.writer) {
             Ok(()) => Ok(()),

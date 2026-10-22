@@ -11,7 +11,7 @@ use serde_json::Value;
 
 /// Tracks traversal progress for one non-empty JSON container on the renderer
 /// stack.
-pub(super) enum Frame<'value> {
+pub(super) enum JcsRendererFrame<'value> {
     /// Tracks the next element in an array while its children are rendered.
     Array {
         /// Values borrowed from the source array.

@@ -5,6 +5,8 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+//! Tests the default callbacks of JSON tree visitors.
+
 use qubit_json::value::traverse::JsonTreeContext;
 use qubit_json::value::traverse::JsonTreeLocation;
 use qubit_json::value::traverse::JsonTreeVisitor;
@@ -30,10 +32,6 @@ fn test_visitor_default_leave_succeeds() {
         location: JsonTreeLocation::Root,
     };
 
-    visitor
-        .enter(&value, context)
-        .expect("enter should succeed");
-    visitor
-        .leave(&value, context)
-        .expect("default leave should succeed");
+    visitor.enter(&value, context).expect("enter should succeed");
+    visitor.leave(&value, context).expect("default leave should succeed");
 }

@@ -1,6 +1,14 @@
+// =============================================================================
+//    Copyright (c) 2025 - 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
+
 use qubit_budget::json::JsonResource;
-use qubit_budget::json::JsonValueLimits;
 use qubit_budget::json::JsonValueBudget;
+use qubit_budget::json::JsonValueLimits;
 use qubit_json::value::AccountingJsonValueSeed;
 use qubit_json::value::DuplicateKeyRejectingJsonValueSeed;
 use qubit_json::value::JsonValueEncoder;
