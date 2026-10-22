@@ -92,9 +92,9 @@ dependencies = [
 
 [[package]]
 name = "qubit-budget"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac92d5681339f8a76fbc5460fd2eaf6339a29680e8de014ebf97da770a1cd1f4"
+checksum = "49bf5243c23f2a18a70b7f365ab03c9c100622308ddb940c0d5a28e0c49442bc"
 dependencies = [
  "thiserror",
 ]
