@@ -10,6 +10,7 @@
 use std::fmt;
 
 use qubit_json::decode::JsonDecoder;
+use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
 use qubit_json::encode::JsonIntegerSignedness;
 use qubit_json::encode::JsonMapKeyKind;
@@ -68,6 +69,20 @@ impl Serialize for DuplicateKeyProbe {
         map.serialize_entry("same", &1_u8)?;
         map.serialize_entry("same", &2_u8)?;
         map.end()
+    }
+}
+
+/// Declares an empty sequence and then emits one element.
+struct ZeroDeclaredSequence;
+
+impl Serialize for ZeroDeclaredSequence {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(0))?;
+        sequence.serialize_element(&1_u8)?;
+        sequence.end()
     }
 }
 
@@ -862,4 +877,23 @@ fn test_json_value_encoder_accepts_explicit_struct_skip_field() {
         .expect("a skipped struct field should not alter the object");
 
     assert_eq!(actual, json!({"kept": 7}));
+}
+
+#[test]
+fn test_zero_declared_sequence_contract_differs_between_encoders() {
+    let value = JsonValueEncoder::new()
+        .encode(&ZeroDeclaredSequence)
+        .expect("the value encoder uses the declared length as a capacity hint");
+    assert_eq!(value, json!([1]));
+
+    let error = JsonEncoder::unlimited()
+        .to_vec(&ZeroDeclaredSequence)
+        .expect_err("the text encoder rejects elements beyond the declared length");
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
+    assert_eq!(
+        error.serialization_error().unwrap().kind(),
+        JsonSerializationErrorKind::InvalidSerializerState {
+            reason: JsonSerializerStateError::UnexpectedCompound,
+        },
+    );
 }

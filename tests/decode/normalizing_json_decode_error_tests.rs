@@ -8,6 +8,7 @@
 //! Tests for the public [`qubit_json::decode::JsonDecodeError`]
 //! type.
 
+use std::collections::BTreeMap;
 use std::error::Error as StdError;
 
 use qubit_budget::ResourceLimit;
@@ -19,6 +20,7 @@ use qubit_json::decode::DiagnosticPolicy;
 use qubit_json::decode::JsonDecodeError;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecodeStage;
+use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonRootKind;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
@@ -151,6 +153,40 @@ fn test_error_exposes_immutable_normalized_diagnostics_without_duplicate_locatio
     assert_eq!(error.column(), Some(2));
     assert!(error.to_string().contains("line 1 column 2"));
     assert!(std::error::Error::source(&error).is_none());
+}
+
+/// Verifies normalized errors report coordinates in the normalized document.
+#[test]
+fn test_normalized_error_coordinates_use_normalized_text() {
+    let normalized_syntax = "{\"名\" 0}";
+    let raw_syntax = format!("  ```json\n{normalized_syntax}\n```  ");
+    let mut normalizer = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
+    );
+    let syntax = normalizer.decode_value(&raw_syntax).unwrap_err();
+    let strict_syntax = JsonDecoder::unlimited().validate_str(normalized_syntax).unwrap_err();
+
+    assert_eq!(syntax.kind(), JsonDecodeErrorKind::InvalidJson);
+    assert_eq!(syntax.line(), strict_syntax.line());
+    assert_eq!(syntax.column(), strict_syntax.column());
+
+    let normalized_type_error = "{\"名\":\"bad\"}";
+    let raw_type_error = format!("  ```json\n{normalized_type_error}\n```  ");
+    let mut normalized = NormalizingJsonDecoder::with_limits(
+        NormalizingJsonDecodePolicy::default(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
+    );
+    let typed = normalized
+        .decode_str::<BTreeMap<String, u8>>(&raw_type_error)
+        .unwrap_err();
+    let strict_typed = JsonDecoder::unlimited()
+        .decode_str::<BTreeMap<String, u8>>(normalized_type_error)
+        .unwrap_err();
+
+    assert_eq!(typed.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(typed.line(), strict_typed.line());
+    assert_eq!(typed.column(), strict_typed.column());
 }
 
 /// Verifies that error source for invalid json preserves serde error.

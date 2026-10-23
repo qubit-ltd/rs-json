@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Tests strict JSON decoding errors through the public decoder API.
+use std::collections::BTreeMap;
 use std::error::Error;
 
 use qubit_budget::json::JsonDecodeLimits;
@@ -15,6 +16,77 @@ use qubit_json::decode::DiagnosticPolicy;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::JsonDecoder;
+
+/// Verifies syntax columns count Unicode scalar values while offsets count
+/// bytes.
+#[test]
+fn test_syntax_column_counts_unicode_scalars() {
+    let input = "{\"名\" 0}";
+    let error = JsonDecoder::unlimited().validate_str(input).unwrap_err();
+    let syntax = error.syntax_error().unwrap();
+    let offset = input.find('0').unwrap();
+
+    assert_eq!(syntax.offset(), offset);
+    assert_eq!(error.line(), Some(1));
+    assert_eq!(error.column(), Some(input[..offset].chars().count() + 1));
+    assert_ne!(error.column(), Some(offset + 1));
+}
+
+/// Verifies deserialize columns preserve serde_json byte coordinates.
+#[test]
+fn test_deserialize_column_preserves_backend_byte_units() {
+    let input = "{\"名\":\"坏\"}";
+    let backend = serde_json::from_str::<BTreeMap<String, u8>>(input).unwrap_err();
+    let error = JsonDecoder::unlimited()
+        .decode_str::<BTreeMap<String, u8>>(input)
+        .unwrap_err();
+    let backend_column = backend.column();
+
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.line(), Some(backend.line()));
+    assert_eq!(error.column(), Some(backend_column));
+    let character_count_before_column = input
+        .char_indices()
+        .take_while(|(byte_index, _)| *byte_index < backend_column)
+        .count();
+    assert_ne!(backend_column, character_count_before_column);
+}
+
+/// Verifies scanner line coordinates for LF, CRLF, and standalone CR.
+#[test]
+fn test_syntax_coordinates_recognize_line_endings() {
+    for input in ["{\r\n\"名\" 0}", "{\n\"名\" 0}", "{\r\"名\" 0}"] {
+        let error = JsonDecoder::unlimited().validate_str(input).unwrap_err();
+        let syntax = error.syntax_error().unwrap();
+        let offset = input.find('0').unwrap();
+        let line_start = input[..offset].rfind(['\r', '\n']).map_or(0, |i| i + 1);
+
+        assert_eq!(error.line(), Some(2));
+        assert_eq!(error.column(), Some(input[line_start..offset].chars().count() + 1));
+        assert_eq!(syntax.offset(), offset);
+    }
+}
+
+/// Verifies backend line coordinates and redaction for each line ending.
+#[test]
+fn test_deserialize_coordinates_and_redaction_recognize_line_endings() {
+    const SECRET: &str = "private-value";
+    for input in [
+        "{\r\n\"名\":\"private-value\"}",
+        "{\n\"名\":\"private-value\"}",
+        "{\r\"名\":\"private-value\"}",
+    ] {
+        let backend = serde_json::from_str::<BTreeMap<String, u8>>(input).unwrap_err();
+        let error = JsonDecoder::unlimited()
+            .decode_str::<BTreeMap<String, u8>>(input)
+            .unwrap_err();
+
+        assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+        assert_eq!(error.line(), Some(backend.line()));
+        assert_eq!(error.column(), Some(backend.column()));
+        assert!(!error.to_string().contains(SECRET));
+    }
+}
 
 /// Verifies strict decoders preserve the existing redacted default.
 #[test]

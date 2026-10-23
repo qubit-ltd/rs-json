@@ -13,7 +13,9 @@ use std::fmt;
 use super::JsonSyntaxErrorReason;
 use crate::lexical::JsonLexicalFailure;
 
-/// A JSON syntax error with byte and human-readable source coordinates.
+/// A JSON syntax error with a zero-based byte offset and one-based source
+/// coordinates. Its column counts UTF-8 characters; CRLF is one line break,
+/// while LF and standalone CR each also start a new line.
 ///
 /// # Examples
 ///

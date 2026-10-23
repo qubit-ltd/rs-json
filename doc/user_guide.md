@@ -583,10 +583,12 @@ Newtype structs are serialized transparently by `JsonValueEncoder`,
 regardless of their name. A custom newtype named
 `$serde_json::private::RawValue` keeps its string, boolean, or `Option` payload
 as that ordinary value; it is not parsed again as JSON. Use a genuine
-`serde_json::value::RawValue` when raw JSON text must be materialized. A custom
-serializer that declares a compound length of zero and then emits an element
-or field fails with `InvalidSerializerState`; legitimate empty containers
-remain valid.
+`serde_json::value::RawValue` when raw JSON text must be materialized.
+`JsonEncoder` rejects a custom serializer that declares an ordinary compound
+length of zero and then emits an element or field, with
+`InvalidSerializerState`. `JsonValueEncoder` uses ordinary compound lengths as
+preallocation hints and does not enforce the same declaration check. Its
+private `RawValue` and `Number` protocols remain strictly validated.
 
 For a `Display` value encoded as a JSON string or object key, each formatting chunk is checked against the prospective complete string/key measurement before the collector appends it. A successful preview does not consume budget; after formatting, the complete measurement is admitted once. This prevents the library collector from growing past configured string/key limits. It cannot control allocations made internally by user `Display::fmt`, allocator metadata, or process RSS. For a `RawValue`/Number raw-output payload, the JSON structure is validated only after the complete text has been collected; output-byte bounds still apply during collection.
 
@@ -604,6 +606,17 @@ Branch on the stable category returned by `kind()`:
 | `UnexpectedTopLevel` | An object/array-specific API received the wrong root kind | `expected_top_level()`, `actual_top_level()` |
 | `Deserialize` | An admitted document could not materialize as the requested type | `line()`, `column()`, and a detailed source when enabled |
 | `Read` | The input source failed before document decoding completed | `read_error_kind()`, `raw_input_bytes()`, and `read_error()` under detailed diagnostics |
+
+For `InvalidJson`, `line()` and `column()` use the lexical scanner's one-based
+coordinates: columns count UTF-8 characters, and the byte-based location is
+available from `syntax_error().offset()`. LF, CRLF, and standalone CR each
+start a new line; CRLF counts as one line break. For `Deserialize`, the
+coordinates preserve `serde_json`'s one-based line and byte column, and a zero
+backend coordinate is exposed as `None`. Normalizing decoders report positions
+in the normalized text after normalization; they do not map positions back to
+the original input. Under `Detailed` diagnostics, a retained
+parser source can format coordinates according to its backend, so its text
+coordinates need not match the structured scanner coordinates.
 
 Adapters that own the error can instead call `into_source()` and exhaustively
 match `JsonDecodeErrorSource` without cloning budget or syntax details.

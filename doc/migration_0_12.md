@@ -6,7 +6,7 @@ This guide covers the source and behavior changes from `qubit-json` 0.11 to 0.12
 
 ## f32 value and object-key representation
 
-This checkout fixes f32 materialization and object-key consistency by using serde_json's f32 JSON representation. A `1.0_f32` object key changes from `"1"` to `"1.0"`, matching direct text encoding. Update lookups that depend on the old key; when an integer key is intended, explicitly serialize it as an integer or string. Finite f32 values can also be materialized and strictly encoded when `arbitrary_precision` is enabled. This checkout change does not claim that a release containing it has been published. No downstream source migration or version adjustment is required.
+This checkout fixes f32 materialization and object-key consistency by using serde_json's f32 JSON representation. A `1.0_f32` object key changes from `"1"` to `"1.0"`, matching direct text encoding. Callers that do not depend on the previous f32 object-key representation need no source changes for this correction. Update and validate lookups, snapshots, or persisted/signed protocols that depend on the old key strings. Serialize an integer or string explicitly when a stable integer key is intended. Finite f32 values can also be materialized and strictly encoded when `arbitrary_precision` is enabled. This checkout change does not claim that a release containing it has been published. Version changes follow the project's release policy.
 
 ## Update dependency versions together
 
@@ -50,9 +50,11 @@ custom newtype named `$serde_json::private::RawValue`: its string, boolean, or
 `Option` payload is serialized as that payload and is not reparsed as JSON.
 Code that needs raw JSON materialization should use a genuine
 `serde_json::value::RawValue`, whose exact private struct protocol remains
-supported. A malformed zero-length compound serializer that emits fields or
-elements now fails instead of returning success with invalid JSON; valid empty
-containers remain supported.
+supported. `JsonEncoder` rejects a hand-written serializer that declares an
+ordinary compound length of zero and then emits fields or elements.
+`JsonValueEncoder` uses ordinary compound lengths as preallocation hints and
+does not enforce the same declaration check. Both encoders continue to
+validate the exact private `RawValue` and `Number` protocols.
 
 ## Keep the three number boundaries separate
 

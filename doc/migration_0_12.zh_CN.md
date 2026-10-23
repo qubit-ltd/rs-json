@@ -6,7 +6,7 @@
 
 ## f32 值与对象键表示
 
-本 checkout 修复了 f32 物化及对象键一致性：使用 serde_json 的 f32 JSON 表示。因此，`1.0_f32` 对象键会从 `"1"` 变为 `"1.0"`，与直接文本编码一致。依赖旧键名的查询需要更新；确需整数键时，应显式序列化为整数或字符串。启用 `arbitrary_precision` 时，有限 f32 也可以物化并通过严格编码。本 checkout 的修改不表示包含该修改的版本已发布。无需下游源码迁移或版本调整。
+本 checkout 修复了 f32 物化及对象键一致性：使用 serde_json 的 f32 JSON 表示。因此，`1.0_f32` 对象键会从 `"1"` 变为 `"1.0"`，与直接文本编码一致。不依赖旧 f32 对象键表示的调用方，无需为这项修正调整源码。依赖旧键字符串的查询、快照或持久化/签名协议应更新并验证兼容性；确需稳定整数键时，应显式序列化为整数或字符串。启用 `arbitrary_precision` 时，有限 f32 也可以物化并通过严格编码。本 checkout 的修改不表示包含该修改的版本已发布。版本调整遵循项目发布策略。
 
 ## 同步更新依赖版本
 
@@ -48,8 +48,9 @@ Number 协议是 serde_json 的私有互操作协议：只有精确的私有 str
 `JsonValueEncoder` 对普通 newtype struct 一律透明处理，包括名称为
 `$serde_json::private::RawValue` 的自定义 newtype：字符串、布尔值或 `Option` payload 都按其自身
 类型序列化，不会再次当作 JSON 解析。确实需要把原始 JSON 文本物化为 Value 时，应使用真正的
-`serde_json::value::RawValue`；其精确私有 struct 协议仍受支持。若手写的零长度 compound serializer
-继续发送字段或元素，现在会失败，不再可能以无效 JSON 返回成功；合法空容器不受影响。
+`serde_json::value::RawValue`；其精确私有 struct 协议仍受支持。`JsonEncoder` 会拒绝声明普通
+compound 长度为零后仍发送字段或元素的手写 serializer。`JsonValueEncoder` 将普通 compound 长度用作
+预分配提示，不执行相同的声明检查。两个 encoder 仍会严格验证精确的 `RawValue` 和 `Number` 私有协议。
 
 ## 分清三种数字边界
 

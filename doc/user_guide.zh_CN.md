@@ -492,8 +492,10 @@ encoder 识别 serde_json 的两种精确私有 struct 协议：`RawValue` 与 `
 
 `JsonValueEncoder` 会透明序列化所有 newtype struct，不根据名称特殊处理。自定义类型即使叫
 `$serde_json::private::RawValue`，它的字符串、布尔值或 `Option` payload 也仍按普通值保留，不会重新解析。
-需要把 raw JSON 文本物化为 Value 时，应使用真正的 `serde_json::value::RawValue`。手写 serializer 若声明
-compound 长度为零后仍发送元素或字段，会以 `InvalidSerializerState` 失败；合法空容器仍可正常编码。
+需要把 raw JSON 文本物化为 Value 时，应使用真正的 `serde_json::value::RawValue`。
+`JsonEncoder` 会拒绝声明普通 compound 长度为零后仍发送元素或字段的自定义 serializer，并返回
+`InvalidSerializerState`。`JsonValueEncoder` 将普通 compound 长度用作预分配提示，不执行相同的声明检查；其
+`RawValue` 和 `Number` 私有协议仍会严格验证。
 
 把 `Display` 编码成 JSON 字符串或对象键时，collector 会先检查本次写入后完整字符串/键的预计测量值，再追加该分块。预检成功不扣预算；格式化完成后才对完整测量准入一次。这能阻止库的 collector 在字符串或键超过限制后继续增长，但库无法控制用户 `Display::fmt` 内部的任意分配、分配器元数据或进程 RSS。`RawValue`/Number 的原始输出 payload 仍要等完整文本收集后才能校验 JSON 结构；收集期间仍受输出字节上限约束。
 
@@ -511,6 +513,13 @@ compound 长度为零后仍发送元素或字段，会以 `InvalidSerializerStat
 | `UnexpectedTopLevel` | 仅接受对象或数组的方法收到错误的根类型 | `expected_top_level()`、`actual_top_level()` |
 | `Deserialize` | 已准入文档无法构造为请求的 Rust 类型 | `line()`、`column()`，启用详细诊断后还可读取来源错误 |
 | `Read` | 输入源在文档解码完成前发生读取错误 | `read_error_kind()`、`raw_input_bytes()`；仅详细诊断保留 `read_error()` |
+
+对于 `InvalidJson`，`line()` 和 `column()` 使用词法扫描器提供的从 1 开始的坐标：列按
+UTF-8 字符计数，按字节计数的位置可通过 `syntax_error().offset()` 获取。LF、CRLF 和单独的
+CR 都会开始新行；CRLF 只算一个换行。对于 `Deserialize`，坐标保留 `serde_json` 从 1 开始的
+行号和字节列号；后端坐标为 0 时，访问器返回 `None`。规范化解码器报告规范化文本中的位置，
+不会映射回原始输入。启用 `Detailed` 诊断时，保留的 parser
+来源错误可能按其后端格式化坐标，因此其文本坐标可能与结构化扫描器坐标不同。
 
 适配层取得错误所有权后，也可以调用 `into_source()`，对 `JsonDecodeErrorSource` 做穷举匹配，
 不需要克隆预算或语法错误详情。

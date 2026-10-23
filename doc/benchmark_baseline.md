@@ -259,6 +259,52 @@ and reports its stack/object split. The renderer-specific run emits no
 `JCS_ALLOC` reports, so diagnostic formatting cannot contaminate global
 allocator counts.
 
+### Unlimited renderer stack growth candidate (2026-10-23)
+
+After the renderer attribution sample above, a local candidate changed only
+unlimited JCS renderer-stack reservations to request geometrically growing
+capacity. Object member tables and finite working-memory configurations keep
+the exact-growth policy. The candidate was measured against source revision
+`8885285bcfc601e2fe85350f868c05e689441325`; the only production-code
+difference in the candidate was `src/encode/internal/jcs_working_memory.rs`.
+
+Environment: Rust/Cargo 1.94.0; x86_64 Linux `7.0.0-38-generic`; Intel Core
+i5-9600K, 6 cores at 3.70 GHz; system `System` allocator. The host was not
+isolated, CPU affinity was not set, and frequency scaling was enabled. Gnuplot
+was unavailable, so Criterion used Plotters. Each batch used 20 samples, a
+1-second warm-up, and a 1-second measurement. Intervals are Criterion's
+reported estimates; an additional baseline depth batch was interleaved after
+the first candidate depth batch.
+
+| Depth | Path | Before batches 1 / 2 / 3 (µs) | After batches 1 / 2 / 3 (µs) |
+| ---: | --- | --- | --- |
+| 32 | unlimited | 1.887–1.916 / 1.871–1.908 / 1.844–1.883 | 1.075–1.079 / 1.080–1.099 / 1.060–1.082 |
+| 128 | unlimited | 8.751–10.242 / 7.638–7.776 / 7.705–7.803 | 3.326–3.353 / 3.526–3.703 / 3.187–3.299 |
+| 512 | unlimited | 28.212–29.824 / 27.046–27.425 / 27.342–27.832 | 10.801–11.131 / 11.296–11.802 / 10.396–10.570 |
+| 2,048 | unlimited | 112.23–115.39 / 110.62–112.83 / 111.04–112.70 | 40.178–41.432 / 38.503–39.063 / 38.616–39.368 |
+| 8,192 | unlimited | 432.99–442.81 / 422.73–432.72 / 428.36–440.33 | 150.06–151.78 / 148.33–150.06 / 147.73–150.27 |
+| 8,192 | finite | 632.17–651.57 / 618.23–634.65 / 604.40–616.33 | 616.23–636.01 / 601.60–617.14 / 594.13–607.47 |
+
+Renderer diagnostics at depth 8,192 changed from 8,192 stack growths and
+1,073,872,896 requested bytes to 13 growths and 524,224 requested bytes. The
+largest actual stack capacity remained 262,144 bytes. Object-table behavior
+was unchanged. The finite path retained 8,192 stack growths and the original
+request policy. This counts requested capacity bytes, not bytes copied, peak
+live memory, or RSS.
+
+Large-object unlimited intervals were 0.951–0.986, 0.947–0.971, and
+0.969–0.990 ms before, and 0.944–0.964, 0.943–0.969, and 1.432–1.598 ms
+after. The last after batch was an isolated slow sample on this non-isolated
+host. Large-array unlimited intervals were 1.327–1.354, 1.358–1.382, and
+1.445–1.827 ms before, and 1.312–1.330, 1.318–1.347, and 1.317–1.338 ms
+after. These samples show no repeatable wide-container regression, though the
+noisy large-object result limits the strength of that conclusion.
+
+The candidate is retained: the deep-chain improvement is repeatable, the
+finite path and object-table strategy are unchanged, and wide-container
+measurements do not show a repeatable regression. This local measurement does
+not establish performance on other machines or workloads.
+
 ## Interpretation boundaries
 
 Strict codecs perform checks that direct `serde_json` may not perform. In

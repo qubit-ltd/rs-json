@@ -209,15 +209,30 @@ impl JcsWorkingMemory {
             .capacity()
             .checked_mul(size_of::<T>())
             .ok_or_else(|| self.limit_error(usize::MAX))?;
-        let requested_bytes = required_capacity
-            .checked_mul(size_of::<T>())
-            .ok_or_else(|| self.limit_error(usize::MAX))?;
         let current = self
             .stack_bytes
             .checked_add(self.object_bytes)
             .ok_or_else(|| self.limit_error(usize::MAX))?;
         let without_old = current
             .checked_sub(old_bytes)
+            .ok_or_else(|| self.limit_error(usize::MAX))?;
+        let target_capacity = if is_stack && self.limit == usize::MAX {
+            let preferred = values.capacity().max(1).saturating_mul(2).max(required_capacity);
+            if preferred
+                .checked_mul(size_of::<T>())
+                .filter(|bytes| *bytes <= isize::MAX as usize)
+                .and_then(|bytes| without_old.checked_add(bytes))
+                .is_some()
+            {
+                preferred
+            } else {
+                required_capacity
+            }
+        } else {
+            required_capacity
+        };
+        let requested_bytes = target_capacity
+            .checked_mul(size_of::<T>())
             .ok_or_else(|| self.limit_error(usize::MAX))?;
         let requested_total = without_old
             .checked_add(requested_bytes)
@@ -227,7 +242,7 @@ impl JcsWorkingMemory {
         }
 
         values
-            .try_reserve_exact(additional)
+            .try_reserve_exact(target_capacity - values.len())
             .map_err(|_| JcsReserveError::Allocation)?;
         let actual_bytes = values
             .capacity()
@@ -317,6 +332,21 @@ mod tests {
         memory.reserve_stack(&mut stack, 1).unwrap();
         assert_eq!(memory.stack_bytes, expected);
         assert_eq!(memory.peak_bytes(), expected);
+    }
+
+    #[test]
+    fn test_unlimited_stack_growth_is_amortized() {
+        let mut memory = JcsWorkingMemory::new(usize::MAX);
+        let mut stack = Vec::<u64>::new();
+        let mut growths = 0;
+        for _ in 0..8192 {
+            let old = stack.capacity();
+            memory.reserve_stack(&mut stack, 1).unwrap();
+            growths += usize::from(stack.capacity() != old);
+            stack.push(0);
+        }
+        assert!(growths <= 15, "unexpected growth count: {growths}");
+        assert_eq!(memory.stack_bytes, stack.capacity() * std::mem::size_of::<u64>());
     }
 
     #[test]

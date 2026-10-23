@@ -416,6 +416,10 @@ where
 
     /// Returns the one-based error line when available.
     ///
+    /// Invalid-JSON coordinates come from the lexical scanner. Deserialize
+    /// coordinates preserve `serde_json`'s values. For a deserialize error,
+    /// a backend line of zero is reported as `None`.
+    ///
     /// # Returns
     ///
     /// `Some(line)` for failures with source coordinates, otherwise `None`.
@@ -429,6 +433,10 @@ where
     }
 
     /// Returns the one-based error column when available.
+    ///
+    /// Invalid-JSON columns count UTF-8 characters, while deserialize columns
+    /// preserve `serde_json`'s byte-based column. For a deserialize error, a
+    /// backend column of zero is reported as `None`.
     ///
     /// # Returns
     ///
