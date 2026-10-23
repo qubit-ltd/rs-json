@@ -18,6 +18,15 @@ use super::internal::DuplicateKeyRejectingJsonVisitor;
 /// Use this seed when the caller owns a deserializer and needs duplicate-key
 /// rejection without requiring an intermediate typed wrapper.
 ///
+/// Native `i64`, `u64`, and finite `f64` events retain their numeric
+/// representation. If an upstream deserializer exposes an arbitrary-precision
+/// number as map events, this seed treats those events as an ordinary object
+/// because it cannot determine their provenance. Lexical admission by
+/// [`crate::decode::JsonDecoder`] does not change the subsequent Serde event
+/// representation. See [`DuplicateKeyRejectingJsonValue`] for the corresponding
+/// wrapper behavior and `doc/number_contract.md` in the repository for the
+/// numeric contract.
+///
 /// # Examples
 ///
 /// ```

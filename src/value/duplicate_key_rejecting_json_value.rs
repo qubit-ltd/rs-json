@@ -20,11 +20,14 @@ pub use duplicate_key_rejecting_json_value_seed::DuplicateKeyRejectingJsonValueS
 /// A JSON value whose deserialization rejects duplicate object keys.
 ///
 /// This wrapper is useful for document formats where accepting the usual
-/// last-key-wins object behavior would make the input ambiguous. It preserves
-/// serde_json's standard `i64`, `u64`, and finite `f64` number representation
-/// while recursively validating every object. For raw JSON text, use
-/// [`crate::decode::JsonDecoder`] when the crate's explicit numeric range
-/// contract must be enforced before deserialization.
+/// last-key-wins object behavior would make the input ambiguous. Native `i64`,
+/// `u64`, and finite `f64` events retain their numeric representation. If an
+/// upstream deserializer exposes an arbitrary-precision number as map events,
+/// this wrapper treats those events as an ordinary object because it cannot
+/// determine their provenance. Lexical admission by
+/// [`crate::decode::JsonDecoder`] does not change the subsequent Serde event
+/// representation. See `doc/number_contract.md` in the repository for the
+/// numeric contract.
 ///
 /// # Examples
 ///

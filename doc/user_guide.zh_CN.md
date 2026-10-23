@@ -392,6 +392,12 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 `NormalizingJsonDecoder` 的目标类型。调用方自行持有 Serde 反序列化器时，可使用对应的
 `DuplicateKeyRejectingJsonValueSeed`。
 
+原生 `i64`、`u64` 和有限 `f64` 事件会保留各自的数字表示。启用
+`arbitrary_precision` 的上游反序列化器可能把数字作为 map 事件提供；包装器无法判断这些事件的来源，
+因此会把它们当作普通对象处理。先用 `JsonDecoder` 扫描文本也不会恢复来源信息。详见
+[JSON 数字契约](number_contract.zh_CN.md)。JCS 使用 binary64，超出其精确范围的整数会舍入，
+不能作为精确整数表示的通用替代方案。
+
 对于已有值，`JsonTreeReader::account` 会在调用方事务中暂存整棵树的资源用量，但不会调用
 访问器。`JsonTreeMutator` 先准入原始值树，再执行原地访问器回调，最后准入修改后的值树：
 
@@ -468,6 +474,7 @@ encoder 识别 serde_json 的两种精确私有 struct 协议：`RawValue` 与 `
 | `InvalidJson` | JSON 语法或数字契约不合法 | `syntax_error()`、`line()`、`column()` |
 | `UnexpectedTopLevel` | 仅接受对象或数组的方法收到错误的根类型 | `expected_top_level()`、`actual_top_level()` |
 | `Deserialize` | 已准入文档无法构造为请求的 Rust 类型 | `line()`、`column()`，启用详细诊断后还可读取来源错误 |
+| `Read` | 输入源在文档解码完成前发生读取错误 | `read_error_kind()`、`raw_input_bytes()`；仅详细诊断保留 `read_error()` |
 
 适配层取得错误所有权后，也可以调用 `into_source()`，对 `JsonDecodeErrorSource` 做穷举匹配，
 不需要克隆预算或语法错误详情。
@@ -521,6 +528,9 @@ encoder 识别 serde_json 的两种精确私有 struct 协议：`RawValue` 与 `
   再进入 JSON 解析。
 - `InvalidJson`：检查原始字节以及错误中的原因、偏移量、行号和列号；规范化不会凭空补齐 JSON
   语法。
+- `Read`：这是输入源故障，不是 JSON 语法错误。已经接受的字节继续计费，输入源不会自动倒带。
+  脱敏诊断可读取 `read_error_kind()` 和 `raw_input_bytes()`；只有启用 `Detailed` 诊断才能读取原始来源。
+  仅当输入源支持安全续读或回退时才重试。
 - `UnexpectedTopLevel`：比较 `expected_top_level()` 与 `actual_top_level()`，修正请求体，或改用
   根类型约束与输入一致的解码方法。
 - `Deserialize`：说明 JSON 已准入，但与目标类型不匹配；分别修正请求内容或目标数据模式。这也包括

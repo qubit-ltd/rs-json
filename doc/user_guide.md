@@ -461,6 +461,14 @@ The wrapper validates nested objects recursively and can also be the target of
 contract. `DuplicateKeyRejectingJsonValueSeed` provides the corresponding seed
 for a caller-owned Serde deserializer.
 
+Native `i64`, `u64`, and finite `f64` events retain their numeric
+representation. An upstream deserializer with `arbitrary_precision` may expose
+a number as map events; the wrapper treats those events as an ordinary object
+because it cannot determine their provenance. Scanning the text first with
+`JsonDecoder` does not restore that provenance. See the [JSON number contract](number_contract.md).
+JCS uses binary64 and rounds integers beyond its exact range, so it is not a
+general replacement when exact integer representation is required.
+
 For an existing value, `JsonTreeReader::account` stages complete-tree charges
 in the caller's transaction without invoking a visitor. `JsonTreeMutator`
 first admits the original tree, then runs in-place visitor callbacks, and
@@ -541,6 +549,7 @@ Branch on the stable category returned by `kind()`:
 | `InvalidJson` | Syntax or the numeric contract was invalid | `syntax_error()`, `line()`, `column()` |
 | `UnexpectedTopLevel` | An object/array-specific API received the wrong root kind | `expected_top_level()`, `actual_top_level()` |
 | `Deserialize` | An admitted document could not materialize as the requested type | `line()`, `column()`, and a detailed source when enabled |
+| `Read` | The input source failed before document decoding completed | `read_error_kind()`, `raw_input_bytes()`, and `read_error()` under detailed diagnostics |
 
 Adapters that own the error can instead call `into_source()` and exhaustively
 match `JsonDecodeErrorSource` without cloning budget or syntax details.
@@ -603,6 +612,11 @@ binary rounding should use a string or explicit domain representation. See the
   and reject or repair the byte transport before JSON parsing.
 - An `InvalidJson` error: validate the original bytes and check the reported reason,
   offset, line, and column; normalization never invents missing JSON syntax.
+- A `Read` error: distinguish an input-source failure from invalid JSON syntax.
+  Bytes already accepted remain charged, and the source is not rewound
+  automatically. `read_error_kind()` and `raw_input_bytes()` are available in
+  redacted diagnostics; the original source is available only with Detailed
+  diagnostics. Retry only when the input source can safely resume or rewind.
 - An `UnexpectedTopLevel` error: compare `expected_top_level()` with
   `actual_top_level()`, then either fix the payload or select a decoder method
   whose root contract matches it.
