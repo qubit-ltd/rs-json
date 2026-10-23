@@ -173,7 +173,7 @@ commit boundaries explicit through `qubit-budget` sessions and transactions.
 | `decode` | Strict JSON admission, explicitly configured normalization, or JCS text decoding with `JcsDecoder` | Ordinary decoding keeps its integer range; JCS decoding uses binary64 and rejects duplicate keys |
 | `encode` | Budgeted strict JSON output | Value accounting commits after complete serialization; an I/O failure can still leave bytes in an external writer |
 | `value` | Building budgeted `serde_json::Value` trees from Serde events | A seed cannot inspect original number text or enforce text-level range rules |
-| `value::traverse` | Iterative reads or in-place mutations of materialized values | Mutation is incremental; visitor and output-budget failures do not roll back prior changes |
+| `value::traverse` | Iterative reads or in-place mutations of materialized values | Mutation is incremental; visitors adding descendants must bound their own work, and visitor/output-budget failures retain prior changes |
 
 `qubit-budget` owns limits, resource identities, budgets, and sessions.
 `qubit-json` owns JSON normalization, lexical validation, text codecs, value
@@ -194,6 +194,7 @@ identifies the separate auxiliary-capacity limit configured with
   finite `f64`. Thus `9007199254740993` becomes `9007199254740992`. Use strings
   or domain types when every decimal digit must be preserved.
 - `JsonValueEncoder` recognizes only the exact private `Number` Serde struct protocol; an ordinary map with the same field name remains an object. Malformed `RawValue` and `Number` protocols return `JsonSerializationErrorKind::InvalidSerializerState`, with `JsonSerializerStateError::InvalidRawValueProtocol` or `InvalidNumberProtocol` respectively. Seed-based value construction only sees native numeric events and cannot infer private map provenance.
+- The fixed 127-container guard applies to JCS decoding and genuine `RawValue` projection by `JsonValueEncoder`; it is separate from configurable root-inclusive `max_depth`. `InvalidRawValue` reports rejection by the strict materialization contract, which includes more than syntax errors. Ordinary newtype structs remain transparent; use `serde_json::value::RawValue` when raw JSON materialization is intended.
 - Tree traversal counts an existing `serde_json::Number` using the length of its current compact display. Under `arbitrary_precision`, this permits accounting for a stored wide number such as `1e400`; ordinary and JCS encoders still reject numbers outside their own finite range.
 - Set finite limits at every untrusted boundary. `unlimited()` disables value,
   output, and working-memory limits; use it only for trusted input or data
@@ -227,6 +228,10 @@ identifies the separate auxiliary-capacity limit configured with
   accounting is committed only after the complete operation succeeds.
   `max_working_bytes` bounds auxiliary traversal and object-sorting capacity,
   not the input `Value`, allocator metadata, or output buffer capacity.
+Value admission runs before rendering, and its traversal stack is outside this
+working-memory limit. When that traversal needs a depth bound, configure
+`max_depth` alongside `max_nodes`; the working-memory setting describes
+renderer collection capacity, not an exact heap ceiling.
 - Diagnostics are redacted by default. Configure a strict decoder with
   `JsonDecoder::with_diagnostic_policy`, or a normalizing decoder through its
   normalization policy. Redacted errors retain only stable classifications and

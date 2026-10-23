@@ -128,6 +128,11 @@ rejects more than 127 nested containers, independently of the configurable
 value-depth budget. Unrelated syntax and budget errors keep their ordinary
 decode classification. Value accounting commits only after the complete
 document succeeds, while accepted input bytes remain charged after failure.
+The shared RawValue materializer used by `JsonValueEncoder` applies that same
+127-container guard to genuine `serde_json::value::RawValue` payloads. Its
+`InvalidRawValue` error identifies rejection by the strict materialization
+contract, including duplicate keys, numeric constraints, or depth; it is not
+a syntax-only classification.
 
 ### Numeric representation
 
@@ -178,8 +183,9 @@ without token provenance, so it remains an ordinary object.
 
 `JsonTreeReader` performs depth-first enter/leave traversal over an immutable
 `Value`; `JsonTreeMutator` performs visitor-driven, non-recursive traversal
-over a mutable `Value`. Both admit nodes, containers, strings, numbers, and
-object keys before callbacks.
+over a mutable `Value`. The reader admits each node and its measured fields
+before the matching callback. The mutator admits the complete input tree
+before its first callback and admits the complete result after traversal.
 
 `JsonTreeReader::account` stages complete-tree charges in an existing caller
 transaction without invoking a visitor or creating and committing another
@@ -191,7 +197,10 @@ in-place mutations, and finally admits the complete result. It returns
 `JsonTreeMutateError::InputBudget`, `::Visitor`, or `::OutputBudget`.
 Visitor and output failures retain mutations already performed.
 `JsonTreeControl::SkipSubtree` skips descendant callbacks only; final output
-accounting still covers every resulting descendant.
+accounting still covers every resulting descendant. Unlike the reader's
+per-node admission before callbacks, the mutator's output admission happens
+after all callbacks. A visitor that creates descendants is responsible for
+bounding its own callback work and ensuring that traversal terminates.
 
 ## Public error model
 
@@ -243,9 +252,11 @@ borrowed member references by UTF-16 key order, then writes punctuation and
 scalar values directly to the output. It accounts the reserved traversal-stack
 and active member-table capacities against `max_working_bytes` before growing
 them. This logical capacity bound excludes the caller-owned input `Value`,
-allocator metadata, and output-buffer capacity. The configured value limits
-such as `max_depth`, `max_map_entries`, and `max_nodes` remain independent;
-`max_output_bytes` limits canonical output bytes, not renderer working memory.
+allocator metadata, output-buffer capacity, and the admission traversal stack
+used before rendering when value limits are configured. Configure `max_depth`
+to bound that admission pass and `max_nodes` to bound admitted values. This
+capacity accounting does not promise an exact heap limit. `max_output_bytes`
+limits canonical output bytes, not renderer working memory.
 
 Value accounting is staged before rendering and commits only after the whole
 encoding succeeds. `Budget` reports value or output accounting failures;

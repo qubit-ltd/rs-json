@@ -45,6 +45,12 @@ Number 协议是 serde_json 的私有互操作协议：只有精确的私有 str
 
 `JsonValueEncoder` 处理真实 `serde_json::Number` 时会构造 Number 值，不再留下 `$serde_json::private::Number` marker 对象。用户普通 map 中同名键仍是普通对象；仅凭键名不会启用私有协议。公开错误结构不提供 deprecated alias 或兼容 facade。
 
+`JsonValueEncoder` 对普通 newtype struct 一律透明处理，包括名称为
+`$serde_json::private::RawValue` 的自定义 newtype：字符串、布尔值或 `Option` payload 都按其自身
+类型序列化，不会再次当作 JSON 解析。确实需要把原始 JSON 文本物化为 Value 时，应使用真正的
+`serde_json::value::RawValue`；其精确私有 struct 协议仍受支持。若手写的零长度 compound serializer
+继续发送字段或元素，现在会失败，不再可能以无效 JSON 返回成功；合法空容器不受影响。
+
 ## 分清三种数字边界
 
 - **普通严格文本、序列化与原生 Serde 整数事件：** 负整数须装入 `i64`，非负整数须装入 `u64`，小数或指数须转换为有限 `f64`。`i128`、`u128` 事件会显式检查范围。文本解码先准入原始 `NumberBytes` 测量，再检查数值范围。Serde seed 只能看到解码后的事件，无法检查原始 token，也无法执行 `NumberBytes` 限制。如果上游 `arbitrary_precision` 把数字呈现为 map 事件，seed 无法区分真实对象，会按对象保留。
@@ -65,6 +71,7 @@ Number 协议是 serde_json 的私有互操作协议：只有精确的私有 str
 - value 测量仍通过 transaction 暂存，完整操作成功后才发布。外部 writer 已接受的字节无法回滚；后续写入或 flush 失败时，这些字节仍计入预算。
 - RawValue 文本必须先验证，再写入外部 writer。增量输出后续失败时，外部目标可能保留此前已接受的合法前缀。
 - JCS Value 构造固定的 127 层容器限制仍独立于可配置、包含根节点的深度预算。
+- `JsonValueEncoder` 投影真正 `RawValue` 时也适用相同的固定 127 层容器限制；它是物化保护，不是普通编解码入口的通用深度限制。`InvalidRawValue` 表示严格 RawValue 物化契约被拒绝，不专指语法错误。
 - 默认诊断继续脱敏，不保留输入文本、私有 payload 或任意 `Serialize::custom` 文本。
 
 私有源码文件如何组织属于实现细节；迁移不承诺保留旧私有模块路径、deprecated alias 或跨 budget 类型身份转换。

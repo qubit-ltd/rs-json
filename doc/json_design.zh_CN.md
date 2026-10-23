@@ -113,6 +113,9 @@ JCS Value 构造最多接受 127 层容器（根容器计第 1 层，标量不�
 与第一遍包含根值的 `max_depth` 预算分别计算；低于 127 的用户深度限制先返回 Budget。`decode_input` 沿用读取到 EOF 并缓冲完整文档的流程，有限输入上限允许一个不计费的探测字节。
 预算描述被计量资源，不构成精确 malloc 上限。JCS 解码只检查并构造值，已规范字节验证须由调用方将编码结果与输入比较。
 
+`JsonValueEncoder` 使用同一个 RawValue 物化器，因此真正的 `serde_json::value::RawValue` payload 也受
+127 层限制。`InvalidRawValue` 表示严格物化契约拒绝输入，可能涉及重复键、数字约束或深度，并非仅用于语法错误。
+
 私有 Number 协议只有在 Serde struct 名称和 payload 形状完全匹配时才会识别；真实对象中名为 `$serde_json::private::Number` 的键仍是普通键。`RawValue` 私有协议也会识别并严格验证。
 有限浮点的紧凑 JSON 文本长度通过公开的 `serde_json::ser::CompactFormatter` 接口计算，
 不直接依赖其底层浮点格式化库。
@@ -128,8 +131,8 @@ JCS Value 构造最多接受 127 层容器（根容器计第 1 层，标量不�
 `JsonTreeReader` 按现有 `serde_json::Number` 的紧凑显示字节数计量，不转成 `f64`，也不改写当前表示。启用 `arbitrary_precision` 时可据此核算宽数字；这不代表普通或 JCS 编码器会接受它。
 
 `JsonTreeReader` 对不可变 `Value` 执行深度优先 enter/leave 遍历；`JsonTreeMutator` 对可变
-`Value` 执行 visitor 驱动的非递归遍历。两者均在回调前对节点、容器、字符串、数字和 object
-key 进行准入。
+`Value` 执行 visitor 驱动的非递归遍历。reader 在对应回调前准入节点及其计量字段；mutator 则在首个
+回调前准入完整输入树，并在遍历后准入完整结果。
 
 `JsonTreeReader::account` 复用 reader 的同一非递归遍历，在调用方已有 transaction 中暂存整棵树
 的消耗，不调用 visitor，也不创建或提交 transaction；失败直接返回 `MeasuredBudgetError`。
@@ -137,8 +140,9 @@ key 进行准入。
 的 budget。`JsonTreeMutator` 先准入原始 tree，再执行 visitor 驱动的原地修改，最后准入完整的
 修改后 tree。它返回 `JsonTreeMutateError::InputBudget`、`::Visitor` 或 `::OutputBudget`；visitor
 和输出失败会保留已执行的修改。`JsonTreeControl::SkipSubtree` 只影响后代回调，最终输出记账
-仍覆盖所有结果后代。`JsonTreeProcessError` 区分 reader 基础设施 budget 失败和业务 visitor
-失败。
+仍覆盖所有结果后代。reader 在回调前逐节点准入；mutator 的输出准入则在全部回调完成后执行。
+visitor 若创建新后代，需要自行限制回调工作量并确保遍历终止。`JsonTreeProcessError` 区分 reader
+基础设施 budget 失败和业务 visitor 失败。
 
 ## 公开错误模型
 
@@ -181,8 +185,9 @@ key 进行准入。
 renderer 以迭代方式遍历数组和对象。每个对象只对借用的成员引用按键的 UTF-16 顺序排序，
 随后直接向输出写入标点和标量。遍历栈与活动成员表扩容前，会先将其保留容量计入
 `max_working_bytes`。这个逻辑容量上限不包含调用方持有的输入 `Value`、分配器元数据或输出缓冲容量。
-`max_depth`、`max_map_entries`、`max_nodes` 等值限制仍独立生效；`max_output_bytes` 限制最终
-规范化字节数，不限制 renderer 工作内存。
+值限制配置后，渲染前还会执行准入遍历；该遍历栈也不计入 `max_working_bytes`。需要限制准入遍历时，
+应设置 `max_depth`，并用 `max_nodes` 限制节点数。这个容量计量不承诺精确堆内存上限；
+`max_output_bytes` 限制最终规范化字节数，不限制 renderer 工作内存。
 
 renderer 前先暂存值资源用量，完整编码成功后才提交。`Budget` 表示值或输出记账失败；
 `WorkingMemory` 表示辅助内存超限；真实分配失败映射为安全的序列化错误。`write_buffered` 会先

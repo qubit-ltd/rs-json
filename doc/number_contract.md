@@ -59,6 +59,13 @@ the JCS binary64 model. JCS decoding still measures
 range check. These budgets measure resources; they are not exact heap-memory
 limits.
 
+JCS `Value` construction has a fixed limit of 127 nested containers. The same
+materialization limit applies when `JsonValueEncoder` projects a genuine
+`serde_json::value::RawValue`; ordinary JSON encoding and decoding do not use
+this as a general depth limit. A `JsonValueEncoder` `InvalidRawValue` error
+denotes rejection by the strict materialization contract, which can include
+duplicate keys, numeric constraints, or depth as well as invalid syntax.
+
 ## Exact and wider values
 
 Use a JSON string or an explicit domain representation for integers below

@@ -43,6 +43,11 @@ parser。`n` 后缀仅属于 JavaScript 源码；`123n` 不是合法 JSON，绝�
 解码和 `RawValue` 协议采用普通严格契约；只有显式调用 `JcsDecoder` 才使用 JCS binary64 模型。
 JCS 解码的 `NumberBytes` 仍按原始 token 字节数计量，并先于范围检查；预算限制计量资源，不是精确堆内存上限。
 
+JCS `Value` 构造最多接受 127 层嵌套容器。`JsonValueEncoder` 投影真正的
+`serde_json::value::RawValue` 时也受同一物化上限约束；普通 JSON 编解码入口没有这项通用深度限制。
+`JsonValueEncoder` 返回 `InvalidRawValue` 表示严格物化契约拒绝了输入，原因可能是重复键、数字约束或
+深度超限，也可能是语法错误。
+
 ## 精确值和更宽的值
 
 小于 `i64::MIN` 或大于 `u64::MAX` 的整数使用 JSON 字符串或显式领域结构。金额等精确十进制

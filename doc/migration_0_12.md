@@ -45,6 +45,15 @@ The Number protocol is private serde_json interoperability: it is recognized onl
 
 Ordinary `JsonValueEncoder` handling of an actual `serde_json::Number` now constructs a Number value instead of leaving a `$serde_json::private::Number` marker object. A normal user map with that key remains an ordinary map; the key alone does not opt into the private protocol. There is no deprecated alias or compatibility facade for changed public error shapes.
 
+Ordinary newtype structs are transparent in `JsonValueEncoder`, including a
+custom newtype named `$serde_json::private::RawValue`: its string, boolean, or
+`Option` payload is serialized as that payload and is not reparsed as JSON.
+Code that needs raw JSON materialization should use a genuine
+`serde_json::value::RawValue`, whose exact private struct protocol remains
+supported. A malformed zero-length compound serializer that emits fields or
+elements now fails instead of returning success with invalid JSON; valid empty
+containers remain supported.
+
 ## Keep the three number boundaries separate
 
 - **Ordinary strict text, serialization, and native Serde integer events:** negative integers must fit `i64`, non-negative integers must fit `u64`, and fractional/exponent values must convert to finite `f64`. `i128` and `u128` events are explicitly range-checked. Text decoding admits the original `NumberBytes` measurement before checking numeric range. A Serde seed sees decoded events, not the original token; it cannot enforce `NumberBytes`. If upstream `arbitrary_precision` produces a map event, the seed cannot distinguish it from a real object and preserves it as an object.
@@ -65,6 +74,7 @@ For private RawValue/Number raw-output payloads, the complete text is still requ
 - Value measurements remain transactional and publish only after the complete operation succeeds. Bytes already accepted by an external writer cannot be rolled back and remain charged if a later write or flush fails.
 - RawValue text is validated before its bytes are emitted to an external writer. An incremental operation may leave a valid accepted prefix after a later failure.
 - The 127 nested-container JCS Value materialization limit remains independent of the configurable root-inclusive depth budget.
+- The same fixed 127-container limit applies when a genuine `RawValue` is projected by `JsonValueEncoder`; it is a materialization guard, not a general ordinary encode/decode depth limit. `InvalidRawValue` means the strict RawValue materialization contract was rejected and is not reserved for syntax errors.
 - Default diagnostics remain redacted and do not retain input, private payload, or arbitrary `Serialize::custom` text.
 
 Private source file organization is an implementation detail. The migration does not promise old private module paths, deprecated aliases, or a bridge between budget type identities.

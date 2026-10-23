@@ -153,13 +153,15 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 | `decode` | 严格准入 JSON、按策略规范化文本，或用 `JcsDecoder` 解码 JCS 数字 | 普通解码保留整数范围；JCS 解码采用 binary64 并拒绝重复键 |
 | `encode` | 生成受预算约束的严格 JSON | 完整序列化成功后才提交值资源用量，但 I/O 失败仍可能在外部写入器中留下部分字节 |
 | `value` | 从 Serde 事件构造受预算约束的 `serde_json::Value` | Serde seed 看不到数字的原始文本，也不能执行文本级数值范围检查 |
-| `value::traverse` | 迭代读取或原地修改已构造的值树 | 修改按步骤生效；访问器或输出预算失败不会回滚此前的改动 |
+| `value::traverse` | 迭代读取或原地修改已构造的值树 | 修改按步骤生效；新增后代的访问器要自行限制工作量，访问器或输出预算失败会保留此前的改动 |
 
 `qubit-budget` 负责限制、资源标识、预算和会话；`qubit-json` 负责 JSON 规范化、词法校验、
 文本编解码、值构造和遍历。
 
 JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemory` 表示单独配置的辅助容量上限不足，
 该上限通过 `JcsEncoder::with_limits(limits, max_working_bytes)` 设置。
+值准入发生在渲染之前，准入遍历栈不受这项工作内存限制约束。需要限制这段遍历时，应同时配置
+`max_depth` 和 `max_nodes`。工作内存限制约束的是 renderer 集合容量，不是精确的堆内存上限。
 
 ## 明确边界
 
@@ -168,6 +170,7 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 - 普通文本解码和编码要求负整数装入 `i64`、非负整数装入 `u64`；`JcsDecoder` 则将所有数字舍入为
   有限 `f64`。例如 `9007199254740993` 会变成 `9007199254740992`。要求精确保留各位数字时，使用字符串或领域类型。
 - `JsonValueEncoder` 只识别 `serde_json::Number` 对应的精确私有 Serde struct 协议；普通 map 即使字段同名也仍是对象。格式错误的 `RawValue` 与 `Number` 协议分别返回 `JsonSerializerStateError::InvalidRawValueProtocol` 和 `InvalidNumberProtocol`。seed 只看到原生数字事件，无法从普通 map 猜出私有协议来源。
+- 固定的 127 层容器保护同时适用于 JCS 解码和 `JsonValueEncoder` 对真实 `RawValue` 的投影；它独立于可配置、包含根值的 `max_depth`。`InvalidRawValue` 表示严格物化契约拒绝输入，原因不只限于语法错误。普通 newtype 保持透明；需要按原始 JSON 物化时应使用 `serde_json::value::RawValue`。
 - 树遍历按现有 `serde_json::Number` 的紧凑显示长度计量。启用 `arbitrary_precision` 时，树读取器可计量已保存的宽数字（例如 `1e400`）；普通和 JCS 编码器仍按各自规则拒绝超出有限范围的数字。
 - 所有不可信边界都应设置有限资源上限。`unlimited()` 会同时取消值、输出和工作内存限制，
   只应用于可信输入或已由其他层完成准入的数据；外层输出上限不能替代解析前的输入与结构准入。

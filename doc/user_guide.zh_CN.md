@@ -167,6 +167,27 @@ JCS 数值遵循 IEEE 754 双精度模型。包含 `9007199254740993` 的值可�
 工作内存覆盖 renderer 遍历栈和活动对象成员表的辅助容量，不包含输入 `Value`、分配器元数据或输出缓冲容量。
 `unlimited()` 会同时取消值、输出和工作内存限制，只应处理可信数据或已由其他层准入的数据。
 
+配置值限制后，值准入会先于渲染执行；它的遍历栈不受 `max_working_bytes` 限制。可同时设置
+`max_depth` 限制准入遍历深度、`max_nodes` 限制树的节点数，并为输出和 renderer 容量分别设限：
+
+```rust
+use qubit_budget::json::{JsonEncodeLimits, JsonResource};
+use qubit_json::encode::JcsEncoder;
+
+let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+    .max_depth(32)
+    .max_nodes(1024)
+    .max_output_bytes(64 * 1024)
+    .build();
+let mut encoder = JcsEncoder::with_limits(limits, 8 * 1024);
+let canonical = encoder.to_vec(&serde_json::json!({"status": "ready"}))?;
+assert_eq!(canonical, br#"{"status":"ready"}"#);
+# Ok::<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>>(())
+```
+
+这些配置限制逻辑资源和 renderer 集合容量，不代表精确堆内存上限；输入 `Value`、准入栈、分配器
+元数据及输出缓冲容量都不包含在内。
+
 ### 按 JCS 规则解码原始文本
 
 若输入来自原始 JSON 文本，使用 feature-gated 的 `JcsDecoder`，而不是先用普通 `JsonDecoder` 构造
@@ -242,6 +263,11 @@ assert!(matches!(
 指向第二个键的开引号；`MaterializationDepthLimit { limit, line, column }` 表示触发固定构造保护。
 该上限为 127 层容器，与包含根值的 `max_depth` 不同。公开错误族还包括 `JcsEncodeError`、
 `JsonSerializationError` 以及普通的 `JsonDecodeError` / `JsonEncodeError` 领域错误。
+
+`JsonValueEncoder` 物化真正的 `serde_json::value::RawValue` 时也受固定 127 层容器限制。这是
+RawValue/JCS 物化保护，不是普通 JSON 编解码入口的通用深度限制。
+`JsonSerializationErrorKind::InvalidRawValue` 表示严格物化契约拒绝了输入，重复键或深度超限等情况也会
+触发它，并非只表示字节不符合 JSON 语法。
 
 同一对象中的键按 JSON 反转义后的字符串查重，因此 `"x"` 与 `"\u0078"` 重复；嵌套对象也执行同样检查。
 Unicode 不做 NFC/NFD 归一化，因而不同码点序列仍是不同键。合法 JSON 的空白和成员顺序不要求规范；
@@ -449,7 +475,10 @@ assert_eq!(value, json!({"name": "qubit"}));
 
 错误分别是 `JsonTreeMutateError::InputBudget`、`::Visitor` 和 `::OutputBudget`；访问器或输出
 预算失败不会回滚已经完成的修改。访问器可以返回 `JsonTreeControl::SkipSubtree` 跳过后代回调，
-但最终输出记账仍会覆盖修改后值树的全部后代。
+但最终输出记账仍会覆盖修改后值树的全部后代。reader 在每次回调前准入对应节点；mutator 则先准入
+完整输入，再访问节点（包括此前回调新增的后代），最后准入完整结果。输出限制不会限制回调次数或
+中间扩展量；会新增后代的访问器要自行保证遍历能终止。`SkipSubtree` 只跳过该节点的后代回调，
+不会跳过最终输出准入。
 
 ## 数字入口、私有协议与 Display
 
@@ -460,6 +489,11 @@ assert_eq!(value, json!({"name": "qubit"}));
 - **JCS 文本：** `JcsDecoder` 对所有 token（包括整数词法）使用有限 IEEE-754 binary64。例如 `9007199254740993` 会舍入为 `9007199254740992`；`1e400` 这类溢出会被拒绝。解码还会拒绝反转义后重复的键，并保留 127 层容器物化保护。
 
 encoder 识别 serde_json 的两种精确私有 struct 协议：`RawValue` 与 `Number`。真实 Number 协议只有一个字符串 payload，通过 `serialize_str` 或一次 `collect_str` 提交；文本在输出或 Value 构造前会完成验证。普通 map 即使含有 `$serde_json::private::Number` 键，仍按对象处理。手写协议结构不合法时返回 `JsonSerializationErrorKind::InvalidSerializerState`，其状态原因是 `JsonSerializerStateError::InvalidRawValueProtocol` 或 `InvalidNumberProtocol`。错误类型是穷举类型，下游 `match` 必须增加新变体处理。诊断不会保留私有 payload 文本。
+
+`JsonValueEncoder` 会透明序列化所有 newtype struct，不根据名称特殊处理。自定义类型即使叫
+`$serde_json::private::RawValue`，它的字符串、布尔值或 `Option` payload 也仍按普通值保留，不会重新解析。
+需要把 raw JSON 文本物化为 Value 时，应使用真正的 `serde_json::value::RawValue`。手写 serializer 若声明
+compound 长度为零后仍发送元素或字段，会以 `InvalidSerializerState` 失败；合法空容器仍可正常编码。
 
 把 `Display` 编码成 JSON 字符串或对象键时，collector 会先检查本次写入后完整字符串/键的预计测量值，再追加该分块。预检成功不扣预算；格式化完成后才对完整测量准入一次。这能阻止库的 collector 在字符串或键超过限制后继续增长，但库无法控制用户 `Display::fmt` 内部的任意分配、分配器元数据或进程 RSS。`RawValue`/Number 的原始输出 payload 仍要等完整文本收集后才能校验 JSON 结构；收集期间仍受输出字节上限约束。
 

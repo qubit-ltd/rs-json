@@ -198,6 +198,31 @@ input `Value`, allocator metadata, or output buffer capacity. `unlimited()`
 selects unlimited value, output, and working-memory budgets, so reserve it for
 trusted or separately admitted data.
 
+Value admission runs before rendering when value limits are configured. Its
+traversal stack is not covered by `max_working_bytes`; set `max_depth` to bound
+that pass and `max_nodes` to bound the admitted tree. For example, a service
+that accepts a materialized value can combine finite value, output, and
+renderer limits as follows:
+
+```rust
+use qubit_budget::json::{JsonEncodeLimits, JsonResource};
+use qubit_json::encode::JcsEncoder;
+
+let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+    .max_depth(32)
+    .max_nodes(1024)
+    .max_output_bytes(64 * 1024)
+    .build();
+let mut encoder = JcsEncoder::with_limits(limits, 8 * 1024);
+let canonical = encoder.to_vec(&serde_json::json!({"status": "ready"}))?;
+assert_eq!(canonical, br#"{"status":"ready"}"#);
+# Ok::<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>>(())
+```
+
+These limits bound configured logical resources and renderer collection
+capacities. They do not promise an exact heap limit or include the existing
+input `Value`, admission stack, allocator metadata, or output buffer.
+
 ### Decode raw text with JCS semantics
 
 For raw JSON text, use the feature-gated `JcsDecoder` instead of first building
@@ -283,6 +308,13 @@ reports the fixed construction guard. The limit is 127 containers, distinct
 from root-inclusive `max_depth`. Public error families also include
 `JcsEncodeError`, `JsonSerializationError`, and the ordinary
 `JsonDecodeError` / `JsonEncodeError` domain errors.
+
+The same fixed limit applies when `JsonValueEncoder` materializes a genuine
+`serde_json::value::RawValue`. It is a RawValue/JCS materialization guard, not
+a general depth limit for ordinary JSON encoding or decoding.
+`JsonSerializationErrorKind::InvalidRawValue` identifies rejection by that
+strict materialization contract, including duplicate keys or depth, and does
+not mean only that the bytes are syntactically invalid.
 
 Keys are compared after JSON unescaping, so `"x"` and `"\u0078"` are
 duplicates, including in nested objects. Unicode is not normalized to NFC or
@@ -529,7 +561,13 @@ Its errors are
 `JsonTreeMutateError::InputBudget`, `::Visitor`, and `::OutputBudget`; visitor
 and output failures retain mutations already made to the value. A visitor can
 return `JsonTreeControl::SkipSubtree` to skip descendant callbacks, but final
-output accounting still covers every resulting descendant.
+output accounting still covers every resulting descendant. The reader admits
+each node before its callback. The mutator admits the complete input first,
+then visits nodes (including descendants introduced by earlier callbacks),
+then admits the complete result. Output limits do not cap callback count or
+intermediate expansion: visitors that add descendants must ensure their own
+traversal terminates. `SkipSubtree` skips callback descent at that node; it
+does not skip final output admission.
 
 ## Numeric paths, private protocols, and Display
 
@@ -540,6 +578,15 @@ Choose one of three numeric boundaries deliberately:
 - **JCS text:** `JcsDecoder` uses finite IEEE-754 binary64 for every token, including integer lexemes. For example, `9007199254740993` rounds to `9007199254740992`; overflow such as `1e400` is rejected. It also rejects keys duplicated after JSON unescaping and keeps the 127-container materialization guard.
 
 The encoder recognizes two exact serde_json private struct protocols: `RawValue` and `Number`. A genuine Number protocol contains one string payload, accepted through `serialize_str` or one `collect_str`; the text is validated before emission or Value construction. A normal map containing a key named `$serde_json::private::Number` remains an object. Invalid hand-written protocol shapes produce `JsonSerializationErrorKind::InvalidSerializerState` with `JsonSerializerStateError::InvalidRawValueProtocol` or `InvalidNumberProtocol`. The error type is exhaustive, so downstream `match` expressions must handle the added variant. Diagnostics do not retain the private payload text.
+
+Newtype structs are serialized transparently by `JsonValueEncoder`,
+regardless of their name. A custom newtype named
+`$serde_json::private::RawValue` keeps its string, boolean, or `Option` payload
+as that ordinary value; it is not parsed again as JSON. Use a genuine
+`serde_json::value::RawValue` when raw JSON text must be materialized. A custom
+serializer that declares a compound length of zero and then emits an element
+or field fails with `InvalidSerializerState`; legitimate empty containers
+remain valid.
 
 For a `Display` value encoded as a JSON string or object key, each formatting chunk is checked against the prospective complete string/key measurement before the collector appends it. A successful preview does not consume budget; after formatting, the complete measurement is admitted once. This prevents the library collector from growing past configured string/key limits. It cannot control allocations made internally by user `Display::fmt`, allocator metadata, or process RSS. For a `RawValue`/Number raw-output payload, the JSON structure is validated only after the complete text has been collected; output-byte bounds still apply during collection.
 
