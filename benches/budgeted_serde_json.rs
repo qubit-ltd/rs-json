@@ -7,6 +7,7 @@
 // =============================================================================
 //! Criterion benchmarks for budget-aware JSON decoding and encoding.
 
+use std::fmt;
 use std::hint::black_box;
 
 use criterion::BenchmarkId;
@@ -28,6 +29,9 @@ use qubit_json::decode::NormalizingJsonDecoder;
 use qubit_json::encode::JsonEncoder;
 use serde::Deserialize;
 use serde::Serialize;
+use serde::Serializer;
+use serde::ser::SerializeSeq;
+use serde::ser::SerializeStruct;
 use serde_json::value::RawValue;
 
 mod internal;
@@ -38,6 +42,142 @@ const DOCUMENT_SIZES: [usize; 3] = [1_024, 65_536, 1_048_576];
 const RECORD: &[u8] = br#"{"id":7,"text":"benchmark-record"}"#;
 const DOCUMENT_PREFIX: &[u8] = br#"{"records":["#;
 const DOCUMENT_SUFFIX: &[u8] = br#"]}"#;
+const SERDE_JSON_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
+const NUMBER_LEXEME: &str = "1234567890.125";
+const T10_PAYLOAD_SIZES: [usize; 2] = [1_024, 65_536];
+
+/// Emits one valid private serde_json Number protocol value.
+struct PrivateNumber(&'static str);
+
+impl Serialize for PrivateNumber {
+    /// Sends the numeric lexeme through serde_json's private Number contract.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(SERDE_JSON_NUMBER_TOKEN, 1)?;
+        state.serialize_field(SERDE_JSON_NUMBER_TOKEN, self.0)?;
+        state.end()
+    }
+}
+
+/// Holds a fixed number of identical private Number protocol values.
+struct PrivateNumberFixture(Vec<PrivateNumber>);
+
+impl Serialize for PrivateNumberFixture {
+    /// Serializes the fixture as a JSON array of private Number values.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+        for number in &self.0 {
+            sequence.serialize_element(number)?;
+        }
+        sequence.end()
+    }
+}
+
+/// Formats a fixed ASCII payload in bounded chunks for `collect_str`.
+struct DisplayPayload<'a>(&'a str);
+
+impl fmt::Display for DisplayPayload<'_> {
+    /// Writes the payload as 64-byte ASCII chunks.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for start in (0..self.0.len()).step_by(64) {
+            let end = (start + 64).min(self.0.len());
+            formatter.write_str(&self.0[start..end])?;
+        }
+        Ok(())
+    }
+}
+
+/// Routes a Display value through Serde's collected-string path.
+struct CollectedDisplay<'a>(&'a str);
+
+impl Serialize for CollectedDisplay<'_> {
+    /// Delegates formatting to `Serializer::collect_str`.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(&DisplayPayload(self.0))
+    }
+}
+
+/// Builds a repeatable ASCII payload with the requested byte length.
+fn display_payload(size: usize) -> String {
+    const CHUNK: &str = "display-collector-payload-0123456789";
+    CHUNK.chars().cycle().take(size).collect()
+}
+
+/// Registers the T10 private Number and Display collector workloads.
+fn benchmark_t10_workloads(criterion: &mut Criterion) {
+    let mut number_group = criterion.benchmark_group("t10-private-number-protocol");
+    for target_bytes in T10_PAYLOAD_SIZES {
+        let count = target_bytes / NUMBER_LEXEME.len();
+        let fixture = PrivateNumberFixture((0..count).map(|_| PrivateNumber(NUMBER_LEXEME)).collect());
+        let payload_bytes = count * NUMBER_LEXEME.len();
+        let output_bytes = count * NUMBER_LEXEME.len() + count.saturating_sub(1) + 2;
+        number_group.throughput(Throughput::Bytes(output_bytes as u64));
+        for (mode, bounded) in [("unlimited", false), ("exact-bounds", true)] {
+            number_group.bench_with_input(
+                BenchmarkId::new(format!("{mode}/number-count-{count}"), output_bytes),
+                &fixture,
+                |bencher, fixture| {
+                    bencher.iter(|| {
+                        let mut encoder = if bounded {
+                            let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+                                .max_output_bytes(output_bytes)
+                                .max_nodes(count + 1)
+                                .max_payload_bytes(payload_bytes)
+                                .max_number_bytes(payload_bytes)
+                                .build();
+                            JsonEncoder::new(JsonEncodeSession::from_limits(limits))
+                        } else {
+                            JsonEncoder::unlimited()
+                        };
+                        black_box(
+                            encoder
+                                .to_vec(black_box(fixture))
+                                .expect("private Number benchmark fixture must encode"),
+                        );
+                    });
+                },
+            );
+        }
+    }
+    number_group.finish();
+
+    let mut display_group = criterion.benchmark_group("t10-display-collector");
+    for payload_bytes in T10_PAYLOAD_SIZES {
+        let payload = display_payload(payload_bytes);
+        let output_bytes = payload_bytes + 2;
+        display_group.throughput(Throughput::Bytes(output_bytes as u64));
+        for (mode, bounded) in [("unlimited", false), ("exact-bounds", true)] {
+            display_group.bench_with_input(BenchmarkId::new(mode, output_bytes), &payload, |bencher, payload| {
+                bencher.iter(|| {
+                    let mut encoder = if bounded {
+                        let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+                            .max_output_bytes(output_bytes)
+                            .max_nodes(1)
+                            .max_payload_bytes(payload_bytes)
+                            .build();
+                        JsonEncoder::new(JsonEncodeSession::from_limits(limits))
+                    } else {
+                        JsonEncoder::unlimited()
+                    };
+                    black_box(
+                        encoder
+                            .to_vec(&CollectedDisplay(black_box(payload)))
+                            .expect("Display collector benchmark fixture must encode"),
+                    );
+                });
+            });
+        }
+    }
+    display_group.finish();
+}
 
 /// Creates a normalization policy that performs no text rewriting.
 fn no_normalization_policy() -> NormalizingJsonDecodePolicy {
@@ -434,5 +574,5 @@ fn encode(criterion: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, decode, encode);
+criterion_group!(benches, decode, encode, benchmark_t10_workloads);
 criterion_main!(benches);
