@@ -12,7 +12,7 @@ changes. Results depend on the hardware, inputs, and enabled limits.
 | `decoder_bench` | Strict and normalizing decoding, UTF-8 entry points, downstream-shaped inputs, control characters, and failure paths |
 | `budgeted_serde_json` | Decode and encode comparisons with direct `serde_json`, multiple input sizes, and separate budget modes |
 | `tree_bench` | Iterative readers and mutators over large arrays, large objects, and deep trees |
-| `jcs_bench` | JCS encoding of large objects, deep objects, and large arrays, with bounded and unlimited configurations and a direct canonicalizer control |
+| `jcs_bench` | JCS encoding of large objects, deep objects, and large arrays, with bounded and unlimited configurations and a direct canonicalizer control; `jcs-depth` measures single-child arrays at increasing depths |
 | `decoder_bench` / `jcs_decode` | JCS text decoding of number arrays, nested objects, ordinary/escaped keys, and duplicate-key rejection with finite/unlimited budgets and fresh/reused sessions |
 
 Run from the repository root:
@@ -139,6 +139,70 @@ cargo bench --manifest-path /data/working/qubit/rust-common/.worktrees/rs-json/i
 This is a single observation from the pre-0.12 baseline commit, not a 0.12 measurement or a before/after comparison. No benchmark was run for the 0.12 candidate in this documentation task. It provides no performance conclusion and does not measure allocation counts
 or peak memory. The fixture does not represent escaped strings, large objects,
 bounded budgets, reused sessions, or application-level work.
+## Recorded JCS depth sample (2026-10-23)
+
+The `jcs-depth` group measures a single-child array around a `null` leaf at
+depths 32, 128, 512, 2,048, and 8,192. Each fixture is built iteratively,
+checked against expected bytes outside the timed operation, and dismantled
+iteratively. It compares `JcsEncoder::unlimited()` with finite limits of
+`max_depth = depth + 1`, `max_nodes = depth + 1`,
+`max_output_bytes = 2 * depth + 4`, and the existing 1 MiB auxiliary-memory
+limit. Output lengths are 68, 260, 1,028, 4,100, and 16,388 bytes.
+
+Environment: base revision `ae26c342c66025302ed27f8e7f6031fdc90994d1`, with
+the implementation worktree modified; Rust/Cargo 1.94.0; x86_64 Linux
+7.0.0-38-generic; Intel Core i5-9600K, 6 cores at 3.70 GHz. No CPU affinity
+was set and CPU frequency scaling was enabled. The host was not isolated.
+Criterion used its Plotters backend because Gnuplot was unavailable. The
+benchmark profile is optimized with LTO and one codegen unit; timing runs used
+the system allocator without the allocation counter. Dependencies were locked.
+
+Each timing batch used 20 samples, 1 second warm-up, and 1 second measurement.
+The values below are Criterion's reported time intervals; each numbered batch
+was a separate command and baseline. A lack of CPU isolation is visible in the
+variation across batches.
+
+| Depth | Path | Batch 1 (µs) | Batch 2 (µs) | Batch 3 (µs) | Successful reallocations | Cumulative realloc request bytes | Output bytes |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 32 | unlimited | 6.0173–7.6997 | 3.5546–4.6375 | 4.1912–5.9725 | 35 | 17,104 | 68 |
+| 32 | finite | 7.1184–10.820 | 5.0491–5.8028 | 4.8082–5.6065 | 40 | 31,984 | 68 |
+| 128 | unlimited | 8.9541–12.204 | 30.351–41.185 | 25.774–38.384 | 133 | 265,168 | 260 |
+| 128 | finite | 27.198–39.262 | 22.775–35.555 | 22.287–31.982 | 140 | 326,128 | 260 |
+| 512 | unlimited | 67.779–94.772 | 66.182–78.464 | 65.233–93.017 | 519 | 4,206,544 | 1,028 |
+| 512 | finite | 62.206–91.545 | 60.150–93.850 | 99.432–150.00 | 528 | 4,451,824 | 1,028 |
+| 2,048 | unlimited | 234.93–318.13 | 257.22–344.40 | 188.67–253.32 | 2,057 | 67,157,968 | 4,100 |
+| 2,048 | finite | 412.47–502.65 | 385.67–483.98 | 167.52–268.07 | 2,068 | 68,140,528 | 4,100 |
+| 8,192 | unlimited | 962.63–1,724.8 | 865.99–1,183.2 | 480.06–659.14 | 8,203 | 1,073,938,384 | 16,388 |
+| 8,192 | finite | 858.12–1,172.3 | 1,764.8–2,698.7 | 1,080.8–1,532.2 | 8,216 | 1,077,870,064 | 16,388 |
+
+Timing commands (with `review-depth-1`, `review-depth-2`, and
+`review-depth-3` as the respective `--save-baseline` values):
+
+```bash
+cargo bench --bench jcs_bench --features jcs --locked -- jcs-depth --sample-size 20 --warm-up-time 1 --measurement-time 1 --save-baseline review-depth-1
+JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --bench jcs_bench --features "jcs jcs-allocation-diagnostics" --locked -- jcs-depth
+```
+
+The allocation command was run separately from all timing batches. Its
+diagnostics counted successful `realloc` calls and summed their requested new
+sizes; they include allocations throughout the complete encode operation,
+including output and admission state. They are not actual bytes copied, peak
+live bytes, RSS, or an isolated measurement of the renderer stack.
+
+The count of reallocations grows roughly with depth, while cumulative request
+bytes rise much faster: at depth 8,192, the diagnostics reported about 1.07 GB
+of requested realloc sizes for a 16,388-byte output. This is evidence of
+superlinear allocation-request traffic in this fixture and merits separate
+attribution work. It does not establish the number of bytes actually moved or
+prove a particular container is responsible. Timing intervals varied across
+batches and do not isolate an algorithmic cause. This measurement does not
+justify changing production growth policy; no production expansion strategy
+was changed in this work.
+
+This is a measurement of the modified candidate only, not a before/after
+comparison. The `jcs-depth` benchmarks and diagnostics remain available for
+follow-up measurements.
+
 ## Interpretation boundaries
 
 Strict codecs perform checks that direct `serde_json` may not perform. In

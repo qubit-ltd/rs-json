@@ -47,6 +47,10 @@ static ALLOCATION_MEASUREMENT_ACTIVE: AtomicBool = AtomicBool::new(false);
 static ALLOCATION_COUNT: AtomicUsize = AtomicUsize::new(0);
 #[cfg(feature = "jcs-allocation-diagnostics")]
 static ALLOCATED_BYTES: AtomicUsize = AtomicUsize::new(0);
+#[cfg(feature = "jcs-allocation-diagnostics")]
+static REALLOCATION_COUNT: AtomicUsize = AtomicUsize::new(0);
+#[cfg(feature = "jcs-allocation-diagnostics")]
+static REALLOCATED_REQUEST_BYTES: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(feature = "jcs-allocation-diagnostics")]
 #[global_allocator]
@@ -73,6 +77,10 @@ unsafe impl GlobalAlloc for AllocationCounter {
     unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         let resized = unsafe { System.realloc(pointer, layout, new_size) };
         record_allocation(resized, new_size);
+        if !resized.is_null() && ALLOCATION_MEASUREMENT_ACTIVE.load(Ordering::Relaxed) {
+            REALLOCATION_COUNT.fetch_add(1, Ordering::Relaxed);
+            REALLOCATED_REQUEST_BYTES.fetch_add(new_size, Ordering::Relaxed);
+        }
         resized
     }
 }
@@ -101,14 +109,18 @@ fn record_allocation(pointer: *mut u8, size: usize) {
 fn report_allocations(shape: &str, path: &str, operation: impl FnOnce() -> Vec<u8>) {
     ALLOCATION_COUNT.store(0, Ordering::Relaxed);
     ALLOCATED_BYTES.store(0, Ordering::Relaxed);
+    REALLOCATION_COUNT.store(0, Ordering::Relaxed);
+    REALLOCATED_REQUEST_BYTES.store(0, Ordering::Relaxed);
     ALLOCATION_MEASUREMENT_ACTIVE.store(true, Ordering::SeqCst);
     let output = operation();
     ALLOCATION_MEASUREMENT_ACTIVE.store(false, Ordering::SeqCst);
 
     eprintln!(
-        "JCS_ALLOC shape={shape} path={path} allocation_count={} allocated_bytes={} output_bytes={} (includes output buffers and all operation allocations)",
+        "JCS_ALLOC shape={shape} path={path} allocation_count={} allocated_bytes={} reallocation_count={} reallocated_request_bytes={} output_bytes={} (includes output buffers and all operation allocations)",
         ALLOCATION_COUNT.load(Ordering::Relaxed),
         ALLOCATED_BYTES.load(Ordering::Relaxed),
+        REALLOCATION_COUNT.load(Ordering::Relaxed),
+        REALLOCATED_REQUEST_BYTES.load(Ordering::Relaxed),
         output.len(),
     );
     drop(output);
@@ -141,6 +153,60 @@ fn deep_object() -> Value {
         value = serde_json::json!({"depth": depth, "child": value});
     }
     value
+}
+
+/// Builds a single-child array chain iteratively to avoid recursive setup.
+///
+/// # Parameters
+///
+/// * `depth` — the number of array layers around the null leaf.
+///
+/// # Returns
+///
+/// The nested array fixture.
+fn deep_array(depth: usize) -> Value {
+    let mut value = Value::Null;
+    for _ in 0..depth {
+        value = Value::Array(vec![value]);
+    }
+    value
+}
+
+/// Dismantles a single-child array chain without recursive destruction.
+///
+/// # Parameters
+///
+/// * `value` — the deep array fixture to dismantle.
+///
+/// # Returns
+///
+/// This function returns after dropping the leaf value.
+fn drop_deep_array(mut value: Value) {
+    loop {
+        match value {
+            Value::Array(mut items) if items.len() == 1 => {
+                value = items.pop().expect("the fixture has exactly one child");
+            }
+            _ => break,
+        }
+    }
+}
+
+/// Builds the expected JCS bytes for a single-child array chain.
+///
+/// # Parameters
+///
+/// * `depth` — the number of array layers around the null leaf.
+///
+/// # Returns
+///
+/// The canonical JSON representation of the fixture.
+fn expected_deep_array(depth: usize) -> Vec<u8> {
+    let mut output = Vec::with_capacity(2 * depth + 4);
+    output.resize(depth, b'[');
+    output.extend_from_slice(b"null");
+    output.resize(2 * depth + 4, b']');
+    output
 }
 
 /// Builds a wide scalar array.
@@ -272,5 +338,65 @@ fn benchmark_jcs_encoding(criterion: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, benchmark_jcs_encoding);
+/// Registers deep-array JCS measurements across increasing nesting depths.
+///
+/// # Parameters
+///
+/// * `criterion` — the Criterion harness that receives the benchmark group.
+///
+/// # Returns
+///
+/// This function returns after registering and finishing the benchmark group.
+fn benchmark_jcs_depth(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("jcs-depth");
+    for depth in [32_usize, 128, 512, 2048, 8192] {
+        let value = deep_array(depth);
+        let expected = expected_deep_array(depth);
+        let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+            .max_output_bytes(expected.len())
+            .max_depth(depth + 1)
+            .max_nodes(depth + 1)
+            .build();
+        assert_eq!(JcsEncoder::unlimited().to_vec(&value).unwrap(), expected);
+        assert_eq!(
+            JcsEncoder::with_limits(limits, FINITE_WORKING_BYTES)
+                .to_vec(&value)
+                .unwrap(),
+            expected,
+        );
+
+        #[cfg(feature = "jcs-allocation-diagnostics")]
+        if std::env::var_os("JCS_ALLOCATION_DIAGNOSTICS").is_some() {
+            let shape = format!("deep-array-{depth}");
+            report_allocations(&shape, "jcs-unlimited", || {
+                JcsEncoder::unlimited().to_vec(&value).unwrap()
+            });
+            report_allocations(&shape, "jcs-finite-budgets", || {
+                JcsEncoder::with_limits(limits, FINITE_WORKING_BYTES)
+                    .to_vec(&value)
+                    .unwrap()
+            });
+            drop_deep_array(value);
+            continue;
+        }
+
+        group.throughput(Throughput::Bytes(expected.len() as u64));
+        group.bench_with_input(BenchmarkId::new("unlimited", depth), &value, |bencher, value| {
+            bencher.iter(|| black_box(JcsEncoder::unlimited().to_vec(black_box(value)).unwrap()));
+        });
+        group.bench_with_input(BenchmarkId::new("finite", depth), &value, |bencher, value| {
+            bencher.iter(|| {
+                black_box(
+                    JcsEncoder::with_limits(limits, FINITE_WORKING_BYTES)
+                        .to_vec(black_box(value))
+                        .unwrap(),
+                )
+            });
+        });
+        drop_deep_array(value);
+    }
+    group.finish();
+}
+
+criterion_group!(benches, benchmark_jcs_encoding, benchmark_jcs_depth);
 criterion_main!(benches);
