@@ -9,7 +9,6 @@
 
 use std::fmt::Display;
 use std::fmt::Write as _;
-use std::str::FromStr;
 
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
@@ -19,6 +18,7 @@ use serde::Serializer;
 use serde_json::Map;
 use serde_json::Number;
 use serde_json::Value;
+use serde_json::to_string;
 
 use super::JsonValueCompound;
 use crate::encode::JsonIntegerSignedness;
@@ -186,18 +186,18 @@ impl Serializer for JsonValueSerializer {
             .and_then(|value| self.serialize_u64(value))
     }
 
-    /// Serializes a finite f32 without widening its display representation.
+    /// Serializes a finite f32 using serde_json's f32 JSON representation.
     ///
     /// # Errors
     ///
     /// Returns a non-finite value error for NaN or infinity, or an invalid
-    /// number representation error if the formatted value cannot be parsed.
+    /// number representation error if serde_json cannot format the value.
     fn serialize_f32(self, value: f32) -> Result<Value, Self::Error> {
         if !value.is_finite() {
             return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
         }
-        Number::from_str(&value.to_string())
-            .map(Value::Number)
+        to_string(&value)
+            .and_then(|text| serde_json::from_str(&text))
             .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))
     }
 

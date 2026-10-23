@@ -9,12 +9,12 @@
 
 use std::fmt::Display;
 use std::fmt::Write as _;
-use std::str::FromStr;
 
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Impossible;
 use serde_json::Number;
+use serde_json::to_string;
 
 use crate::encode::JsonMapKeyKind;
 use crate::encode::JsonSerializationError;
@@ -135,19 +135,17 @@ impl Serializer for JsonValueMapKeySerializer {
     ///
     /// # Returns
     ///
-    /// The finite value in canonical decimal text.
+    /// The finite value in serde_json's f32 JSON representation.
     ///
     /// # Errors
     ///
     /// Returns `NonFiniteFloat` for a non-finite input or
-    /// `InvalidNumberRepresentation` when the decimal text cannot be parsed as
-    /// a JSON number.
+    /// `InvalidNumberRepresentation` when serde_json cannot format the value.
     fn serialize_f32(self, value: f32) -> Result<String, Self::Error> {
         if !value.is_finite() {
             return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
         }
-        Number::from_str(&value.to_string())
-            .map(|number| number.to_string())
+        to_string(&value)
             .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))
     }
 

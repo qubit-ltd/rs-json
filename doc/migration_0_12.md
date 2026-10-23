@@ -4,6 +4,10 @@
 
 This guide covers the source and behavior changes from `qubit-json` 0.11 to 0.12. The candidate requires Rust 1.94 and pairs `qubit-json` 0.12 with `qubit-budget` 0.9.1.
 
+## f32 value and object-key representation
+
+This checkout fixes f32 materialization and object-key consistency by using serde_json's f32 JSON representation. A `1.0_f32` object key changes from `"1"` to `"1.0"`, matching direct text encoding. Update lookups that depend on the old key; when an integer key is intended, explicitly serialize it as an integer or string. Finite f32 values can also be materialized and strictly encoded when `arbitrary_precision` is enabled. This checkout change does not claim that a release containing it has been published. No downstream source migration or version adjustment is required.
+
 ## Update dependency versions together
 
 Use one `qubit-budget` version for every JSON limits, resource, session, and transaction type in the dependency graph:

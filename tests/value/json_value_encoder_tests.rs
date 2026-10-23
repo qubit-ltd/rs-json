@@ -9,6 +9,7 @@
 
 use std::fmt;
 
+use qubit_json::decode::JsonDecoder;
 use qubit_json::encode::JsonEncoder;
 use qubit_json::encode::JsonIntegerSignedness;
 use qubit_json::encode::JsonMapKeyKind;
@@ -51,9 +52,9 @@ impl Serialize for DuplicateKeyProbe {
 }
 
 /// Emits one floating-point map key.
-struct FloatKeyProbe(f64);
+struct FloatKeyProbe<T>(T);
 
-impl Serialize for FloatKeyProbe {
+impl<T: Serialize> Serialize for FloatKeyProbe<T> {
     /// Serializes one map entry whose key is not JSON-compatible.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -445,6 +446,66 @@ fn test_json_value_encoder_preserves_float32_semantics() {
         source
     );
     assert_ne!(text, to_string(&widened).expect("widened number should render"));
+}
+
+#[test]
+fn test_json_value_encoder_f32_keys_match_direct_encoding() {
+    for key in [
+        1.0_f32,
+        -1.0,
+        0.0,
+        -0.0,
+        1.5,
+        1e20,
+        -1e20,
+        f32::MIN_POSITIVE,
+        f32::from_bits(1),
+        f32::MAX,
+    ] {
+        let probe = FloatKeyProbe(key);
+        let projected = JsonValueEncoder::new().encode(&probe).unwrap();
+        let direct = JsonEncoder::unlimited().to_vec(&probe).unwrap();
+        assert_eq!(to_vec(&projected).unwrap(), direct, "key bits={:08x}", key.to_bits());
+    }
+}
+
+#[test]
+fn test_json_value_encoder_f32_values_remain_strictly_encodable() {
+    for source in [
+        1.0_f32,
+        -1.0,
+        0.0,
+        -0.0,
+        1.5,
+        1e20,
+        -1e20,
+        f32::MIN_POSITIVE,
+        f32::from_bits(1),
+        f32::MAX,
+        f32::from_bits(0xC65B_9806),
+    ] {
+        let direct = JsonEncoder::unlimited().to_vec(&source).unwrap();
+        let expected: Value = JsonDecoder::unlimited().decode_utf8(&direct).unwrap();
+        let projected = JsonValueEncoder::new().encode(&source).unwrap();
+        assert_eq!(projected, expected, "value bits={:08x}", source.to_bits());
+        let encoded = JsonEncoder::unlimited().to_vec(&projected).unwrap();
+        let _: Value = JsonDecoder::unlimited().decode_utf8(&encoded).unwrap();
+        assert_eq!(
+            from_value::<f32>(projected).unwrap().to_bits(),
+            source.to_bits(),
+            "f32 round trip must retain the original bits",
+        );
+    }
+}
+
+#[test]
+fn test_json_value_encoder_f32_rejects_non_finite_values_and_keys() {
+    for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let error = JsonValueEncoder::new().encode(&value).unwrap_err();
+        assert_eq!(error.kind(), JsonSerializationErrorKind::NonFiniteFloat);
+        let error = JsonValueEncoder::new().encode(&FloatKeyProbe(value)).unwrap_err();
+        assert_eq!(error.kind(), JsonSerializationErrorKind::NonFiniteFloat);
+    }
 }
 
 /// Accepts finite map keys using the same text as the strict text encoder.

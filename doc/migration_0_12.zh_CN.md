@@ -4,6 +4,10 @@
 
 本文说明从 `qubit-json` 0.11 升级到 0.12 时的源码与行为变化。候选版本要求 Rust 1.94，并与 `qubit-budget` 0.9.1 配套使用。
 
+## f32 值与对象键表示
+
+本 checkout 修复了 f32 物化及对象键一致性：使用 serde_json 的 f32 JSON 表示。因此，`1.0_f32` 对象键会从 `"1"` 变为 `"1.0"`，与直接文本编码一致。依赖旧键名的查询需要更新；确需整数键时，应显式序列化为整数或字符串。启用 `arbitrary_precision` 时，有限 f32 也可以物化并通过严格编码。本 checkout 的修改不表示包含该修改的版本已发布。无需下游源码迁移或版本调整。
+
 ## 同步更新依赖版本
 
 依赖图中的 JSON limits、resource、session 和 transaction 类型应统一来自同一版 `qubit-budget`：

@@ -23,11 +23,30 @@ use qubit_json::value::AccountingJsonValueSeed;
 use qubit_json::value::DuplicateKeyRejectingJsonValueSeed;
 use qubit_json::value::JsonValueEncoder;
 use qubit_json::value::traverse::JsonTreeBudgetTracker;
+use serde::Serialize;
+use serde::Serializer;
 use serde::de::DeserializeSeed;
 use serde::de::value::I128Deserializer;
 use serde::de::value::U128Deserializer;
+use serde::ser::SerializeMap;
 use serde_json::Number;
 use serde_json::Value;
+use serde_json::from_value;
+use serde_json::to_vec;
+
+/// Emits a single scalar map key for cross-encoder contract checks.
+struct FloatKeyProbe<T>(T);
+
+impl<T: Serialize> Serialize for FloatKeyProbe<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(&self.0, &true)?;
+        map.end()
+    }
+}
 
 #[test]
 fn test_real_number_zero_exponents_and_underflow() {
@@ -56,6 +75,56 @@ fn test_real_number_zero_exponents_and_underflow() {
             decoded.as_f64().expect(text).to_bits(),
             expected.to_bits(),
             "{text}"
+        );
+    }
+}
+
+#[test]
+fn test_json_value_encoder_f32_keys_match_direct_encoding() {
+    for key in [
+        1.0_f32,
+        -1.0,
+        0.0,
+        -0.0,
+        1.5,
+        1e20,
+        -1e20,
+        f32::MIN_POSITIVE,
+        f32::from_bits(1),
+        f32::MAX,
+    ] {
+        let probe = FloatKeyProbe(key);
+        let projected = JsonValueEncoder::new().encode(&probe).unwrap();
+        let direct = JsonEncoder::unlimited().to_vec(&probe).unwrap();
+        assert_eq!(to_vec(&projected).unwrap(), direct, "key bits={:08x}", key.to_bits());
+    }
+}
+
+#[test]
+fn test_json_value_encoder_f32_values_remain_strictly_encodable() {
+    for source in [
+        1.0_f32,
+        -1.0,
+        0.0,
+        -0.0,
+        1.5,
+        1e20,
+        -1e20,
+        f32::MIN_POSITIVE,
+        f32::from_bits(1),
+        f32::MAX,
+        f32::from_bits(0xC65B_9806),
+    ] {
+        let direct = JsonEncoder::unlimited().to_vec(&source).unwrap();
+        let expected: Value = JsonDecoder::unlimited().decode_utf8(&direct).unwrap();
+        let projected = JsonValueEncoder::new().encode(&source).unwrap();
+        assert_eq!(projected, expected, "value bits={:08x}", source.to_bits());
+        let encoded = JsonEncoder::unlimited().to_vec(&projected).unwrap();
+        let _: Value = JsonDecoder::unlimited().decode_utf8(&encoded).unwrap();
+        assert_eq!(
+            from_value::<f32>(projected).unwrap().to_bits(),
+            source.to_bits(),
+            "f32 round trip must retain the original bits",
         );
     }
 }
