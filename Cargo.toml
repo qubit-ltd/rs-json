@@ -34,6 +34,9 @@ package-include-extra = [
     "/.github/workflows/fuzz.yml",
 ]
 
+[package.metadata.docs.rs]
+features = ["jcs"]
+
 [lib]
 name = "qubit_json"
 doctest = true
@@ -51,7 +54,7 @@ serde = "^1.0"
 serde_json = { version = "^1.0", features = ["float_roundtrip", "raw_value"] }
 thiserror = "^2.0"
 
-qubit-budget = { version = "0.9", features = ["json"] }
+qubit-budget = { version = "0.9.1", features = ["json"] }
 qubit-io = { path = "../rs-io", version = "0.19" }
 serde_json_canonicalizer = { version = "^0.4", optional = true }
 

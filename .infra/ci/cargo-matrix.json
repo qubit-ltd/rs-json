@@ -25,6 +25,16 @@
         "name": "serde_json",
         "resolution": "latest"
       }
+    },
+    {
+      "name": "qubit-budget-minimum",
+      "commands": ["test"],
+      "allFeatures": true,
+      "dependency": {
+        "name": "qubit-budget",
+        "resolution": "precise",
+        "version": "0.9.1"
+      }
     }
   ]
 }
