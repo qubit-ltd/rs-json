@@ -5,9 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Defines ordinary JSON tree traversal control.
+//! Defines control returned by mutable JSON tree visitors.
 
-/// Selects whether a successfully visited node exposes its descendants.
+/// Selects whether a mutable tree visitor receives callbacks for descendants.
+///
+/// This control is returned by [`super::JsonTreeMutVisitor`] and interpreted by
+/// [`super::JsonTreeMutator::process`]. Reader APIs do not return this control.
 ///
 /// # Examples
 ///
@@ -21,6 +24,9 @@
 pub enum JsonTreeControl {
     /// Visit the node's descendants in normal depth-first order.
     Descend,
-    /// Do not visit or charge the node's descendants.
+    /// Skip callbacks for the node's descendants.
+    ///
+    /// Descendants remain subject to complete input and final output budget
+    /// accounting performed by [`super::JsonTreeMutator::process`].
     SkipSubtree,
 }
