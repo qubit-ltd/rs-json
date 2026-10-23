@@ -82,6 +82,9 @@ where
         if let Some(error) = syntax_error {
             return Err(JsonEncodeError::<R, Q>::invalid_raw_json(error));
         }
+        if let Some(error) = self.accounting.borrow_mut().take_serialization_error() {
+            return Err(JsonEncodeError::<R, Q>::serialization(error));
+        }
         if result.is_err() {
             let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
             return Err(JsonEncodeError::<R, Q>::serialization(error));
