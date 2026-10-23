@@ -118,8 +118,10 @@ where
 
     /// Returns the cumulative session for read-only inspection.
     ///
-    /// The reference exposes charges committed by completed encode
-    /// operations and remains borrowed from this encoder.
+    /// The reference exposes cumulative accounting state. Bytes accepted by
+    /// an external destination remain charged even when the encode operation
+    /// fails; value-resource charges commit only after the complete operation
+    /// succeeds. The reference remains borrowed from this encoder.
     ///
     /// # Returns
     ///

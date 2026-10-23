@@ -305,6 +305,86 @@ finite path and object-table strategy are unchanged, and wide-container
 measurements do not show a repeatable regression. This local measurement does
 not establish performance on other machines or workloads.
 
+### Finite renderer stack growth investigation (2026-10-23)
+
+The candidate used geometric stack growth under finite working-memory limits,
+required-capacity fallback, and speculative stack-capacity recovery before an
+object table reservation. The unlimited path retained its prior direct
+`try_reserve_exact` strategy. The candidate was reverted after it failed the
+wide-control performance screen; RSJSON-003 remains incomplete. The results
+below preserve the investigation evidence and do not describe the current
+source tree as optimized.
+
+Environment: Rust/Cargo 1.94.0; x86_64 Linux `7.0.0-38-generic`; Intel Core
+i5-9600K, 6 cores at 3.70 GHz; system `System` allocator. The host was not
+isolated, CPU affinity was not set, and frequency scaling was enabled. Gnuplot
+was unavailable, so Criterion used Plotters. Timing batches used 20 samples,
+1-second warm-up, and 1-second measurement, with sequential commands. Intervals
+are Criterion slope intervals; point estimate comes first. Depth times are µs;
+wide times are ms.
+
+Baseline was clean HEAD `fb1045b0fa98009883ace85a84738d1a5811cc0b`. Candidate
+measurements used the same HEAD with uncommitted T3 changes. The JCS benchmark
+fixtures and parameters were unchanged. All before and candidate timing
+commands exited 0. Three final depth timing commands and six final wide timing
+commands (object/array, each covering finite, unlimited, and legacy paths)
+exited 0. Three final diagnostic commands with
+`JCS_RENDERER_ALLOCATION_DIAGNOSTICS=1` and features `jcs jcs-allocation-diagnostics`
+exited 0 and emitted nonzero samples for all registered paths. Timing and
+diagnostics were separate.
+
+Deep-array fixtures used `FINITE_WORKING_BYTES = 1 MiB`,
+`max_depth = max_nodes = depth + 1`, and `max_output_bytes` equal to complete
+canonical output length (depths 512, 2,048, and 8,192). The large-object fixture
+had 111,531 output bytes and 6,145 value nodes; the large-array fixture had
+87,195 output bytes and 16,385 nodes. Wide finite controls used the same 1 MiB
+working-memory limit and exact output/node limits.
+
+| Depth path | Before batches 1 / 2 / 3 (point [interval]) | Candidate batches 1 / 2 / 3 (point [interval]) |
+| --- | --- | --- |
+| 512 finite | 37.435 [37.078–37.900] / 37.320 [37.039–37.657] / 37.814 [37.226–38.568] | 22.16 [22.02–22.32] / 22.75 [22.47–23.10] / 22.36 [22.13–22.61] |
+| 2,048 finite | 145.780 [144.810–147.217] / 147.254 [145.798–148.967] / 148.634 [147.123–150.941] | 82.41 [81.97–82.89] / 81.76 [81.30–82.41] / 82.26 [81.63–83.17] |
+| 8,192 finite | 613.655 [608.435–619.985] / 621.189 [607.887–634.761] / 636.312 [621.982–652.576] | 379.10 [374.00–384.82] / 377.00 [374.14–380.55] / 371.85 [368.95–375.66] |
+| 512 unlimited | 10.584 [10.474–10.674] / 10.482 [10.419–10.557] / 10.478 [10.386–10.559] | 12.34 [12.31–12.38] / 12.09 [11.99–12.26] / 12.28 [12.18–12.40] |
+| 2,048 unlimited | 40.112 [39.672–40.687] / 38.753 [38.520–39.000] / 39.321 [38.878–39.767] | 43.53 [43.24–43.87] / 45.37 [44.95–45.93] / 44.70 [44.30–45.15] |
+| 8,192 unlimited | 149.927 [148.941–151.029] / 150.973 [149.258–152.398] / 149.528 [148.523–150.611] | 171.52 [168.21–176.73] / 172.80 [170.17–175.27] / 171.83 [169.92–174.20] |
+
+Finite deep paths improved by more than 10% in all three batches at each depth.
+Unlimited depth 8,192 regressed by about 14–15% in all three batches; depth
+2,048 also regressed by about 8–16%, and depth 512 by about 15–18%. The finite
+8,192 diagnostic reported 13 growths, 524,224 requested bytes, and 262,144
+maximum actual bytes in each run, versus 8,192 growths, 1,073,872,896 requested
+bytes, and 262,144 maximum actual bytes before the candidate. Candidate
+large-object and large-array diagnostics reported no stack recovery. During
+candidate verification, a focused tracker regression passed for recovery of
+speculative `u64` stack capacity from four elements to three (24 requested
+bytes), allowing a two-entry table to fit a 40-byte budget while preserving
+stack values `[0, 1, 2]`. The regression was removed with the reverted
+implementation.
+
+| Wide control | Path | Before batches 1 / 2 / 3 (point [interval]) | Candidate batches 1 / 2 / 3 (point [interval]) |
+| --- | --- | --- | --- |
+| Large object | finite | 1.160 [1.142–1.182] / 1.127 [1.117–1.137] / 1.227 [1.163–1.317] | 1.884 [1.730–2.086] / 1.191 [1.171–1.214] / 1.233 [1.210–1.253] |
+| Large object | unlimited | 0.939 [0.933–0.948] / 0.947 [0.939–0.957] / 0.948 [0.936–0.961] | 1.506 [1.415–1.597] / 1.015 [1.003–1.025] / 1.045 [1.027–1.072] |
+| Large object | legacy | 2.741 [2.678–2.800] / 2.674 [2.636–2.712] / 2.738 [2.676–2.831] | 3.072 [3.047–3.098] / 2.940 [2.890–2.975] / 2.784 [2.720–2.846] |
+| Large array | finite | 1.801 [1.781–1.817] / 1.795 [1.774–1.814] / 1.800 [1.786–1.819] | 1.872 [1.857–1.886] / 1.869 [1.862–1.877] / 1.850 [1.848–1.853] |
+| Large array | unlimited | 1.350 [1.337–1.365] / 1.336 [1.323–1.352] / 1.354 [1.343–1.369] | 1.528 [1.464–1.621] / 1.429 [1.418–1.440] / 1.446 [1.429–1.474] |
+| Large array | legacy | 1.402 [1.381–1.429] / 1.407 [1.397–1.415] / 1.397 [1.387–1.407] | 1.425 [1.415–1.434] / 1.433 [1.430–1.436] / 2.091 [1.518–2.567] |
+
+The unlimited large-object path regressed by more than 5% in two candidate
+batches; unlimited large-array regressed by more than 5% in all three. The
+finite large-array path stayed below 5%; finite large-object had one candidate
+batch above 5%, with the first candidate batch visibly noisy. The final legacy
+large-array batch was noisy. Because unlimited wide paths failed the repeated
+regression threshold, the candidate was reverted despite the finite deep-chain
+improvement. These measurements are an engineering screen on a shared,
+frequency-scaled host and do not establish statistical significance.
+
+Diagnostics count requested capacity and maximum actual vector capacity. They
+do not measure bytes copied, RSS, allocator metadata, or temporary coexistence
+of old and replacement vectors. The measurements describe this candidate and
+these fixtures only.
+
 ## Interpretation boundaries
 
 Strict codecs perform checks that direct `serde_json` may not perform. In

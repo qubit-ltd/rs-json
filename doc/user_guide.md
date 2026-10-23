@@ -28,10 +28,12 @@ the application layer after JSON admission.
 
 Strict decoders and encoders are stateful objects. Use `with_limits(limits)`
 with a fresh owned session, or pass a `JsonDecodeSession`/`JsonEncodeSession` to
-`new(session)` when charges must accumulate across calls. Decoded-value and
-buffered-output charges
-are staged in transactions and commit at their documented success boundary;
-input charges remain visible in the session after a failed decode attempt.
+`new(session)` when charges must accumulate across calls. Value-resource charges
+commit only after the complete operation succeeds. Serialization into a
+temporary buffer does not publish output charges on failure. Once an external
+destination accepts bytes, those bytes remain written and charged even if a
+later write or flush fails. Input charges remain visible in the session after
+a failed decode attempt.
 
 ## Scenario: bounded JSON at an HTTP boundary
 
@@ -129,11 +131,15 @@ assert_eq!(output, b"[1,2");
 # Ok::<(), qubit_json::encode::JsonEncodeError<qubit_budget::json::JsonResource>>(())
 ```
 
-Buffered mode finishes serialization and budget checks before touching the
-writer, and commits accounting only after the complete write succeeds; an I/O
-failure can still leave partial bytes in the external writer. Incremental mode
-retains accepted prefixes when a later serialization, budget, or writer
-operation fails, as the example shows.
+`to_vec` serializes into a temporary buffer, so a failed serialization does not
+publish output charges. Buffered mode finishes serialization and budget checks
+before touching the writer. If a later write fails, bytes already accepted by
+the external writer remain written and charged, while value-resource charges
+are rolled back. See the existing
+[`test_buffered_writer_failure_keeps_prefix_and_rolls_back_value`](../tests/encode/json_encode_session_tests.rs)
+regression: the writer accepts two bytes before failing, leaving `output = 2`
+and `nodes = 0`. Incremental mode likewise retains and charges accepted prefixes
+if a later serialization, budget, or writer operation fails.
 
 The next step is to deserialize the admitted document into an application type
 and apply schema, authorization, and identifier rules. Continue below when the
@@ -185,13 +191,15 @@ JCS numbers follow the IEEE 754 binary64 model. A value containing
 `9007199254740992`. Represent an integer as a JSON string when its exact digits
 must survive canonicalization.
 
-`to_vec` and `to_string` return a complete result. `write_buffered` creates and
-checks the canonical document before writing it; `write_incremental` sends
-produced bytes directly to the destination. Either writer can leave a prefix
-if the destination fails, and accepted bytes remain charged to the output
-budget; the value transaction commits only if the complete operation succeeds.
-Incremental output is flushed before success is reported. A write or flush
-failure is `Write`; an output limit failure is `Budget`; exceeding the separate
+`to_vec` and `to_string` return a complete result. Serialization into their
+temporary buffer does not publish output charges on failure. `write_buffered`
+creates and checks the canonical document before writing it; `write_incremental`
+sends produced bytes directly to the destination. Either writer can leave a
+prefix if a write fails, and accepted bytes remain charged to the output
+budget; value-resource charges commit only if the complete operation succeeds.
+Incremental output is flushed before success is reported, so accepted bytes
+remain charged if that flush fails. A write or flush failure is `Write`; an
+output limit failure is `Budget`; exceeding the separate
 `max_working_bytes` auxiliary-capacity limit is `WorkingMemory`. Working memory
 covers the renderer's traversal stack and active object member tables, not the
 input `Value`, allocator metadata, or output buffer capacity. `unlimited()`
