@@ -70,6 +70,19 @@ where
         }
     }
 
+    /// Records the first destination error and returns a sanitized copy.
+    ///
+    /// The original error remains available for typed conversion after the
+    /// serializer has erased its source. The returned error keeps the same
+    /// kind without exposing the destination's error message to serialization.
+    fn record_io_error(&mut self, error: io::Error) -> io::Error {
+        let kind = error.kind();
+        if self.io_error.is_none() {
+            self.io_error = Some(error);
+        }
+        io::Error::new(kind, "JSON output operation failed")
+    }
+
     /// Converts the serializer result while preserving typed failures.
     ///
     /// # Parameters
@@ -99,6 +112,9 @@ where
         }
         if let Some(error) = self.io_error {
             return Err(JsonEncodeError::<R, Q>::write(error));
+        }
+        if let Some(error) = self.accounting.borrow_mut().take_serialization_error() {
+            return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         if result.is_err() {
             let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
@@ -144,10 +160,7 @@ where
             Ok(written) => {
                 if written == 0 && !input.is_empty() {
                     let error = io::Error::new(io::ErrorKind::WriteZero, "JSON output writer accepted no bytes");
-                    if self.io_error.is_none() {
-                        self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
-                    }
-                    return Err(error);
+                    return Err(self.record_io_error(error));
                 }
                 if self.has_output_budget {
                     let mut accounting = self.accounting.borrow_mut();
@@ -159,10 +172,11 @@ where
                 Ok(written)
             }
             Err(error) => {
-                if error.kind() != io::ErrorKind::Interrupted && self.io_error.is_none() {
-                    self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
+                if error.kind() == io::ErrorKind::Interrupted {
+                    Err(error)
+                } else {
+                    Err(self.record_io_error(error))
                 }
-                Err(error)
             }
         }
     }
@@ -179,12 +193,7 @@ where
     fn flush(&mut self) -> io::Result<()> {
         match Output::flush(&mut self.writer) {
             Ok(()) => Ok(()),
-            Err(error) => {
-                if self.io_error.is_none() {
-                    self.io_error = Some(io::Error::new(error.kind(), error.to_string()));
-                }
-                Err(error)
-            }
+            Err(error) => Err(self.record_io_error(error)),
         }
     }
 }

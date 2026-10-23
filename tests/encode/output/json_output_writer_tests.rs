@@ -8,6 +8,7 @@
 //! Tests incremental output writing through the public encoder.
 
 use std::collections::VecDeque;
+use std::fmt;
 use std::io;
 use std::io::ErrorKind;
 use std::io::Result as IoResult;
@@ -59,6 +60,118 @@ struct ScriptedWriter {
     calls: usize,
     flushes: usize,
     flush_error: Option<io::ErrorKind>,
+}
+
+struct SourceWriter {
+    write_error: Option<io::Error>,
+    flush_error: Option<io::Error>,
+}
+
+impl Write for SourceWriter {
+    fn write(&mut self, bytes: &[u8]) -> IoResult<usize> {
+        match self.write_error.take() {
+            Some(error) => Err(error),
+            None => Ok(bytes.len()),
+        }
+    }
+
+    fn flush(&mut self) -> IoResult<()> {
+        match self.flush_error.take() {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct MarkerError;
+
+impl fmt::Display for MarkerError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("marker source failure")
+    }
+}
+
+impl std::error::Error for MarkerError {}
+
+#[derive(Clone, Copy)]
+enum PreservedError {
+    Os,
+    Marker,
+}
+
+impl PreservedError {
+    fn make(self) -> io::Error {
+        match self {
+            Self::Os => io::Error::from_raw_os_error(5),
+            Self::Marker => io::Error::other(MarkerError),
+        }
+    }
+
+    fn assert_preserved(self, error: &io::Error) {
+        match self {
+            Self::Os => {
+                assert_eq!(error.raw_os_error(), Some(5));
+                assert_eq!(error.kind(), io::Error::from_raw_os_error(5).kind());
+            }
+            Self::Marker => assert!(
+                error
+                    .get_ref()
+                    .and_then(|source| source.downcast_ref::<MarkerError>())
+                    .is_some()
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum OutputFailure {
+    BufferedWrite,
+    IncrementalWrite,
+    IncrementalFlush,
+}
+
+fn source_writer(failure: OutputFailure, error: PreservedError) -> SourceWriter {
+    match failure {
+        OutputFailure::BufferedWrite | OutputFailure::IncrementalWrite => SourceWriter {
+            write_error: Some(error.make()),
+            flush_error: None,
+        },
+        OutputFailure::IncrementalFlush => SourceWriter {
+            write_error: None,
+            flush_error: Some(error.make()),
+        },
+    }
+}
+
+fn assert_json_error_preserves_original(failure: OutputFailure, original: PreservedError) {
+    let mut encoder = JsonEncoder::new(bounded_session());
+    let result = match failure {
+        OutputFailure::BufferedWrite => encoder.write_buffered(source_writer(failure, original), &true),
+        OutputFailure::IncrementalWrite | OutputFailure::IncrementalFlush => {
+            encoder.write_incremental(source_writer(failure, original), &true)
+        }
+    };
+    let error = result.expect_err("the configured output operation should fail");
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Write);
+    original.assert_preserved(error.write_error().expect("write error"));
+}
+
+#[cfg(feature = "jcs")]
+fn assert_jcs_error_preserves_original(failure: OutputFailure, original: PreservedError) {
+    use qubit_json::encode::JcsEncoder;
+    use serde_json::json;
+
+    let mut encoder = JcsEncoder::new(bounded_session(), 4096);
+    let value = json!(true);
+    let result = match failure {
+        OutputFailure::BufferedWrite => encoder.write_buffered(source_writer(failure, original), &value),
+        OutputFailure::IncrementalWrite | OutputFailure::IncrementalFlush => {
+            encoder.write_incremental(source_writer(failure, original), &value)
+        }
+    };
+    let error = result.expect_err("the configured output operation should fail");
+    original.assert_preserved(error.write_error().expect("write error"));
 }
 
 impl ScriptedWriter {
@@ -335,4 +448,38 @@ fn test_json_writer_preserves_first_terminal_io_error() {
     assert_eq!(output.flushes, 0);
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
     assert_eq!(encoder.session().output_budget().expect("output budget").used(), 1);
+}
+
+#[test]
+fn test_json_output_writer_preserves_original_write_errors() {
+    for failure in [OutputFailure::BufferedWrite, OutputFailure::IncrementalWrite] {
+        for original in [PreservedError::Os, PreservedError::Marker] {
+            assert_json_error_preserves_original(failure, original);
+        }
+    }
+}
+
+#[test]
+fn test_json_output_writer_preserves_original_incremental_flush_errors() {
+    for original in [PreservedError::Os, PreservedError::Marker] {
+        assert_json_error_preserves_original(OutputFailure::IncrementalFlush, original);
+    }
+}
+
+#[cfg(feature = "jcs")]
+#[test]
+fn test_jcs_output_writer_preserves_original_write_errors() {
+    for failure in [OutputFailure::BufferedWrite, OutputFailure::IncrementalWrite] {
+        for original in [PreservedError::Os, PreservedError::Marker] {
+            assert_jcs_error_preserves_original(failure, original);
+        }
+    }
+}
+
+#[cfg(feature = "jcs")]
+#[test]
+fn test_jcs_output_writer_preserves_original_incremental_flush_errors() {
+    for original in [PreservedError::Os, PreservedError::Marker] {
+        assert_jcs_error_preserves_original(OutputFailure::IncrementalFlush, original);
+    }
 }
