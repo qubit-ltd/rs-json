@@ -318,10 +318,14 @@ fence, or control-character escaping). Its policy is independent from
 limits)`, or pass a `JsonDecodeSession` to `NormalizingJsonDecoder::new(policy,
 session)`.
 
-Slice-based strict and normalizing decoder methods consume a complete `&str`
-or `&[u8]` input. Use them when a decoded result must borrow from that input.
-Their input-byte limit admits the supplied slice; it does not retroactively
-limit memory already allocated by an HTTP body aggregator or other transport.
+Slice-based strict and normalizing decoder methods consume the complete
+supplied `&str` or `&[u8]`. Their input-byte limit admits that slice; it does
+not retroactively limit memory already allocated by an HTTP body aggregator or
+other transport. Strict `JsonDecoder` slice methods can return values borrowing
+from the input. One-shot `NormalizingJsonDecoder` methods require
+`DeserializeOwned` because normalized text may be temporary. To borrow after
+normalization, prepare a document and decode from it; borrowed results cannot
+outlive the `NormalizedJsonDocument` they reference.
 `JsonDecoder::decode_input` offers a byte-oriented source for owned results:
 
 ```rust
@@ -400,8 +404,11 @@ make that input-accounting precondition explicit. Each successful
 `decode_precharged_object_document`, `decode_precharged_array_document`, or
 `validate_precharged_document` commits a separate value charge; a failed
 materialization rolls back only that attempt's value charges. The document is
-detached and may be decoded by another compatible decoder.
-Borrowing follows Serde's representation rules: unescaped JSON strings can
+detached and may be decoded by another compatible decoder. Its normalized text
+borrows the original input when normalization needs no rewrite, and owns the
+text when rewriting requires allocation. Borrowed decode results are tied to
+the prepared document and cannot outlive it. Borrowing follows Serde's
+representation rules: unescaped JSON strings can
 borrow from the document, while escaped strings require owned targets.
 
 Use `AccountingJsonValueSeed` when another Serde deserializer owns the input. It charges

@@ -327,7 +327,14 @@ where
         self.diagnostic_policy
     }
 
-    /// Returns the original input length in bytes.
+    /// Returns the raw input byte count associated with this error.
+    ///
+    /// For slice-based entry points, this is the complete input slice length,
+    /// including when input admission rejects the slice before processing it.
+    /// For `decode_input`, this is the length of the prefix read and retained
+    /// before the error; a byte consumed only to probe past the input budget is
+    /// excluded. The value therefore does not universally represent bytes
+    /// charged to the budget or the session's cumulative input usage.
     ///
     /// # Returns
     ///

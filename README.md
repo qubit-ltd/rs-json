@@ -199,14 +199,19 @@ identifies the separate auxiliary-capacity limit configured with
   output, and working-memory limits; use it only for trusted input or data
   already admitted by another layer. An outer output
   bound cannot replace input and structural admission before parsing.
-- Slice-based strict and normalizing decoder methods consume complete `&str` or
-  `&[u8]` inputs; use them when the decoded result must borrow from the input.
-  `JsonDecoder::decode_input` instead reads an `Input<Item = u8>` source through
-  EOF and returns an owned `DeserializeOwned` value. It buffers the complete
-  document; without `max_input_bytes`, that temporary memory use has no
-  configured limit. Apply a bounded read or body-aggregation limit before
-  decoding. This strict JSON method is not a raw-text JCS canonicalization
-  entry point.
+- Slice-based strict and normalizing decoder methods consume the complete
+  supplied `&str` or `&[u8]`; their input-byte limits admit that slice and do
+  not limit memory already allocated by a transport or body aggregator. Strict
+  `JsonDecoder` slice methods can return values borrowing from the input.
+  One-shot `NormalizingJsonDecoder` methods require `DeserializeOwned`, since
+  normalized text may be temporary. To borrow after normalization, prepare a
+  `NormalizedJsonDocument` and decode from it; borrowed results live no longer
+  than that document. `JsonDecoder::decode_input` continues to read an
+  `Input<Item = u8>` source through EOF and return an owned `DeserializeOwned`
+  value. It buffers the complete document; without `max_input_bytes`, that
+  temporary memory use has no configured limit. Apply a bounded read or
+  body-aggregation limit before decoding. This strict JSON method is not a
+  raw-text JCS canonicalization entry point.
 - `JcsDecoder::decode_input` also reads and buffers the complete input. With a
   finite input limit, it may consume one uncharged probe byte that cannot be
   returned to the source. Lexical budgets are not exact heap-memory bounds:

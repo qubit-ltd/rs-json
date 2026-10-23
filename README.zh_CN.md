@@ -171,10 +171,13 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 - 树遍历按现有 `serde_json::Number` 的紧凑显示长度计量。启用 `arbitrary_precision` 时，树读取器可计量已保存的宽数字（例如 `1e400`）；普通和 JCS 编码器仍按各自规则拒绝超出有限范围的数字。
 - 所有不可信边界都应设置有限资源上限。`unlimited()` 会同时取消值、输出和工作内存限制，
   只应用于可信输入或已由其他层完成准入的数据；外层输出上限不能替代解析前的输入与结构准入。
-- 严格解码和规范化解码的切片入口接收完整的 `&str` 或 `&[u8]`；需要借用输入的结果时使用它们。
-  `JsonDecoder::decode_input` 则从 `Input<Item = u8>` 读取到 EOF，并返回拥有数据的
-  `DeserializeOwned` 结果。它会暂存整份文档；未设置 `max_input_bytes` 时，这部分临时内存没有配置上限。
-  解码前仍应在传输层限制读取或 body 聚合大小。这个严格 JSON 入口不能用于原始文本的 JCS 规范化。
+- 严格解码和规范化解码的切片入口都会处理传入的完整 `&str` 或 `&[u8]`；输入字节限制只准入该切片，
+  无法追溯限制传输层或 body 聚合器已经分配的内存。`JsonDecoder` 的切片方法可以返回借用输入的结果。
+  一次性 `NormalizingJsonDecoder` 方法要求目标实现 `DeserializeOwned`，因为规范化文本可能是临时数据。
+  若需在规范化后借用文本，应先准备 `NormalizedJsonDocument` 再解码，借用结果的生命周期不能超过该文档。
+  `JsonDecoder::decode_input` 仍会从 `Input<Item = u8>` 读取到 EOF，并返回拥有数据的 `DeserializeOwned` 结果；
+  它会暂存整份文档，未设置 `max_input_bytes` 时这部分临时内存没有配置上限。解码前仍应在传输层限制读取或
+  body 聚合大小。这个严格 JSON 入口不能用于原始文本的 JCS 规范化。
 - `JcsDecoder::decode_input` 也会读取并缓冲完整输入；有限输入预算下可能多读取一个不计费且无法放回输入源的探测字节。
   词法预算不是堆内存上限，结果容器容量、分配器元数据和输入缓冲区容量不受精确约束。JCS Value 构造另有 127 层容器上限，
   即使无限预算也生效；第 128 层返回 `MaterializationDepthLimit`。它与包含根值的 `max_depth` 不同。重复键按反转义后的字符串比较，

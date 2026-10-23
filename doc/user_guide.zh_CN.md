@@ -264,9 +264,11 @@ JSON Markdown 围栏或控制字符转义。规范化策略不携带 `JsonDecode
 `NormalizingJsonDecoder::with_limits(policy, limits)` 显式传入限制，或把
 `JsonDecodeSession` 传给 `NormalizingJsonDecoder::new(policy, session)`。
 
-严格解码和规范化解码的切片方法接收完整的 `&str` 或 `&[u8]`。需要让结果借用输入时，应使用这些
-方法。其输入字节限制只负责准入现有切片，不能追溯限制 HTTP body 聚合器或其他传输层已经分配的
-内存。`JsonDecoder::decode_input` 可从字节输入源解码拥有所有权的结果：
+严格解码和规范化解码的切片方法都会处理传入的完整 `&str` 或 `&[u8]`。输入字节限制只准入该切片，
+无法追溯限制 HTTP body 聚合器或其他传输层已经分配的内存。`JsonDecoder` 的切片方法可以返回借用输入的
+结果；一次性 `NormalizingJsonDecoder` 方法要求目标实现 `DeserializeOwned`，因为规范化文本可能是临时数据。
+若需在规范化后借用文本，应先准备文档再解码，借用结果不能超过所引用的 `NormalizedJsonDocument` 生命周期。
+`JsonDecoder::decode_input` 可从字节输入源解码拥有所有权的结果：
 
 ```rust
 use qubit_budget::json::JsonDecodeLimits;
@@ -336,8 +338,8 @@ fn main() -> Result<(), JsonDecodeError> {
 `decode_precharged_document_seed`、`decode_precharged_object_document`、
 `decode_precharged_array_document` 或 `validate_precharged_document`，都会分别提交一份值资源
 用量；构造结果失败时，只回滚本次尝试暂存的值资源。准备后的文档不依赖创建它的解码器，可以交给
-预算类型兼容的另一个解码器。借用规则
-遵循 Serde 的表示方式：未转义的 JSON 字符串可以借用文档内容，包含转义的字符串则必须构造
+预算类型兼容的另一个解码器。规范化无需改写时，文档文本可以借用原始输入；需要改写时，文档会持有新分配的文本。
+借用结果受准备文档的生命周期约束。借用规则遵循 Serde 的表示方式：未转义的 JSON 字符串可以借用文档内容，包含转义的字符串则必须构造
 自有数据。
 
 当输入由另一个 Serde 反序列化器持有时，可以使用 `AccountingJsonValueSeed`。它会核算解码事件，但看不到
