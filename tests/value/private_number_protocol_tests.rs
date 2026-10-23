@@ -10,6 +10,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use qubit_json::decode::JsonDecoder;
 use qubit_json::encode::JsonSerializationErrorKind;
 use qubit_json::encode::JsonSerializerStateError;
 use qubit_json::value::JsonValueEncoder;
@@ -19,6 +20,7 @@ use serde::ser::SerializeStruct;
 use serde_json::Number;
 use serde_json::Value;
 use serde_json::json;
+use serde_json::value::RawValue;
 
 /// serde_json's private struct name for number payloads.
 const NUMBER: &str = concat!("$", "serde_json", ":", ":private::Number");
@@ -79,6 +81,37 @@ fn test_private_number_protocol_constructs_only_a_number() {
             error.kind(),
             JsonSerializationErrorKind::NonFiniteFloat | JsonSerializationErrorKind::InvalidNumberRepresentation
         ));
+    }
+}
+
+#[test]
+fn test_private_number_zero_exponents_and_underflow() {
+    for (text, expected) in [
+        ("0e1", 0.0_f64),
+        ("0e+10", 0.0),
+        ("0.0e-10", 0.0),
+        ("-0e1", -0.0),
+        ("-0.0e+10", -0.0),
+        ("1e-400", 0.0),
+        ("-1e-400", -0.0),
+        ("5e-324", f64::from_bits(1)),
+        ("-5e-324", -f64::from_bits(1)),
+    ] {
+        let protocol = NumberProtocol {
+            payload: text,
+            ..valid_probe()
+        };
+        let value = JsonValueEncoder::new().encode(&protocol).expect(text);
+        assert_eq!(value.as_f64().expect(text).to_bits(), expected.to_bits(), "{text}");
+
+        let raw = RawValue::from_string(text.to_owned()).expect(text);
+        let raw_value = JsonValueEncoder::new().encode(&raw).expect(text);
+        let decoded = JsonDecoder::unlimited().decode_str::<Value>(text).expect(text);
+        assert_eq!(
+            raw_value.as_f64().expect(text).to_bits(),
+            decoded.as_f64().expect(text).to_bits(),
+            "{text}"
+        );
     }
 }
 

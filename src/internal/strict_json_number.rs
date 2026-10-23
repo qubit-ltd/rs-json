@@ -88,7 +88,7 @@ impl StrictJsonNumber {
         }
         if text.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E')) {
             let value = text.parse::<f64>().map_err(|_| invalid_number())?;
-            if !value.is_finite() || (value == 0.0 && text.bytes().any(|byte| matches!(byte, b'1'..=b'9'))) {
+            if !value.is_finite() {
                 return Err(number_error(JsonSerializationErrorKind::NonFiniteFloat));
             }
             return Number::from_f64(value).ok_or_else(invalid_number);

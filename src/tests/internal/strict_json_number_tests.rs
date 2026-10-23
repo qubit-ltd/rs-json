@@ -59,8 +59,26 @@ fn test_parse_preserves_negative_zero_and_finite_fraction() {
 }
 
 #[test]
+fn test_parse_accepts_zero_exponents_and_underflow() {
+    for (text, expected) in [
+        ("0e1", 0.0_f64),
+        ("0e+10", 0.0),
+        ("0.0e-10", 0.0),
+        ("-0e1", -0.0),
+        ("-0.0e+10", -0.0),
+        ("1e-400", 0.0),
+        ("-1e-400", -0.0),
+        ("5e-324", f64::from_bits(1)),
+        ("-5e-324", -f64::from_bits(1)),
+    ] {
+        let actual = StrictJsonNumber::parse(text).expect(text);
+        assert_eq!(actual.as_f64().expect(text).to_bits(), expected.to_bits(), "{text}");
+    }
+}
+
+#[test]
 fn test_parse_maps_numeric_range_errors() {
-    for text in ["1e400", "1e-400"] {
+    for text in ["1e400", "-1e400"] {
         assert_eq!(
             StrictJsonNumber::parse(text).unwrap_err().kind(),
             JsonSerializationErrorKind::NonFiniteFloat

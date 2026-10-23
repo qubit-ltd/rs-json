@@ -262,6 +262,27 @@ fn test_private_number_keeps_valid_lexeme_and_does_not_leak_invalid_text() {
     assert!(!format!("{error:?}").contains(secret));
 }
 
+#[test]
+fn test_private_number_zero_exponents_and_underflow() {
+    let modes = [OutputMode::Vec, OutputMode::Buffered, OutputMode::Incremental];
+    for text in [
+        "0e1", "0e+10", "0.0e-10", "-0e1", "-0.0e+10", "1e-400", "-1e-400", "5e-324", "-5e-324",
+    ] {
+        let value = PrivateProtocol {
+            kind: PrivateKind::Number,
+            declared_len: 1,
+            field_count: 1,
+            wrong_field: false,
+            payload: text,
+        };
+        for mode in modes {
+            let mut encoder = encoder(false);
+            let (result, _) = encode(&mut encoder, mode, &value);
+            assert_eq!(result.expect(text), text.as_bytes(), "{text}");
+        }
+    }
+}
+
 /// Wraps a number in Serde newtype form to test non-text payload rejection.
 struct NumberNewtype(u64);
 
