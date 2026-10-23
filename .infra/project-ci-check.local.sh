@@ -4,6 +4,7 @@ set -euo pipefail
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 cd "$project_root"
 cargo clippy --workspace --all-targets -- -D warnings
+cargo test --manifest-path fuzz/Cargo.toml --lib --tests --locked
 cargo test --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc --locked
 fixture=tests/fixtures/jcs_feature_unification/Cargo.toml
 cargo test --manifest-path "$fixture" --locked

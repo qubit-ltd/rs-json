@@ -7,17 +7,20 @@
 // =============================================================================
 //! Regression checks for the typed decoder fuzz payload.
 
-use serde_json::Value;
-use serde_json::from_str;
-use serde_json::json;
+use qubit_json::decode::JsonDecoder;
+use qubit_json_fuzz::fuzz_record::FuzzRecord;
+use serde_json::from_slice;
 
 #[test]
 fn test_fuzz_record_decodes_representative_object_fields() {
-    let record: Value = from_str(r#"{"id":7,"label":"representative","enabled":true,"tags":["fuzz","record"]}"#)
-        .expect("the corpus object must decode as a JSON object");
-
-    assert_eq!(record["id"], 7);
-    assert_eq!(record["label"], "representative");
-    assert_eq!(record["enabled"], true);
-    assert_eq!(record["tags"], json!(["fuzz", "record"]));
+    let input = include_bytes!("../corpus/decoder/typed-fuzz-record");
+    let actual: FuzzRecord = JsonDecoder::unlimited()
+        .decode_utf8(input)
+        .expect("the real typed corpus must reach the decoder success path");
+    let expected: FuzzRecord = from_slice(input).expect("the same corpus must decode with Serde");
+    assert_eq!(actual, expected);
+    assert_eq!(actual.id, 7);
+    assert_eq!(actual.label, "representative");
+    assert!(actual.enabled);
+    assert_eq!(actual.tags, vec![String::from("fuzz"), String::from("record")]);
 }

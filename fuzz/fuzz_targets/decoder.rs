@@ -9,6 +9,8 @@
 //! Exercises decoder acceptance, error-model, privacy, and shape invariants
 //! over arbitrary byte input.
 
+#[path = "internal/fuzz_record.rs"]
+mod fuzz_record;
 mod internal;
 
 use std::error::Error;
@@ -32,7 +34,7 @@ use serde_json::Value;
 use serde_json::from_slice;
 use serde_json::to_vec;
 
-use crate::internal::fuzz_record::FuzzRecord;
+use crate::fuzz_record::FuzzRecord;
 
 /// Verifies stable diagnostics shared by every redacted decoder configuration.
 ///

@@ -5,15 +5,6 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Defines the typed payload used by the decoder fuzz target.
+//! Re-exports the shared typed payload to the decoder fuzz target.
 
-use serde::Deserialize;
-
-/// Representative object payload used to exercise typed decoder entry points.
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-pub(crate) struct FuzzRecord {
-    pub(crate) id: u64,
-    pub(crate) label: String,
-    pub(crate) enabled: bool,
-    pub(crate) tags: Vec<String>,
-}
+pub(crate) use qubit_json_fuzz::fuzz_record::FuzzRecord;
