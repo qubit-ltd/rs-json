@@ -27,7 +27,9 @@
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonSerializerStateError {
-    /// A compound callback was used with the wrong compound state.
+    /// A compound callback was used with the wrong compound state, including
+    /// an element, key, or field callback after declaring a zero-length
+    /// compound.
     UnexpectedCompound,
     /// A split-map key was submitted before the previous key received a value.
     MapKeyAlreadyPending,

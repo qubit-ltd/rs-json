@@ -22,10 +22,125 @@ use qubit_json::encode::JsonEncoder;
 use qubit_json::encode::JsonSerializerStateError;
 use serde::Serialize;
 use serde::Serializer;
+use serde::ser::SerializeMap;
+use serde::ser::SerializeSeq;
 use serde::ser::SerializeStruct;
+use serde::ser::SerializeStructVariant;
+use serde::ser::SerializeTuple;
+use serde::ser::SerializeTupleStruct;
+use serde::ser::SerializeTupleVariant;
 
 const RAW: &str = concat!("$", "serde_json", ":", ":private::RawValue");
 const NUMBER: &str = concat!("$", "serde_json", ":", ":private::Number");
+
+#[derive(Clone, Copy)]
+enum EmptyCompoundKind {
+    Sequence,
+    Tuple,
+    TupleStruct,
+    TupleVariant,
+    Map,
+    Struct,
+    StructVariant,
+}
+
+struct EmptyCompound(EmptyCompoundKind, bool);
+
+impl Serialize for EmptyCompound {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.0 {
+            EmptyCompoundKind::Sequence => {
+                let mut state = serializer.serialize_seq(Some(0))?;
+                if self.1 {
+                    let _ = state.serialize_element(&1_u8);
+                    let _ = state.serialize_element(&2_u8);
+                }
+                state.end()
+            }
+            EmptyCompoundKind::Tuple => {
+                let mut state = serializer.serialize_tuple(0)?;
+                if self.1 {
+                    let _ = state.serialize_element(&1_u8);
+                }
+                state.end()
+            }
+            EmptyCompoundKind::TupleStruct => {
+                let mut state = serializer.serialize_tuple_struct("Empty", 0)?;
+                if self.1 {
+                    let _ = state.serialize_field(&1_u8);
+                }
+                state.end()
+            }
+            EmptyCompoundKind::TupleVariant => {
+                let mut state = serializer.serialize_tuple_variant("Empty", 0, "Variant", 0)?;
+                if self.1 {
+                    let _ = state.serialize_field(&1_u8);
+                }
+                state.end()
+            }
+            EmptyCompoundKind::Map => {
+                let mut state = serializer.serialize_map(Some(0))?;
+                if self.1 {
+                    let _ = state.serialize_key("key");
+                    let _ = state.serialize_value(&1_u8);
+                    let _ = state.serialize_entry("entry", &2_u8);
+                }
+                state.end()
+            }
+            EmptyCompoundKind::Struct => {
+                let mut state = serializer.serialize_struct("Empty", 0)?;
+                if self.1 {
+                    let _ = state.serialize_field("field", &1_u8);
+                }
+                state.skip_field("skipped")?;
+                state.end()
+            }
+            EmptyCompoundKind::StructVariant => {
+                let mut state = serializer.serialize_struct_variant("Empty", 0, "Variant", 0)?;
+                if self.1 {
+                    let _ = state.serialize_field("field", &1_u8);
+                }
+                state.skip_field("skipped")?;
+                state.end()
+            }
+        }
+    }
+}
+
+#[test]
+fn test_zero_length_compounds_reject_callbacks_and_allow_empty_end() {
+    let modes = [OutputMode::Vec, OutputMode::Buffered, OutputMode::Incremental];
+    for kind in [
+        EmptyCompoundKind::Sequence,
+        EmptyCompoundKind::Tuple,
+        EmptyCompoundKind::TupleStruct,
+        EmptyCompoundKind::TupleVariant,
+        EmptyCompoundKind::Map,
+        EmptyCompoundKind::Struct,
+        EmptyCompoundKind::StructVariant,
+    ] {
+        for finite in [false, true] {
+            for mode in modes {
+                let empty = EmptyCompound(kind, false);
+                let (result, _) = encode(&mut encoder(finite), mode, &empty);
+                result.expect("an empty compound may end without callbacks");
+
+                let malformed = EmptyCompound(kind, true);
+                let (result, _) = encode(&mut encoder(finite), mode, &malformed);
+                let error = result.expect_err("callbacks after a zero-length declaration must fail");
+                assert_eq!(
+                    error
+                        .serialization_error()
+                        .and_then(|error| error.serializer_state_error()),
+                    Some(JsonSerializerStateError::UnexpectedCompound),
+                );
+            }
+        }
+    }
+}
 
 /// Selects the private payload token used by protocol conformance cases.
 #[derive(Clone, Copy)]
@@ -117,7 +232,7 @@ fn encoder(finite: bool) -> JsonEncoder<'static, JsonResource, usize> {
 fn encode(
     encoder: &mut JsonEncoder<'static, JsonResource, usize>,
     mode: OutputMode,
-    value: &PrivateProtocol,
+    value: &impl Serialize,
 ) -> (
     Result<Vec<u8>, qubit_json::encode::JsonEncodeError<JsonResource>>,
     Vec<u8>,

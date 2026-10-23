@@ -380,7 +380,7 @@ where
         self.enter_container(JsonContainerKind::Sequence, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_seq(len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth, len == Some(0)))
     }
 
     /// Charges a fixed-length JSON tuple array.
@@ -389,7 +389,7 @@ where
         self.enter_container(JsonContainerKind::Sequence, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_tuple(len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth, len == 0))
     }
 
     /// Charges a fixed-length JSON tuple-struct array.
@@ -398,7 +398,7 @@ where
         self.enter_container(JsonContainerKind::Sequence, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_tuple_struct(name, len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth, len == 0))
     }
 
     /// Charges a tuple variant's outer object and nested array.
@@ -416,7 +416,7 @@ where
         let context = self.context;
         let child_depth = array_depth.saturating_add(1);
         let inner = self.inner.serialize_tuple_variant(name, variant_index, variant, len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth, len == 0))
     }
 
     /// Charges an object before asking the inner serializer to create it.
@@ -425,7 +425,7 @@ where
         self.enter_container(JsonContainerKind::Map, self.depth)?;
         let child_depth = self.depth.saturating_add(1);
         let inner = self.inner.serialize_map(len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth, len == Some(0)))
     }
 
     /// Charges a JSON object or recognizes serde_json's RawValue shape.
@@ -452,7 +452,7 @@ where
                 self.enter_container(JsonContainerKind::Map, self.depth)?;
                 let child_depth = self.depth.saturating_add(1);
                 let inner = self.inner.serialize_struct(name, len)?;
-                Ok(JsonEncodeCompound::new(inner, context, child_depth))
+                Ok(JsonEncodeCompound::new(inner, context, child_depth, len == 0))
             }
         }
     }
@@ -472,7 +472,7 @@ where
         let context = self.context;
         let child_depth = object_depth.saturating_add(1);
         let inner = self.inner.serialize_struct_variant(name, variant_index, variant, len)?;
-        Ok(JsonEncodeCompound::new(inner, context, child_depth))
+        Ok(JsonEncodeCompound::new(inner, context, child_depth, len == 0))
     }
 
     /// Formats one display value once, checks it as a string, and emits it.

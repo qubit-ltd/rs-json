@@ -35,6 +35,26 @@ use serde_json::to_string;
 use serde_json::to_vec;
 use serde_json::value::RawValue;
 
+const RAW_VALUE_TOKEN: &str = concat!("$", "serde_json", ":", ":private::RawValue");
+
+/// Emits a value under serde_json's private RawValue newtype name.
+struct RawValueNameProbe<T>(T);
+
+impl<T: Serialize> Serialize for RawValueNameProbe<T> {
+    /// Passes the payload through the private RawValue newtype protocol.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_newtype_struct(RAW_VALUE_TOKEN, &self.0)
+    }
+}
+
+/// Ordinary derived newtype used to check transparent projection.
+#[derive(Serialize)]
+#[serde(transparent)]
+struct TransparentProbe<T>(T);
+
 /// Emits two entries that become the same JSON object key.
 struct DuplicateKeyProbe;
 
@@ -664,6 +684,50 @@ fn test_json_value_encoder_materializes_raw_value() {
         .encode(&raw)
         .expect("strict RawValue should materialize");
     assert_eq!(actual, json!({"ok": true, "values": [1, 2]}));
+}
+
+/// Keeps ordinary and private RawValue newtypes on their intended paths.
+#[test]
+fn test_json_value_encoder_newtype_delegation_and_raw_protocol() {
+    let encoder = JsonValueEncoder::new();
+    assert_eq!(encoder.encode(&TransparentProbe(Some(true))), Ok(json!(true)));
+
+    let raw_name = RawValueNameProbe(String::from("true"));
+    assert_eq!(encoder.encode(&raw_name), Ok(json!("true")));
+
+    let raw_bool = RawValueNameProbe(true);
+    assert_eq!(encoder.encode(&raw_bool), Ok(json!(true)));
+
+    let raw_option = RawValueNameProbe(Some(String::from("true")));
+    assert_eq!(encoder.encode(&raw_option), Ok(json!("true")));
+
+    let mut ordinary = JsonEncoder::unlimited();
+    assert_eq!(ordinary.to_vec(&TransparentProbe(Some(true))).unwrap(), b"true");
+    assert_eq!(ordinary.to_vec(&raw_name).unwrap(), br#""true""#);
+    assert_eq!(ordinary.to_vec(&raw_bool).unwrap(), b"true");
+    assert_eq!(ordinary.to_vec(&raw_option).unwrap(), br#""true""#);
+}
+
+/// Enforces the same fixed RawValue materialization boundary at 127/128.
+#[test]
+fn test_json_value_encoder_raw_value_depth_boundary() {
+    let encoder = JsonValueEncoder::new();
+    for depth in [127, 128] {
+        let text = format!("{}null{}", "[".repeat(depth), "]".repeat(depth));
+        let raw = RawValue::from_string(text).expect("nested fixture is valid JSON");
+        let result = encoder.encode(&raw);
+        if depth == 127 {
+            let mut value = json!(null);
+            for _ in 0..127 {
+                value = json!([value]);
+            }
+            assert_eq!(result, Ok(value));
+        } else {
+            let error = result.expect_err("128 nested containers exceed the projection limit");
+            assert_eq!(error.kind(), JsonSerializationErrorKind::InvalidRawValue);
+            assert!(error.to_string().contains("127"));
+        }
+    }
 }
 
 /// Materializes real RawValue numbers as numbers rather than private marker

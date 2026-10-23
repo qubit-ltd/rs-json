@@ -57,8 +57,9 @@ pub enum JsonSerializationErrorKind {
     /// Two source entries produced the same JSON object key.
     #[error("duplicate JSON object key")]
     DuplicateObjectKey,
-    /// A serde_json RawValue payload violated the strict value contract.
-    #[error("invalid raw JSON value")]
+    /// A serde_json RawValue payload violated the strict value contract,
+    /// including the fixed maximum of 127 nested containers.
+    #[error("invalid raw JSON value (maximum nesting depth is 127 containers)")]
     InvalidRawValue,
     /// A JSON collection count overflowed the platform representation.
     #[error("JSON collection length overflow")]

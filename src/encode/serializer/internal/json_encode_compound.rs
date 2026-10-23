@@ -57,6 +57,9 @@ where
     /// Number of sequence items or map entries observed so far.
     observed: usize,
 
+    /// Whether the serializer declared this compound empty.
+    declared_empty: bool,
+
     /// Whether a map key has been accepted without its corresponding value.
     map_key_pending: bool,
 
@@ -80,6 +83,8 @@ where
     /// * `inner` - Serde compound serializer that receives admitted values.
     /// * `context` - Shared mutable state for this serialization traversal.
     /// * `child_depth` - Root-inclusive depth assigned to child values.
+    /// * `declared_empty` - Whether the serializer declared zero items or
+    ///   fields for this compound.
     ///
     /// # Returns
     ///
@@ -90,12 +95,14 @@ where
         inner: C,
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         child_depth: usize,
+        declared_empty: bool,
     ) -> Self {
         Self {
             inner,
             context,
             child_depth,
             observed: 0,
+            declared_empty,
             map_key_pending: false,
             private_kind: None,
             private_state: None,
@@ -128,6 +135,7 @@ where
             context,
             child_depth: depth,
             observed: 0,
+            declared_empty: false,
             map_key_pending: false,
             private_kind: Some(kind),
             private_state: Some(state),
@@ -243,6 +251,28 @@ where
             .serialization_error(JsonSerializationErrorKind::InvalidSerializerState { reason })
     }
 
+    /// Rejects a callback for a compound declared with zero items or fields.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the compound declaration permits callbacks.
+    ///
+    /// # Errors
+    ///
+    /// Returns a Serde error containing
+    /// [`JsonSerializerStateError::UnexpectedCompound`] when the compound
+    /// declared no items or fields.
+    #[inline(always)]
+    fn reject_empty_callback<E>(&self) -> Result<(), E>
+    where
+        E: Error,
+    {
+        if self.declared_empty {
+            return Err(self.serialization_error(JsonSerializerStateError::UnexpectedCompound));
+        }
+        Ok(())
+    }
+
     /// Records the current private protocol's stable failure.
     ///
     /// # Type Parameters
@@ -300,6 +330,7 @@ where
     where
         T: Serialize + ?Sized,
     {
+        self.reject_empty_callback()?;
         self.next_sequence()?;
         let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_element(&value)
@@ -352,6 +383,7 @@ where
     where
         T: Serialize + ?Sized,
     {
+        self.reject_empty_callback()?;
         self.next_sequence()?;
         let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_element(&value)
@@ -402,6 +434,7 @@ where
     where
         T: Serialize + ?Sized,
     {
+        self.reject_empty_callback()?;
         self.next_sequence()?;
         let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(&value)
@@ -453,6 +486,7 @@ where
     where
         T: Serialize + ?Sized,
     {
+        self.reject_empty_callback()?;
         self.next_sequence()?;
         let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(&value)
@@ -506,6 +540,7 @@ where
     where
         T: Serialize + ?Sized,
     {
+        self.reject_empty_callback()?;
         if self.map_key_pending {
             return Err(self.serialization_error(JsonSerializerStateError::MapKeyAlreadyPending));
         }
@@ -538,6 +573,7 @@ where
     where
         T: Serialize + ?Sized,
     {
+        self.reject_empty_callback()?;
         if !self.map_key_pending {
             return Err(self.serialization_error(JsonSerializerStateError::MapValueWithoutKey));
         }
@@ -571,6 +607,7 @@ where
         K: Serialize + ?Sized,
         V: Serialize + ?Sized,
     {
+        self.reject_empty_callback()?;
         self.serialize_key(key)?;
         self.serialize_value(value)
     }
@@ -624,6 +661,7 @@ where
     where
         T: Serialize + ?Sized,
     {
+        self.reject_empty_callback()?;
         if let Some(kind) = self.private_kind {
             let state = self.private_state.as_mut().expect("private state must exist");
             if state.begin(key).is_err() {
@@ -744,6 +782,7 @@ where
     where
         T: Serialize + ?Sized,
     {
+        self.reject_empty_callback()?;
         self.next_map_entry()?;
         if VALUE_LIMITS {
             self.context

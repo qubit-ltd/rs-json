@@ -327,7 +327,7 @@ where
         self.diagnostic_policy
     }
 
-    /// Returns the raw input byte count associated with this error.
+    /// Returns the raw input length observed at the decoding boundary.
     ///
     /// For slice-based entry points, this is the complete input slice length,
     /// including when input admission rejects the slice before processing it.
@@ -338,7 +338,7 @@ where
     ///
     /// # Returns
     ///
-    /// The number of bytes charged for the input that caused this error.
+    /// The raw input length observed for the input that caused this error.
     #[must_use]
     #[inline(always)]
     pub const fn raw_input_bytes(&self) -> usize {
@@ -353,12 +353,16 @@ where
         }
     }
 
-    /// Returns the normalized text length when normalization completed.
+    /// Returns the predicted normalized text length when it is available.
+    ///
+    /// A value may be present even when a budget rejected the input before
+    /// normalized text was allocated or rewritten. This reports a target
+    /// length, not proof that a normalized document was produced or charged.
     ///
     /// # Returns
     ///
-    /// `Some(length)` when normalization produced text, or `None` when the
-    /// failure occurred before a normalized document existed.
+    /// `Some(length)` when normalization determined a target length, or
+    /// `None` when the failure occurred before that length was available.
     #[inline(always)]
     pub const fn normalized_input_bytes(&self) -> Option<usize> {
         match self.failure {

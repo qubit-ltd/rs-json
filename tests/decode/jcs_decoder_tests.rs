@@ -78,6 +78,13 @@ fn test_jcs_decoder_accepts_binary64_integer_text() {
 }
 
 #[test]
+fn test_jcs_decoder_unlimited_does_not_measure_unconfigured_value_resources() {
+    let mut decoder = JcsDecoder::unlimited();
+    assert_eq!(decoder.decode_str(r#"{"value":[1,true]}"#).unwrap()["value"][1], true);
+    assert_eq!(decoder.session().value_budget().used_nodes(), None);
+}
+
+#[test]
 fn test_jcs_decoder_rejects_decoded_duplicate_key_without_leaking_key() {
     let error = JcsDecoder::unlimited()
         .decode_str(r#"{"secret":1,"\u0073ecret":2}"#)

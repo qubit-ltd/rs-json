@@ -21,7 +21,8 @@ mod internal;
 /// rejects wider numeric values and non-finite floats, validates map keys, and
 /// rejects duplicate object keys. It owns no resource budget; use
 /// [`crate::encode::JsonEncoder`] when encoded text and resource accounting are
-/// required.
+/// required. RawValue projection accepts at most 127 nested containers; a
+/// fragment containing 128 containers is rejected.
 ///
 /// # Examples
 ///

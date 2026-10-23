@@ -18,7 +18,9 @@ use crate::internal::StrictJsonNumber;
 use crate::lexical::JsonLexicalEvent;
 use crate::lexical::JsonNumberModel;
 
-/// Fixed maximum number of nested containers in a materialized JCS value.
+/// Fixed maximum number of nested containers in a materialized JSON value.
+///
+/// RawValue projections accept container depths 1 through 127 and reject 128.
 const MAX_MATERIALIZATION_DEPTH: usize = 127;
 
 /// Constructs one owned value from a complete scanner event sequence.

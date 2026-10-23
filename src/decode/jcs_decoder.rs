@@ -72,8 +72,9 @@ where
 impl JcsDecoder<'static, JsonResource, usize> {
     /// Creates a decoder with no configured resource limits.
     ///
-    /// The returned decoder still accounts for decoded resources, but no
-    /// configured ceiling rejects input based on resource usage.
+    /// Resource ceilings are not configured, so resource usage is not
+    /// measured by this session. Syntax, numeric, duplicate-key, and fixed
+    /// materialization-depth checks still apply.
     ///
     /// # Returns
     ///

@@ -24,10 +24,8 @@ use super::JsonValueCompound;
 use crate::encode::JsonIntegerSignedness;
 use crate::encode::JsonSerializationError;
 use crate::encode::JsonSerializationErrorKind;
-use crate::encode::JsonSerializerStateError;
 use crate::internal::JsonPrivateProtocolKind;
 use crate::internal::JsonPrivateProtocolState;
-use crate::internal::SERDE_JSON_RAW_VALUE_TOKEN;
 use crate::lexical::JsonLexicalScanner;
 use crate::lexical::JsonNumberModel;
 use crate::value::internal::JsonValueMaterializationError;
@@ -35,9 +33,6 @@ use crate::value::internal::LexicalJsonValueBuilder;
 
 /// Maximum compound capacity reserved from an untrusted Serde length hint.
 const MAX_PREALLOCATED_ITEMS: usize = 1_024;
-
-/// Serde RawValue protocol token documented by serde_json's public behavior.
-pub(in crate::value::json_value_encoder) const RAW_VALUE_TOKEN: &str = SERDE_JSON_RAW_VALUE_TOKEN;
 
 /// Bounds a Serde compound length hint before allocating its initial storage.
 #[inline(always)]
@@ -51,7 +46,8 @@ fn preallocated_capacity(len: Option<usize>) -> usize {
 /// # Errors
 ///
 /// Returns [`JsonSerializationErrorKind::InvalidRawValue`] when the text is
-/// invalid JSON or contains duplicate object keys.
+/// invalid JSON, contains duplicate object keys, or exceeds the fixed maximum
+/// of 127 nested containers (container depths 1 through 127 are accepted).
 pub(in crate::value::json_value_encoder) fn decode_raw_value(text: &str) -> Result<Value, JsonSerializationError> {
     let limits = JsonValueLimits::<JsonResource, usize>::new();
     let mut budget = JsonValueBudget::new(limits);
@@ -273,29 +269,16 @@ impl Serializer for JsonValueSerializer {
         self.serialize_str(variant)
     }
 
-    /// Delegates ordinary newtype structs and materializes RawValue payloads.
+    /// Delegates every newtype struct transparently.
     ///
     /// # Errors
     ///
-    /// Returns an error from serializing `value`, an invalid serializer state
-    /// error when a RawValue payload is not encoded as a string, or an invalid
-    /// raw value error when that string is not strict JSON.
-    fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Value, Self::Error>
+    /// Returns any error produced while serializing `value`.
+    fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<Value, Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        let value = value.serialize(self)?;
-        if name != RAW_VALUE_TOKEN {
-            return Ok(value);
-        }
-        let Value::String(text) = value else {
-            return Err(JsonSerializationError::new(
-                JsonSerializationErrorKind::InvalidSerializerState {
-                    reason: JsonSerializerStateError::InvalidRawValueProtocol,
-                },
-            ));
-        };
-        decode_raw_value(&text)
+        value.serialize(self)
     }
 
     /// Serializes a newtype variant as a single-key object.

@@ -228,6 +228,7 @@ fn test_json_text_decoder_classifies_serde_depth_as_deserialization() {
 struct OnlyInput {
     chunks: Vec<&'static [u8]>,
     next: usize,
+    offset: usize,
     interrupt_once: bool,
     fail_after_chunks: bool,
     reads: usize,
@@ -238,6 +239,7 @@ impl OnlyInput {
         Self {
             chunks,
             next: 0,
+            offset: 0,
             interrupt_once: false,
             fail_after_chunks: false,
             reads: 0,
@@ -254,6 +256,13 @@ impl Input for OnlyInput {
             self.interrupt_once = false;
             return Err(ErrorKind::Interrupted.into());
         }
+        if count == 0 {
+            return Ok(0);
+        }
+        while self.next < self.chunks.len() && self.offset == self.chunks[self.next].len() {
+            self.next += 1;
+            self.offset = 0;
+        }
         if self.next == self.chunks.len() {
             return if self.fail_after_chunks {
                 Err(IoError::other("sensitive source text"))
@@ -262,11 +271,51 @@ impl Input for OnlyInput {
             };
         }
         let chunk = self.chunks[self.next];
-        let copied = chunk.len().min(count);
-        output[index..index + copied].copy_from_slice(&chunk[..copied]);
-        self.next += 1;
+        let remaining = &chunk[self.offset..];
+        let copied = remaining.len().min(count);
+        output[index..index + copied].copy_from_slice(&remaining[..copied]);
+        self.offset += copied;
+        if self.offset == chunk.len() {
+            self.next += 1;
+            self.offset = 0;
+        }
         Ok(copied)
     }
+}
+
+#[test]
+fn test_only_input_preserves_chunk_remainder_across_small_reads() {
+    let bytes = b"true false";
+    let mut input = OnlyInput::new(vec![b"", b"true false", b""]);
+    input.interrupt_once = true;
+    let mut output = [0; 6];
+    let mut read = Vec::new();
+
+    loop {
+        let count = match unsafe { input.read_unchecked(&mut output, 1, 4) } {
+            Ok(count) => count,
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) => panic!("unexpected read error: {error}"),
+        };
+        if count == 0 {
+            break;
+        }
+        read.extend_from_slice(&output[1..1 + count]);
+    }
+
+    assert_eq!(read, bytes);
+    assert_eq!(input.reads, 5, "the interrupt, three data reads, and EOF are counted");
+}
+
+#[test]
+fn test_only_input_zero_count_does_not_consume_input() {
+    let mut input = OnlyInput::new(vec![b"true"]);
+    let mut output = [0; 5];
+
+    assert_eq!(unsafe { input.read_unchecked(&mut output, 1, 0) }.unwrap(), 0);
+    assert_eq!(input.next, 0);
+    assert_eq!(unsafe { input.read_unchecked(&mut output, 1, 4) }.unwrap(), 4);
+    assert_eq!(&output[1..5], b"true");
 }
 
 #[test]
@@ -297,6 +346,15 @@ fn test_json_decoder_stream_rejects_trailing_document() {
     let error = JsonDecoder::unlimited()
         .decode_input::<Value, _>(&mut input)
         .expect_err("a second top-level document must fail");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+}
+
+#[test]
+fn test_json_decoder_stream_rejects_trailing_document_in_small_reads() {
+    let mut input = OnlyInput::new(vec![b"true false"]);
+    let error = JsonDecoder::unlimited()
+        .decode_input::<Value, _>(&mut input)
+        .expect_err("a trailing document in the same chunk must not be discarded");
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
 }
 
@@ -563,7 +621,8 @@ fn test_json_decoder_stream_cumulative_input_budget_spans_calls() {
         .expect_err("the second call must use the remaining cumulative input budget");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     assert_eq!(error.raw_input_bytes(), 1);
-    assert_eq!(second.next, 1);
+    assert_eq!(second.next, 0);
+    assert_eq!(second.offset, 2);
     assert_eq!(
         decoder
             .session()

@@ -53,7 +53,8 @@ where
 {
     /// Reading input failed before text decoding began.
     Read {
-        /// Number of successfully read and charged bytes before the failure.
+        /// Number of bytes observed as read before the failure; this is not
+        /// necessarily the amount charged by every input path.
         raw_input_bytes: usize,
         /// Stable standard I/O failure category.
         kind: io::ErrorKind,
@@ -64,9 +65,11 @@ where
     Budget {
         /// Semantic stage where the measurement was rejected.
         stage: JsonDecodeStage,
-        /// Original input length.
+        /// Original input length observed at the decoding boundary; not
+        /// necessarily the amount charged to an input-byte budget.
         raw_input_bytes: usize,
-        /// Normalized length when normalization completed.
+        /// Predicted normalized target length when available; it does not
+        /// prove that normalized text was allocated or rewritten.
         normalized_input_bytes: Option<usize>,
         /// Complete measured-budget failure.
         source: MeasuredBudgetError<R, Q>,
@@ -75,14 +78,15 @@ where
     EmptyInput {
         /// Semantic stage where emptiness was detected.
         stage: JsonDecodeStage,
-        /// Original input length.
+        /// Original input length observed at the decoding boundary.
         raw_input_bytes: usize,
-        /// Normalized length when available.
+        /// Predicted normalized target length when available; it does not
+        /// prove that normalized text was produced.
         normalized_input_bytes: Option<usize>,
     },
     /// Raw bytes were not valid UTF-8.
     InvalidUtf8 {
-        /// Original input length.
+        /// Original input length observed at the decoding boundary.
         raw_input_bytes: usize,
         /// Valid prefix length reported by UTF-8 validation.
         valid_up_to: usize,
@@ -93,9 +97,10 @@ where
     },
     /// Text was not one valid JSON document.
     InvalidJson {
-        /// Original input length.
+        /// Original input length observed at the decoding boundary.
         raw_input_bytes: usize,
-        /// Normalized length when normalization completed.
+        /// Predicted normalized target length when available; it does not
+        /// prove that normalized text was allocated or rewritten.
         normalized_input_bytes: Option<usize>,
         /// Stable scanner reason and source coordinates.
         syntax: JsonSyntaxError,
@@ -104,9 +109,10 @@ where
     },
     /// A valid document had an unexpected top-level kind.
     UnexpectedTopLevel {
-        /// Original input length.
+        /// Original input length observed at the decoding boundary.
         raw_input_bytes: usize,
-        /// Normalized length when normalization completed.
+        /// Predicted normalized target length when available; it does not
+        /// prove that normalized text was produced.
         normalized_input_bytes: Option<usize>,
         /// Required top-level kind.
         expected: JsonRootKind,
@@ -115,9 +121,10 @@ where
     },
     /// A valid admitted document could not materialize the target type.
     Deserialize {
-        /// Original input length.
+        /// Original input length observed at the decoding boundary.
         raw_input_bytes: usize,
-        /// Normalized length when normalization completed.
+        /// Predicted normalized target length when available; it does not
+        /// prove that normalized text was produced.
         normalized_input_bytes: Option<usize>,
         /// One-based Serde line, or zero when unavailable.
         line: usize,
