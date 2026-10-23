@@ -8,6 +8,7 @@
 //! Regressions for literal JSON reference parsing used by fuzz oracles.
 
 use qubit_json_fuzz::json_reference::parse_literal_value;
+use qubit_json_fuzz::json_reference::roundtrip_literal_value;
 use serde_json::Value;
 
 /// Ordinary JSON values retain the reference parser's scalar and container
@@ -41,6 +42,21 @@ fn test_reference_roundtrip_preserves_nested_private_key_after_sorting() {
     let encoded = serde_json::to_vec(&original).expect("value encodes");
     let decoded = parse_literal_value(&encoded).expect("sorted object remains JSON");
     assert_eq!(decoded, original);
+}
+
+/// Ordinary Value deserialization can reinterpret a private-looking key.
+#[test]
+fn test_reference_roundtrip_preserves_raw_value_key_in_object_and_array() {
+    let mut object = serde_json::Map::new();
+    object.insert(
+        "$serde_json::private::RawValue".to_owned(),
+        Value::String("null".to_owned()),
+    );
+    let value = Value::Object(object);
+    assert_eq!(roundtrip_literal_value(&value).expect("object roundtrip"), value);
+
+    let wrapped = Value::Array(vec![value.clone()]);
+    assert_eq!(roundtrip_literal_value(&wrapped).expect("array roundtrip"), wrapped);
 }
 
 /// The literal reference must still reject invalid syntax and Unicode.

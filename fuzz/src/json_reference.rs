@@ -28,6 +28,12 @@ pub fn parse_literal_value(input: &[u8]) -> Result<Value, serde_json::Error> {
     Ok(value)
 }
 
+/// Serializes and reparses a value while treating every object key literally.
+pub fn roundtrip_literal_value(value: &Value) -> Result<Value, serde_json::Error> {
+    let encoded = serde_json::to_vec(value)?;
+    parse_literal_value(&encoded)
+}
+
 /// Recursively requests ordinary JSON values from serde_json's deserializer.
 struct LiteralValue(Value);
 

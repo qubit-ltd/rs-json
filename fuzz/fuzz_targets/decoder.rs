@@ -30,9 +30,9 @@ use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use qubit_json_fuzz::input_limit::bounded_input;
 use qubit_json_fuzz::json_number_contract::numbers_fit_contract;
+use qubit_json_fuzz::json_reference::roundtrip_literal_value;
 use serde_json::Value;
 use serde_json::from_slice;
-use serde_json::to_vec;
 
 use crate::fuzz_record::FuzzRecord;
 
@@ -95,8 +95,9 @@ fuzz_target!(|data: &[u8]| {
     );
     match default_decoder.decode_utf8::<Value>(data) {
         Ok(value) => {
-            let encoded = to_vec(&value).expect("serde_json::Value must serialize");
-            let _: Value = from_slice(&encoded).expect("successful decoder output must be strict JSON");
+            let roundtripped =
+                roundtrip_literal_value(&value).expect("successful decoder output must roundtrip as strict JSON");
+            assert_eq!(roundtripped, value, "decoder output must roundtrip without data loss");
         }
         Err(error) => assert_error_invariants(&error, data.len()),
     }
@@ -195,9 +196,9 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(value, decoded);
     }
     if let Ok(values) = default_decoder.decode_array_str::<Value>(input) {
-        let encoded = to_vec(&values).expect("decoded array elements must serialize");
-        let reparsed: Value = from_slice(&encoded).expect("decoded array must remain strict JSON");
-        assert!(reparsed.is_array());
+        let wrapped = Value::Array(values);
+        let roundtripped = roundtrip_literal_value(&wrapped).expect("decoded array must remain strict JSON");
+        assert_eq!(roundtripped, wrapped, "decoded array must roundtrip without data loss");
     }
     if input.contains("TOP_SECRET")
         && let Err(error) = default_decoder.decode_str::<FuzzRecord>(input)
