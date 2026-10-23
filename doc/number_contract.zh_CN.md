@@ -59,7 +59,7 @@ JCS `Value` 构造最多接受 127 层嵌套容器。`JsonValueEncoder` 投影�
 数字规则取决于入口：
 
 - 文本解码、规范化解码、普通序列化及 Serde 原生整数事件采用上文普通契约。`i128`/`u128` 只有能表示为相应 `i64` 或 `u64` 时才接受。
-- `AccountingJsonValueSeed` 与 `DuplicateKeyRejectingJsonValueSeed` 接收的是已解码事件，而不是源文本。它们会检查原生整数事件是否在 64 位范围内，但看不到原始 token，也无法执行 `NumberBytes`。如果 `arbitrary_precision` 将数字呈现为 map 事件，seed 无法区分它与同形状的真实对象，因此按对象保留。需要可靠文本来源时，使用受控文本、RawValue 或 JCS 入口。
+- `AccountingJsonValueSeed` 与 `DuplicateKeyRejectingJsonValueSeed` 接收的是已解码事件，而不是源文本，因此都看不到原始 number lexeme。`AccountingJsonValueSeed` 会检查原生整数事件是否在 64 位范围内，并按构造后 `Number` 的紧凑显示长度执行 `NumberBytes` 预算；该长度可能与源 token 长度不同。`DuplicateKeyRejectingJsonValueSeed` 只检查重复键，本身不执行资源预算。如果 `arbitrary_precision` 将数字呈现为 map 事件，任一 seed 都无法区分它与同形状的真实对象，因此按对象保留。需要可靠文本来源时，使用受控文本、RawValue 或 JCS 入口。
 - `JsonTreeReader` 读取的是已存在的 `serde_json::Value`，按 Number 当前紧凑显示表示的字节长度计量；不转换为 `f64`，也不套用普通文本 encoder 的范围限制。启用 `arbitrary_precision` 后，已有的 `1e400` 可安全计量，39 位整数则按 39 字节计费。普通 `JsonEncoder` 与 `JcsEncoder` 仍会拒绝超出各自契约的数字。
 
 crate 自身不启用 serde_json 的 `arbitrary_precision`。若其他依赖统一启用了该 feature，encoder 会识别 serde_json 精确的私有 Number struct 协议：只有一个字符串 payload，经 `serialize_str` 或一次 `collect_str` 提交。它会用共享 JSON 数字 scanner 校验后再输出或构造 Value。普通对象即使有 `$serde_json::private::Number` 键也仍按对象处理。单独的 `RawValue` 私有协议同样受支持并会验证。私有协议形状错误返回 `JsonSerializationErrorKind::InvalidSerializerState`，具体状态原因是 `JsonSerializerStateError::InvalidNumberProtocol` 或 `InvalidRawValueProtocol`；诊断文本不泄露 payload。

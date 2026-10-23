@@ -83,6 +83,47 @@ fn test_accounting_json_value_seed_returns_the_admitted_value() {
     assert_eq!(value, json!({"key": [true]}));
 }
 
+#[test]
+fn test_accounting_json_value_seed_checks_number_display_bytes() {
+    for maximum in [2_usize, 3] {
+        let limits = JsonValueLimits::<JsonResource, usize>::builder()
+            .max_number_bytes(maximum)
+            .build();
+        let mut budget = limits.budget();
+        let mut transaction = budget.transaction();
+        let result = AccountingJsonValueSeed::new(&mut transaction)
+            .deserialize(value::U64Deserializer::<value::Error>::new(100));
+        if maximum == 3 {
+            assert_eq!(result.unwrap(), json!(100));
+            transaction.commit().unwrap();
+        } else {
+            let error = result.expect_err("three displayed digits must exceed two bytes");
+            assert!(error.to_string().contains("NumberBytes"));
+        }
+    }
+}
+
+#[test]
+fn test_accounting_json_value_seed_budgets_decoded_number_display() {
+    for maximum in [3_usize, 5] {
+        let limits = JsonValueLimits::<JsonResource, usize>::builder()
+            .max_number_bytes(maximum)
+            .build();
+        let mut budget = limits.budget();
+        let mut transaction = budget.transaction();
+        let mut deserializer = Deserializer::from_str("1e2");
+        let result = AccountingJsonValueSeed::new(&mut transaction).deserialize(&mut deserializer);
+        if maximum == 3 {
+            let error = result.expect_err("the displayed number is longer than its source token");
+            assert!(error.to_string().contains("NumberBytes"));
+        } else {
+            let value = result.expect("five displayed bytes should fit");
+            assert_eq!(value.to_string(), "100.0");
+            transaction.commit().unwrap();
+        }
+    }
+}
+
 /// Verifies duplicate keys count as separate decoded object entries.
 #[test]
 fn test_accounting_json_value_seed_counts_duplicate_object_entries() {

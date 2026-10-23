@@ -20,7 +20,9 @@ use super::internal::JsonValueVisitor;
 /// Serde seed that constructs a [`Value`] while accounting decoded resources.
 ///
 /// Unlike lexical JSON admission, this seed observes values after a Serde
-/// deserializer has decoded them. It cannot inspect original number lexemes or
+/// deserializer has decoded them. For a number, it charges `NumberBytes` using
+/// the compact display length of the constructed [`serde_json::Number`], not
+/// the original token length. It cannot inspect original number lexemes or
 /// enforce text-level integer and floating-point range rules. Use
 /// `JsonDecoder` when decoding JSON text requires those guarantees. This seed
 /// remains suitable for decoded-value budget enforcement inside a type's
