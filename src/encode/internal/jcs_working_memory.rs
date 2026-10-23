@@ -22,6 +22,24 @@ pub(super) struct JcsWorkingMemory {
     object_bytes: usize,
     /// Largest combined tracked capacity observed so far.
     peak_bytes: usize,
+    /// Successful stack growths observed by the allocation diagnostic.
+    #[cfg(feature = "jcs-allocation-diagnostics")]
+    stack_growth_count: usize,
+    /// Sum of requested stack capacities observed by the diagnostic.
+    #[cfg(feature = "jcs-allocation-diagnostics")]
+    stack_requested_bytes: usize,
+    /// Largest actual stack capacity observed by the diagnostic.
+    #[cfg(feature = "jcs-allocation-diagnostics")]
+    stack_max_actual_bytes: usize,
+    /// Successful object-table growths observed by the allocation diagnostic.
+    #[cfg(feature = "jcs-allocation-diagnostics")]
+    object_growth_count: usize,
+    /// Sum of requested object-table capacities observed by the diagnostic.
+    #[cfg(feature = "jcs-allocation-diagnostics")]
+    object_requested_bytes: usize,
+    /// Largest actual object-table capacity observed by the diagnostic.
+    #[cfg(feature = "jcs-allocation-diagnostics")]
+    object_max_actual_bytes: usize,
 }
 
 impl JcsWorkingMemory {
@@ -42,6 +60,18 @@ impl JcsWorkingMemory {
             stack_bytes: 0,
             object_bytes: 0,
             peak_bytes: 0,
+            #[cfg(feature = "jcs-allocation-diagnostics")]
+            stack_growth_count: 0,
+            #[cfg(feature = "jcs-allocation-diagnostics")]
+            stack_requested_bytes: 0,
+            #[cfg(feature = "jcs-allocation-diagnostics")]
+            stack_max_actual_bytes: 0,
+            #[cfg(feature = "jcs-allocation-diagnostics")]
+            object_growth_count: 0,
+            #[cfg(feature = "jcs-allocation-diagnostics")]
+            object_requested_bytes: 0,
+            #[cfg(feature = "jcs-allocation-diagnostics")]
+            object_max_actual_bytes: 0,
         }
     }
 
@@ -120,6 +150,24 @@ impl JcsWorkingMemory {
             .checked_sub(bytes)
             .ok_or_else(|| self.limit_error(usize::MAX))?;
         Ok(())
+    }
+
+    /// Prints one renderer capacity report when the dedicated diagnostic is
+    /// enabled.
+    #[cfg(feature = "jcs-allocation-diagnostics")]
+    pub(super) fn report_diagnostics(&self, success: bool) {
+        if std::env::var_os("JCS_RENDERER_ALLOCATION_DIAGNOSTICS").is_some() {
+            eprintln!(
+                "JCS_RENDERER status={} stack_growths={} stack_requested_bytes={} stack_max_actual_bytes={} object_growths={} object_requested_bytes={} object_max_actual_bytes={}",
+                if success { "success" } else { "failure" },
+                self.stack_growth_count,
+                self.stack_requested_bytes,
+                self.stack_max_actual_bytes,
+                self.object_growth_count,
+                self.object_requested_bytes,
+                self.object_max_actual_bytes,
+            );
+        }
     }
 
     #[cfg(test)]
@@ -202,6 +250,16 @@ impl JcsWorkingMemory {
                 .ok_or_else(|| self.limit_error(usize::MAX))?;
         }
         self.peak_bytes = self.peak_bytes.max(actual_total);
+        #[cfg(feature = "jcs-allocation-diagnostics")]
+        if is_stack {
+            self.stack_growth_count = self.stack_growth_count.saturating_add(1);
+            self.stack_requested_bytes = self.stack_requested_bytes.saturating_add(requested_bytes);
+            self.stack_max_actual_bytes = self.stack_max_actual_bytes.max(actual_bytes);
+        } else {
+            self.object_growth_count = self.object_growth_count.saturating_add(1);
+            self.object_requested_bytes = self.object_requested_bytes.saturating_add(requested_bytes);
+            self.object_max_actual_bytes = self.object_max_actual_bytes.max(actual_bytes);
+        }
         Ok(())
     }
 
@@ -321,5 +379,30 @@ mod tests {
             }
             other => panic!("expected an untracked capacity error, got {other:?}"),
         }
+    }
+
+    #[cfg(feature = "jcs-allocation-diagnostics")]
+    #[test]
+    fn test_diagnostic_counts_successful_growth_by_collection() {
+        let mut memory = JcsWorkingMemory::new(usize::MAX);
+        let mut stack = Vec::<u64>::new();
+        let mut entries = Vec::<(usize, usize)>::new();
+
+        memory.reserve_stack(&mut stack, 2).unwrap();
+        memory.reserve_stack(&mut stack, 1).unwrap();
+        memory.reserve_object_entries(&mut entries, 2).unwrap();
+
+        assert_eq!(memory.stack_growth_count, 1);
+        assert_eq!(memory.stack_requested_bytes, 2 * std::mem::size_of::<u64>());
+        assert_eq!(
+            memory.stack_max_actual_bytes,
+            stack.capacity() * std::mem::size_of::<u64>()
+        );
+        assert_eq!(memory.object_growth_count, 1);
+        assert_eq!(memory.object_requested_bytes, 2 * std::mem::size_of::<(usize, usize)>());
+        assert_eq!(
+            memory.object_max_actual_bytes,
+            entries.capacity() * std::mem::size_of::<(usize, usize)>(),
+        );
     }
 }

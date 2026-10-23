@@ -392,6 +392,38 @@ fn test_jcs_encoder_rejects_object_before_working_memory_exceeds_limit() {
 }
 
 #[test]
+fn test_jcs_encoder_admission_depth_precedes_renderer_working_memory() {
+    let mut value = serde_json::Value::Null;
+    for _ in 0..64 {
+        value = serde_json::Value::Array(vec![value]);
+    }
+
+    let loose_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_nodes(128)
+        .max_output_bytes(4096)
+        .build();
+    let error = JcsEncoder::with_limits(loose_limits, 0)
+        .to_vec(&value)
+        .expect_err("renderer stack must be rejected at zero working capacity");
+    assert_eq!(error.kind(), JcsEncodeErrorKind::WorkingMemory);
+
+    let shallow_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_depth(32)
+        .max_nodes(128)
+        .max_output_bytes(4096)
+        .build();
+    let error = JcsEncoder::with_limits(shallow_limits, 0)
+        .to_vec(&value)
+        .expect_err("admission depth must fail before renderer capacity is checked");
+    assert_eq!(error.kind(), JcsEncodeErrorKind::Budget);
+    assert!(error.budget_error().is_some());
+
+    while let serde_json::Value::Array(mut values) = value {
+        value = values.pop().expect("each nested array has one child");
+    }
+}
+
+#[test]
 fn test_jcs_encoder_checks_working_memory_for_nested_containers_and_reuses_session() {
     let value = serde_json::json!([{"a": [1, 2]}]);
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(8).build();

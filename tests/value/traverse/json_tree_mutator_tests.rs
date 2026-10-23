@@ -77,6 +77,24 @@ struct FailingVisitor {
     calls: usize,
 }
 
+/// Adds one descendant per callback and stops after eight additions.
+struct BoundedExpansionVisitor {
+    additions: usize,
+}
+
+impl JsonTreeMutVisitor for BoundedExpansionVisitor {
+    type Error = &'static str;
+
+    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+        if self.additions == 8 {
+            return Err("expansion limit reached");
+        }
+        self.additions += 1;
+        *value = json!([null]);
+        Ok(JsonTreeControl::Descend)
+    }
+}
+
 impl JsonTreeMutVisitor for FailingVisitor {
     type Error = &'static str;
 
@@ -197,6 +215,25 @@ fn test_process_rejects_input_before_mutation() {
     assert_eq!(visitor.calls, 0);
     assert_eq!(value, original);
     assert_eq!(output.used_nodes(), Some(0));
+}
+
+#[test]
+fn test_mutator_visitor_can_bound_work_from_added_descendants() {
+    let limits = measured_limits();
+    let mut input_budget = limits.budget();
+    let mut output_budget = limits.budget();
+    let mut input = input_budget.transaction();
+    let mut output = output_budget.transaction();
+    let mut value = Value::Null;
+    let mut visitor = BoundedExpansionVisitor { additions: 0 };
+
+    let error = JsonTreeMutator::new(&mut input, &mut output)
+        .process(&mut value, &mut visitor)
+        .expect_err("visitor must stop after its configured number of additions");
+
+    assert!(matches!(error, JsonTreeMutateError::Visitor("expansion limit reached")));
+    assert_eq!(visitor.additions, 8);
+    assert_eq!(value, json!([[[[[[[[null]]]]]]]]));
 }
 
 /// Verifies shrinking transformations account the complete original and the

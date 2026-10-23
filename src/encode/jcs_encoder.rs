@@ -35,9 +35,13 @@ use crate::value::traverse::JsonTreeReader;
 /// exactly representable range can therefore be rounded (for example,
 /// `9007199254740993` becomes `9007199254740992`). Output limits measure the
 /// final canonical byte sequence. Auxiliary storage used while rendering is
-/// limited separately by `max_working_bytes`; this limit covers the traversal
-/// stack and active object member tables, but excludes the input [`Value`] and
-/// buffered output bytes.
+/// limited separately by `max_working_bytes`; this limit covers the renderer's
+/// traversal stack and active object member tables, but excludes the input
+/// [`Value`], buffered output bytes, and any admission stack used to check
+/// configured value limits before rendering. Configure `max_depth` as well
+/// when the admission traversal itself must have a depth bound. A working
+/// memory limit is a capacity bound for these renderer collections, not an
+/// exact heap-usage bound.
 ///
 /// # Type Parameters
 ///

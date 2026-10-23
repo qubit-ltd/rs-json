@@ -159,6 +159,50 @@ realloc 次数大致随深度增长，而累计请求字节增长明显更快：
 
 这是修改候选的一次测量，没有修改前对照。`jcs-depth` 基准和诊断仍可用于后续测量。
 
+### Renderer 容量归因采样（2026-10-23）
+
+新增 renderer 专项诊断由 `jcs-allocation-diagnostics` feature 与
+`JCS_RENDERER_ALLOCATION_DIAGNOSTICS` 环境变量启用。它分别报告 renderer
+stack 与 object member table 的成功扩容次数、请求容量字节总和以及实际容量最大值。
+这些数据只覆盖 renderer 管理的容量，不包括准入状态、输出缓冲、allocator metadata
+和输入 `Value` 占用的内存。专项 benchmark 会在启用全局 allocator 计数标志前分流。
+
+环境：HEAD `2c594e7d4e5c6724e6cc994bfabbc0037c2d38f4`，共享 review worktree
+含未提交改动；Rust/Cargo 1.94.0；x86_64 Linux `7.0.0-38-generic`；Intel Core
+i5-9600K，6 核，allocator 为系统 `System`。主机未隔离，未固定 CPU 亲和性，CPU
+频率调节开启。三次 renderer 诊断得到相同的数据。每行代表每次运行中各编码路径的一次成功样本；
+本次没有计时样本或失败样本。深数组 fixture 在 unlimited 和有限预算路径得到相同的 renderer
+容量值。
+
+| 形态 | 路径 | Stack 扩容次数 | Stack 请求字节 | Stack 实际容量最大值 | Object 扩容次数 | Object 请求字节 | Object 实际容量最大值 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 深数组，深度 32 | 两种路径 | 32 | 16,896 | 1,024 | 0 | 0 | 0 |
+| 深数组，深度 128 | 两种路径 | 128 | 264,192 | 4,096 | 0 | 0 | 0 |
+| 深数组，深度 512 | 两种路径 | 512 | 4,202,496 | 16,384 | 0 | 0 | 0 |
+| 深数组，深度 2,048 | 两种路径 | 2,048 | 67,141,632 | 65,536 | 0 | 0 | 0 |
+| 深数组，深度 8,192 | 两种路径 | 8,192 | 1,073,872,896 | 262,144 | 0 | 0 | 0 |
+| 大对象，2,048 条记录 | 两种路径 | 2 | 96 | 64 | 2,049 | 147,456 | 49,152 |
+| 深对象，深度 128 | 两种路径 | 129 | 268,320 | 4,128 | 129 | 6,168 | 48 |
+| 大数组，16,384 项 | 两种路径 | 1 | 32 | 32 | 0 | 0 | 0 |
+
+“两种路径”指 `jcs-unlimited` 与 `jcs-finite-budgets`；三次深数组诊断均确认两者数据相同。深度
+8,192 的 renderer stack 扩容累计请求 1,073,872,896 字节，实际容量峰值为 262,144
+字节。同一工作树中的既有全操作诊断报告 unlimited 累计 realloc 请求 1,073,938,384
+字节、finite 累计请求 1,077,870,064 字节，深度 8,192 的三次全操作诊断结果一致。因此，renderer
+stack 能解释深数组请求流量中的绝大部分；全操作剩余流量来自 renderer 以外的分配，本次不进一步归因。
+这些是重复诊断样本，不是修改前后对照或计时结果；它们不测实际搬迁字节、峰值存活内存或 RSS。
+现有证据不足以支持修改生产扩容策略。
+
+命令：
+
+```bash
+JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --bench jcs_bench --features "jcs jcs-allocation-diagnostics" --locked -- jcs-depth
+JCS_RENDERER_ALLOCATION_DIAGNOSTICS=1 cargo bench --bench jcs_bench --features "jcs jcs-allocation-diagnostics" --locked -- jcs-depth
+```
+
+`jcs-depth` 过滤器也会运行基准中明确设置的大对象对照，并输出 stack/object 分类。renderer
+专项运行不会输出 `JCS_ALLOC`，避免诊断文本格式化污染全局 allocator 计数。
+
 ## 结果解释边界
 
 严格编解码会执行直接 `serde_json` 不一定承担的检查。尤其是 `RawValue` 的直接对照信任

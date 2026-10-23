@@ -107,6 +107,16 @@ fn record_allocation(pointer: *mut u8, size: usize) {
 /// This function returns after printing the allocation report.
 #[cfg(feature = "jcs-allocation-diagnostics")]
 fn report_allocations(shape: &str, path: &str, operation: impl FnOnce() -> Vec<u8>) {
+    if std::env::var_os("JCS_RENDERER_ALLOCATION_DIAGNOSTICS").is_some() {
+        let output = operation();
+        eprintln!(
+            "JCS_RENDERER_SAMPLE shape={shape} path={path} output_bytes={}",
+            output.len()
+        );
+        drop(output);
+        return;
+    }
+
     ALLOCATION_COUNT.store(0, Ordering::Relaxed);
     ALLOCATED_BYTES.store(0, Ordering::Relaxed);
     REALLOCATION_COUNT.store(0, Ordering::Relaxed);
@@ -257,7 +267,9 @@ fn benchmark_jcs_encoding(criterion: &mut Criterion) {
         ("large-array", large_array()),
     ];
     #[cfg(feature = "jcs-allocation-diagnostics")]
-    if std::env::var_os("JCS_ALLOCATION_DIAGNOSTICS").is_some() {
+    if std::env::var_os("JCS_ALLOCATION_DIAGNOSTICS").is_some()
+        || std::env::var_os("JCS_RENDERER_ALLOCATION_DIAGNOSTICS").is_some()
+    {
         for (shape, value) in &fixtures {
             let finite_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
                 .max_output_bytes(
@@ -357,16 +369,20 @@ fn benchmark_jcs_depth(criterion: &mut Criterion) {
             .max_depth(depth + 1)
             .max_nodes(depth + 1)
             .build();
-        assert_eq!(JcsEncoder::unlimited().to_vec(&value).unwrap(), expected);
-        assert_eq!(
-            JcsEncoder::with_limits(limits, FINITE_WORKING_BYTES)
-                .to_vec(&value)
-                .unwrap(),
-            expected,
-        );
+        if std::env::var_os("JCS_RENDERER_ALLOCATION_DIAGNOSTICS").is_none() {
+            assert_eq!(JcsEncoder::unlimited().to_vec(&value).unwrap(), expected);
+            assert_eq!(
+                JcsEncoder::with_limits(limits, FINITE_WORKING_BYTES)
+                    .to_vec(&value)
+                    .unwrap(),
+                expected,
+            );
+        }
 
         #[cfg(feature = "jcs-allocation-diagnostics")]
-        if std::env::var_os("JCS_ALLOCATION_DIAGNOSTICS").is_some() {
+        if std::env::var_os("JCS_ALLOCATION_DIAGNOSTICS").is_some()
+            || std::env::var_os("JCS_RENDERER_ALLOCATION_DIAGNOSTICS").is_some()
+        {
             let shape = format!("deep-array-{depth}");
             report_allocations(&shape, "jcs-unlimited", || {
                 JcsEncoder::unlimited().to_vec(&value).unwrap()

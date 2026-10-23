@@ -203,6 +203,62 @@ This is a measurement of the modified candidate only, not a before/after
 comparison. The `jcs-depth` benchmarks and diagnostics remain available for
 follow-up measurements.
 
+### Renderer capacity attribution sample (2026-10-23)
+
+The renderer-only diagnostic was added behind `jcs-allocation-diagnostics` and
+`JCS_RENDERER_ALLOCATION_DIAGNOSTICS`. It reports successful growth count,
+the sum of requested capacity bytes, and the maximum actual capacity separately
+for the renderer stack and object member tables. These are renderer-owned
+capacities; they exclude admission state, output buffers, allocator metadata,
+and memory used by the input `Value`. The dedicated benchmark path bypasses the
+global allocator counter before its measurement flag is enabled.
+
+Environment: HEAD `2c594e7d4e5c6724e6cc994bfabbc0037c2d38f4` with the shared
+review worktree modified; Rust/Cargo 1.94.0; x86_64 Linux
+`7.0.0-38-generic`; Intel Core i5-9600K, 6 cores, system `System` allocator.
+The host was not isolated, no CPU affinity was set, and CPU frequency scaling
+was enabled. Three renderer diagnostic runs produced identical values. Each row
+is one successful observation per encoding path in each run; there was no
+timing sample or failure sample. Unlimited and finite paths produced identical
+renderer capacities for each deep-array fixture.
+
+| Shape | Path | Stack growths | Stack requested bytes | Stack max actual bytes | Object growths | Object requested bytes | Object max actual bytes |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| deep array, depth 32 | both | 32 | 16,896 | 1,024 | 0 | 0 | 0 |
+| deep array, depth 128 | both | 128 | 264,192 | 4,096 | 0 | 0 | 0 |
+| deep array, depth 512 | both | 512 | 4,202,496 | 16,384 | 0 | 0 | 0 |
+| deep array, depth 2,048 | both | 2,048 | 67,141,632 | 65,536 | 0 | 0 | 0 |
+| deep array, depth 8,192 | both | 8,192 | 1,073,872,896 | 262,144 | 0 | 0 | 0 |
+| large object, 2,048 records | both | 2 | 96 | 64 | 2,049 | 147,456 | 49,152 |
+| deep object, depth 128 | both | 129 | 268,320 | 4,128 | 129 | 6,168 | 48 |
+| large array, 16,384 items | both | 1 | 32 | 32 | 0 | 0 | 0 |
+
+“Both” denotes `jcs-unlimited` and `jcs-finite-budgets`; the deep-array
+diagnostic runs confirmed the values match between those paths. The 8,192-layer
+case attributes 1,073,872,896 requested bytes to renderer stack growth, with
+262,144 bytes as its largest actual stack capacity. The existing whole-operation
+diagnostic in the same worktree produced the same values in three runs:
+1,073,938,384 cumulative realloc request bytes for unlimited and 1,077,870,064
+for finite budgets at depth 8,192. The renderer-only figures therefore explain
+nearly all of the deep-array request traffic; the remaining whole-operation
+traffic includes allocations outside the renderer and is not assigned here.
+These are repeated diagnostic samples, not a before/after comparison or timing
+result, and they do not measure bytes copied, peak live
+memory, or RSS. The available measurements do not justify changing production
+growth policy.
+
+Commands:
+
+```bash
+JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --bench jcs_bench --features "jcs jcs-allocation-diagnostics" --locked -- jcs-depth
+JCS_RENDERER_ALLOCATION_DIAGNOSTICS=1 cargo bench --bench jcs_bench --features "jcs jcs-allocation-diagnostics" --locked -- jcs-depth
+```
+
+The `jcs-depth` filter also runs the benchmark's explicit large-object control
+and reports its stack/object split. The renderer-specific run emits no
+`JCS_ALLOC` reports, so diagnostic formatting cannot contaminate global
+allocator counts.
+
 ## Interpretation boundaries
 
 Strict codecs perform checks that direct `serde_json` may not perform. In
