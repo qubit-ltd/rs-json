@@ -484,3 +484,28 @@ JCS_RENDERER_ALLOCATION_DIAGNOSTICS=1 cargo bench --locked --features 'jcs jcs-a
 ```
 
 Criterion’s original raw outputs and estimates remain under `target/criterion/` using the baseline identifiers shown above. The experiment does not change older benchmark records or earlier failed-candidate evidence.
+
+## 2026-10-24 RSJ-R01 finite-stack candidate (withdrawn)
+
+The finite-stack amortization/reclaim candidate passed its focused correctness checks and reduced deep-array-8,192 stack growths from 8,192 to 13. It did **not** pass the required latency gate, so only the R01 candidate implementation and candidate-only tests were withdrawn. The rest of this change set is unaffected. The allocation counters report requested/actual vector capacities, not copied bytes, peak live heap, or RSS. Review of the candidate also established that replacement vectors can briefly coexist; the measured budget was a tracked logical-capacity bound, not a physical peak-memory limit.
+
+All timings below are Criterion point estimates, in microseconds for depth and milliseconds for large object/array encodes. The first three before batches are the required paired baseline. Because those and other active workspace builds showed substantial variation, a full three-batch before retest was also run and retained; it does not replace the original batches. Candidate batches ran afterward on CPU 2 with the same command, Rust toolchain, lockfile, sample size, warm-up, and measurement duration. Concurrent Cargo processes were observed during candidate measurements, which further limits interpretation.
+
+| Fixture | Before 1 / 2 / 3 | Before retest 1 / 2 / 3 | Candidate 1 / 2 / 3 |
+| --- | --- | --- | --- |
+| finite depth 512 (µs) | 38.683 / 37.093 / 37.506 | 42.578 / 37.985 / 37.424 | 22.600 / 32.612 / 33.089 |
+| finite depth 2,048 (µs) | 149.00 / 146.90 / 148.91 | 167.20 / 196.26 / 147.92 | 145.75 / 156.08 / 106.45 |
+| finite depth 8,192 (µs) | 670.44 / 594.85 / 608.26 | 689.77 / 872.67 / 620.33 | 870.08 / 498.66 / 454.30 |
+| unlimited depth 512 (µs) | 20.307 / 10.151 / 10.147 | 10.438 / 10.438 / 10.478 | 22.745 / 11.567 / 12.162 |
+| unlimited depth 2,048 (µs) | 38.796 / 37.851 / 37.831 | 48.134 / 38.306 / 37.569 | 41.256 / 48.628 / 93.208 |
+| unlimited depth 8,192 (µs) | 143.04 / 139.78 / 141.91 | 147.23 / 194.31 / 143.75 | 228.43 / 203.57 / 163.74 |
+| large object, unlimited (ms) | 1.0295 / 0.9674 / 0.9674 | 1.1278 / 1.3012 / 0.9946 | 2.3196 / 3.1941 / 1.2317 |
+| large object, finite (ms) | 2.3183 / 1.1388 / 1.1622 | 1.2303 / 1.4319 / 1.1999 | 5.3979 / 2.3326 / 1.3057 |
+| large array, unlimited (ms) | 1.3554 / 1.3508 / 1.4069 | 1.3603 / 1.7179 / 2.6138 | 1.5134 / 1.4381 / 1.5186 |
+| large array, finite (ms) | 1.7991 / 1.8069 / 1.8184 | 1.8196 / 1.8025 / 2.5045 | 3.5701 / 1.8889 / 1.8844 |
+
+The finite target improved by 41.6%, 12.1%, and 11.8% at depth 512; by 2.2%, regressed 6.2%, and improved 28.5% at depth 2,048; and regressed 29.8%, improved 16.2%, and improved 25.3% at depth 8,192. Therefore the three-batch, at-least-10% improvement requirement failed at depths 2,048 and 8,192. Unlimited depth 2,048 and 8,192 also regressed by more than 5% in at least two batches, failing the control gate. The repeated baseline contains large excursions (notably finite 2,048/8,192 and large-array controls), so the host measurements were unstable as well. The candidate status is **not retained**; neither the latency nor allocation-count result is presented as a shipped performance improvement.
+
+The separate allocation diagnostic exited 0. For deep-array-8,192, the original path reported 8,192 stack growths and 1,073,872,896 requested stack-capacity bytes; the candidate reported 13 growths and 524,224 requested bytes, with 262,144 maximum actual vector capacity bytes. This is explanatory capacity evidence only and did not override the failed timing gate.
+
+All six required before timing commands, all six before-retest commands, all six candidate timing commands, and the separate candidate allocation diagnostic exited 0. Benchmark commands used `taskset -c 2 cargo bench --locked --features jcs --bench jcs_bench -- jcs-depth|jcs-encode --sample-size 20 --warm-up-time 1 --measurement-time 1 --save-baseline rsjr01-{before,before-retest,after}-{1,2,3}`. The diagnostic used `JCS_RENDERER_ALLOCATION_DIAGNOSTICS=1 taskset -c 2 cargo bench --locked --features 'jcs jcs-allocation-diagnostics' --bench jcs_bench -- jcs-depth`. Raw candidate logs were retained until this record was written; Criterion data used the listed identifiers under `target/criterion/`.
