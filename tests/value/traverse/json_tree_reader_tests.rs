@@ -22,8 +22,42 @@ struct RecordingVisitor {
     events: Vec<String>,
 }
 
-/// Stops traversal to verify the caller-owned transaction rolls back.
+/// Stops traversal so dropping the caller-owned transaction publishes no use.
 struct FailingVisitor;
+
+/// Records callbacks and rejects the child at the selected callback phase.
+struct FailingRecordingVisitor {
+    fail_on_leave: bool,
+    events: Vec<&'static str>,
+}
+
+impl JsonTreeVisitor for FailingRecordingVisitor {
+    type Error = &'static str;
+
+    fn enter(&mut self, _value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+        self.events.push(if context.depth == 1 {
+            "enter_root"
+        } else {
+            "enter_child"
+        });
+        if context.depth == 2 && !self.fail_on_leave {
+            return Err("stop");
+        }
+        Ok(())
+    }
+
+    fn leave(&mut self, _value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+        self.events.push(if context.depth == 1 {
+            "leave_root"
+        } else {
+            "leave_child"
+        });
+        if context.depth == 2 && self.fail_on_leave {
+            return Err("stop");
+        }
+        Ok(())
+    }
+}
 
 impl JsonTreeVisitor for FailingVisitor {
     type Error = &'static str;
@@ -126,7 +160,7 @@ fn test_process_accepts_value_borrowed_shorter_than_budget() {
     assert_eq!(transaction.used_nodes(), Some(2));
 }
 
-/// Verifies a visitor error leaves the caller's committed budget unchanged.
+/// Verifies dropping the transaction after a visitor error publishes no use.
 #[test]
 fn test_process_rolls_back_transaction_when_visitor_returns_error() {
     let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
@@ -142,6 +176,62 @@ fn test_process_rolls_back_transaction_when_visitor_returns_error() {
         assert!(matches!(error, JsonTreeProcessError::Visitor("stop")));
     }
 
+    assert_eq!(budget.used_nodes(), Some(0));
+}
+
+/// Errors stop callbacks without unwinding visitor state or staged accounting.
+#[test]
+fn test_process_visitor_failure_retains_staged_nodes_and_stops_callbacks() {
+    for fail_on_leave in [false, true] {
+        let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+            .max_nodes(4)
+            .build()
+            .budget();
+        let mut visitor = FailingRecordingVisitor {
+            fail_on_leave,
+            events: Vec::new(),
+        };
+        {
+            let mut transaction = budget.transaction();
+            let error = JsonTreeReader::new(&mut transaction)
+                .process(&json!([null]), &mut visitor)
+                .expect_err("child callback must reject traversal");
+            assert!(matches!(error, JsonTreeProcessError::Visitor("stop")));
+            assert_eq!(transaction.used_nodes(), Some(2));
+            let expected: &[&str] = if fail_on_leave {
+                &["enter_root", "enter_child", "leave_child"]
+            } else {
+                &["enter_root", "enter_child"]
+            };
+            assert_eq!(visitor.events.as_slice(), expected);
+        }
+        assert_eq!(
+            budget.used_nodes(),
+            Some(0),
+            "dropping the transaction publishes no charges"
+        );
+    }
+}
+
+/// Child admission failure stops before the child callback and poisons commit.
+#[test]
+fn test_process_budget_failure_stops_callbacks_and_rejects_commit() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(1)
+        .build()
+        .budget();
+    let mut visitor = FailingRecordingVisitor {
+        fail_on_leave: false,
+        events: Vec::new(),
+    };
+    let mut transaction = budget.transaction();
+    let error = JsonTreeReader::new(&mut transaction)
+        .process(&json!([null]), &mut visitor)
+        .expect_err("child admission exceeds the one-node limit");
+    assert!(matches!(error, JsonTreeProcessError::Budget(error) if error.resource() == &JsonResource::Nodes));
+    assert_eq!(visitor.events.as_slice(), &["enter_root"]);
+    let error = transaction.commit().expect_err("a rejected transaction cannot commit");
+    assert_eq!(error.resource(), &JsonResource::Nodes);
     assert_eq!(budget.used_nodes(), Some(0));
 }
 

@@ -892,14 +892,49 @@ fn test_json_value_encoder_preserves_former_number_marker_object() {
     assert_eq!(JsonValueEncoder::new().encode(&source), Ok(source));
 }
 
-/// Covers every scalar and compound Serde serializer entry point.
+/// Asserts the encoded value for every scalar and compound Serde entry point.
 #[test]
 fn test_json_value_encoder_supports_all_serde_entry_points() {
+    let expected = [
+        json!(true),
+        json!(-1_i64),
+        json!(-1_i64),
+        json!(-1_i64),
+        json!(-1_i64),
+        json!(-1_i64),
+        json!(1_u64),
+        json!(1_u64),
+        json!(1_u64),
+        json!(1_u64),
+        json!(1_u64),
+        json!(1.0_f64),
+        json!(1.0_f64),
+        json!("x"),
+        json!("x"),
+        json!([1, 2]),
+        json!(null),
+        json!(1),
+        json!(null),
+        json!(null),
+        json!("Unit"),
+        json!(1),
+        json!({"New": 1}),
+        json!([1]),
+        json!([1]),
+        json!([1]),
+        json!({"Tuple": [1]}),
+        json!({"key": 1}),
+        json!({"key": 1}),
+        json!({"Object": {"key": 1}}),
+        json!("display"),
+    ];
+    assert_eq!(expected.len(), 31, "every probe index must have an expectation");
     let encoder = JsonValueEncoder::new();
-    for index in 0..=30 {
-        encoder
-            .encode(&SerializerProbe(index))
+    for (index, expected) in expected.into_iter().enumerate() {
+        let actual = encoder
+            .encode(&SerializerProbe(u8::try_from(index).expect("probe index fits u8")))
             .expect("supported Serde entry point should encode");
+        assert_eq!(actual, expected, "Serde entry point {index} emitted the wrong Value");
     }
 }
 
