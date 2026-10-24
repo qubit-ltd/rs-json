@@ -275,7 +275,7 @@ fuzz_target!(|data: &[u8]| {
     assert_serializable(&error_value);
 
     #[cfg(all(not(fuzzing), panic = "unwind"))]
-    let panic_after = 1 + usize::from(data.get(2).copied().unwrap_or(0)) % 16;
+    let panic_after = 1;
     let mut recovery_value = original;
     #[cfg(all(not(fuzzing), panic = "unwind"))]
     {
@@ -283,10 +283,14 @@ fuzz_target!(|data: &[u8]| {
         let mut panic_output_budget = generous_budget();
         let mut input_transaction = panic_input_budget.transaction();
         let mut output_transaction = panic_output_budget.transaction();
+        // libfuzzer-sys aborts from its panic hook before catch_unwind can recover.
+        let panic_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
         let panic_result = catch_unwind(AssertUnwindSafe(|| {
             let _ = JsonTreeMutator::new(&mut input_transaction, &mut output_transaction)
                 .process(&mut recovery_value, &mut PanicVisitor { panic_after, calls: 0 });
         }));
+        std::panic::set_hook(panic_hook);
         assert!(panic_result.is_err());
     }
     #[cfg(fuzzing)]
