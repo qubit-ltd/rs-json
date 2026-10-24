@@ -219,12 +219,19 @@ cargo test --all-features
 # 运行独立 fixture 中的 Markdown 文档示例
 cargo test --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc --locked
 
+# 使用 serde_json 1.0.151 和 Cargo 解析到的最新兼容版本检查独立 JSON fixture
+python3 .infra/ci/check-json-feature-matrix.py
+
 # 运行项目 CI 检查
 ./.infra/bin/ci-check.sh
 
 # 检查代码覆盖率
 ./.infra/bin/coverage.sh
 ```
+
+该矩阵会对 fixture 的 number 和 JCS 契约测试运行八种 feature 组合，分别使用现有
+`serde_json` 1.0.151 测试基线和 Cargo 解析到的最新兼容版本。1.0.151 是测试基线，
+不代表 `^1.0` 依赖范围允许的最早版本。runner 只在临时副本中修改锁文件，不会改动仓库锁文件。
 
 ## 许可证
 

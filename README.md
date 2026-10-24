@@ -265,12 +265,22 @@ cargo test --all-features
 # Run the standalone Markdown documentation examples
 cargo test --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc --locked
 
+# Check the standalone JSON fixture at serde_json 1.0.151 and latest compatible
+python3 .infra/ci/check-json-feature-matrix.py
+
 # Project CI checks
 ./.infra/bin/ci-check.sh
 
 # Check code coverage
 ./.infra/bin/coverage.sh
 ```
+
+The feature matrix runs the fixture's number and JCS contract tests for eight
+feature combinations at the existing `serde_json` 1.0.151 test baseline and
+the latest compatible version resolved by Cargo. The 1.0.151 baseline is not
+a claim about the earliest version allowed by the `^1.0` dependency range. The
+runner changes lockfiles only in temporary copies and leaves repository
+lockfiles unchanged.
 
 ## License
 

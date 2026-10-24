@@ -2,7 +2,7 @@
 
 [English](migration_0_12.md)
 
-本文说明从 `qubit-json` 0.11 升级到 0.12 时的源码与行为变化。候选版本要求 Rust 1.94，并与 `qubit-budget` 0.9.1 配套使用。
+本文说明从 `qubit-json` 0.11 升级到 0.12 时的源码与行为变化。候选版本要求 Rust 1.94，并与 `qubit-budget` 0.9.1 或兼容的 0.9 系列更新版本配套使用。
 
 ## f32 值与对象键表示
 
@@ -34,6 +34,14 @@ serde_json = "1.0"
 | `qubit-web` | 0.2.0 | 0.3.0 |
 
 这些 crate 的 JSON 路径统一更新为 `qubit-json = "0.12"`、`qubit-budget = "0.9.1"`，随后同步调整各自版本与 lockfile。表中是候选版本，不表示已经发布。未交换 JSON budget 类型的其他 crate 不在此表内，不应仅为这次迁移一并升级。
+
+当前本地 `qubit-metadata` 0.7.0 候选的 JSON 路径使用
+`qubit-datatype` 0.15、`qubit-budget` 0.9.1、`qubit-json` 0.12、
+`qubit-redact` 0.10 和 `qubit-value` 0.13。它对
+`JsonDecodeErrorSource::Read` 的适配会保留 I/O 错误类别，并按所选诊断策略处理
+source。从 `qubit-json` 0.10 直接迁移的调用方，在映射解码错误时应加入 `Read`
+分支；该 source 变体并非首次由 `qubit-json` 0.12 引入。这是本地候选源码的集成结果，
+不表示候选 `qubit-metadata` 包已经发布。
 
 rs-json 候选还会带入提交 `ec16e78` 中已有的 Cargo 修改；整合该修改后，manifest 使用 `qubit-io 0.19`。这是延续已有 Cargo 决定，不是 0.12 计划新增的 IO 迁移。
 

@@ -2,7 +2,7 @@
 
 [简体中文](migration_0_12.zh_CN.md)
 
-This guide covers the source and behavior changes from `qubit-json` 0.11 to 0.12. The candidate requires Rust 1.94 and pairs `qubit-json` 0.12 with `qubit-budget` 0.9.1.
+This guide covers the source and behavior changes from `qubit-json` 0.11 to 0.12. The candidate requires Rust 1.94 and pairs `qubit-json` 0.12 with `qubit-budget` 0.9.1 or later in the compatible 0.9 series.
 
 ## f32 value and object-key representation
 
@@ -34,6 +34,16 @@ The seven direct downstream candidates that exchange these JSON/budget types are
 | `qubit-web` | 0.2.0 | 0.3.0 |
 
 Update their JSON paths to `qubit-json = "0.12"` and `qubit-budget = "0.9.1"`, then update the corresponding downstream dependency versions and locks. These are candidate versions; this guide does not claim that they have been published. Other crates that do not exchange JSON budget types are outside this list and should not be upgraded solely for this migration.
+
+The current local `qubit-metadata` 0.7.0 candidate uses `qubit-datatype` 0.15,
+`qubit-budget` 0.9.1, `qubit-json` 0.12, `qubit-redact` 0.10, and
+`qubit-value` 0.13 for its JSON path. Its adapter for
+`JsonDecodeErrorSource::Read` preserves the I/O error kind and follows the
+selected diagnostic policy for the source. Callers migrating directly from
+`qubit-json` 0.10 should include that `Read` case when mapping decode errors;
+the source variant was not first added in `qubit-json` 0.12. These are local
+integration results for candidate source and do not claim that the candidate
+`qubit-metadata` package has been published.
 
 The rs-json candidate also carries the existing Cargo change from commit `ec16e78`; after that change is integrated, its manifest uses `qubit-io` 0.19. This carries forward an already selected Cargo change and is not an additional IO migration introduced by the 0.12 plan.
 
