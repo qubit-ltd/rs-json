@@ -452,8 +452,13 @@ representation rules: unescaped JSON strings can
 borrow from the document, while escaped strings require owned targets.
 
 Use `AccountingJsonValueSeed` when another Serde deserializer owns the input. It charges
-decoded events but cannot inspect original number lexemes, `NumberBytes`, or
-text-level integer range. Use `JsonDecoder` for those guarantees.
+decoded events and enforces `NumberBytes` using the compact display length of each
+constructed `Number`, but cannot measure the original number token or enforce
+text-level integer range. For example, with the default number representation, the
+three-byte token `1e2` becomes `100.0`: a limit of 3 rejects it and a limit of 5
+accepts it. See the [number contract](number_contract.md). Use `JsonDecoder` when
+you need limits on the original text. `DuplicateKeyRejectingJsonValueSeed` rejects
+duplicate keys but does not apply a resource budget.
 Use `decode_object_str`/`decode_object_utf8` or the corresponding array methods
 when the boundary also requires a specific top-level container.
 
@@ -581,7 +586,7 @@ does not skip final output admission.
 
 Choose one of three numeric boundaries deliberately:
 
-- **Ordinary text and Serde events:** strict text requires negative integers in `i64`, non-negative integers in `u64`, and fractional or exponent values that convert to finite `f64`. `i128` and `u128` serializer/seed events are explicitly range-checked. Text decoding checks `NumberBytes` before numeric range. A generic seed has no original token, so it cannot enforce that lexical limit; for map-shaped Serde events it also cannot tell a real object from an upstream imitation of serde_json's private Number map.
+- **Ordinary text and Serde events:** strict text requires negative integers in `i64`, non-negative integers in `u64`, and fractional or exponent values that convert to finite `f64`. `i128` and `u128` serializer/seed events are explicitly range-checked. Text decoding checks the original-token `NumberBytes` before numeric range. `AccountingJsonValueSeed` cannot measure that token, but enforces `NumberBytes` using the compact display length of the constructed `Number`; by default, `1e2` (3 source bytes) displays as `100.0` (5 bytes). See the [number contract](number_contract.md). `DuplicateKeyRejectingJsonValueSeed` does not apply a resource budget. For map-shaped Serde events, a seed also cannot tell a real object from an upstream imitation of serde_json's private Number map.
 - **An already materialized `Value` tree:** `JsonTreeReader` counts each existing Number's actual compact display representation without converting it to `f64` or normalizing it. With `arbitrary_precision`, it can count a stored `1e400` or a 39-digit integer at its actual representation length. This accounting rule does not make the number acceptable to an ordinary or JCS encoder.
 - **JCS text:** `JcsDecoder` uses finite IEEE-754 binary64 for every token, including integer lexemes. For example, `9007199254740993` rounds to `9007199254740992`; overflow such as `1e400` is rejected. It also rejects keys duplicated after JSON unescaping and keeps the 127-container materialization guard.
 

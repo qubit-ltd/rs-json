@@ -54,7 +54,7 @@ compound 长度为零后仍发送字段或元素的手写 serializer。`JsonValu
 
 ## 分清三种数字边界
 
-- **普通严格文本、序列化与原生 Serde 整数事件：** 负整数须装入 `i64`，非负整数须装入 `u64`，小数或指数须转换为有限 `f64`。`i128`、`u128` 事件会显式检查范围。文本解码先准入原始 `NumberBytes` 测量，再检查数值范围。Serde seed 只能看到解码后的事件，无法检查原始 token，也无法执行 `NumberBytes` 限制。如果上游 `arbitrary_precision` 把数字呈现为 map 事件，seed 无法区分真实对象，会按对象保留。
+- **普通严格文本、序列化与原生 Serde 整数事件：** 负整数须装入 `i64`，非负整数须装入 `u64`，小数或指数须转换为有限 `f64`。`i128`、`u128` 事件会显式检查范围。文本解码先准入原始 `NumberBytes` 测量，再检查数值范围。`AccountingJsonValueSeed` 无法测量原始数字 token 的长度，但会按构造后 `Number` 的紧凑显示字节数执行 `NumberBytes` 限制：默认数字表示会把 `1e2` 构造成 `100.0`，因此源 token 的 3 字节在上限 3 时会被拒绝，在上限 5 时通过。详见[数字契约](number_contract.zh_CN.md)。`DuplicateKeyRejectingJsonValueSeed` 会拒绝重复键，但本身不施加资源预算。如果上游 `arbitrary_precision` 把数字呈现为 map 事件，seed 无法区分真实对象，会按对象保留。
 - **已经物化的 `serde_json::Value` 树：** `JsonTreeReader` 按已有 Number 当前紧凑显示表示的字节长度计量。启用 `arbitrary_precision` 后，它可安全核算已有的 `1e400`，并把 39 位整数按 39 字节计量；不会先转成 `f64`，也不会套用普通文本编码的范围检查。这不代表普通或 JCS encoder 会接受该数字。
 - **JCS 文本：** `JcsDecoder` 把每个数字（包括整数词法）转换为有限 IEEE-754 binary64。因此 `9007199254740993` 会舍入为 `9007199254740992`，`1e400` 这类溢出值会被拒绝。对象键在反转义后查重，JCS Value 构造仍有 127 层容器上限。
 

@@ -372,8 +372,11 @@ fn main() -> Result<(), JsonDecodeError> {
 借用结果受准备文档的生命周期约束。借用规则遵循 Serde 的表示方式：未转义的 JSON 字符串可以借用文档内容，包含转义的字符串则必须构造
 自有数据。
 
-当输入由另一个 Serde 反序列化器持有时，可以使用 `AccountingJsonValueSeed`。它会核算解码事件，但看不到
-数字的原始文本、`NumberBytes` 或文本级整数范围；需要这些保证时应使用 `JsonDecoder`。
+当输入由另一个 Serde 反序列化器持有时，可以使用 `AccountingJsonValueSeed`。它会核算解码事件，并按构造后
+`Number` 的紧凑显示字节数执行 `NumberBytes` 限制，但无法测量原始数字 token，也无法执行文本级整数范围检查。
+例如，默认数字表示会把 3 字节的 `1e2` 构造成 `100.0`，因此上限 3 时拒绝、上限 5 时通过。详见
+[数字契约](number_contract.zh_CN.md)。需要限制原始文本时应使用 `JsonDecoder`。`DuplicateKeyRejectingJsonValueSeed`
+会拒绝重复键，但本身不施加资源预算。
 如果边界还要求特定的顶层容器，请使用 `decode_object_str`、`decode_object_utf8` 或对应的数组方法。
 
 ### 重复对象键
@@ -488,7 +491,7 @@ assert_eq!(value, json!({"name": "qubit"}));
 
 三种数字边界要分开判断：
 
-- **普通文本与 Serde 事件：** strict 文本要求负整数在 `i64` 范围、非负整数在 `u64` 范围，小数或指数可转换为有限 `f64`。序列化器和 seed 收到 `i128`、`u128` 事件时会显式检查范围。文本解码先准入 `NumberBytes`，再检查数值范围。通用 seed 看不到原始 token，不能执行词法长度限制；遇到 map 形状事件时，也无法判断它是真对象还是上游模拟的 serde_json 私有 Number map。
+- **普通文本与 Serde 事件：** strict 文本要求负整数在 `i64` 范围、非负整数在 `u64` 范围，小数或指数可转换为有限 `f64`。序列化器和 seed 收到 `i128`、`u128` 事件时会显式检查范围。文本解码先准入原始 token 的 `NumberBytes`，再检查数值范围。`AccountingJsonValueSeed` 无法测量原始 token，但会按构造后 `Number` 的紧凑显示字节数执行 `NumberBytes` 限制；默认情况下，3 字节的 `1e2` 会显示为 5 字节的 `100.0`。详见[数字契约](number_contract.zh_CN.md)。`DuplicateKeyRejectingJsonValueSeed` 不施加资源预算。遇到 map 形状事件时，seed 也无法判断它是真对象还是上游模拟的 serde_json 私有 Number map。
 - **已经物化的 `Value` 树：** `JsonTreeReader` 按现有 Number 的紧凑显示内容长度计量，不先转 `f64`，也不改写数字。启用 `arbitrary_precision` 后，树读取器能按实际表示计量 `1e400` 或 39 位整数。这条计量规则不代表普通或 JCS encoder 会接受该数字。
 - **JCS 文本：** `JcsDecoder` 对所有 token（包括整数词法）使用有限 IEEE-754 binary64。例如 `9007199254740993` 会舍入为 `9007199254740992`；`1e400` 这类溢出会被拒绝。解码还会拒绝反转义后重复的键，并保留 127 层容器物化保护。
 
