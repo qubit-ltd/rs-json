@@ -160,9 +160,9 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
     };
 
     let mut baseline_encoder = JsonEncoder::new(encode_limits(usize::MAX, usize::MAX, usize::MAX));
-    let baseline_result = baseline_encoder.to_vec(&value);
-    let baseline_succeeded = baseline_result.is_ok();
-    let baseline_encoded = baseline_result.ok();
+    let baseline_encoded = baseline_encoder
+        .to_vec(&value)
+        .expect("a valid JSON Value must encode under effectively unbounded budgets");
     let baseline_session = baseline_encoder.into_session();
     let measured_nodes = baseline_session
         .value_budget()
@@ -180,21 +180,19 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
     let (reference_nodes, reference_payload) = reference_usage(&value);
     let reference_encoded = serde_json::to_vec(&value).expect("JSON value serialization succeeds");
     let reference_output = reference_encoded.len();
-    if baseline_succeeded {
-        assert_eq!(
-            measured_nodes, reference_nodes,
-            "baseline node accounting must match independent reference"
-        );
-        assert_eq!(
-            measured_payload, reference_payload,
-            "baseline payload accounting must match independent reference"
-        );
-        assert_eq!(
-            measured_output, reference_output,
-            "baseline output accounting must match encoded byte length"
-        );
-        assert_eq!(baseline_encoded.as_deref(), Some(reference_encoded.as_slice()));
-    }
+    assert_eq!(
+        measured_nodes, reference_nodes,
+        "baseline node accounting must match independent reference"
+    );
+    assert_eq!(
+        measured_payload, reference_payload,
+        "baseline payload accounting must match independent reference"
+    );
+    assert_eq!(
+        measured_output, reference_output,
+        "baseline output accounting must match encoded byte length"
+    );
+    assert_eq!(baseline_encoded.as_slice(), reference_encoded.as_slice());
     let baseline_nodes = reference_nodes;
     let baseline_payload = reference_payload;
     let baseline_output = reference_output;
@@ -252,29 +250,23 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
     }
     assert_eq!(encoded.is_ok(), buffered.is_ok());
     assert_eq!(encoded.is_ok(), incremental.is_ok());
-    assert_eq!(encoded.is_ok(), baseline_succeeded && limits_fit);
+    assert_eq!(encoded.is_ok(), limits_fit);
 
-    if let (Some(expected), Ok(encoded), Ok(()), Ok(())) = (baseline_encoded.as_ref(), encoded, buffered, incremental) {
+    if let (Ok(encoded), Ok(()), Ok(())) = (encoded, buffered, incremental) {
         let decoded = parse_literal_value(&encoded).expect("successful budget-aware encoding must produce JSON");
         assert_eq!(decoded, value);
-        assert_eq!(&encoded, expected);
-        assert_eq!(&buffered_output, expected);
-        assert_eq!(&incremental_output, expected);
-    } else if baseline_succeeded {
+        assert_eq!(encoded.as_slice(), baseline_encoded.as_slice());
+        assert_eq!(buffered_output.as_slice(), baseline_encoded.as_slice());
+        assert_eq!(incremental_output.as_slice(), baseline_encoded.as_slice());
+    } else {
         assert_eq!(buffered_output.len(), 0, "buffered failure must publish no output");
     }
 
-    if baseline_succeeded {
-        assert_eq!(buffered_output.len(), buffered_session.output_budget().unwrap().used());
-        assert_eq!(
-            incremental_output.len(),
-            incremental_session.output_budget().unwrap().used()
-        );
-    }
-
-    if !baseline_succeeded {
-        return;
-    }
+    assert_eq!(buffered_output.len(), buffered_session.output_budget().unwrap().used());
+    assert_eq!(
+        incremental_output.len(),
+        incremental_session.output_budget().unwrap().used()
+    );
     assert_writer_invariants(
         &value,
         &reference_encoded,
