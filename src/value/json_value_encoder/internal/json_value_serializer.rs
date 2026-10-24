@@ -379,6 +379,6 @@ impl Serializer for JsonValueSerializer {
         let mut text = String::new();
         write!(&mut text, "{value}")
             .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
-        self.serialize_str(&text)
+        Ok(Value::String(text))
     }
 }
