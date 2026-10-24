@@ -7,16 +7,4 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --locked --test tests --features serde_json/preserve_order value::traverse::json_tree_mutator_tests
 cargo test --manifest-path fuzz/Cargo.toml --lib --tests --locked
 cargo test --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc --locked
-fixture=tests/fixtures/jcs_feature_unification/Cargo.toml
-cargo test --manifest-path "$fixture" --locked
-for feature_set in \
-    arbitrary_precision \
-    preserve_order \
-    "arbitrary_precision preserve_order" \
-    jcs \
-    "jcs arbitrary_precision" \
-    "jcs preserve_order" \
-    "jcs arbitrary_precision preserve_order"
-do
-    cargo test --manifest-path "$fixture" --locked --features "$feature_set"
-done
+python3 .infra/ci/check-json-feature-matrix.py
