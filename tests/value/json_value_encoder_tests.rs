@@ -7,6 +7,7 @@
 // =============================================================================
 //! Public strict JSON value encoding contracts.
 
+use std::cell::Cell;
 use std::fmt;
 
 use qubit_json::decode::JsonDecoder;
@@ -69,6 +70,60 @@ impl Serialize for DuplicateKeyProbe {
         map.serialize_entry("same", &1_u8)?;
         map.serialize_entry("same", &2_u8)?;
         map.end()
+    }
+}
+
+struct RejectedValueProbe<'a>(&'a Cell<usize>);
+
+impl Serialize for RejectedValueProbe<'_> {
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.set(self.0.get() + 1);
+        Err(S::Error::custom("duplicate value must not be projected"))
+    }
+}
+
+struct DuplicateProjectionProbe<'a> {
+    path: &'static str,
+    calls: &'a Cell<usize>,
+}
+
+impl Serialize for DuplicateProjectionProbe<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let rejected = RejectedValueProbe(self.calls);
+        match self.path {
+            "split-map" => {
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("same", &1_u8)?;
+                map.serialize_key("same")?;
+                map.serialize_value(&rejected)?;
+                map.end()
+            }
+            "entry-map" => {
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("same", &1_u8)?;
+                map.serialize_entry("same", &rejected)?;
+                map.end()
+            }
+            "struct" => {
+                let mut object = serializer.serialize_struct("Probe", 2)?;
+                object.serialize_field("same", &1_u8)?;
+                object.serialize_field("same", &rejected)?;
+                object.end()
+            }
+            "variant" => {
+                let mut object = serializer.serialize_struct_variant("Probe", 0, "Object", 2)?;
+                object.serialize_field("same", &1_u8)?;
+                object.serialize_field("same", &rejected)?;
+                object.end()
+            }
+            _ => Err(S::Error::custom("unknown test path")),
+        }
     }
 }
 
@@ -688,6 +743,28 @@ fn test_json_value_encoder_rejects_duplicate_object_key() {
         .expect_err("duplicate key must fail");
     assert_eq!(error.kind(), JsonSerializationErrorKind::DuplicateObjectKey);
     assert_eq!(error.category(), JsonSerializationErrorCategory::ObjectKey);
+}
+
+#[test]
+fn test_json_value_encoder_rejects_duplicate_before_value_projection() {
+    for path in ["split-map", "entry-map", "struct", "variant"] {
+        let calls = Cell::new(0);
+        let error = JsonValueEncoder::new()
+            .encode(&DuplicateProjectionProbe { path, calls: &calls })
+            .expect_err("duplicate key must fail");
+        assert_eq!(calls.get(), 0, "duplicate value was projected via {path}");
+        assert_eq!(error.kind(), JsonSerializationErrorKind::DuplicateObjectKey);
+    }
+}
+
+#[test]
+fn test_json_value_encoder_preserves_distinct_object_values() {
+    assert_eq!(
+        JsonValueEncoder::new()
+            .encode(&json!({"first": 1, "second": [2, 3]}))
+            .unwrap(),
+        json!({"first": 1, "second": [2, 3]})
+    );
 }
 
 /// Materializes a strict RawValue payload into its represented JSON value.

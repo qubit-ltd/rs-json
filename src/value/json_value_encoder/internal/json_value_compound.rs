@@ -223,7 +223,11 @@ impl JsonValueCompound {
     ///
     /// * `values` - Object entries receiving the new pair.
     /// * `key` - Serialized object key to insert.
-    /// * `value` - Materialized JSON value paired with the key.
+    /// * `value` - Value to serialize after the key is confirmed unique.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value type accepted by Serde.
     ///
     /// # Returns
     ///
@@ -231,14 +235,19 @@ impl JsonValueCompound {
     ///
     /// # Errors
     ///
-    /// Returns `DuplicateObjectKey` when `key` is already present.
-    fn insert(values: &mut Map<String, Value>, key: String, value: Value) -> Result<(), JsonSerializationError> {
+    /// Returns `DuplicateObjectKey` when `key` is already present, without
+    /// serializing `value`. Returns a serialization error if `value` cannot be
+    /// projected to a JSON value.
+    fn insert<T>(values: &mut Map<String, Value>, key: String, value: &T) -> Result<(), JsonSerializationError>
+    where
+        T: Serialize + ?Sized,
+    {
         if values.contains_key(&key) {
             return Err(JsonSerializationError::new(
                 JsonSerializationErrorKind::DuplicateObjectKey,
             ));
         }
-        values.insert(key, value);
+        values.insert(key, value.serialize(JsonValueSerializer)?);
         Ok(())
     }
 }
@@ -475,7 +484,7 @@ impl SerializeMap for JsonValueCompound {
         let key = next_key
             .take()
             .ok_or_else(|| invalid_state(JsonSerializerStateError::MapValueWithoutKey))?;
-        Self::insert(values, key, value.serialize(JsonValueSerializer)?)
+        Self::insert(values, key, value)
     }
 
     /// Returns the completed object after checking split map state.
@@ -549,7 +558,7 @@ impl SerializeStruct for JsonValueCompound {
                 if next_key.is_some() {
                     return Err(invalid_state(JsonSerializerStateError::MapKeyAlreadyPending));
                 }
-                Self::insert(values, key.to_owned(), value.serialize(JsonValueSerializer)?)
+                Self::insert(values, key.to_owned(), value)
             }
             Self::RawValue { text, state } => {
                 Self::set_private_payload(text, state, JsonPrivateProtocolKind::RawValue, key, value)
@@ -637,7 +646,7 @@ impl SerializeStructVariant for JsonValueCompound {
         let Self::StructVariant { values, .. } = self else {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
         };
-        Self::insert(values, key.to_owned(), value.serialize(JsonValueSerializer)?)
+        Self::insert(values, key.to_owned(), value)
     }
 
     /// Returns the struct variant as a nested single-key object.
