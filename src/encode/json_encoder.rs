@@ -194,6 +194,36 @@ where
 
     /// Buffers a complete document before writing it to `writer`.
     ///
+    /// Success means `writer` accepted the complete document and output/value
+    /// accounting was committed. This method does not flush the writer. If
+    /// the writer buffers output, call its [`Write::flush`] method after this
+    /// call succeeds. To retain control of a writer consumed by value here,
+    /// pass a mutable reference such as `&mut writer`. A later flush failure
+    /// is outside this encoding transaction and does not roll back accounting
+    /// already committed by this method. A successful flush only reports the
+    /// writer's result; it does not confirm persistence to disk or receipt by
+    /// a remote peer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::{BufWriter, Write};
+    /// use qubit_budget::json::{JsonEncodeLimits, JsonResource};
+    /// use qubit_json::encode::JsonEncoder;
+    /// use serde_json::json;
+    ///
+    /// let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+    ///     .max_output_bytes(64)
+    ///     .build();
+    /// let mut encoder = JsonEncoder::with_limits(limits);
+    /// let mut writer = BufWriter::new(Vec::new());
+    /// encoder.write_buffered(&mut writer, &json!({"ok": true}))?;
+    /// writer.flush()?;
+    /// let bytes = writer.into_inner().expect("flush already succeeded");
+    /// assert_eq!(bytes, br#"{"ok":true}"#);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
     /// # Type Parameters
     ///
     /// * `O` - Destination output type.
@@ -230,6 +260,15 @@ where
     }
 
     /// Streams `value` directly to `writer`, retaining accepted prefixes.
+    ///
+    /// After serialization succeeds, this method flushes `writer` before
+    /// committing value-resource accounting. A flush failure is reported as a
+    /// writer error, and bytes already accepted remain charged to the output
+    /// budget while value-resource accounting is not committed. A successful
+    /// flush only reports the writer's result; it does not confirm persistence
+    /// to disk or receipt by a remote peer. The writer is consumed by value,
+    /// so pass a mutable reference such as `&mut writer` when you need to
+    /// retain control of it. Do not rely on `Drop` to flush buffered output.
     ///
     /// # Type Parameters
     ///

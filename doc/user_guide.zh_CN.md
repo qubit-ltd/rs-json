@@ -123,6 +123,33 @@ assert_eq!(output, b"[1,2");
 覆盖了这一点：写入器接受 2 字节后失败，结果为 `output = 2`、`nodes = 0`。增量模式在后续
 序列化、预算或写入操作失败时，也会保留并计费已经接受的前缀。
 
+`write_buffered` 在写入器接受全部字节且编码计费提交后返回成功。它不会 flush 写入器。若使用带缓冲
+的写入器，请在调用成功后显式 flush；这次后续 flush 位于编码事务之外，即使失败，也不会回滚已经提交
+的计费。例如：
+
+```rust
+use std::io::{BufWriter, Write};
+use qubit_budget::json::{JsonEncodeLimits, JsonResource};
+use qubit_json::encode::JsonEncoder;
+use serde_json::json;
+
+let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+    .max_output_bytes(64)
+    .build();
+let mut encoder = JsonEncoder::with_limits(limits);
+let mut writer = BufWriter::new(Vec::new());
+encoder.write_buffered(&mut writer, &json!({"ok": true}))?;
+writer.flush()?;
+let bytes = writer.into_inner().expect("flush 已成功");
+assert_eq!(bytes, br#"{"ok":true}"#);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`write_incremental` 在序列化完成后、提交值资源计费前执行 flush。若 flush 失败，方法返回 `Write`
+错误：已被写入器接受的字节仍计入输出预算，值资源计费不会提交。两个方法都按值接收写入器；若要继续
+控制写入器，请传入 `&mut writer`。不要依赖 `Drop` 隐式 flush。flush 成功只表示写入器报告成功，不
+代表字节已持久化到磁盘或已被远端接收。
+
 下一步通常是把已准入文档反序列化为应用类型，再执行模式、权限和标识符规则。如果边界还
 需要文本规范化、重复解码、对象键唯一性或值树处理，请继续阅读后续章节。
 

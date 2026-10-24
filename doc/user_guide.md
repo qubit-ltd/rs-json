@@ -141,6 +141,38 @@ regression: the writer accepts two bytes before failing, leaving `output = 2`
 and `nodes = 0`. Incremental mode likewise retains and charges accepted prefixes
 if a later serialization, budget, or writer operation fails.
 
+`write_buffered` returns success when the writer accepts all bytes and the
+encoding attempt commits its accounting. It does not flush the writer. If you
+pass a buffered writer, flush it after the call succeeds; that later flush is
+outside the encoder transaction, so a flush failure does not roll back the
+committed charges. For example:
+
+```rust
+use std::io::{BufWriter, Write};
+use qubit_budget::json::{JsonEncodeLimits, JsonResource};
+use qubit_json::encode::JsonEncoder;
+use serde_json::json;
+
+let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+    .max_output_bytes(64)
+    .build();
+let mut encoder = JsonEncoder::with_limits(limits);
+let mut writer = BufWriter::new(Vec::new());
+encoder.write_buffered(&mut writer, &json!({"ok": true}))?;
+writer.flush()?;
+let bytes = writer.into_inner().expect("flush already succeeded");
+assert_eq!(bytes, br#"{"ok":true}"#);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`write_incremental` flushes after serialization and before committing
+value-resource accounting. If that flush fails, the method returns a `Write`
+error: bytes already accepted remain charged to the output budget, and value
+resources are not committed. Both methods take the writer by value, so pass
+`&mut writer` when you need to keep using it. Do not rely on `Drop` for an
+implicit flush. A successful flush reports only the writer's result; it does
+not confirm that bytes reached disk or a remote peer.
+
 The next step is to deserialize the admitted document into an application type
 and apply schema, authorization, and identifier rules. Continue below when the
 boundary also needs normalization, repeated decoding, unique object keys, or
