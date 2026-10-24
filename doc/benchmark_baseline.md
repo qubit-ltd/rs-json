@@ -397,3 +397,90 @@ value accounting, writer error ordering, and partial-output behavior. Numeric
 checks should cover `i64`/`u64` boundaries, range rejection, and `NumberBytes`
 rejection. Unlimited results apply only to trusted or separately admitted data.
 See the [design](json_design.md) and [number contract](number_contract.md).
+
+
+### Finite JCS stack-growth candidate trials (2026-10-24)
+
+RJ-004 was **not achieved**. Two finite-stack candidates were measured and withdrawn; no candidate production code or candidate tests remain in the worktree. The first trial accidentally applied finite-budget calculations to unlimited reservations. It was retained as a withdrawn trial and not used to claim success. A corrected trial restored the prior unlimited reservation selection and avoided finite-budget calculations for unlimited object reservations. Finite deep chains improved, but the corrected candidate still exceeded the allowed regression on unlimited deep-chain controls in at least two of three batches at depths 512, 2,048, and 8,192. Per the acceptance rule, the candidate was withdrawn. The controlled recheck confirmed that the poor third finite-8,192 batch was noise; it did not remove the repeated unlimited-control regressions.
+
+**Environment and identity.** HEAD was `bad907715b54728bb4a7bbd221d0d22fb3b27527`; the benchmark worktree also contained uncommitted RJ-001–003 changes. The before source was the pre-T4 `jcs_working_memory.rs` and `jcs_renderer.rs`; the withdrawn and corrected trials were uncommitted T4 candidates over the same HEAD and RJ-001–003 worktree. Rust `1.94.0 (4a4ef493e 2026-03-02)`, Cargo `1.94.0 (85eff7c80 2026-01-15)`, x86_64 Linux `7.0.0-38-generic`, Intel Core i5-9600K (6 cores, 3.70 GHz), system `System` allocator. `Cargo.lock` SHA-256: `05f3bf96eb21153f837a5e590c5e3270f0c71e07cbdcd75118c45fab128386db`. Gnuplot was unavailable; Criterion used Plotters. The host was not isolated, CPU affinity was not set, and CPU frequency scaling was enabled. Timing used the system allocator, no diagnostics, 20 samples, 1-second warm-up, and 1-second measurement. Commands were serialized.
+
+`jcs-depth` used iteratively constructed single-child array chains at depths 32, 128, 512, 2,048, and 8,192. Finite limits were 1 MiB working memory, `max_depth = max_nodes = depth + 1`, and `max_output_bytes` equal to output length (68, 260, 1,028, 4,100, and 16,388 bytes). `jcs-encode` used the existing large-object (111,531-byte output), deep-object (2,719-byte output), and large-array (87,195-byte output) fixtures; finite runs used 1 MiB working memory, exact output-byte limits, and exact node limits. Legacy runs used `serde_json_canonicalizer`.
+
+The tables show Criterion `mean.point_estimate` and its 95% confidence interval from each `estimates.json`, converted to microseconds. Rows retain each benchmark path and fixture identifier. `Withdrawn` data are preserved separately from the corrected candidate.
+
+**Depth benchmarks (µs).**
+
+| Case | Before 1 | Before 2 | Before 3 | Withdrawn 1 | Withdrawn 2 | Withdrawn 3 | Corrected 1 | Corrected 2 | Corrected 3 | Controlled check |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `jcs-depth/finite/128` | 10.465 [10.409–10.523] | 10.732 [10.633–10.846] | 13.132 [11.835–14.671] | 7.941 [7.555–8.375] | 6.360 [6.310–6.411] | 6.414 [6.361–6.475] | 6.242 [6.187–6.314] | 6.120 [6.059–6.187] | 6.301 [6.195–6.426] | 5.964 [5.915–6.028] |
+| `jcs-depth/finite/2048` | 147.591 [147.297–147.977] | 146.156 [145.055–147.727] | 149.304 [146.801–152.140] | 78.370 [77.823–78.946] | 81.303 [80.436–82.264] | 79.137 [78.408–80.326] | 76.404 [76.302–76.520] | 76.806 [76.351–77.315] | 77.579 [77.098–78.145] | 76.727 [75.938–77.679] |
+| `jcs-depth/finite/32` | 3.178 [3.159–3.199] | 3.209 [3.187–3.231] | 3.167 [3.149–3.184] | 2.163 [2.157–2.171] | 2.273 [2.249–2.298] | 2.205 [2.188–2.224] | 2.128 [2.107–2.156] | 2.143 [2.131–2.159] | 2.140 [2.135–2.145] | 2.051 [2.034–2.069] |
+| `jcs-depth/finite/512` | 40.980 [39.269–43.189] | 37.642 [37.336–38.091] | 38.145 [37.892–38.413] | 29.372 [25.568–34.332] | 27.582 [26.044–29.549] | 32.610 [28.990–36.679] | 21.054 [20.766–21.403] | 21.038 [20.926–21.162] | 25.684 [24.415–27.147] | 20.653 [20.456–20.882] |
+| `jcs-depth/finite/8192` | 637.208 [628.745–646.800] | 1066.020 [941.025–1218.300] | 1024.688 [911.719–1152.247] | 351.437 [347.127–355.976] | 579.211 [532.775–626.708] | 357.839 [350.376–366.024] | 388.022 [366.470–417.688] | 360.351 [357.474–363.485] | 1110.604 [942.546–1279.832] | 346.325 [341.103–352.269] |
+| `jcs-depth/unlimited/128` | 3.147 [3.137–3.158] | 3.149 [3.125–3.177] | 3.211 [3.195–3.229] | 3.513 [3.496–3.529] | 3.526 [3.500–3.556] | 3.509 [3.505–3.514] | 3.251 [3.220–3.286] | 3.299 [3.272–3.330] | 3.284 [3.257–3.320] | 3.267 [3.230–3.310] |
+| `jcs-depth/unlimited/2048` | 37.519 [37.456–37.596] | 37.670 [37.547–37.805] | 43.366 [39.457–48.989] | 51.026 [48.954–53.475] | 45.384 [44.880–45.941] | 52.871 [49.993–56.729] | 40.340 [40.033–40.685] | 40.494 [40.220–40.782] | 44.012 [41.881–47.939] | 40.749 [40.377–41.166] |
+| `jcs-depth/unlimited/32` | 1.054 [1.047–1.062] | 1.064 [1.052–1.077] | 1.054 [1.048–1.060] | 1.179 [1.169–1.196] | 1.280 [1.211–1.369] | 1.165 [1.163–1.166] | 1.100 [1.088–1.112] | 1.099 [1.092–1.106] | 1.113 [1.109–1.118] | 1.090 [1.083–1.097] |
+| `jcs-depth/unlimited/512` | 10.071 [10.030–10.116] | 10.080 [9.973–10.201] | 14.529 [12.976–16.239] | 15.546 [14.155–17.441] | 12.236 [12.099–12.391] | 12.351 [12.138–12.618] | 10.923 [10.837–11.011] | 11.067 [11.023–11.118] | 11.057 [10.971–11.159] | 10.823 [10.713–10.945] |
+| `jcs-depth/unlimited/8192` | 143.268 [143.023–143.551] | 193.581 [182.094–205.623] | 146.071 [144.287–148.218] | 167.408 [166.299–168.635] | 216.161 [195.699–239.999] | 169.374 [168.508–170.356] | 155.868 [154.895–156.985] | 154.431 [153.953–155.012] | 162.600 [159.134–167.189] | 157.627 [155.045–160.557] |
+
+**Encode benchmarks (µs).**
+
+| Case | Before 1 | Before 2 | Before 3 | Withdrawn 1 | Withdrawn 2 | Withdrawn 3 | Corrected 1 | Corrected 2 | Corrected 3 | Controlled check |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `jcs-encode/deep-object_finite-budgets/2719` | 68.182 [63.891–73.751] | 62.270 [61.834–62.767] | 61.345 [60.873–61.903] | 61.343 [59.596–63.645] | 52.683 [52.303–53.053] | 53.127 [52.559–53.817] | 52.361 [51.871–52.895] | 101.231 [89.651–113.281] | 59.338 [57.996–60.742] | 54.296 [54.018–54.583] |
+| `jcs-encode/deep-object_legacy-canonicalizer/2719` | 108.843 [108.636–109.064] | 105.996 [105.318–106.706] | 111.353 [107.732–117.401] | 107.846 [107.145–108.631] | 106.253 [104.932–107.834] | 107.831 [105.911–110.019] | 106.903 [105.952–107.972] | 183.246 [167.906–201.311] | 108.327 [107.369–109.411] | 106.895 [106.105–107.831] |
+| `jcs-encode/deep-object_unlimited/2719` | 45.591 [45.352–45.843] | 44.579 [44.050–45.205] | 44.833 [44.153–45.651] | 44.524 [44.218–44.837] | 43.593 [42.970–44.371] | 42.585 [42.242–42.997] | 44.038 [43.458–44.635] | 102.945 [93.192–112.726] | 55.695 [51.481–60.645] | 43.579 [43.193–44.046] |
+| `jcs-encode/large-array_finite-budgets/87195` | 1808.916 [1802.071–1816.677] | 1949.768 [1836.689–2119.260] | 3112.821 [2787.378–3436.353] | 2072.305 [1983.395–2185.788] | 1770.962 [1767.127–1775.422] | 1783.472 [1764.924–1807.330] | 1812.147 [1789.620–1838.364] | 1886.052 [1838.078–1943.951] | 1802.797 [1800.132–1805.698] | 1814.216 [1804.122–1825.881] |
+| `jcs-encode/large-array_legacy-canonicalizer/87195` | 1447.362 [1440.191–1456.147] | 1434.690 [1426.934–1443.005] | 1717.390 [1565.254–1896.989] | 1449.960 [1437.056–1464.345] | 1428.058 [1427.265–1428.966] | 1420.139 [1410.594–1430.238] | 1426.863 [1413.502–1440.651] | 1621.535 [1525.243–1733.956] | 1441.961 [1426.680–1463.460] | 1445.313 [1429.512–1464.289] |
+| `jcs-encode/large-array_unlimited/87195` | 1360.194 [1358.966–1361.517] | 1857.784 [1662.430–2085.076] | 2280.332 [2043.726–2514.082] | 1377.189 [1369.077–1386.547] | 1368.050 [1367.076–1369.141] | 1371.590 [1367.353–1377.501] | 1380.994 [1368.084–1397.332] | 2162.397 [1995.076–2325.826] | 1381.881 [1377.355–1387.387] | 1397.757 [1387.317–1409.426] |
+| `jcs-encode/large-object_finite-budgets/111531` | 1218.696 [1199.025–1241.913] | 1426.773 [1345.397–1513.006] | 1221.439 [1192.712–1252.877] | 1181.661 [1138.235–1235.343] | 1238.204 [1206.479–1271.328] | 1134.699 [1121.900–1149.169] | 1185.254 [1175.572–1196.429] | 2017.663 [1826.223–2237.987] | 1201.736 [1184.153–1222.605] | 1166.433 [1151.690–1183.929] |
+| `jcs-encode/large-object_legacy-canonicalizer/111531` | 2929.866 [2910.860–2951.770] | 2832.857 [2793.566–2876.740] | 3100.406 [2989.372–3238.749] | 2794.435 [2739.033–2856.662] | 2953.444 [2842.517–3074.439] | 2735.172 [2694.844–2780.741] | 2718.487 [2668.042–2780.357] | 3542.969 [3380.194–3761.370] | 6245.949 [5283.485–7231.849] | 2866.311 [2814.910–2915.533] |
+| `jcs-encode/large-object_unlimited/111531` | 1010.208 [990.096–1033.338] | 995.377 [973.560–1026.985] | 1886.477 [1647.497–2154.265] | 961.573 [954.567–968.580] | 1059.460 [1023.060–1098.025] | 965.909 [951.078–983.060] | 1012.243 [1000.848–1024.296] | 1753.644 [1614.197–1891.854] | 1062.229 [1034.007–1102.836] | 989.711 [979.131–1001.175] |
+
+The corrected finite 512 and 2,048 deep-chain point estimates improved by more than 10% in all three batches. At finite depth 8,192 the first two corrected batches improved 39.1% and 66.2%; batch 3 measured 1,111 µs versus 1,025 µs before (+8.4%) with a broad 95% interval of 943–1,280 µs. The one controlled recheck measured 346.325 µs [341.103–352.269] versus before batch 1 at 637.208 µs, confirming the third batch was noisy.
+
+The corrected unlimited deep-chain control exceeded the 5% regression allowance in at least two of three batches at each target depth: depth 512 (+8.5%, +9.8%, −23.9%), 2,048 (+7.5%, +7.5%, +1.5%), and 8,192 (+8.8%, −20.2%, +11.3%). The single controlled recheck remained +7.5%, +8.6%, and +10.0% versus the corresponding first before batches at those depths. Wide and legacy encode controls also contained large batch-to-batch excursions on the unisolated host; the controlled recheck returned those values near baseline but does not erase the original measurements. As the unlimited deep-chain gate failed, the final status is **RJ-004 not achieved** and no performance improvement is claimed for the released worktree.
+
+**Separate allocation diagnostic.** The command below was run independently from timing (exit 0; it was repeated once to capture complete output, also exit 0). At depth 8,192, finite and unlimited each reported 13 stack growths, 524,224 requested stack-capacity bytes, and 262,144 maximum actual stack-capacity bytes. Stack reclamation count was zero for the deep-array fixture because it has no objects. Other diagnostic samples: large object—2,049 object-table growths, 147,456 requested bytes, 49,152 maximum actual bytes; deep object—8 stack growths / 16,320 requested / 8,192 maximum actual, and 129 object-table growths / 6,168 requested / 48 maximum actual; large array—1 stack growth / 64 requested / 64 maximum actual. These are requested capacities and maximum vector capacities, not bytes copied, peak live memory, or RSS.
+
+**Correctness checks before measurement.** Both corrected-candidate focused commands exited 0: `cargo test --locked --lib --features jcs jcs_working_memory` (8 passed) and `cargo test --locked --test tests --features jcs encode::jcs_encoder_tests` (24 passed). `git diff --check` on the T4 Rust files exited 0. These checks describe the trial before it was reverted; the worktree now has no T4 source or test diff.
+
+**Commands and exit codes.** All 6 before timing commands, all 6 withdrawn-trial timing commands, all 6 corrected-candidate timing commands, both controlled-recheck commands, and both separate diagnostic invocations exited 0. For each three-batch group, the exact command pair was:
+
+Before: each command pair was run with `--save-baseline` set in turn to `rj004-before-1`, `rj004-before-2`, and `rj004-before-3`:
+
+```bash
+cargo bench --locked --features jcs --bench jcs_bench -- jcs-depth --sample-size 20 --warm-up-time 1 --measurement-time 1 --save-baseline BASELINE
+cargo bench --locked --features jcs --bench jcs_bench -- jcs-encode --sample-size 20 --warm-up-time 1 --measurement-time 1 --save-baseline BASELINE
+```
+
+Withdrawn trial: each command pair was run with `--save-baseline` set in turn to `rj004-after-1`, `rj004-after-2`, and `rj004-after-3`:
+
+```bash
+cargo bench --locked --features jcs --bench jcs_bench -- jcs-depth --sample-size 20 --warm-up-time 1 --measurement-time 1 --save-baseline BASELINE
+cargo bench --locked --features jcs --bench jcs_bench -- jcs-encode --sample-size 20 --warm-up-time 1 --measurement-time 1 --save-baseline BASELINE
+```
+
+Corrected candidate: each command pair was run with `--save-baseline` set in turn to `rj004-after-corrected-1`, `rj004-after-corrected-2`, and `rj004-after-corrected-3`:
+
+```bash
+cargo bench --locked --features jcs --bench jcs_bench -- jcs-depth --sample-size 20 --warm-up-time 1 --measurement-time 1 --save-baseline BASELINE
+cargo bench --locked --features jcs --bench jcs_bench -- jcs-encode --sample-size 20 --warm-up-time 1 --measurement-time 1 --save-baseline BASELINE
+```
+
+Controlled recheck (both commands exited 0; one batch each):
+
+```bash
+cargo bench --locked --features jcs --bench jcs_bench -- jcs-depth --sample-size 20 --warm-up-time 1 --measurement-time 1 --save-baseline rj004-after-corrected-recheck
+cargo bench --locked --features jcs --bench jcs_bench -- jcs-encode --sample-size 20 --warm-up-time 1 --measurement-time 1 --save-baseline rj004-after-corrected-recheck
+```
+
+Diagnostics (each command exited 0; run separately from timing):
+
+```bash
+JCS_RENDERER_ALLOCATION_DIAGNOSTICS=1 cargo bench --locked --features 'jcs jcs-allocation-diagnostics' --bench jcs_bench -- jcs-depth
+JCS_RENDERER_ALLOCATION_DIAGNOSTICS=1 cargo bench --locked --features 'jcs jcs-allocation-diagnostics' --bench jcs_bench -- jcs-depth
+```
+
+Criterion’s original raw outputs and estimates remain under `target/criterion/` using the baseline identifiers shown above. The experiment does not change older benchmark records or earlier failed-candidate evidence.
