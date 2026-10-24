@@ -282,7 +282,6 @@ where
             else {
                 break;
             };
-            self.admit(JsonMeasurement::Key { bytes: key.len() })?;
             let value = map.next_value_seed(self.child())?;
             entries = next;
             values.insert(key, value);

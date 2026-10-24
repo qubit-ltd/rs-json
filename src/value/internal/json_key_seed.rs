@@ -12,10 +12,11 @@ use std::fmt::Debug;
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonContainerKind;
 use qubit_budget::json::JsonValueTransaction;
-use serde::Deserialize;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
 use serde::de::Error;
+
+use super::json_key_visitor::JsonKeyVisitor;
 
 /// A map-key seed that checks the prospective entry before decoding its key.
 ///
@@ -61,6 +62,6 @@ where
         self.transaction
             .check_container_count(JsonContainerKind::Map, self.prospective)
             .map_err(D::Error::custom)?;
-        String::deserialize(deserializer)
+        deserializer.deserialize_str(JsonKeyVisitor::new(self.transaction))
     }
 }

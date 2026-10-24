@@ -8,6 +8,7 @@
 //! Private Serde roles used to build budgeted JSON values.
 
 mod json_key_seed;
+mod json_key_visitor;
 mod json_number_length_writer;
 mod json_number_lexeme_length;
 mod json_value_child_seed;
