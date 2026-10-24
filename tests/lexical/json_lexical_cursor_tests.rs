@@ -76,6 +76,76 @@ fn test_cursor_reports_the_invalid_literal_delimiter_location() {
     assert_eq!(error.column(), 5);
 }
 
+/// Verifies literal prefixes and misspellings report their first unavailable or
+/// invalid byte.
+#[test]
+fn test_cursor_reports_literal_prefix_and_misspelling_locations() {
+    let cases: &[(&str, JsonSyntaxErrorReason, usize, usize, usize)] = &[
+        ("t", JsonSyntaxErrorReason::UnexpectedEnd, 1, 1, 2),
+        ("tr", JsonSyntaxErrorReason::UnexpectedEnd, 2, 1, 3),
+        ("tru", JsonSyntaxErrorReason::UnexpectedEnd, 3, 1, 4),
+        ("f", JsonSyntaxErrorReason::UnexpectedEnd, 1, 1, 2),
+        ("fa", JsonSyntaxErrorReason::UnexpectedEnd, 2, 1, 3),
+        ("fal", JsonSyntaxErrorReason::UnexpectedEnd, 3, 1, 4),
+        ("fals", JsonSyntaxErrorReason::UnexpectedEnd, 4, 1, 5),
+        ("n", JsonSyntaxErrorReason::UnexpectedEnd, 1, 1, 2),
+        ("nu", JsonSyntaxErrorReason::UnexpectedEnd, 2, 1, 3),
+        ("nul", JsonSyntaxErrorReason::UnexpectedEnd, 3, 1, 4),
+        ("falsX", JsonSyntaxErrorReason::UnexpectedByte, 4, 1, 5),
+        ("trXe", JsonSyntaxErrorReason::UnexpectedByte, 2, 1, 3),
+        ("tXue", JsonSyntaxErrorReason::UnexpectedByte, 1, 1, 2),
+        ("truX", JsonSyntaxErrorReason::UnexpectedByte, 3, 1, 4),
+        ("Xrue", JsonSyntaxErrorReason::UnexpectedByte, 0, 1, 1),
+        ("faXse", JsonSyntaxErrorReason::UnexpectedByte, 2, 1, 3),
+        ("fXlse", JsonSyntaxErrorReason::UnexpectedByte, 1, 1, 2),
+        ("falXe", JsonSyntaxErrorReason::UnexpectedByte, 3, 1, 4),
+        ("Xalse", JsonSyntaxErrorReason::UnexpectedByte, 0, 1, 1),
+        ("nuXl", JsonSyntaxErrorReason::UnexpectedByte, 2, 1, 3),
+        ("nXll", JsonSyntaxErrorReason::UnexpectedByte, 1, 1, 2),
+        ("nulX", JsonSyntaxErrorReason::UnexpectedByte, 3, 1, 4),
+        ("Xull", JsonSyntaxErrorReason::UnexpectedByte, 0, 1, 1),
+        ("truex", JsonSyntaxErrorReason::UnexpectedByte, 4, 1, 5),
+        ("\r\n  tru", JsonSyntaxErrorReason::UnexpectedEnd, 7, 2, 6),
+    ];
+
+    for (input, expected_reason, expected_offset, expected_line, expected_column) in cases {
+        let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+        let error = JsonDecoder::new(session)
+            .validate_str(input)
+            .expect_err("malformed literal should be rejected");
+        let error = error.syntax_error().expect("expected a syntax error");
+        assert_eq!(error.reason(), *expected_reason, "input: {input:?}");
+        assert_eq!(error.offset(), *expected_offset, "input: {input:?}");
+        assert_eq!(error.line(), *expected_line, "input: {input:?}");
+        assert_eq!(error.column(), *expected_column, "input: {input:?}");
+    }
+
+    let decode_cases: &[(&[u8], JsonSyntaxErrorReason, usize, usize, usize)] = &[
+        (b"tru", JsonSyntaxErrorReason::UnexpectedEnd, 3, 1, 4),
+        (b"falsX", JsonSyntaxErrorReason::UnexpectedByte, 4, 1, 5),
+        (b"truex", JsonSyntaxErrorReason::UnexpectedByte, 4, 1, 5),
+        (b"\r\n  tru", JsonSyntaxErrorReason::UnexpectedEnd, 7, 2, 6),
+    ];
+    for (input, expected_reason, expected_offset, expected_line, expected_column) in decode_cases {
+        let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+        let error = JsonDecoder::new(session)
+            .decode_utf8::<serde_json::Value>(input)
+            .expect_err("malformed literal should be rejected");
+        let error = error.syntax_error().expect("expected a syntax error");
+        assert_eq!(error.reason(), *expected_reason, "input: {input:?}");
+        assert_eq!(error.offset(), *expected_offset, "input: {input:?}");
+        assert_eq!(error.line(), *expected_line, "input: {input:?}");
+        assert_eq!(error.column(), *expected_column, "input: {input:?}");
+    }
+
+    for input in ["true", "false", "null"] {
+        let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+        JsonDecoder::new(session)
+            .decode_utf8::<serde_json::Value>(input.as_bytes())
+            .expect("valid literal should decode");
+    }
+}
+
 /// Verifies UTF-8 width handling, Unicode escapes, and source coordinates.
 #[test]
 fn test_cursor_accepts_unicode_and_reports_coordinates() {

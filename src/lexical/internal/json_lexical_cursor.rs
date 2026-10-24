@@ -388,6 +388,12 @@ where
     /// Charges and consumes one scalar literal.
     fn literal(&mut self, literal: &[u8], measurement: JsonMeasurement) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.input[self.offset..].starts_with(literal) {
+            let matched = self.input[self.offset..]
+                .iter()
+                .zip(literal.iter())
+                .take_while(|(actual, expected)| actual == expected)
+                .count();
+            self.offset += matched;
             return Err(match self.peek() {
                 None => self.syntax(JsonLexicalErrorReason::UnexpectedEnd),
                 Some(_) => self.syntax(JsonLexicalErrorReason::UnexpectedByte),
