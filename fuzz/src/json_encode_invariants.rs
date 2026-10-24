@@ -24,6 +24,83 @@ use crate::json_reference::parse_literal_value;
 /// Number of control bytes preceding a JSON encode fuzz payload.
 pub const CONTROL_BYTES: usize = 9;
 
+/// Computes value nodes and payload bytes without using the JSON budget APIs.
+fn reference_usage(value: &Value) -> (usize, usize) {
+    let mut pending = vec![value];
+    let mut nodes = 0_usize;
+    let mut payload = 0_usize;
+    while let Some(value) = pending.pop() {
+        nodes = nodes.checked_add(1).expect("reference node count overflow");
+        match value {
+            Value::Null | Value::Bool(_) => {}
+            Value::Number(number) => {
+                payload = payload
+                    .checked_add(
+                        serde_json::to_string(number)
+                            .expect("number serialization succeeds")
+                            .len(),
+                    )
+                    .expect("reference payload count overflow");
+            }
+            Value::String(string) => {
+                payload = payload
+                    .checked_add(string.len())
+                    .expect("reference payload count overflow");
+            }
+            Value::Array(values) => pending.extend(values.iter()),
+            Value::Object(values) => {
+                for (key, value) in values {
+                    payload = payload
+                        .checked_add(key.len())
+                        .expect("reference payload count overflow");
+                    pending.push(value);
+                }
+            }
+        }
+    }
+    (nodes, payload)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    use super::reference_usage;
+
+    #[test]
+    fn reference_usage_counts_basic_values_and_numeric_tokens() {
+        for literal in ["null", "true", "false", "\"\"", "[]", "{}"] {
+            let value: Value = serde_json::from_str(literal).unwrap();
+            assert_eq!(reference_usage(&value), (1, 0), "literal: {literal}");
+        }
+
+        let value: Value = serde_json::from_str(r#""é中""#).unwrap();
+        assert_eq!(reference_usage(&value), (1, 5));
+        let value: Value = serde_json::from_str(r#""a\n\"""#).unwrap();
+        assert_eq!(reference_usage(&value), (1, 3));
+
+        for (literal, expected_payload) in [
+            ("18446744073709551615", 20),
+            ("-9223372036854775808", 20),
+            ("-0.0", 4),
+            ("123.45", 6),
+            ("1e+20", 5),
+        ] {
+            let value: Value = serde_json::from_str(literal).unwrap();
+            assert_eq!(reference_usage(&value), (1, expected_payload), "number: {literal}");
+        }
+    }
+
+    #[test]
+    fn reference_usage_counts_utf8_object_keys_and_nested_values() {
+        let value: Value = serde_json::from_str(r#"{"é":[null,true,"中",12]}"#).unwrap();
+        assert_eq!(reference_usage(&value), (6, 7));
+
+        let value: Value = serde_json::from_str(r#"{"escaped\"key":"a\n\""}"#).unwrap();
+        assert_eq!(reference_usage(&value), (2, 14));
+    }
+}
+
 /// Splits a bounded fuzz input into its independent control header and payload.
 ///
 /// # Parameters
@@ -87,18 +164,40 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
     let baseline_succeeded = baseline_result.is_ok();
     let baseline_encoded = baseline_result.ok();
     let baseline_session = baseline_encoder.into_session();
-    let baseline_nodes = baseline_session
+    let measured_nodes = baseline_session
         .value_budget()
         .used_nodes()
         .expect("baseline node measurement is enabled");
-    let baseline_payload = baseline_session
+    let measured_payload = baseline_session
         .value_budget()
         .used_payload_bytes()
         .expect("baseline payload measurement is enabled");
-    let baseline_output = baseline_session
+    let measured_output = baseline_session
         .output_budget()
         .expect("baseline output measurement is enabled")
         .used();
+
+    let (reference_nodes, reference_payload) = reference_usage(&value);
+    let reference_encoded = serde_json::to_vec(&value).expect("JSON value serialization succeeds");
+    let reference_output = reference_encoded.len();
+    if baseline_succeeded {
+        assert_eq!(
+            measured_nodes, reference_nodes,
+            "baseline node accounting must match independent reference"
+        );
+        assert_eq!(
+            measured_payload, reference_payload,
+            "baseline payload accounting must match independent reference"
+        );
+        assert_eq!(
+            measured_output, reference_output,
+            "baseline output accounting must match encoded byte length"
+        );
+        assert_eq!(baseline_encoded.as_deref(), Some(reference_encoded.as_slice()));
+    }
+    let baseline_nodes = reference_nodes;
+    let baseline_payload = reference_payload;
+    let baseline_output = reference_output;
 
     let output_limit = select_control_limit(control, 0, baseline_output);
     let node_limit = select_control_limit(control, 2, baseline_nodes);
@@ -178,9 +277,7 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
     }
     assert_writer_invariants(
         &value,
-        baseline_encoded
-            .as_deref()
-            .expect("successful baseline supplies expected writer bytes"),
+        &reference_encoded,
         control,
         baseline_nodes,
         baseline_payload,

@@ -47,9 +47,19 @@ fn test_split_requires_control_header_and_preserves_complete_payload() {
 fn test_shared_harness_covers_payload_and_writer_invariants() {
     let payloads: &[&[u8]] = &[
         b"null",
-        "\"é\\n\\\"\"".as_bytes(),
-        br#"{"nested":[true,17,{"key":"value"}]}"#,
+        b"true",
         b"\"\"",
+        b"[]",
+        b"{}",
+        "\"é\\n\\\"\"".as_bytes(),
+        r#"{"é":"中\\\"","escaped\\\"key":"value"}"#.as_bytes(),
+        br#"{"nested":[true,17,{"key":"value"}]}"#,
+        r#"{"é":[null,true,"中",12]}"#.as_bytes(),
+        b"18446744073709551615",
+        b"-9223372036854775808",
+        b"-0.0",
+        b"123.45",
+        b"1e+20",
     ];
 
     for payload in payloads {
