@@ -13,6 +13,11 @@ use super::JsonTreeContext;
 
 /// Receives enter and leave events for budget-admitted JSON tree nodes.
 ///
+/// If either callback returns an error, the reader stops immediately and does
+/// not guarantee a matching `leave` for nodes already entered. Visitor state
+/// and external side effects are not restored; callers that require paired
+/// callbacks should discard and rebuild the visitor after an error.
+///
 /// # Examples
 ///
 /// ```

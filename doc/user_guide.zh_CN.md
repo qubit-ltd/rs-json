@@ -198,6 +198,11 @@ JCS 数值遵循 IEEE 754 双精度模型。包含 `9007199254740993` 的值可�
 工作内存覆盖 renderer 遍历栈和活动对象成员表的辅助容量，不包含输入 `Value`、分配器元数据或输出缓冲容量。
 `unlimited()` 会同时取消值、输出和工作内存限制，只应处理可信数据或已由其他层准入的数据。
 
+`JcsEncoder::write_buffered` 不会 flush 目标。使用缓冲写入器时传入 `&mut writer`，调用成功后再显式
+flush。后续 flush 位于已提交的编码事务之外，因此失败不会撤销已计费的用量。不要依赖 `Drop` 报告
+flush 错误。相比之下，`write_incremental` 会在提交值计费前 flush。flush 成功也不代表数据已持久化
+或送达远端。完整的缓冲写入器示例见[英文指南中的说明](user_guide.md#scenario-bounded-json-at-an-http-boundary)。
+
 配置值限制后，值准入会先于渲染执行；它的遍历栈不受 `max_working_bytes` 限制。可同时设置
 `max_depth` 限制准入遍历深度、`max_nodes` 限制树的节点数，并为输出和 renderer 容量分别设限：
 
@@ -513,6 +518,11 @@ assert_eq!(value, json!({"name": "qubit"}));
 完整输入，再访问节点（包括此前回调新增的后代），最后准入完整结果。输出限制不会限制回调次数或
 中间扩展量；会新增后代的访问器要自行保证遍历能终止。`SkipSubtree` 只跳过该节点的后代回调，
 不会跳过最终输出准入。
+
+使用 visitor 遍历时，`JsonTreeReader::process` 遇到准入或 visitor 错误会立即停止。先前的 `enter`
+回调不保证都有对应的 `leave`，visitor 副作用也不会撤销。已经暂存在调用方事务中的计费不会由
+`process` 回滚。visitor 错误本身不会使事务无法提交；预算拒绝会阻止事务成功提交。若要仅在整次遍历
+成功后发布用量，应在完全成功后才 commit，失败时丢弃事务；visitor 状态需要单独重建或恢复。
 
 ## 数字入口、私有协议与 Display
 

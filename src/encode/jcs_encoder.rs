@@ -241,6 +241,13 @@ where
     /// Output budget is checked against the complete document before external
     /// I/O. If the destination fails, accepted bytes remain written and remain
     /// charged, while the value transaction is not committed.
+    /// This method does not flush the destination. Success means that the
+    /// destination accepted the complete document and the encoding charges
+    /// were committed. Pass a mutable reference to retain the writer, then
+    /// flush it explicitly. A later flush is outside this encoding transaction
+    /// and does not roll back committed charges if it fails. Do not rely on
+    /// `Drop` to report flush errors. A successful flush does not guarantee
+    /// durability or delivery to a remote peer.
     ///
     /// # Type Parameters
     ///
@@ -248,19 +255,46 @@ where
     ///
     /// # Parameters
     ///
-    /// * `output` receives the complete buffered document.
+    /// * `output` receives the complete buffered document. Pass a mutable
+    ///   reference when you need to flush or otherwise use the writer after
+    ///   this call.
     /// * `value` is the JSON value to encode.
     ///
     /// # Returns
     ///
-    /// `Ok(())` after all bytes are written and accounting is committed.
+    /// `Ok(())` after the destination has accepted all bytes and accounting
+    /// is committed. The destination is not flushed.
     ///
     /// # Errors
     ///
     /// Returns `JcsEncodeError` if rendering, output budgeting, destination
     /// I/O, or session accounting fails. A destination failure preserves
     /// accepted output bytes and their output charges without committing the
-    /// value transaction.
+    /// value transaction. A later caller-initiated flush failure does not undo
+    /// the already committed charges.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::BufWriter;
+    /// use std::io::Write;
+    ///
+    /// use qubit_budget::json::JsonEncodeLimits;
+    /// use qubit_budget::json::JsonResource;
+    /// use qubit_json::encode::JcsEncoder;
+    /// use serde_json::json;
+    ///
+    /// let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+    ///     .max_output_bytes(64)
+    ///     .build();
+    /// let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
+    /// let mut writer = BufWriter::new(Vec::new());
+    /// encoder.write_buffered(&mut writer, &json!({"b": 2, "a": 1}))?;
+    /// writer.flush()?;
+    /// let bytes = writer.into_inner().expect("flush already succeeded");
+    /// assert_eq!(bytes, br#"{"a":1,"b":2}"#);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn write_buffered<O: Output<Item = u8>>(
         &mut self,
         output: O,
@@ -279,7 +313,9 @@ where
     ///
     /// Accepted bytes are charged immediately and remain written if rendering,
     /// flushing, or destination I/O later fails. A failed operation does not
-    /// commit the value budget.
+    /// commit the value budget. On success, this method flushes the destination
+    /// before committing value accounting; a flush failure therefore retains
+    /// charges for accepted output bytes without committing the value budget.
     ///
     /// # Type Parameters
     ///

@@ -112,6 +112,14 @@ where
     ///
     /// Returns [`JsonTreeProcessError::Budget`] when resource admission fails,
     /// or [`JsonTreeProcessError::Visitor`] when the visitor rejects a node.
+    /// Either error stops traversal immediately: remaining callbacks are not
+    /// invoked, and a node may not receive a matching `leave` callback. Any
+    /// visitor state or external side effects are the caller's responsibility
+    /// and are not undone. This method neither commits nor rolls back the
+    /// borrowed transaction. A visitor error leaves prior charges staged in
+    /// that transaction; a budget error rejects the transaction so it cannot
+    /// be committed. Drop the transaction after an error and rebuild visitors
+    /// that require balanced callbacks or clean state.
     pub fn process<V>(&mut self, value: &Value, visitor: &mut V) -> Result<(), JsonTreeProcessError<R, Q, V::Error>>
     where
         V: JsonTreeVisitor,

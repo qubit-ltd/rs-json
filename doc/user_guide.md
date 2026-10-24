@@ -238,6 +238,14 @@ input `Value`, allocator metadata, or output buffer capacity. `unlimited()`
 selects unlimited value, output, and working-memory budgets, so reserve it for
 trusted or separately admitted data.
 
+`JcsEncoder::write_buffered` does not flush its destination. Pass `&mut writer`
+when using a buffered writer, and explicitly flush after a successful call.
+That later flush is outside the committed encoding transaction, so failure
+does not undo its charges. Do not rely on `Drop` to report flush failures. By
+contrast, `write_incremental` flushes before committing value accounting. A
+successful flush does not imply durable storage or remote delivery. See the
+[buffered writer example above](#scenario-bounded-json-at-an-http-boundary).
+
 Value admission runs before rendering when value limits are configured. Its
 traversal stack is not covered by `max_working_bytes`; set `max_depth` to bound
 that pass and `max_nodes` to bound the admitted tree. For example, a service
@@ -613,6 +621,15 @@ then admits the complete result. Output limits do not cap callback count or
 intermediate expansion: visitors that add descendants must ensure their own
 traversal terminates. `SkipSubtree` skips callback descent at that node; it
 does not skip final output admission.
+
+For visitor-based traversal, `JsonTreeReader::process` stops immediately on an
+admission or visitor error. Earlier `enter` callbacks are not guaranteed
+matching `leave` callbacks, and visitor side effects are not undone. Charges
+already staged in the caller's transaction are not rolled back by `process`.
+A visitor error alone does not poison that transaction; a budget rejection
+prevents a successful commit. For all-or-nothing publication, commit only
+after complete success and drop the transaction on failure. Rebuild or restore
+visitor state separately.
 
 ## Numeric paths, private protocols, and Display
 
