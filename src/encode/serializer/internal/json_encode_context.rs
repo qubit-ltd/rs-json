@@ -172,7 +172,8 @@ where
     /// # Parameters
     ///
     /// * `self` - Shared transaction and output state for this check.
-    /// * `kind` - Display resource dimension, such as a string or object key.
+    /// * `kind` - Display resource dimension, including string, key, or number
+    ///   text.
     /// * `depth` - Root-inclusive depth of the value in the encoded document.
     /// * `bytes` - Number of UTF-8 bytes in the prospective display text.
     ///
@@ -183,7 +184,7 @@ where
     /// # Errors
     ///
     /// Returns a custom Serde error and records the violation when the
-    /// prospective string or key exceeds its configured limits.
+    /// prospective string, key, or number exceeds its configured limits.
     ///
     /// # Panics
     ///
@@ -333,7 +334,8 @@ where
     ///
     /// The collector checks output capacity as text is written, then admits the
     /// completed string's value measurement when that resource dimension is
-    /// configured.
+    /// configured. Number text is checked incrementally and left for number
+    /// preflight to admit once the complete representation is valid.
     ///
     /// # Type Parameters
     ///
@@ -344,7 +346,7 @@ where
     ///
     /// * `context` - Shared encoding state used for output and value checks.
     /// * `value` - Display value to format.
-    /// * `kind` - String or key resource dimension applied to the text.
+    /// * `kind` - Resource dimension applied while collecting the text.
     /// * `depth` - Root-inclusive depth of the value in the encoded document.
     ///
     /// # Returns
@@ -378,7 +380,9 @@ where
                 .serialization_error(JsonSerializationErrorKind::DisplayFormattingFailed)
         })?;
         let text = collector.text;
-        if let Some(measurement) = kind.measurement(depth, text.len()) {
+        if !matches!(kind, DisplayBudgetKind::Number)
+            && let Some(measurement) = kind.measurement(depth, text.len())
+        {
             collector.context.borrow_mut().admit(measurement)?;
         }
         Ok(text)

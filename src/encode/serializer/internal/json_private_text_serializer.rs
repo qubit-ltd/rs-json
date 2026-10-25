@@ -54,8 +54,8 @@ where
 
 macro_rules! delegate_number_method {
     ($name:ident, $type:ty) => {
-        #[doc = "Forwards the scalar unchanged outside Number mode."]
-        #[doc = "Number mode rejects scalar payloads; numbers must use a text method."]
+        #[doc = "Forwards the scalar unchanged outside private text modes."]
+        #[doc = "Private text modes reject scalar payloads; both require a text method."]
         #[doc = ""]
         #[doc = "# Parameters"]
         #[doc = ""]
@@ -69,9 +69,9 @@ macro_rules! delegate_number_method {
         #[doc = "# Errors"]
         #[doc = ""]
         #[doc = "Returns the wrapped serializer's error, or the protocol error"]
-        #[doc = "when Number mode rejects this non-text payload."]
+        #[doc = "when a private text mode rejects this non-text payload."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
-            self.reject_non_text_number_payload()?;
+            self.reject_non_text_payload()?;
             self.inner.$name(value)
         }
     };
@@ -83,33 +83,33 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    /// Rejects non-text payload methods for the Number protocol.
+    /// Rejects non-text payload methods for private text protocols.
     ///
-    /// Returns an error only when the serializer represents a number, whose
-    /// protocol accepts textual numeric payloads only.
+    /// Returns an error when the serializer represents a private text value,
+    /// whose protocol accepts string payloads only.
     ///
     /// # Returns
     ///
-    /// `Ok(())` outside Number mode, or `Err` when Number mode rejects a
-    /// non-text payload.
+    /// `Err` containing the selected private protocol's stable state error.
     ///
     /// # Errors
     ///
     /// Returns the wrapped serializer's error carrying
-    /// `InvalidNumberProtocol` when a non-text Number payload is rejected.
+    /// `InvalidNumberProtocol` or `InvalidRawValueProtocol` when a non-text
+    /// payload is rejected.
     ///
     /// # Panics
     ///
     /// Panics if the shared context is already borrowed.
-    fn reject_non_text_number_payload(&self) -> Result<(), S::Error> {
-        if matches!(self.kind, PrivateTextKind::Number { .. }) {
-            return Err(self.context.borrow_mut().serialization_error(
-                JsonSerializationErrorKind::InvalidSerializerState {
-                    reason: JsonSerializerStateError::InvalidNumberProtocol,
-                },
-            ));
-        }
-        Ok(())
+    fn reject_non_text_payload(&self) -> Result<(), S::Error> {
+        let reason = match self.kind {
+            PrivateTextKind::RawValue { .. } => JsonSerializerStateError::InvalidRawValueProtocol,
+            PrivateTextKind::Number { .. } => JsonSerializerStateError::InvalidNumberProtocol,
+        };
+        Err(self
+            .context
+            .borrow_mut()
+            .serialization_error(JsonSerializationErrorKind::InvalidSerializerState { reason }))
     }
 }
 
@@ -173,7 +173,8 @@ where
         self.inner.serialize_str(value)
     }
 
-    /// Forwards byte payloads unless Number mode rejects this non-text payload.
+    /// Forwards byte payloads unless a private text mode rejects this non-text
+    /// payload.
     ///
     /// # Parameters
     ///
@@ -187,13 +188,14 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_bytes(value)
     }
 
-    /// Forwards an absent optional payload unless Number mode rejects it.
+    /// Forwards an absent optional payload unless a private text mode rejects
+    /// it.
     ///
     /// # Parameters
     ///
@@ -206,13 +208,14 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_none()
     }
 
-    /// Forwards a present optional payload unless Number mode rejects it.
+    /// Forwards a present optional payload unless a private text mode rejects
+    /// it.
     ///
     /// # Type Parameters
     ///
@@ -230,16 +233,16 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_some(value)
     }
 
-    /// Forwards a unit payload unless Number mode rejects this non-text
+    /// Forwards a unit payload unless a private text mode rejects this non-text
     /// payload.
     ///
     /// # Parameters
@@ -253,13 +256,13 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_unit()
     }
 
-    /// Forwards a unit-struct payload unless Number mode rejects it.
+    /// Forwards a unit-struct payload unless a private text mode rejects it.
     ///
     /// # Parameters
     ///
@@ -273,13 +276,13 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_unit_struct(name)
     }
 
-    /// Forwards a unit-variant payload unless Number mode rejects it.
+    /// Forwards a unit-variant payload unless a private text mode rejects it.
     ///
     /// # Parameters
     ///
@@ -295,18 +298,18 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_unit_variant(
         self,
         name: &'static str,
         variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_unit_variant(name, variant_index, variant)
     }
 
-    /// Forwards a newtype-struct payload unless Number mode rejects it.
+    /// Forwards a newtype-struct payload unless a private text mode rejects it.
     ///
     /// # Type Parameters
     ///
@@ -325,16 +328,17 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_newtype_struct(name, value)
     }
 
-    /// Forwards a newtype-variant payload unless Number mode rejects it.
+    /// Forwards a newtype-variant payload unless a private text mode rejects
+    /// it.
     ///
     /// # Type Parameters
     ///
@@ -355,7 +359,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_newtype_variant<T>(
         self,
         name: &'static str,
@@ -366,13 +370,13 @@ where
     where
         T: Serialize + ?Sized,
     {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner
             .serialize_newtype_variant(name, variant_index, variant, value)
     }
 
-    /// Creates a sequence serializer unless Number mode rejects this non-text
-    /// payload.
+    /// Creates a sequence serializer unless a private text mode rejects this
+    /// non-text payload.
     ///
     /// # Parameters
     ///
@@ -386,14 +390,14 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_seq(len)
     }
 
-    /// Creates a tuple serializer unless Number mode rejects this non-text
-    /// payload.
+    /// Creates a tuple serializer unless a private text mode rejects this
+    /// non-text payload.
     ///
     /// # Parameters
     ///
@@ -407,13 +411,13 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_tuple(len)
     }
 
-    /// Creates a tuple-struct serializer unless Number mode rejects it.
+    /// Creates a tuple-struct serializer unless a private text mode rejects it.
     ///
     /// # Parameters
     ///
@@ -428,13 +432,14 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_tuple_struct(name, len)
     }
 
-    /// Creates a tuple-variant serializer unless Number mode rejects it.
+    /// Creates a tuple-variant serializer unless a private text mode rejects
+    /// it.
     ///
     /// # Parameters
     ///
@@ -451,7 +456,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_tuple_variant(
         self,
         name: &'static str,
@@ -459,12 +464,12 @@ where
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_tuple_variant(name, variant_index, variant, len)
     }
 
-    /// Creates a map serializer unless Number mode rejects this non-text
-    /// payload.
+    /// Creates a map serializer unless a private text mode rejects this
+    /// non-text payload.
     ///
     /// # Parameters
     ///
@@ -478,14 +483,14 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_map(len)
     }
 
-    /// Creates a struct serializer unless Number mode rejects this non-text
-    /// payload.
+    /// Creates a struct serializer unless a private text mode rejects this
+    /// non-text payload.
     ///
     /// # Parameters
     ///
@@ -500,13 +505,14 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_struct(name, len)
     }
 
-    /// Creates a struct-variant serializer unless Number mode rejects it.
+    /// Creates a struct-variant serializer unless a private text mode rejects
+    /// it.
     ///
     /// # Parameters
     ///
@@ -523,7 +529,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Number mode rejects this non-text payload.
+    /// Private text modes reject this non-text payload.
     fn serialize_struct_variant(
         self,
         name: &'static str,
@@ -531,7 +537,7 @@ where
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        self.reject_non_text_number_payload()?;
+        self.reject_non_text_payload()?;
         self.inner.serialize_struct_variant(name, variant_index, variant, len)
     }
 
@@ -558,15 +564,11 @@ where
     where
         T: Display + ?Sized,
     {
-        let depth = match self.kind {
-            PrivateTextKind::RawValue { depth } | PrivateTextKind::Number { depth } => depth,
+        let (depth, budget_kind) = match self.kind {
+            PrivateTextKind::RawValue { depth } => (depth, DisplayBudgetKind::RawOutput),
+            PrivateTextKind::Number { depth } => (depth, DisplayBudgetKind::Number),
         };
-        let text = JsonEncodeContext::collect_display::<S::Error, _>(
-            self.context,
-            value,
-            DisplayBudgetKind::RawOutput,
-            depth,
-        )?;
+        let text = JsonEncodeContext::collect_display::<S::Error, _>(self.context, value, budget_kind, depth)?;
         match self.kind {
             PrivateTextKind::RawValue { .. } => {
                 self.context.borrow_mut().preflight_raw(&text, depth)?;

@@ -18,13 +18,16 @@ pub(in crate::encode) enum DisplayBudgetKind {
     /// JSON object key text.
     Key,
 
+    /// Number text checked incrementally and admitted by number preflight.
+    Number,
+
     /// Raw JSON source, bounded by the complete output limit while collected.
     RawOutput,
 }
 
 impl DisplayBudgetKind {
     /// Returns the budget measurement for prospective text, if it is a JSON
-    /// string or key payload.
+    /// string, key, or number text.
     ///
     /// # Parameters
     ///
@@ -34,13 +37,15 @@ impl DisplayBudgetKind {
     ///
     /// # Returns
     ///
-    /// Returns `Some` with a string or key measurement for `String` and `Key`.
+    /// Returns `Some` with a string, key, or number measurement for `String`,
+    /// `Key`, and `Number`.
     /// Returns `None` for `RawOutput`, which is bounded by the complete output
     /// limit instead of a JSON payload measurement.
     pub(super) fn measurement(self, depth: usize, bytes: usize) -> Option<JsonMeasurement> {
         match self {
             Self::String => Some(JsonMeasurement::String { depth, bytes }),
             Self::Key => Some(JsonMeasurement::Key { bytes }),
+            Self::Number => Some(JsonMeasurement::Number { depth, bytes }),
             Self::RawOutput => None,
         }
     }

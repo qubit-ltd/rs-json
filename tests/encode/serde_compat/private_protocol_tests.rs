@@ -7,6 +7,8 @@
 // =============================================================================
 //! Exercises the exact RawValue and Number private serializer protocols.
 
+use std::cell::Cell;
+use std::fmt;
 use std::fmt::Display;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
@@ -18,6 +20,7 @@ use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
+use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
 use qubit_json::encode::JsonSerializerStateError;
 use serde::Serialize;
@@ -32,6 +35,43 @@ use serde::ser::SerializeTupleVariant;
 
 const RAW: &str = concat!("$", "serde_json", ":", ":private::RawValue");
 const NUMBER: &str = concat!("$", "serde_json", ":", ":private::Number");
+
+struct CountedNumberDisplay<'a> {
+    calls: &'a Cell<usize>,
+    chunks: usize,
+}
+
+impl fmt::Display for CountedNumberDisplay<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for _ in 0..self.chunks {
+            self.calls.set(self.calls.get() + 1);
+            formatter.write_str("1")?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for CountedNumberDisplay<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+struct DisplayNumber<'a>(CountedNumberDisplay<'a>);
+
+impl Serialize for DisplayNumber<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(NUMBER, 1)?;
+        state.serialize_field(NUMBER, &self.0)?;
+        state.end()
+    }
+}
 
 #[derive(Clone, Copy)]
 enum EmptyCompoundKind {
@@ -539,4 +579,205 @@ fn test_failed_number_display_is_called_once_and_keeps_first_error() {
         error.serialization_error().map(|error| error.kind()),
         Some(qubit_json::encode::JsonSerializationErrorKind::DisplayFormattingFailed),
     );
+}
+
+#[test]
+fn test_number_collect_str_stops_at_number_budget() {
+    let calls = Cell::new(0);
+    let value = DisplayNumber(CountedNumberDisplay {
+        calls: &calls,
+        chunks: 10_000,
+    });
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_number_bytes(3)
+        .build();
+    let mut encoder = JsonEncoder::with_limits(limits);
+    let error = encoder.to_vec(&value).expect_err("number must exceed budget");
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
+    assert_eq!(
+        error.budget_error().expect("budget source").resource(),
+        &JsonResource::NumberBytes
+    );
+    assert_eq!(calls.get(), 4, "must stop at first rejected chunk");
+}
+
+#[test]
+fn test_number_collect_str_stops_at_payload_budget() {
+    let calls = Cell::new(0);
+    let value = DisplayNumber(CountedNumberDisplay {
+        calls: &calls,
+        chunks: 10_000,
+    });
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_payload_bytes(3)
+        .build();
+    let mut encoder = JsonEncoder::with_limits(limits);
+    let error = encoder.to_vec(&value).expect_err("payload must exceed budget");
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
+    assert_eq!(
+        error.budget_error().expect("budget source").resource(),
+        &JsonResource::PayloadBytes
+    );
+    assert_eq!(calls.get(), 4, "must stop before collecting all text");
+}
+
+#[test]
+fn test_number_collect_str_stops_at_depth_budget() {
+    let calls = Cell::new(0);
+    let value = [DisplayNumber(CountedNumberDisplay {
+        calls: &calls,
+        chunks: 10_000,
+    })];
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_depth(1).build();
+    let mut encoder = JsonEncoder::with_limits(limits);
+    let error = encoder.to_vec(&value).expect_err("number depth must exceed budget");
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
+    assert_eq!(
+        error.budget_error().expect("budget source").resource(),
+        &JsonResource::Depth
+    );
+    assert_eq!(calls.get(), 1, "must stop at first rejected chunk");
+}
+
+#[test]
+fn test_number_collect_str_charges_once() {
+    let calls = Cell::new(0);
+    let value = DisplayNumber(CountedNumberDisplay {
+        calls: &calls,
+        chunks: 3,
+    });
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_nodes(1)
+        .max_number_bytes(3)
+        .max_payload_bytes(3)
+        .build();
+    let mut encoder = JsonEncoder::with_limits(limits);
+    assert_eq!(encoder.to_vec(&value).expect("exact limits must fit"), b"111");
+    assert_eq!(calls.get(), 3);
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(1));
+    assert_eq!(encoder.session().value_budget().used_payload_bytes(), Some(3));
+}
+
+#[test]
+fn test_number_collect_str_uses_remaining_payload() {
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_nodes(2)
+        .max_payload_bytes(4)
+        .build();
+    let mut encoder = JsonEncoder::with_limits(limits);
+    let first_calls = Cell::new(0);
+    let first = DisplayNumber(CountedNumberDisplay {
+        calls: &first_calls,
+        chunks: 2,
+    });
+    assert_eq!(encoder.to_vec(&first).expect("first number fits"), b"11");
+    let calls = Cell::new(0);
+    let second = DisplayNumber(CountedNumberDisplay {
+        calls: &calls,
+        chunks: 3,
+    });
+    let error = encoder.to_vec(&second).expect_err("remaining payload is two bytes");
+    assert_eq!(calls.get(), 3);
+    assert_eq!(
+        error.budget_error().expect("budget source").resource(),
+        &JsonResource::PayloadBytes
+    );
+    assert_eq!(encoder.session().value_budget().used_payload_bytes(), Some(2));
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(1));
+}
+
+#[test]
+fn test_number_collect_str_preserves_output_precedence() {
+    let calls = Cell::new(0);
+    let value = DisplayNumber(CountedNumberDisplay {
+        calls: &calls,
+        chunks: 10_000,
+    });
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_output_bytes(3)
+        .max_number_bytes(3)
+        .build();
+    let mut encoder = JsonEncoder::with_limits(limits);
+    let error = encoder.to_vec(&value).expect_err("output budget is exceeded first");
+    assert_eq!(
+        error.budget_error().expect("budget source").resource(),
+        &JsonResource::OutputBytes
+    );
+    assert_eq!(calls.get(), 4);
+}
+
+#[test]
+fn test_number_collect_str_preserves_empty_number_error() {
+    let calls = Cell::new(0);
+    let value = DisplayNumber(CountedNumberDisplay {
+        calls: &calls,
+        chunks: 0,
+    });
+    let mut encoder = JsonEncoder::unlimited();
+    let error = encoder.to_vec(&value).expect_err("empty text is not a number");
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
+    assert_eq!(
+        error.serialization_error().expect("serialization source").kind(),
+        qubit_json::encode::JsonSerializationErrorKind::InvalidNumberRepresentation
+    );
+    assert_eq!(calls.get(), 0);
+    assert_eq!(encoder.session().value_budget().used_nodes(), None);
+}
+
+#[test]
+fn test_number_collect_str_preserves_narrow_quantity_error() {
+    let calls = Cell::new(0);
+    let value = DisplayNumber(CountedNumberDisplay {
+        calls: &calls,
+        chunks: 256,
+    });
+    let limits = JsonEncodeLimits::<JsonResource, u8>::builder()
+        .max_number_bytes(u8::MAX)
+        .build();
+    let mut encoder = JsonEncoder::with_limits(limits);
+    let error = encoder.to_vec(&value).expect_err("number quantity must overflow");
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
+    assert_eq!(
+        error.budget_error().expect("budget source").resource(),
+        &JsonResource::NumberBytes
+    );
+    assert_eq!(calls.get(), 256);
+}
+
+#[test]
+fn test_number_collect_str_checks_all_output_modes() {
+    for mode in [OutputMode::Vec, OutputMode::Buffered, OutputMode::Incremental] {
+        let calls = Cell::new(0);
+        let value = [DisplayNumber(CountedNumberDisplay {
+            calls: &calls,
+            chunks: 10_000,
+        })];
+        let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+            .max_nodes(8)
+            .max_number_bytes(3)
+            .max_output_bytes(256)
+            .build();
+        let mut encoder = JsonEncoder::with_limits(limits);
+        let mut output = Vec::new();
+        let result = match mode {
+            OutputMode::Vec => encoder.to_vec(&value).map(|bytes| output = bytes),
+            OutputMode::Buffered => encoder.write_buffered(&mut output, &value),
+            OutputMode::Incremental => encoder.write_incremental(&mut output, &value),
+        };
+        let error = result.expect_err("number limit must reject every output mode");
+        assert_eq!(
+            error.budget_error().expect("budget source").resource(),
+            &JsonResource::NumberBytes
+        );
+        assert_eq!(calls.get(), 4);
+        assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+        match mode {
+            OutputMode::Vec | OutputMode::Buffered => assert!(output.is_empty()),
+            OutputMode::Incremental => assert!(!output.is_empty()),
+        }
+        assert_eq!(
+            encoder.session().output_budget().expect("output budget").used(),
+            output.len()
+        );
+    }
 }
