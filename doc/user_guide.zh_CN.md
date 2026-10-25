@@ -455,6 +455,41 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 }
 ```
 
+启用 `serde_json` 的 `raw_value` feature 后，普通 `serde_json::Value` 还会特殊处理对象中的首个
+`$serde_json::private::RawValue` 键。已准入的源文本
+`{"$serde_json::private::RawValue":"null"}` 会变成 `null`；若对应值不是字符串，例如
+`{"$serde_json::private::RawValue":8}`，目标反序列化会失败。首键的字符串值为 `[1,2,3]` 时，目标会变成数组。
+这些都是现有 Serde 目标语义：准入和资源计量描述源文本，目标可能将其投影成不同形态。因此，下例源对象计量为
+两个节点，返回数组却包含四个值；`decode_object_str` 检查的是源根形状，不保证投影后的根仍是对象。
+
+```rust
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::decode::JsonDecoder;
+use qubit_json::value::DuplicateKeyRejectingJsonValue;
+use serde_json::Value;
+
+let text = r#"{"$serde_json::private::RawValue":"[1,2,3]"}"#;
+let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    .max_nodes(2)
+    .build();
+let mut decoder = JsonDecoder::with_limits(limits);
+let projected: Value = decoder.decode_object_str(text)?;
+assert_eq!(projected.as_array().unwrap().len(), 3);
+assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
+
+let mut literal_decoder = JsonDecoder::with_limits(limits);
+let literal: DuplicateKeyRejectingJsonValue = literal_decoder.decode_str(text)?;
+let literal = literal.into_inner();
+assert!(literal.is_object());
+assert_eq!(literal["$serde_json::private::RawValue"], "[1,2,3]");
+# Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
+```
+
+`DuplicateKeyRejectingJsonValue` 会按字面保留这个标记键对象，并递归拒绝重复键。它还会执行重复键校验和自身的物化工作，
+因此代价不同于普通 `Value` 投影。启用 `arbitrary_precision` 后，上游 Serde 可能把数字作为 map 形状事件提供；包装器无法判断事件来源，
+会将其视为普通对象。文本准入无法恢复这些事件的来源信息。
+
 该包装类型会递归检查嵌套对象；如果输入契约本来就包含文本规范化，也可将它作为
 `NormalizingJsonDecoder` 的目标类型。调用方自行持有 Serde 反序列化器时，可使用对应的
 `DuplicateKeyRejectingJsonValueSeed`。

@@ -8,6 +8,7 @@
 
 #[cfg(feature = "arbitrary_precision")]
 use qubit_budget::ResourceLimit;
+use qubit_budget::json::JsonDecodeLimits;
 #[cfg(feature = "arbitrary_precision")]
 use qubit_budget::json::JsonEncodeLimits;
 #[cfg(feature = "arbitrary_precision")]
@@ -15,11 +16,13 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 #[cfg(feature = "arbitrary_precision")]
 use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
 use qubit_json::value::AccountingJsonValueSeed;
+use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use qubit_json::value::DuplicateKeyRejectingJsonValueSeed;
 use qubit_json::value::JsonValueEncoder;
 use qubit_json::value::traverse::JsonTreeBudgetTracker;
@@ -63,19 +66,11 @@ fn test_real_number_zero_exponents_and_underflow() {
     ] {
         let number: Number = serde_json::from_str(text).expect(text);
         let value = JsonValueEncoder::new().encode(&number).expect(text);
-        assert_eq!(
-            value.as_f64().expect(text).to_bits(),
-            expected.to_bits(),
-            "{text}"
-        );
+        assert_eq!(value.as_f64().expect(text).to_bits(), expected.to_bits(), "{text}");
 
         let bytes = JsonEncoder::unlimited().to_vec(&number).expect(text);
         let decoded: Value = JsonDecoder::unlimited().decode_utf8(&bytes).expect(text);
-        assert_eq!(
-            decoded.as_f64().expect(text).to_bits(),
-            expected.to_bits(),
-            "{text}"
-        );
+        assert_eq!(decoded.as_f64().expect(text).to_bits(), expected.to_bits(), "{text}");
     }
 }
 
@@ -152,6 +147,41 @@ fn test_value_encoder_keeps_marker_named_objects_as_objects() {
 }
 
 #[test]
+fn test_private_raw_key_obeys_serde_value_target_semantics() {
+    let input = r#"{"$serde_json::private::RawValue":"null"}"#;
+    let value: Value = JsonDecoder::unlimited().decode_str(input).unwrap();
+    assert!(value.is_null());
+
+    let error = JsonDecoder::unlimited()
+        .decode_str::<Value>(r#"{"$serde_json::private::RawValue":8}"#)
+        .unwrap_err();
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+}
+
+#[test]
+fn test_private_raw_key_preserves_source_accounting_and_root_check() {
+    let input = r#"{"$serde_json::private::RawValue":"[1,2,3]"}"#;
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder().max_nodes(2).build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let value: Value = decoder.decode_object_str(input).unwrap();
+    assert_eq!(value.as_array().unwrap().len(), 3);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
+}
+
+#[test]
+fn test_private_raw_key_can_be_literal_with_unique_key_target() {
+    for input in [
+        r#"{"$serde_json::private::RawValue":"null"}"#,
+        r#"{"$serde_json::private::RawValue":"[1,2,3]"}"#,
+    ] {
+        let value: DuplicateKeyRejectingJsonValue = JsonDecoder::unlimited().decode_utf8(input.as_bytes()).unwrap();
+        let value = value.into_inner();
+        assert!(value.is_object());
+        assert!(value["$serde_json::private::RawValue"].is_string());
+    }
+}
+
+#[test]
 fn test_seed_entry_points_enforce_the_64_bit_integer_union() {
     let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::default());
     let mut transaction = budget.transaction();
@@ -159,13 +189,17 @@ fn test_seed_entry_points_enforce_the_64_bit_integer_union() {
         .deserialize(U128Deserializer::<serde_json::Error>::new(u64::MAX as u128))
         .unwrap();
     assert_eq!(accepted.as_u64(), Some(u64::MAX));
-    assert!(AccountingJsonValueSeed::new(&mut transaction)
-        .deserialize(U128Deserializer::<serde_json::Error>::new(u128::MAX))
-        .is_err());
+    assert!(
+        AccountingJsonValueSeed::new(&mut transaction)
+            .deserialize(U128Deserializer::<serde_json::Error>::new(u128::MAX))
+            .is_err()
+    );
 
-    assert!(DuplicateKeyRejectingJsonValueSeed::new()
-        .deserialize(I128Deserializer::<serde_json::Error>::new(i64::MIN as i128 - 1))
-        .is_err());
+    assert!(
+        DuplicateKeyRejectingJsonValueSeed::new()
+            .deserialize(I128Deserializer::<serde_json::Error>::new(i64::MIN as i128 - 1))
+            .is_err()
+    );
 }
 
 #[cfg(feature = "arbitrary_precision")]
@@ -205,8 +239,7 @@ fn test_arbitrary_precision_tree_numbers_are_counted_without_float_conversion() 
 #[test]
 fn test_arbitrary_precision_real_numbers_still_enforce_strict_ranges() {
     for text in ["1e400", "18446744073709551616"] {
-        let number: Number =
-            serde_json::from_str(text).expect("arbitrary-precision Number must parse");
+        let number: Number = serde_json::from_str(text).expect("arbitrary-precision Number must parse");
         let error = JsonEncoder::unlimited()
             .to_vec(&number)
             .expect_err("ordinary encoding must reject values outside the strict range");

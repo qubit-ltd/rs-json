@@ -97,6 +97,12 @@ admission, see the [`rs-web` controller example](https://github.com/qubit-ltd/rs
 This is a changeable downstream reference; the [user guide](doc/user_guide.md#advanced-usage)
 explains `decode_input`.
 
+Admission limits and object/array checks describe the source JSON. A Serde
+target may construct a different value; ordinary `serde_json::Value` can
+reinterpret a first `$serde_json::private::RawValue` key when `raw_value` is
+enabled. See the [user guide's duplicate-key section](doc/user_guide.md#duplicate-object-keys)
+before relying on literal object preservation.
+
 ## Choose the decoding boundary
 
 Choose the entry point from the input contract, not from whether the payload

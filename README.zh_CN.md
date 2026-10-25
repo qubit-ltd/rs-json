@@ -87,6 +87,10 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 `qubit-json` 不提供 HTTP body 聚合 API。需要查看下游 HTTP 接入方式时，可参考
 [`rs-web` controller 示例](https://github.com/qubit-ltd/rs-web/blob/main/examples/controller_crud.rs)；该链接是可能随下游仓库变化的参考示例。更多输入方式见[用户手册的 `decode_input` 章节](doc/user_guide.zh_CN.md#进阶用法)。
 
+准入预算和对象/数组检查针对源 JSON，Serde 目标可能构造出不同形态的值。启用 `raw_value` 时，普通
+`serde_json::Value` 会特殊处理首个 `$serde_json::private::RawValue` 键；需要保留字面对象时，请先阅读
+[用户手册的重复键章节](doc/user_guide.zh_CN.md#重复对象键)并选择合适的目标类型。
+
 ## 选择解码边界
 
 选择入口时应以输入契约为准，而不是看某份数据能否碰巧解析成功：

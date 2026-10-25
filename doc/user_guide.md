@@ -548,6 +548,50 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 }
 ```
 
+With `serde_json`'s `raw_value` feature enabled, ordinary `serde_json::Value`
+also gives special meaning to a first object key named
+`$serde_json::private::RawValue`. The admitted source
+`{"$serde_json::private::RawValue":"null"}` becomes `null`; a non-string
+value such as `{"$serde_json::private::RawValue":8}` fails target
+deserialization. A first string value containing `[1,2,3]` becomes an array.
+These are existing Serde target semantics: admission and resource accounting
+describe the source text, while the target may project it into a different
+shape. Thus the source object below uses two nodes, although the returned array
+contains four values, and `decode_object_str` checks the source root rather than
+guaranteeing the projected root remains an object.
+
+```rust
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
+use qubit_json::decode::JsonDecoder;
+use qubit_json::value::DuplicateKeyRejectingJsonValue;
+use serde_json::Value;
+
+let text = r#"{"$serde_json::private::RawValue":"[1,2,3]"}"#;
+let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    .max_nodes(2)
+    .build();
+let mut decoder = JsonDecoder::with_limits(limits);
+let projected: Value = decoder.decode_object_str(text)?;
+assert_eq!(projected.as_array().unwrap().len(), 3);
+assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
+
+let mut literal_decoder = JsonDecoder::with_limits(limits);
+let literal: DuplicateKeyRejectingJsonValue = literal_decoder.decode_str(text)?;
+let literal = literal.into_inner();
+assert!(literal.is_object());
+assert_eq!(literal["$serde_json::private::RawValue"], "[1,2,3]");
+# Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
+```
+
+`DuplicateKeyRejectingJsonValue` preserves this marker-named object literally
+and rejects duplicate keys recursively. It adds duplicate-key validation and
+its own materialization work, so its cost is distinct from the ordinary
+`Value` projection. With `arbitrary_precision`, upstream Serde map events can
+represent numbers as map-shaped events; the wrapper cannot identify their
+provenance and treats them as ordinary objects. Text admission does not restore
+that event provenance.
+
 The wrapper validates nested objects recursively and can also be the target of
 `NormalizingJsonDecoder` when the configured text cleanup is part of the input
 contract. `DuplicateKeyRejectingJsonValueSeed` provides the corresponding seed
