@@ -2,7 +2,7 @@
 
 [简体中文](migration_0_12.zh_CN.md)
 
-This guide covers the source and behavior changes from `qubit-json` 0.11 to 0.12. The candidate requires Rust 1.94 and pairs `qubit-json` 0.12 with `qubit-budget` 0.9.1 or later in the compatible 0.9 series. In a multi-crate local checkout, ensure all crates resolve `qubit-budget` from the same source: a path dependency and a crates.io dependency with the same version still have distinct Rust type identities. A downstream crate that uses the checkout's local `qubit-budget` should patch the crates.io source to that same path while testing the local integration, then compile the JSON type exchange path.
+This guide covers the source and behavior changes from `qubit-json` 0.11 to 0.12. The candidate requires Rust 1.94 and pairs `qubit-json` 0.12 with `qubit-budget` 0.10 or later in the compatible 0.10 series. In a multi-crate local checkout, ensure all crates resolve `qubit-budget` from the same source: a path dependency and a crates.io dependency with the same version still have distinct Rust type identities. A downstream crate that uses the checkout's local `qubit-budget` should patch the crates.io source to that same path while testing the local integration, then compile the JSON type exchange path.
 
 ## f32 value and object-key representation
 
@@ -15,11 +15,11 @@ Use one `qubit-budget` version for every JSON limits, resource, session, and tra
 ```toml
 [dependencies]
 qubit-json = "0.12"
-qubit-budget = { version = "0.9.1", features = ["json"] }
+qubit-budget = { version = "0.10", features = ["json"] }
 serde_json = "1.0"
 ```
 
-`qubit-budget` 0.8 and 0.9.1 expose distinct public type identities. A `JsonDecodeLimits`, `JsonEncodeLimits`, resource, or transaction from one version cannot be passed to the other version's APIs. Remove old direct JSON-path budget pins in downstream crates, regenerate the lockfile, and compile the actual JSON exchange path. Do not add a conversion wrapper or keep both budget versions to bridge these types.
+`qubit-budget` 0.8, 0.9, and 0.10 expose distinct public type identities. A `JsonDecodeLimits`, `JsonEncodeLimits`, resource, or transaction from one version cannot be passed to the other version's APIs. Remove old direct JSON-path budget pins in downstream crates, regenerate the lockfile, and compile the actual JSON exchange path. Do not add a conversion wrapper or keep both budget versions to bridge these types.
 
 The seven direct downstream candidates that exchange these JSON/budget types are:
 
@@ -33,10 +33,10 @@ The seven direct downstream candidates that exchange these JSON/budget types are
 | `qubit-http` | 0.15.1 | 0.16.0 |
 | `qubit-web` | 0.2.0 | 0.3.0 |
 
-Update their JSON paths to `qubit-json = "0.12"` and `qubit-budget = "0.9.1"`, then update the corresponding downstream dependency versions and locks. These are candidate versions; this guide does not claim that they have been published. Other crates that do not exchange JSON budget types are outside this list and should not be upgraded solely for this migration.
+Update their JSON paths to `qubit-json = "0.12"` and `qubit-budget = "0.10"`, then update the corresponding downstream dependency versions and locks. These are candidate versions; this guide does not claim that they have been published. Other crates that do not exchange JSON budget types are outside this list and should not be upgraded solely for this migration.
 
 The current local `qubit-metadata` 0.7.0 candidate uses `qubit-datatype` 0.15,
-`qubit-budget` 0.9.1, `qubit-json` 0.12, `qubit-redact` 0.10, and
+`qubit-budget` 0.10, `qubit-json` 0.12, `qubit-redact` 0.10, and
 `qubit-value` 0.13 for its JSON path. Its adapter for
 `JsonDecodeErrorSource::Read` preserves the I/O error kind and follows the
 selected diagnostic policy for the source. Callers migrating directly from

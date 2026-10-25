@@ -38,7 +38,7 @@
 ```toml
 [dependencies]
 qubit-json = "0.12"
-qubit-budget = { version = "0.9.1", features = ["json"] }
+qubit-budget = { version = "0.10", features = ["json"] }
 serde_json = "1.0"
 ```
 

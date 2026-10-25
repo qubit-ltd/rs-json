@@ -2,7 +2,7 @@
 
 [English](migration_0_12.md)
 
-本文说明从 `qubit-json` 0.11 升级到 0.12 时的源码与行为变化。候选版本要求 Rust 1.94，并与 `qubit-budget` 0.9.1 或兼容的 0.9 系列更新版本配套使用。在多 crate 本地 checkout 中，还要确保所有 crate 从同一来源解析 `qubit-budget`：即使 path 依赖和 crates.io 依赖版本号相同，它们的 Rust 类型身份仍然不同。若下游 crate 使用本地 checkout 中的 `qubit-budget`，本地联调时应将 crates.io 来源 patch 到同一路径，再编译实际的 JSON 类型传递路径。
+本文说明从 `qubit-json` 0.11 升级到 0.12 时的源码与行为变化。候选版本要求 Rust 1.94，并与 `qubit-budget` 0.10 或兼容的后续 0.10 系列版本配套使用。在多 crate 本地 checkout 中，还要确保所有 crate 从同一来源解析 `qubit-budget`：即使 path 依赖和 crates.io 依赖版本号相同，它们的 Rust 类型身份仍然不同。若下游 crate 使用本地 checkout 中的 `qubit-budget`，本地联调时应将 crates.io 来源 patch 到同一路径，再编译实际的 JSON 类型传递路径。
 
 ## f32 值与对象键表示
 
@@ -15,11 +15,11 @@
 ```toml
 [dependencies]
 qubit-json = "0.12"
-qubit-budget = { version = "0.9.1", features = ["json"] }
+qubit-budget = { version = "0.10", features = ["json"] }
 serde_json = "1.0"
 ```
 
-`qubit-budget` 0.8 和 0.9.1 的公开类型身份不同。一版的 `JsonDecodeLimits`、`JsonEncodeLimits`、resource 或 transaction 不能传给另一版 API。下游应删除 JSON 数据交换路径上的旧 budget 直接依赖，更新 lockfile，并编译真实的 JSON 类型传递路径。不要添加类型转换包装层，也不要为了连接两种类型而同时保留两个 budget 版本。
+`qubit-budget` 0.8、0.9 和 0.10 的公开类型身份不同。一版的 `JsonDecodeLimits`、`JsonEncodeLimits`、resource 或 transaction 不能传给另一版 API。下游应删除 JSON 数据交换路径上的旧 budget 直接依赖，更新 lockfile，并编译真实的 JSON 类型传递路径。不要添加类型转换包装层，也不要为了连接两种类型而同时保留两个 budget 版本。
 
 七个直接交换这些 JSON/budget 类型的下游候选版本如下：
 
@@ -33,10 +33,10 @@ serde_json = "1.0"
 | `qubit-http` | 0.15.1 | 0.16.0 |
 | `qubit-web` | 0.2.0 | 0.3.0 |
 
-这些 crate 的 JSON 路径统一更新为 `qubit-json = "0.12"`、`qubit-budget = "0.9.1"`，随后同步调整各自版本与 lockfile。表中是候选版本，不表示已经发布。未交换 JSON budget 类型的其他 crate 不在此表内，不应仅为这次迁移一并升级。
+这些 crate 的 JSON 路径统一更新为 `qubit-json = "0.12"`、`qubit-budget = "0.10"`，随后同步调整各自版本与 lockfile。表中是候选版本，不表示已经发布。未交换 JSON budget 类型的其他 crate 不在此表内，不应仅为这次迁移一并升级。
 
 当前本地 `qubit-metadata` 0.7.0 候选的 JSON 路径使用
-`qubit-datatype` 0.15、`qubit-budget` 0.9.1、`qubit-json` 0.12、
+`qubit-datatype` 0.15、`qubit-budget` 0.10、`qubit-json` 0.12、
 `qubit-redact` 0.10 和 `qubit-value` 0.13。它对
 `JsonDecodeErrorSource::Read` 的适配会保留 I/O 错误类别，并按所选诊断策略处理
 source。从 `qubit-json` 0.10 直接迁移的调用方，在映射解码错误时应加入 `Read`
