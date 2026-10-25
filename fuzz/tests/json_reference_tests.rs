@@ -7,6 +7,7 @@
 // =============================================================================
 //! Regressions for literal JSON reference parsing used by fuzz oracles.
 
+use qubit_json::encode::JcsEncoder;
 use qubit_json_fuzz::json_reference::parse_literal_value;
 use qubit_json_fuzz::json_reference::roundtrip_literal_value;
 use serde_json::Value;
@@ -57,6 +58,25 @@ fn test_reference_roundtrip_preserves_raw_value_key_in_object_and_array() {
 
     let wrapped = Value::Array(vec![value.clone()]);
     assert_eq!(roundtrip_literal_value(&wrapped).expect("array roundtrip"), wrapped);
+}
+
+/// JCS encoding retains private-looking keys as ordinary object members.
+#[test]
+fn test_jcs_encoder_preserves_private_raw_value_key_objects() {
+    for (input, expected) in [
+        (
+            br#"{"$serde_json::private::RawValue":"null"}"#.as_slice(),
+            br#"{"$serde_json::private::RawValue":"null"}"#.as_slice(),
+        ),
+        (
+            br#"{"$serde_json::private::RawValue":8}"#.as_slice(),
+            br#"{"$serde_json::private::RawValue":8}"#.as_slice(),
+        ),
+    ] {
+        let value = parse_literal_value(input).expect("literal object parses");
+        let encoded = JcsEncoder::unlimited().to_vec(&value).expect("JCS encoding succeeds");
+        assert_eq!(encoded, expected);
+    }
 }
 
 /// The literal reference must still reject invalid syntax and Unicode.

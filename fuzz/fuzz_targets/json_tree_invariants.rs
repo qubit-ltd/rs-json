@@ -27,10 +27,10 @@ use qubit_json::value::traverse::JsonTreeMutVisitor;
 use qubit_json::value::traverse::JsonTreeMutateError;
 use qubit_json::value::traverse::JsonTreeMutator;
 use qubit_json_fuzz::input_limit::bounded_input;
+use qubit_json_fuzz::json_reference::parse_literal_value;
+use qubit_json_fuzz::json_reference::roundtrip_literal_value;
 use serde_json::Value;
-use serde_json::from_slice;
 use serde_json::json;
-use serde_json::to_vec;
 
 const MAX_TREE_DEPTH: usize = 64;
 const GENEROUS_LIMIT: usize = 1_000_000;
@@ -77,8 +77,7 @@ fn generous_budget() -> JsonValueBudget<JsonResource, usize> {
 
 /// Ensures a restored tree remains a valid JSON value after a traversal path.
 fn assert_serializable(value: &Value) {
-    let encoded = to_vec(value).expect("tree restoration must preserve a serializable JSON value");
-    let decoded = from_slice::<Value>(&encoded).expect("restored tree must remain valid JSON");
+    let decoded = roundtrip_literal_value(value).expect("restored tree must remain valid literal JSON");
     assert_eq!(decoded, *value);
 }
 
@@ -180,7 +179,7 @@ fuzz_target!(|data: &[u8]| {
     let (control, payload) = data
         .split_first()
         .map_or((0, data), |(control, payload)| (*control, payload));
-    let original = from_slice::<Value>(payload).unwrap_or_else(|_| make_tree(payload));
+    let original = parse_literal_value(payload).unwrap_or_else(|_| make_tree(payload));
 
     let mut success_value = original.clone();
     let mut success_input_budget = generous_budget();

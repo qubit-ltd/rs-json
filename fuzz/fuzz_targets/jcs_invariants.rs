@@ -18,6 +18,7 @@ use qubit_json::encode::JcsEncodeErrorKind;
 use qubit_json::encode::JcsEncoder;
 use qubit_json_fuzz::input_limit::bounded_input;
 use qubit_json_fuzz::jcs_decode_invariants::assert_jcs_decode_invariants;
+use qubit_json_fuzz::json_reference::parse_literal_value;
 use serde_json::Value;
 
 mod internal;
@@ -32,7 +33,7 @@ fuzz_target!(|data: &[u8]| {
     let raw_nodes = internal::fuzz_limit::limit(data, 6);
     assert_jcs_decode_invariants(input, raw_nodes, MAX_DEPTH);
 
-    let Ok(value) = serde_json::from_slice::<Value>(input) else {
+    let Ok(value) = parse_literal_value(input) else {
         return;
     };
     if !within_depth(&value) {
