@@ -219,8 +219,13 @@ fn benchmark_document(target_bytes: usize) -> Vec<u8> {
 
     let mut document = Vec::with_capacity(target_bytes);
     document.extend_from_slice(DOCUMENT_PREFIX);
-    while document.len() + RECORD.len() + DOCUMENT_SUFFIX.len() <= target_bytes {
-        if document.len() > DOCUMENT_PREFIX.len() {
+    loop {
+        let has_record = document.len() > DOCUMENT_PREFIX.len();
+        let comma_len = usize::from(has_record);
+        if document.len() + comma_len + RECORD.len() + DOCUMENT_SUFFIX.len() > target_bytes {
+            break;
+        }
+        if has_record {
             document.push(b',');
         }
         document.extend_from_slice(RECORD);
