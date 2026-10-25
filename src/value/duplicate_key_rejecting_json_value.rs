@@ -59,6 +59,11 @@ impl DuplicateKeyRejectingJsonValue {
 
 impl<'de> Deserialize<'de> for DuplicateKeyRejectingJsonValue {
     /// Deserializes JSON recursively while rejecting duplicate object keys.
+    ///
+    /// # Errors
+    ///
+    /// Returns the deserializer's error if the input is invalid or an object
+    /// contains a duplicate key.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,

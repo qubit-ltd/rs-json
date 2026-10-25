@@ -68,7 +68,7 @@ mod tests {
     use super::reference_usage;
 
     #[test]
-    fn reference_usage_counts_basic_values_and_numeric_tokens() {
+    fn test_reference_usage_counts_basic_values_and_numeric_tokens() {
         for literal in ["null", "true", "false", "\"\"", "[]", "{}"] {
             let value: Value = serde_json::from_str(literal).unwrap();
             assert_eq!(reference_usage(&value), (1, 0), "literal: {literal}");
@@ -92,7 +92,7 @@ mod tests {
     }
 
     #[test]
-    fn reference_usage_counts_utf8_object_keys_and_nested_values() {
+    fn test_reference_usage_counts_utf8_object_keys_and_nested_values() {
         let value: Value = serde_json::from_str(r#"{"é":[null,true,"中",12]}"#).unwrap();
         assert_eq!(reference_usage(&value), (6, 7));
 

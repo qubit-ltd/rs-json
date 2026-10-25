@@ -60,6 +60,7 @@ fn make_tree(data: &[u8]) -> Value {
 }
 
 /// Creates a budget with generous limits for visitor-error and panic paths.
+#[must_use]
 fn generous_budget() -> JsonValueBudget<JsonResource, usize> {
     let structure = StructureLimits::builder()
         .depth_limit(ResourceLimit::new(JsonResource::Depth, GENEROUS_LIMIT))
@@ -224,7 +225,8 @@ fuzz_target!(|data: &[u8]| {
     if node_count(&limited_value) > 1 {
         assert!(matches!(
             limited_error,
-            Err(JsonTreeMutateError::OutputBudget(error)) if error.resource() == &JsonResource::Nodes
+            Err(JsonTreeMutateError::OutputBudget(error))
+                if error.resource() == &JsonResource::Nodes
         ));
     } else {
         assert!(

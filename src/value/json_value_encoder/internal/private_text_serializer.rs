@@ -7,6 +7,8 @@
 // =============================================================================
 //! Serializer for text carried by serde_json private protocols.
 
+use std::fmt;
+
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Impossible;
@@ -635,9 +637,9 @@ impl Serializer for PrivateTextSerializer {
     /// # Errors
     ///
     /// Returns `DisplayFormattingFailed` if formatting rejects a write.
-    fn collect_str<T: std::fmt::Display + ?Sized>(self, value: &T) -> Result<Value, Self::Error> {
+    fn collect_str<T: fmt::Display + ?Sized>(self, value: &T) -> Result<Value, Self::Error> {
         let mut text = String::new();
-        std::fmt::write(&mut text, format_args!("{value}"))
+        fmt::write(&mut text, format_args!("{value}"))
             .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
         Ok(Value::String(text))
     }

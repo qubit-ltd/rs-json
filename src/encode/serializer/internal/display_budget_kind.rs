@@ -41,6 +41,7 @@ impl DisplayBudgetKind {
     /// `Key`, and `Number`.
     /// Returns `None` for `RawOutput`, which is bounded by the complete output
     /// limit instead of a JSON payload measurement.
+    #[inline]
     pub(super) fn measurement(self, depth: usize, bytes: usize) -> Option<JsonMeasurement> {
         match self {
             Self::String => Some(JsonMeasurement::String { depth, bytes }),

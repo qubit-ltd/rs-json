@@ -26,6 +26,18 @@ pub(crate) struct JsonLexicalFailure {
 
 impl fmt::Display for JsonLexicalFailure {
     /// Formats a privacy-safe lexical diagnostic and its source coordinates.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination receiving the diagnostic text.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the complete diagnostic is written.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter's error if writing the diagnostic fails.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,

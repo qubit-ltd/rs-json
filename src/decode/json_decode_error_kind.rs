@@ -44,6 +44,18 @@ pub enum JsonDecodeErrorKind {
 
 impl fmt::Display for JsonDecodeErrorKind {
     /// Writes the stable snake-case category name.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination for the category name.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the category name is written successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter's error if the destination rejects the write.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Read => "read",
@@ -61,6 +73,14 @@ impl FromStr for JsonDecodeErrorKind {
     type Err = &'static str;
 
     /// Parses a stable category name without ASCII case sensitivity.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Category name to parse.
+    ///
+    /// # Returns
+    ///
+    /// The matching JSON decoding error category.
     ///
     /// # Errors
     ///

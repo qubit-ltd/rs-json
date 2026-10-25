@@ -9,6 +9,7 @@
 
 use std::fmt::Display;
 
+use serde::ser::Error as SerError;
 use thiserror::Error;
 
 use super::JsonCollectionKind;
@@ -148,7 +149,6 @@ impl JsonSerializationError {
     ///
     /// `Some(signedness)` for an out-of-range integer, or `None` for every
     /// other serialization failure.
-    #[must_use]
     #[inline(always)]
     pub const fn integer_signedness(&self) -> Option<JsonIntegerSignedness> {
         match self.kind {
@@ -163,7 +163,6 @@ impl JsonSerializationError {
     ///
     /// `Some(kind)` for an unsupported map key, or `None` for every other
     /// serialization failure.
-    #[must_use]
     #[inline(always)]
     pub const fn map_key_kind(&self) -> Option<JsonMapKeyKind> {
         match self.kind {
@@ -178,7 +177,6 @@ impl JsonSerializationError {
     ///
     /// `Some(kind)` for a collection-length overflow, or `None` for every
     /// other serialization failure.
-    #[must_use]
     #[inline(always)]
     pub const fn collection_kind(&self) -> Option<JsonCollectionKind> {
         match self.kind {
@@ -193,7 +191,6 @@ impl JsonSerializationError {
     ///
     /// `Some(reason)` for an invalid serializer state, or `None` for every
     /// other serialization failure.
-    #[must_use]
     #[inline(always)]
     pub const fn serializer_state_error(&self) -> Option<JsonSerializerStateError> {
         match self.kind {
@@ -203,7 +200,7 @@ impl JsonSerializationError {
     }
 }
 
-impl serde::ser::Error for JsonSerializationError {
+impl SerError for JsonSerializationError {
     /// Converts arbitrary custom serializer text into one opaque, stable kind.
     fn custom<T>(_message: T) -> Self
     where

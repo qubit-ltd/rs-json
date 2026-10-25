@@ -130,7 +130,6 @@ impl NormalizingJsonDecodePolicyBuilder {
     /// An immutable normalization policy containing all settings selected on
     /// this builder.
     #[inline]
-    #[must_use]
     pub const fn build(self) -> NormalizingJsonDecodePolicy {
         self.policy
     }

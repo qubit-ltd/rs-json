@@ -74,6 +74,10 @@ pub trait JsonTreeVisitor {
     /// # Returns
     ///
     /// `Ok(())` to continue traversal, or the visitor's error to stop it.
+    ///
+    /// # Errors
+    ///
+    /// Returns the visitor-defined error when handling this node fails.
     fn enter(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error>;
 
     /// Handles a node after all of its descendants have been handled.
@@ -86,6 +90,10 @@ pub trait JsonTreeVisitor {
     /// # Returns
     ///
     /// `Ok(())` to continue traversal, or the visitor's error to stop it.
+    ///
+    /// # Errors
+    ///
+    /// Returns the visitor-defined error when handling this node fails.
     fn leave(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Ok(())
     }

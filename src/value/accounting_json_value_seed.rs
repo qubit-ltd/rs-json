@@ -93,7 +93,22 @@ where
 {
     type Value = Value;
 
-    /// Builds one value through the accounting visitor.
+    /// Builds one value through the accounting visitor and stages its resource
+    /// charges.
+    ///
+    /// # Parameters
+    ///
+    /// * `deserializer` - Serde input that supplies the value to decode.
+    ///
+    /// # Returns
+    ///
+    /// The decoded [`Value`]. Its resource charges remain staged in the
+    /// transaction until the caller commits that transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns the deserializer's error when the input cannot be represented
+    /// as a JSON value or when the transaction rejects a resource charge.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,

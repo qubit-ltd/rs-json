@@ -32,6 +32,7 @@ impl MarkdownFence {
     ///
     /// `Some(fence)` when `input` begins with a supported marker after at most
     /// three spaces, or `None` otherwise.
+    #[must_use]
     fn parse_opening(input: &str) -> Option<Self> {
         let indent_len = input.bytes().take_while(|byte| *byte == b' ').count();
         if indent_len > 3 {
@@ -98,6 +99,7 @@ impl MarkdownFence {
     ///
     /// `Some((line_end, next_line_start))` for LF, CRLF, or CR input, or
     /// `None` when no line break exists.
+    #[must_use]
     fn first_line_break(input: &str) -> Option<(usize, usize)> {
         let bytes = input.as_bytes();
         let line_end = bytes.iter().position(|byte| matches!(*byte, b'\n' | b'\r'))?;
@@ -138,6 +140,7 @@ impl MarkdownFence {
     /// `Some(body)` when, after ignoring trailing ASCII spaces, tabs, CRs, and
     /// LFs, the final line begins with zero to three ASCII spaces and contains
     /// a compatible closing marker run; otherwise, `None`.
+    #[must_use]
     fn strip_closing<'a>(&self, content: &'a str) -> Option<&'a str> {
         let trimmed_end = content.trim_end_matches([' ', '\t', '\n', '\r']);
         let closing_line_start = trimmed_end
@@ -168,6 +171,7 @@ impl MarkdownFence {
     ///
     /// `Some(length)` for a run of at least three matching marker bytes, or
     /// `None` otherwise.
+    #[must_use]
     fn matching_marker_len(&self, line: &str) -> Option<usize> {
         let count = line.bytes().take_while(|byte| *byte == self.marker).count();
         (count >= 3).then_some(count)

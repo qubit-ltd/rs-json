@@ -147,6 +147,10 @@ impl LexicalJsonValueBuilder {
 
     /// Returns the complete value or the first materialization failure.
     ///
+    /// # Returns
+    ///
+    /// The completed JSON value when every event was materialized successfully.
+    ///
     /// # Errors
     ///
     /// Returns the first recorded error when an admitted number cannot be
@@ -167,6 +171,15 @@ impl LexicalJsonValueBuilder {
 
     /// Rejects a container event when another frame would exceed the fixed
     /// limit.
+    ///
+    /// # Parameters
+    ///
+    /// * `offset` - Byte offset of the container's opening token.
+    ///
+    /// # Returns
+    ///
+    /// `true` when another frame fits within the limit, or `false` after
+    /// recording a depth-limit error.
     #[must_use]
     fn check_depth(&mut self, offset: usize) -> bool {
         if self.frames.len() == MAX_MATERIALIZATION_DEPTH {
@@ -181,6 +194,10 @@ impl LexicalJsonValueBuilder {
     }
 
     /// Attaches a completed value to its parent frame or stores it as the root.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Fully materialized value to attach to the current frame.
     fn push_value(&mut self, value: Value) {
         match self.frames.last_mut() {
             Some(JsonValueFrame::Array(values)) => values.push(value),

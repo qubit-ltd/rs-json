@@ -65,7 +65,18 @@ pub enum JsonSyntaxErrorReason {
 }
 
 impl From<JsonLexicalErrorReason> for JsonSyntaxErrorReason {
-    /// Exhaustively maps the shared lexical reason into the public text reason.
+    /// Maps a lexical rejection reason to its public diagnostic counterpart.
+    ///
+    /// The mapping is exhaustive so each internal lexical failure retains its
+    /// corresponding stable public reason.
+    ///
+    /// # Parameters
+    ///
+    /// * `reason` - Internal reason produced by strict lexical scanning.
+    ///
+    /// # Returns
+    ///
+    /// The public syntax reason corresponding to `reason`.
     #[inline]
     fn from(reason: JsonLexicalErrorReason) -> Self {
         match reason {
@@ -89,7 +100,19 @@ impl From<JsonLexicalErrorReason> for JsonSyntaxErrorReason {
 }
 
 impl fmt::Display for JsonSyntaxErrorReason {
-    /// Formats the stable human-readable reason.
+    /// Formats this reason as stable, input-independent diagnostic text.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination for the formatted reason.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the reason is written successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter's error if writing the reason fails.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnexpectedEnd => formatter.write_str("unexpected end of input"),

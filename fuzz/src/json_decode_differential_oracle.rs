@@ -9,6 +9,7 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use serde_json::Value;
@@ -41,11 +42,11 @@ const MAX_REFERENCE_OPENING_DELIMITERS: usize = 64;
 /// relationship, or when a shallow input disagrees with serde_json and the
 /// public number contract.
 pub fn assert_decode_contract(input: &[u8]) {
-    let decode_session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let decode_limits = JsonDecodeLimits::<JsonResource, usize>::builder().build();
+    let decode_session = JsonDecodeSession::from_limits(decode_limits);
     let decoded = JsonDecoder::new(decode_session).decode_utf8::<Value>(input);
-    let validation_session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let validation_limits = JsonDecodeLimits::<JsonResource, usize>::builder().build();
+    let validation_session = JsonDecodeSession::from_limits(validation_limits);
     let validated = JsonDecoder::new(validation_session).validate_utf8(input);
 
     assert!(

@@ -32,6 +32,7 @@ pub(crate) fn reset_deserialize_calls() {
 /// # Returns
 ///
 /// The current invocation count.
+#[must_use]
 #[inline(always)]
 pub(crate) fn deserialize_calls() -> usize {
     DESERIALIZE_CALLS.load(Ordering::SeqCst)

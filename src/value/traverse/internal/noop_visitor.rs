@@ -7,6 +7,8 @@
 // =============================================================================
 //! Defines the no-op visitor used for accounting-only traversal.
 
+use std::convert::Infallible;
+
 use serde_json::Value;
 
 use super::super::JsonTreeContext;
@@ -17,7 +19,7 @@ pub(in crate::value::traverse) struct NoopVisitor;
 
 impl JsonTreeVisitor for NoopVisitor {
     /// Error type proving this visitor has no failing operation.
-    type Error = std::convert::Infallible;
+    type Error = Infallible;
 
     /// Accepts an entered node.
     #[inline(always)]

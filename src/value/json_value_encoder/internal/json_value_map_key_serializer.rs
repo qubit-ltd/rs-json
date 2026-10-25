@@ -43,6 +43,7 @@ macro_rules! serialize_key_integer {
             #[doc = "# Errors"]
             #[doc = ""]
             #[doc = "This conversion is infallible."]
+            #[inline]
             fn $method(self, value: $type) -> Result<String, Self::Error> {
                 Ok(value.to_string())
             }
@@ -75,6 +76,7 @@ impl Serializer for JsonValueMapKeySerializer {
     /// # Errors
     ///
     /// This conversion is infallible.
+    #[inline]
     fn serialize_bool(self, value: bool) -> Result<String, Self::Error> {
         Ok(value.to_string())
     }
@@ -104,6 +106,7 @@ impl Serializer for JsonValueMapKeySerializer {
     /// # Errors
     ///
     /// This conversion is infallible.
+    #[inline]
     fn serialize_i128(self, value: i128) -> Result<String, Self::Error> {
         Ok(JsonMapKey::signed_wide(value))
     }
@@ -122,6 +125,7 @@ impl Serializer for JsonValueMapKeySerializer {
     /// # Errors
     ///
     /// This conversion is infallible.
+    #[inline]
     fn serialize_u128(self, value: u128) -> Result<String, Self::Error> {
         Ok(JsonMapKey::unsigned_wide(value))
     }
@@ -261,6 +265,7 @@ impl Serializer for JsonValueMapKeySerializer {
     ///
     /// Returns the wrapped serializer's error when that key shape is
     /// unsupported or invalid.
+    #[inline]
     fn serialize_some<T>(self, value: &T) -> Result<String, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -351,6 +356,7 @@ impl Serializer for JsonValueMapKeySerializer {
     ///
     /// Returns the wrapped serializer's error when that key shape is
     /// unsupported or invalid.
+    #[inline]
     fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<String, Self::Error>
     where
         T: Serialize + ?Sized,

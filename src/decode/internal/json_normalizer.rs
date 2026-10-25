@@ -43,7 +43,6 @@ impl JsonNormalizer {
 
     /// Returns the immutable configuration used by this normalizer.
     #[inline(always)]
-    #[must_use]
     pub(crate) const fn policy(&self) -> &NormalizingJsonDecodePolicy {
         &self.policy
     }

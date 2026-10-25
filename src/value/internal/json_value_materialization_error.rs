@@ -9,6 +9,7 @@
 //! Non-sensitive failures produced while constructing a lexical JSON value.
 
 /// A materialization failure stores only its kind, location, and fixed limit.
+#[must_use]
 #[derive(Debug)]
 pub(crate) enum JsonValueMaterializationError {
     /// A decoded object key was already present in the current object.

@@ -56,6 +56,7 @@ impl MutChildCursor {
     ///
     /// A cursor over the root's direct children, or an empty cursor for a
     /// scalar value.
+    #[must_use]
     pub(in crate::value::traverse) fn new(mut value: NonNull<Value>) -> Self {
         // SAFETY: the pointer originates from the caller's exclusive root
         // borrow, and no child cursor or visitor borrow of this node is live.
@@ -75,6 +76,7 @@ impl MutChildCursor {
             Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Self::Empty,
         }
     }
+
     /// Returns the next child and its traversal metadata.
     ///
     /// # Parameters

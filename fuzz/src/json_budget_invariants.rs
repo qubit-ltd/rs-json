@@ -18,6 +18,7 @@ use serde::de::DeserializeSeed;
 use serde_json::Value;
 
 /// Returns the committed node and payload byte counters.
+#[must_use = "the accounting snapshot must be checked"]
 fn usage(budget: &JsonValueBudget<JsonResource, usize>) -> (Option<usize>, Option<usize>) {
     (budget.used_nodes(), budget.used_payload_bytes())
 }

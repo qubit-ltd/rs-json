@@ -188,7 +188,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_bytes(value)
@@ -208,7 +208,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_none()
@@ -233,7 +233,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -256,7 +256,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_unit()
@@ -276,7 +276,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_unit_struct(name)
@@ -298,7 +298,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_unit_variant(
         self,
         name: &'static str,
@@ -328,7 +328,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -359,7 +359,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_newtype_variant<T>(
         self,
         name: &'static str,
@@ -390,7 +390,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_seq(len)
@@ -411,7 +411,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_tuple(len)
@@ -432,7 +432,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_tuple_struct(name, len)
@@ -456,7 +456,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_tuple_variant(
         self,
         name: &'static str,
@@ -483,7 +483,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_map(len)
@@ -505,7 +505,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_struct(name, len)
@@ -529,7 +529,7 @@ where
     /// # Errors
     ///
     /// Returns the wrapped serializer's error, or the protocol error when
-    /// Private text modes reject this non-text payload.
+    /// private text modes reject this non-text payload.
     fn serialize_struct_variant(
         self,
         name: &'static str,

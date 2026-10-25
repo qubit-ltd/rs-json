@@ -43,12 +43,25 @@ pub struct JcsWorkingMemoryError {
 
 impl JcsWorkingMemoryError {
     /// Creates a working memory error with the configured limit and request.
+    ///
+    /// # Parameters
+    ///
+    /// * `limit` is the maximum auxiliary memory available to the renderer.
+    /// * `requested` is the auxiliary memory required by the rejected request.
+    ///
+    /// # Returns
+    ///
+    /// The error containing both byte counts.
     #[inline]
     pub(crate) const fn new(limit: usize, requested: usize) -> Self {
         Self { limit, requested }
     }
 
     /// Returns the configured working memory limit in bytes.
+    ///
+    /// # Returns
+    ///
+    /// The maximum auxiliary memory available to the renderer.
     #[must_use]
     #[inline]
     pub const fn limit(&self) -> usize {
@@ -56,6 +69,10 @@ impl JcsWorkingMemoryError {
     }
 
     /// Returns the requested working memory in bytes.
+    ///
+    /// # Returns
+    ///
+    /// The auxiliary memory required by the rejected request.
     #[must_use]
     #[inline]
     pub const fn requested(&self) -> usize {
@@ -66,7 +83,19 @@ impl JcsWorkingMemoryError {
 impl fmt::Display for JcsWorkingMemoryError {
     /// Formats the configured limit and rejected request for diagnostics.
     ///
-    /// Returns a formatting error if the destination rejects the output.
+    /// # Parameters
+    ///
+    /// * `formatter` is the destination receiving the diagnostic text.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when formatting succeeds, or a formatting error if the
+    /// destination rejects the output.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatting error from the destination when it rejects
+    /// output.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,

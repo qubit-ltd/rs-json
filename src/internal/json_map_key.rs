@@ -14,6 +14,15 @@ pub(crate) enum JsonMapKey {
 
 impl JsonMapKey {
     /// Converts a full-range signed integer key to canonical decimal text.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Signed integer key to convert.
+    ///
+    /// # Returns
+    ///
+    /// The key's canonical base-10 representation, including a minus sign
+    /// when `value` is negative.
     #[inline]
     #[must_use]
     pub(crate) fn signed_wide(value: i128) -> String {
@@ -21,6 +30,14 @@ impl JsonMapKey {
     }
 
     /// Converts a full-range unsigned integer key to canonical decimal text.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Unsigned integer key to convert.
+    ///
+    /// # Returns
+    ///
+    /// The key's canonical base-10 representation.
     #[inline]
     #[must_use]
     pub(crate) fn unsigned_wide(value: u128) -> String {

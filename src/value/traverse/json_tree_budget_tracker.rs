@@ -26,7 +26,8 @@ use super::JsonTreeReader;
 /// # Examples
 ///
 /// ```
-/// use qubit_budget::json::{JsonResource, JsonValueLimits};
+/// use qubit_budget::json::JsonResource;
+/// use qubit_budget::json::JsonValueLimits;
 /// use qubit_json::value::traverse::JsonTreeBudgetTracker;
 /// use serde_json::json;
 ///

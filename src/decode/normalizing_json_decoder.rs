@@ -166,7 +166,6 @@ where
     ///
     /// A shared reference to the configured policy.
     #[inline(always)]
-    #[must_use]
     pub const fn policy(&self) -> &NormalizingJsonDecodePolicy {
         self.normalizer.policy()
     }
@@ -555,6 +554,7 @@ where
     ///
     /// Returns a structured error when normalization, accounting, parsing, or
     /// value construction fails.
+    #[inline]
     pub fn decode_value(&mut self, input: &str) -> Result<Value, JsonDecodeError<R, Q>> {
         self.decode_str(input)
     }

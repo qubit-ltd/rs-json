@@ -118,27 +118,6 @@ where
         }
     }
 
-    /// Configures whether input-derived error sources are retained.
-    ///
-    /// The default is [`DiagnosticPolicy::Redacted`]. Selecting
-    /// [`DiagnosticPolicy::Detailed`] may retain source errors containing
-    /// fragments or structural details derived from the input.
-    ///
-    /// # Parameters
-    ///
-    /// * `policy` - Diagnostic retention policy for failures produced by this
-    ///   decoder.
-    ///
-    /// # Returns
-    ///
-    /// The decoder with the requested policy; its existing session is retained.
-    #[inline(always)]
-    #[must_use]
-    pub const fn with_diagnostic_policy(mut self, policy: DiagnosticPolicy) -> Self {
-        self.diagnostic_policy = policy;
-        self
-    }
-
     /// Returns the configured diagnostic policy without changing the decoder.
     ///
     /// # Returns
@@ -176,6 +155,27 @@ where
     #[must_use]
     pub const fn session_mut(&mut self) -> &mut JsonDecodeSession<'budget, R, Q> {
         self.engine.session_mut()
+    }
+
+    /// Configures whether input-derived error sources are retained.
+    ///
+    /// The default is [`DiagnosticPolicy::Redacted`]. Selecting
+    /// [`DiagnosticPolicy::Detailed`] may retain source errors containing
+    /// fragments or structural details derived from the input.
+    ///
+    /// # Parameters
+    ///
+    /// * `policy` - Diagnostic retention policy for failures produced by this
+    ///   decoder.
+    ///
+    /// # Returns
+    ///
+    /// The decoder with the requested policy; its existing session is retained.
+    #[inline(always)]
+    #[must_use]
+    pub const fn with_diagnostic_policy(mut self, policy: DiagnosticPolicy) -> Self {
+        self.diagnostic_policy = policy;
+        self
     }
 
     /// Consumes the decoder and returns its cumulative session.

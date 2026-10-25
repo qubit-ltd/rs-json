@@ -7,6 +7,8 @@
 // =============================================================================
 //! Errors reported while rendering a JSON value as JCS.
 
+use serde_json::Error;
+
 use crate::encode::JcsWorkingMemoryError;
 
 /// Describes failures encountered while rendering a JSON value as JCS.
@@ -16,7 +18,7 @@ pub(in crate::encode) enum JcsRendererError {
     /// The renderer exceeded its configured working-memory budget.
     WorkingMemory(JcsWorkingMemoryError),
     /// Canonical JSON serialization or output writing failed.
-    Serialize(serde_json::Error),
+    Serialize(Error),
     /// An auxiliary allocation could not be completed.
     Allocation,
 }

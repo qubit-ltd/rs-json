@@ -58,7 +58,6 @@ where
     Q: Copy + fmt::Debug,
 {
     /// Creates a resource-accounting failure.
-    #[must_use = "return or inspect the constructed encoding error"]
     pub(crate) const fn budget(source: MeasuredBudgetError<R, Q>) -> Self {
         Self {
             failure: JsonEncodeFailure::Budget(source),
@@ -66,7 +65,6 @@ where
     }
 
     /// Creates a failure for invalid `RawValue` JSON text.
-    #[must_use = "return or inspect the constructed encoding error"]
     pub(crate) const fn invalid_raw_json(source: JsonSyntaxError) -> Self {
         Self {
             failure: JsonEncodeFailure::InvalidRawJson(source),
@@ -74,7 +72,6 @@ where
     }
 
     /// Creates a privacy-safe Serde serialization failure.
-    #[must_use = "return or inspect the constructed encoding error"]
     pub(crate) const fn serialization(source: JsonSerializationError) -> Self {
         Self {
             failure: JsonEncodeFailure::Serialize(source),
@@ -82,7 +79,6 @@ where
     }
 
     /// Creates a destination-writer failure.
-    #[must_use = "return or inspect the constructed encoding error"]
     pub(crate) fn write(source: IoError) -> Self {
         Self {
             failure: JsonEncodeFailure::Write(source),
@@ -111,7 +107,6 @@ where
     /// `Some` with the borrowed budget error for
     /// [`JsonEncodeErrorKind::Budget`], or `None` for every other failure
     /// kind.
-    #[must_use]
     #[inline(always)]
     pub const fn budget_error(&self) -> Option<&MeasuredBudgetError<R, Q>> {
         match &self.failure {
@@ -126,7 +121,6 @@ where
     ///
     /// `Some` with the borrowed syntax error for
     /// [`JsonEncodeErrorKind::InvalidRawJson`], or `None` otherwise.
-    #[must_use]
     #[inline(always)]
     pub const fn syntax_error(&self) -> Option<&JsonSyntaxError> {
         match &self.failure {
@@ -141,7 +135,6 @@ where
     ///
     /// `Some` with the borrowed serialization error for
     /// [`JsonEncodeErrorKind::Serialize`], or `None` otherwise.
-    #[must_use]
     #[inline(always)]
     pub const fn serialization_error(&self) -> Option<&JsonSerializationError> {
         match &self.failure {
@@ -156,7 +149,6 @@ where
     ///
     /// `Some` with the borrowed I/O error for [`JsonEncodeErrorKind::Write`],
     /// or `None` otherwise.
-    #[must_use]
     #[inline(always)]
     pub const fn write_error(&self) -> Option<&IoError> {
         match &self.failure {
@@ -171,7 +163,6 @@ where
     ///
     /// `Some` with the owned budget error for [`JsonEncodeErrorKind::Budget`],
     /// or `None` otherwise.
-    #[must_use]
     pub fn into_budget_error(self) -> Option<MeasuredBudgetError<R, Q>> {
         match self.failure {
             JsonEncodeFailure::Budget(source) => Some(source),
@@ -185,7 +176,6 @@ where
     ///
     /// `Some` with the owned syntax error for
     /// [`JsonEncodeErrorKind::InvalidRawJson`], or `None` otherwise.
-    #[must_use]
     pub fn into_syntax_error(self) -> Option<JsonSyntaxError> {
         match self.failure {
             JsonEncodeFailure::InvalidRawJson(source) => Some(source),
@@ -199,7 +189,6 @@ where
     ///
     /// `Some` with the owned serialization error for
     /// [`JsonEncodeErrorKind::Serialize`], or `None` otherwise.
-    #[must_use]
     pub fn into_serialization_error(self) -> Option<JsonSerializationError> {
         match self.failure {
             JsonEncodeFailure::Serialize(source) => Some(source),
@@ -214,7 +203,6 @@ where
     ///
     /// `Some` with the owned I/O error for [`JsonEncodeErrorKind::Write`], or
     /// `None` otherwise.
-    #[must_use]
     pub fn into_write_error(self) -> Option<IoError> {
         match self.failure {
             JsonEncodeFailure::Write(source) => Some(source),

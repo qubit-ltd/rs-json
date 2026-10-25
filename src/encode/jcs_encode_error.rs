@@ -182,7 +182,6 @@ where
     /// # Returns
     ///
     /// The retained budget error for a budget failure, or `None` otherwise.
-    #[must_use]
     #[inline]
     pub const fn budget_error(&self) -> Option<&MeasuredBudgetError<R, Q>> {
         match &self.failure {
@@ -200,7 +199,6 @@ where
     ///
     /// The retained working-memory failure for that category, or `None`
     /// otherwise.
-    #[must_use]
     #[inline]
     pub const fn working_memory_error(&self) -> Option<&JcsWorkingMemoryError> {
         match &self.failure {
@@ -218,7 +216,6 @@ where
     ///
     /// The privacy-safe serialization failure for that category, or `None`
     /// otherwise.
-    #[must_use]
     #[inline]
     pub const fn serialization_error(&self) -> Option<&JsonSerializationError> {
         match &self.failure {
@@ -235,7 +232,6 @@ where
     /// # Returns
     ///
     /// The retained writer error for that category, or `None` otherwise.
-    #[must_use]
     #[inline]
     pub const fn write_error(&self) -> Option<&io::Error> {
         match &self.failure {

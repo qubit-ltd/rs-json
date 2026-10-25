@@ -20,6 +20,7 @@
 /// let control = JsonTreeControl::SkipSubtree;
 /// assert_eq!(control, JsonTreeControl::SkipSubtree);
 /// ```
+#[must_use = "the traversal control determines whether descendant callbacks run"]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonTreeControl {
     /// Visit the node's descendants in normal depth-first order.

@@ -20,6 +20,7 @@ use qubit_json_fuzz::input_limit::bounded_input;
 use qubit_json_fuzz::jcs_decode_invariants::assert_jcs_decode_invariants;
 use qubit_json_fuzz::json_reference::parse_literal_value;
 use serde_json::Value;
+use serde_json_canonicalizer::to_vec;
 
 mod internal;
 
@@ -40,8 +41,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    let expected = serde_json_canonicalizer::to_vec(&value)
-        .expect("a serde_json value accepted by the JCS oracle must canonicalize");
+    let expected = to_vec(&value).expect("a serde_json value accepted by the JCS oracle must canonicalize");
     let mut unlimited = JcsEncoder::unlimited();
     assert_eq!(
         unlimited.to_vec(&value).expect("unlimited JCS encoding must succeed"),

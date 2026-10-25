@@ -29,6 +29,7 @@ use super::NormalizingJsonDecodePolicyBuilder;
 ///     .build();
 /// assert!(!policy.trim_whitespace());
 /// ```
+#[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizingJsonDecodePolicy {
     /// Whether leading and trailing whitespace is removed.
@@ -54,7 +55,6 @@ impl NormalizingJsonDecodePolicy {
     ///
     /// A policy with the documented permissive defaults.
     #[inline]
-    #[must_use]
     pub const fn lenient() -> Self {
         Self {
             trim_whitespace: true,

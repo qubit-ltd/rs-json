@@ -10,6 +10,7 @@
 use crate::encode::JcsWorkingMemoryError;
 
 /// Failure reported while reserving tracked working memory.
+#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum JcsReserveError {
     /// The requested capacity would exceed the configured working-memory limit.

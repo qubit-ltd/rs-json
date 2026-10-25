@@ -30,6 +30,11 @@ use super::json_number_lexeme_length;
 use crate::internal::StrictJsonNumber;
 
 /// Visitor used to construct and account one JSON value.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity retained by the transaction's limits and errors.
+/// * `Q` - Exact unsigned quantity used for measurements and accounting.
 pub(in crate::value) struct JsonValueVisitor<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,

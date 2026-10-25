@@ -119,7 +119,9 @@ fn visitor_floor(root: &Value) -> usize {
                 pending.push(Frame::Leave(value));
                 match value {
                     Value::Array(values) => pending.extend(values.iter().rev().map(Frame::Enter)),
-                    Value::Object(entries) => pending.extend(entries.values().rev().map(Frame::Enter)),
+                    Value::Object(entries) => {
+                        pending.extend(entries.values().rev().map(Frame::Enter));
+                    }
                     Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
                 }
             }

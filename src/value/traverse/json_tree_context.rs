@@ -14,7 +14,8 @@ use super::JsonTreeLocation;
 /// # Examples
 ///
 /// ```
-/// use qubit_json::value::traverse::{JsonTreeContext, JsonTreeLocation};
+/// use qubit_json::value::traverse::JsonTreeContext;
+/// use qubit_json::value::traverse::JsonTreeLocation;
 ///
 /// let context = JsonTreeContext {
 ///     depth: 1,

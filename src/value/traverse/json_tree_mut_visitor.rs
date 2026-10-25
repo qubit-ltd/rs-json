@@ -17,12 +17,15 @@ use super::JsonTreeControl;
 /// Output admission runs only after every visitor callback succeeds. Returning
 /// [`JsonTreeControl::SkipSubtree`] skips descendant callbacks but does not
 /// skip final output accounting.
+/// [`crate::value::traverse::JsonTreeMutator::process`] supplies the context to
+/// each callback during traversal.
 ///
 /// # Examples
 ///
 /// ```
+/// use qubit_budget::json::{JsonResource, JsonValueBudget, JsonValueLimits};
 /// use qubit_json::value::traverse::{
-///     JsonTreeContext, JsonTreeControl, JsonTreeMutVisitor,
+///     JsonTreeContext, JsonTreeControl, JsonTreeMutator, JsonTreeMutVisitor,
 /// };
 /// use serde_json::Value;
 ///
@@ -40,15 +43,16 @@ use super::JsonTreeControl;
 ///     }
 /// }
 ///
+/// let limits = JsonValueLimits::<JsonResource, usize>::default();
+/// let mut input_budget = JsonValueBudget::new(limits);
+/// let mut output_budget = JsonValueBudget::new(limits);
+/// let mut input = input_budget.transaction();
+/// let mut output = output_budget.transaction();
+/// let mut mutator = JsonTreeMutator::new(&mut input, &mut output);
 /// let mut visitor = Visitor;
 /// let mut value = Value::Bool(true);
-/// let context = JsonTreeContext {
-///     depth: 1,
-///     location: qubit_json::value::traverse::JsonTreeLocation::Root,
-/// };
-/// let control = visitor.visit(&mut value, context).unwrap();
+/// mutator.process(&mut value, &mut visitor).unwrap();
 /// assert_eq!(value, Value::Null);
-/// assert_eq!(control, JsonTreeControl::SkipSubtree);
 /// ```
 pub trait JsonTreeMutVisitor {
     /// Domain-specific failure returned by this visitor.

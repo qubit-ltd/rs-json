@@ -29,6 +29,14 @@ pub(in crate::value::traverse) enum OwnedLocation {
 
 impl OwnedLocation {
     /// Borrows this owned location for a visitor context.
+    ///
+    /// # Parameters
+    ///
+    /// * `depth` - Root-inclusive depth of the value reported to the visitor.
+    ///
+    /// # Returns
+    ///
+    /// A callback context containing this location and the supplied depth.
     #[must_use]
     #[inline(always)]
     pub(in crate::value::traverse) fn context(&self, depth: usize) -> JsonTreeContext<'_> {
