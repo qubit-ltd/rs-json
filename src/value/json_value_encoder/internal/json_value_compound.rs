@@ -519,12 +519,13 @@ impl SerializeMap for JsonValueCompound {
         let key = key
             .serialize(JsonValueMapKeySerializer)
             .map_err(|error| self.retain_error(error))?;
+        if matches!(self, Self::Map { next_key: Some(_), .. }) {
+            let error = invalid_state(JsonSerializerStateError::MapKeyAlreadyPending);
+            return Err(self.retain_error(error));
+        }
         let Self::Map { next_key, .. } = self else {
             unreachable!()
         };
-        if next_key.is_some() {
-            return Err(invalid_state(JsonSerializerStateError::MapKeyAlreadyPending));
-        }
         *next_key = Some(key);
         Ok(())
     }
@@ -547,12 +548,14 @@ impl SerializeMap for JsonValueCompound {
     where
         T: Serialize + ?Sized,
     {
+        if matches!(self, Self::Map { next_key: None, .. }) {
+            let error = invalid_state(JsonSerializerStateError::MapValueWithoutKey);
+            return Err(self.retain_error(error));
+        }
         let Self::Map { values, next_key, .. } = self else {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
         };
-        let key = next_key
-            .take()
-            .ok_or_else(|| invalid_state(JsonSerializerStateError::MapValueWithoutKey))?;
+        let key = next_key.take().expect("the map key was checked above");
         Self::insert(values, key, value).map_err(|error| self.retain_error(error))
     }
 

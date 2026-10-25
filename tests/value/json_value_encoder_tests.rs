@@ -351,6 +351,29 @@ impl Serialize for InvalidMapStateProbe {
     }
 }
 
+/// Ignores an invalid split-map call before completing the compound.
+struct SwallowedMapStateProbe(u8);
+
+impl Serialize for SwallowedMapStateProbe {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        match self.0 {
+            0 => {
+                let _ = map.serialize_value(&true);
+            }
+            _ => {
+                map.serialize_key("first")?;
+                let _ = map.serialize_key("second");
+                map.serialize_value(&1_u8)?;
+            }
+        }
+        map.end()
+    }
+}
+
 /// Selects one Serde serializer entry point by index.
 struct SerializerProbe(u8);
 
@@ -902,6 +925,25 @@ fn test_json_value_encoder_classifies_invalid_map_states() {
             JsonSerializationErrorKind::InvalidSerializerState { reason }
         );
         assert!(error.is_serializer_contract_error());
+        assert_eq!(error.serializer_state_error(), Some(reason));
+    }
+}
+
+/// Retains map-state errors even when a custom serializer ignores them.
+#[test]
+fn test_json_value_encoder_retains_swallowed_map_state_errors() {
+    let expected = [
+        JsonSerializerStateError::MapValueWithoutKey,
+        JsonSerializerStateError::MapKeyAlreadyPending,
+    ];
+    for (index, reason) in expected.into_iter().enumerate() {
+        let error = JsonValueEncoder::new()
+            .encode(&SwallowedMapStateProbe(index as u8))
+            .expect_err("ignored invalid map calls must still fail the encoding operation");
+        assert_eq!(
+            error.kind(),
+            JsonSerializationErrorKind::InvalidSerializerState { reason }
+        );
         assert_eq!(error.serializer_state_error(), Some(reason));
     }
 }
