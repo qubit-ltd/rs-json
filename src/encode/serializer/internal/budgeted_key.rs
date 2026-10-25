@@ -87,14 +87,24 @@ where
     /// # Errors
     ///
     /// Returns errors produced while the wrapped serializer encodes the key.
+    /// An operation-level opaque failure is also recorded when an enclosing
+    /// custom implementation ignores the returned error.
     #[inline(always)]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        self.value.serialize(JsonKeyBudgetSerializer::<S, R, Q, VALUE_LIMITS> {
+        let result = self.value.serialize(JsonKeyBudgetSerializer::<S, R, Q, VALUE_LIMITS> {
             inner: serializer,
             context: self.context,
-        })
+        });
+        if result.is_err() {
+            self.context
+                .borrow()
+                .output
+                .borrow_mut()
+                .record_custom_serialization_error();
+        }
+        result
     }
 }

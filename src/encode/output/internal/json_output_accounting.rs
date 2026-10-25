@@ -198,6 +198,17 @@ where
         }
     }
 
+    /// Records an opaque nested serialization failure without retaining its
+    /// text.
+    ///
+    /// Earlier structured serialization failures remain authoritative.
+    #[inline]
+    pub(in crate::encode) fn record_custom_serialization_error(&mut self) {
+        self.record_serialization_error(JsonSerializationError::new(
+            JsonSerializationErrorKind::CustomSerialization,
+        ));
+    }
+
     /// Takes the first structured serialization failure, if one exists.
     ///
     /// # Returns

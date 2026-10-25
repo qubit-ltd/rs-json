@@ -36,6 +36,11 @@ use super::serializer::JsonEncodeSerializer;
 /// error instead of being truncated or converted to strings. Floating-point
 /// values must be finite.
 ///
+/// Nested serialization errors remain failures of the complete operation even
+/// when an enclosing custom `Serialize` implementation ignores them. Arbitrary
+/// custom error text is not retained. Incremental output may already contain an
+/// accepted prefix when an error is reported.
+///
 /// # Type Parameters
 ///
 /// * `'budget` - Lifetime of the caller-provided cumulative encode session.

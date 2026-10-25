@@ -94,17 +94,28 @@ where
     /// # Errors
     ///
     /// Returns the downstream serializer error if value serialization or a
-    /// nested budget check fails.
+    /// nested budget check fails. An operation-level opaque failure is also
+    /// recorded when nested serialization returns an error that an enclosing
+    /// custom implementation may ignore.
     #[inline(always)]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        self.value
+        let result = self
+            .value
             .serialize(JsonEncodeSerializer::<S, R, Q, VALUE_LIMITS>::with_context(
                 serializer,
                 self.context,
                 self.depth,
-            ))
+            ));
+        if result.is_err() {
+            self.context
+                .borrow()
+                .output
+                .borrow_mut()
+                .record_custom_serialization_error();
+        }
+        result
     }
 }

@@ -119,14 +119,24 @@ where
     /// # Errors
     ///
     /// Returns errors from private-text preflight or the wrapped serializer.
+    /// An operation-level opaque failure is also recorded when an enclosing
+    /// custom implementation ignores the returned error.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        self.value.serialize(JsonPrivateTextSerializer {
+        let result = self.value.serialize(JsonPrivateTextSerializer {
             inner: serializer,
             context: self.context,
             kind: self.kind,
-        })
+        });
+        if result.is_err() {
+            self.context
+                .borrow()
+                .output
+                .borrow_mut()
+                .record_custom_serialization_error();
+        }
+        result
     }
 }

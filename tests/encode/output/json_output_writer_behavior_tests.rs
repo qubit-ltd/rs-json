@@ -15,6 +15,7 @@ use qubit_json::encode::JsonSerializationErrorKind;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error as _;
+use serde::ser::SerializeMap;
 use serde::ser::SerializeSeq;
 use serde::ser::SerializeStruct;
 
@@ -109,6 +110,148 @@ impl Serialize for SwallowedPrivateNumberElement {
         let _ = sequence.serialize_element(&NonFinitePrivateNumber);
         sequence.end()
     }
+}
+
+/// Emits a partial value before returning an opaque custom serialization error.
+struct PartialCustomFailure;
+
+impl Serialize for PartialCustomFailure {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let _unfinished = serializer.serialize_seq(Some(1))?;
+        Err(S::Error::custom("swallowed custom text"))
+    }
+}
+
+/// Ignores a nested custom serialization error before completing its sequence.
+struct SwallowedCustomElement;
+
+impl Serialize for SwallowedCustomElement {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(1))?;
+        let _ = sequence.serialize_element(&PartialCustomFailure);
+        sequence.end()
+    }
+}
+
+struct ImmediateCustomFailure;
+
+impl Serialize for ImmediateCustomFailure {
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        Err(S::Error::custom("immediate custom text"))
+    }
+}
+
+struct SwallowedCustomBeforeOutput;
+
+impl Serialize for SwallowedCustomBeforeOutput {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(1))?;
+        let _ = sequence.serialize_element(&ImmediateCustomFailure);
+        sequence.end()
+    }
+}
+
+struct SwallowedCustomMapValue;
+
+impl Serialize for SwallowedCustomMapValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        let _ = map.serialize_entry("x", &PartialCustomFailure);
+        map.end()
+    }
+}
+
+struct SwallowedCustomStructField;
+
+impl Serialize for SwallowedCustomStructField {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Record", 1)?;
+        let _ = state.serialize_field("field", &PartialCustomFailure);
+        state.end()
+    }
+}
+
+struct PartialCustomKey;
+
+impl Serialize for PartialCustomKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str("sensitive-key")?;
+        Err(S::Error::custom("sensitive key text"))
+    }
+}
+
+struct SwallowedCustomMapKey;
+
+impl Serialize for SwallowedCustomMapKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        let _ = map.serialize_entry(&PartialCustomKey, &1);
+        map.end()
+    }
+}
+
+struct PartialCustomPrivatePayload;
+
+impl Serialize for PartialCustomPrivatePayload {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str("1")?;
+        Err(S::Error::custom("sensitive payload text"))
+    }
+}
+
+struct SwallowedCustomPrivatePayload(&'static str);
+
+impl Serialize for SwallowedCustomPrivatePayload {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(self.0, 1)?;
+        let _ = state.serialize_field(self.0, &PartialCustomPrivatePayload);
+        state.end()
+    }
+}
+
+fn assert_custom_serialization_failure<T: Serialize>(value: &T) {
+    let mut encoder = JsonEncoder::unlimited();
+    let error = encoder
+        .to_vec(value)
+        .expect_err("nested custom error must fail the operation");
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
+    assert_eq!(
+        error.serialization_error().expect("typed source").kind(),
+        JsonSerializationErrorKind::CustomSerialization
+    );
+    let diagnostic = format!("{error:?} {error}");
+    assert!(!diagnostic.contains("swallowed custom text"));
+    assert!(!diagnostic.contains("sensitive"));
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -320,4 +463,83 @@ fn test_json_output_writer_rejects_swallowed_nested_private_number_errors() {
         }
     }
     assert!(issues.is_empty(), "{}", issues.join("\n"));
+}
+
+#[test]
+fn test_rejects_swallowed_custom_error_all_output_modes() {
+    for mode in [OutputMode::Vec, OutputMode::Buffered, OutputMode::Incremental] {
+        for value_limited in [false, true] {
+            for output_limited in [false, true] {
+                let mut limits = JsonEncodeLimits::<JsonResource, usize>::new();
+                if value_limited {
+                    limits = limits.into_builder().max_nodes(64).build();
+                }
+                if output_limited {
+                    limits = limits.into_builder().max_output_bytes(256).build();
+                }
+                let mut encoder = JsonEncoder::with_limits(limits);
+                let mut output = Vec::new();
+                let result = match mode {
+                    OutputMode::Vec => encoder.to_vec(&SwallowedCustomElement).map(|bytes| {
+                        output = bytes;
+                    }),
+                    OutputMode::Buffered => encoder.write_buffered(&mut output, &SwallowedCustomElement),
+                    OutputMode::Incremental => encoder.write_incremental(&mut output, &SwallowedCustomElement),
+                };
+                let error = result.expect_err("nested failure must survive outer success");
+                assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
+                assert_eq!(
+                    error.serialization_error().expect("typed source").kind(),
+                    JsonSerializationErrorKind::CustomSerialization
+                );
+                assert!(!format!("{error:?} {error}").contains("swallowed custom text"));
+                if value_limited {
+                    assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+                }
+                match mode {
+                    OutputMode::Vec | OutputMode::Buffered => assert!(output.is_empty()),
+                    OutputMode::Incremental => assert!(!output.is_empty()),
+                }
+                if output_limited {
+                    let expected = match mode {
+                        OutputMode::Vec | OutputMode::Buffered => 0,
+                        OutputMode::Incremental => output.len(),
+                    };
+                    assert_eq!(
+                        encoder.session().output_budget().expect("output budget").used(),
+                        expected
+                    );
+                }
+                assert_eq!(encoder.to_vec(&true).expect("next operation may succeed"), b"true");
+            }
+        }
+    }
+}
+
+#[test]
+fn test_rejects_swallowed_custom_error_before_output() {
+    assert_custom_serialization_failure(&SwallowedCustomBeforeOutput);
+}
+
+#[test]
+fn test_rejects_swallowed_custom_map_value() {
+    assert_custom_serialization_failure(&SwallowedCustomMapValue);
+}
+
+#[test]
+fn test_rejects_swallowed_custom_struct_field() {
+    assert_custom_serialization_failure(&SwallowedCustomStructField);
+}
+
+#[test]
+fn test_rejects_swallowed_custom_map_key() {
+    assert_custom_serialization_failure(&SwallowedCustomMapKey);
+}
+
+#[test]
+fn test_rejects_swallowed_custom_private_payload() {
+    let raw_value = SwallowedCustomPrivatePayload(concat!("$", "serde_json", ":", ":private::RawValue"));
+    assert_custom_serialization_failure(&raw_value);
+    let number = SwallowedCustomPrivatePayload(NUMBER_TOKEN);
+    assert_custom_serialization_failure(&number);
 }
