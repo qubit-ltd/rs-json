@@ -34,6 +34,7 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
     Sequence(
         /// Values accumulated in encounter order.
         Vec<Value>,
+        Option<JsonSerializationError>,
     ),
     /// Object entries and a key awaiting its value.
     Map {
@@ -41,6 +42,7 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
         values: Map<String, Value>,
         /// Serialized key supplied through split map calls.
         next_key: Option<String>,
+        failure: Option<JsonSerializationError>,
     },
     /// Tuple variant fields nested below one variant name.
     TupleVariant {
@@ -48,6 +50,7 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
         variant: String,
         /// Ordered tuple fields.
         values: Vec<Value>,
+        failure: Option<JsonSerializationError>,
     },
     /// Struct variant fields nested below one variant name.
     StructVariant {
@@ -55,6 +58,7 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
         variant: String,
         /// Unique named struct fields.
         values: Map<String, Value>,
+        failure: Option<JsonSerializationError>,
     },
     /// Text carried by serde_json's RawValue struct protocol.
     RawValue {
@@ -62,6 +66,7 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
         text: Option<String>,
         /// Validated private protocol lifecycle.
         state: JsonPrivateProtocolState,
+        failure: Option<JsonSerializationError>,
     },
     /// Text carried by serde_json's private Number protocol.
     Number {
@@ -69,6 +74,7 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
         text: Option<String>,
         /// Validated private protocol lifecycle.
         state: JsonPrivateProtocolState,
+        failure: Option<JsonSerializationError>,
     },
 }
 
@@ -85,7 +91,7 @@ impl JsonValueCompound {
     #[inline]
     #[must_use]
     pub(in crate::value::json_value_encoder) fn sequence(capacity: usize) -> Self {
-        Self::Sequence(Vec::with_capacity(capacity))
+        Self::Sequence(Vec::with_capacity(capacity), None)
     }
 
     /// Creates an object-like compound with reserved storage.
@@ -103,6 +109,7 @@ impl JsonValueCompound {
         Self::Map {
             values: Map::with_capacity(capacity),
             next_key: None,
+            failure: None,
         }
     }
 
@@ -122,6 +129,7 @@ impl JsonValueCompound {
         Self::TupleVariant {
             variant: variant.to_owned(),
             values: Vec::with_capacity(capacity),
+            failure: None,
         }
     }
 
@@ -141,6 +149,7 @@ impl JsonValueCompound {
         Self::StructVariant {
             variant: variant.to_owned(),
             values: Map::with_capacity(capacity),
+            failure: None,
         }
     }
 
@@ -161,8 +170,44 @@ impl JsonValueCompound {
         state: JsonPrivateProtocolState,
     ) -> Self {
         match kind {
-            JsonPrivateProtocolKind::RawValue => Self::RawValue { text: None, state },
-            JsonPrivateProtocolKind::Number => Self::Number { text: None, state },
+            JsonPrivateProtocolKind::RawValue => Self::RawValue {
+                text: None,
+                state,
+                failure: None,
+            },
+            JsonPrivateProtocolKind::Number => Self::Number {
+                text: None,
+                state,
+                failure: None,
+            },
+        }
+    }
+
+    #[inline]
+    fn retain_error(&mut self, error: JsonSerializationError) -> JsonSerializationError {
+        let slot = match self {
+            Self::Sequence(_, failure)
+            | Self::Map { failure, .. }
+            | Self::TupleVariant { failure, .. }
+            | Self::StructVariant { failure, .. }
+            | Self::RawValue { failure, .. }
+            | Self::Number { failure, .. } => failure,
+        };
+        if slot.is_none() {
+            *slot = Some(error);
+        }
+        slot.unwrap_or(error)
+    }
+
+    #[inline]
+    fn retained_error(&self) -> Option<JsonSerializationError> {
+        match self {
+            Self::Sequence(_, failure)
+            | Self::Map { failure, .. }
+            | Self::TupleVariant { failure, .. }
+            | Self::StructVariant { failure, .. }
+            | Self::RawValue { failure, .. }
+            | Self::Number { failure, .. } => *failure,
         }
     }
 
@@ -274,10 +319,16 @@ impl SerializeSeq for JsonValueCompound {
     where
         T: Serialize + ?Sized,
     {
-        let Self::Sequence(values) = self else {
+        if !matches!(self, Self::Sequence(..)) {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
+        }
+        let value = value
+            .serialize(JsonValueSerializer)
+            .map_err(|error| self.retain_error(error))?;
+        let Self::Sequence(values, _) = self else {
+            unreachable!()
         };
-        values.push(value.serialize(JsonValueSerializer)?);
+        values.push(value);
         Ok(())
     }
 
@@ -291,7 +342,10 @@ impl SerializeSeq for JsonValueCompound {
     ///
     /// Returns an invalid-state error if this is not a sequence compound.
     fn end(self) -> Result<Value, Self::Error> {
-        let Self::Sequence(values) = self else {
+        if let Some(error) = self.retained_error() {
+            return Err(error);
+        }
+        let Self::Sequence(values, _) = self else {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
         };
         Ok(Value::Array(values))
@@ -402,10 +456,16 @@ impl SerializeTupleVariant for JsonValueCompound {
     where
         T: Serialize + ?Sized,
     {
-        let Self::TupleVariant { values, .. } = self else {
+        if !matches!(self, Self::TupleVariant { .. }) {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
+        }
+        let value = value
+            .serialize(JsonValueSerializer)
+            .map_err(|error| self.retain_error(error))?;
+        let Self::TupleVariant { values, .. } = self else {
+            unreachable!()
         };
-        values.push(value.serialize(JsonValueSerializer)?);
+        values.push(value);
         Ok(())
     }
 
@@ -419,7 +479,10 @@ impl SerializeTupleVariant for JsonValueCompound {
     ///
     /// Returns an invalid-state error if this is not a tuple variant.
     fn end(self) -> Result<Value, Self::Error> {
-        let Self::TupleVariant { variant, values } = self else {
+        if let Some(error) = self.retained_error() {
+            return Err(error);
+        }
+        let Self::TupleVariant { variant, values, .. } = self else {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
         };
         let mut object = Map::new();
@@ -450,13 +513,19 @@ impl SerializeMap for JsonValueCompound {
     where
         T: Serialize + ?Sized,
     {
-        let Self::Map { next_key, .. } = self else {
+        if !matches!(self, Self::Map { .. }) {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
+        }
+        let key = key
+            .serialize(JsonValueMapKeySerializer)
+            .map_err(|error| self.retain_error(error))?;
+        let Self::Map { next_key, .. } = self else {
+            unreachable!()
         };
         if next_key.is_some() {
             return Err(invalid_state(JsonSerializerStateError::MapKeyAlreadyPending));
         }
-        *next_key = Some(key.serialize(JsonValueMapKeySerializer)?);
+        *next_key = Some(key);
         Ok(())
     }
 
@@ -478,13 +547,13 @@ impl SerializeMap for JsonValueCompound {
     where
         T: Serialize + ?Sized,
     {
-        let Self::Map { values, next_key } = self else {
+        let Self::Map { values, next_key, .. } = self else {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
         };
         let key = next_key
             .take()
             .ok_or_else(|| invalid_state(JsonSerializerStateError::MapValueWithoutKey))?;
-        Self::insert(values, key, value)
+        Self::insert(values, key, value).map_err(|error| self.retain_error(error))
     }
 
     /// Returns the completed object after checking split map state.
@@ -497,7 +566,10 @@ impl SerializeMap for JsonValueCompound {
     ///
     /// Returns an error if this is not a map or a key has no paired value.
     fn end(self) -> Result<Value, Self::Error> {
-        let Self::Map { values, next_key } = self else {
+        if let Some(error) = self.retained_error() {
+            return Err(error);
+        }
+        let Self::Map { values, next_key, .. } = self else {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
         };
         if next_key.is_some() {
@@ -554,17 +626,19 @@ impl SerializeStruct for JsonValueCompound {
         T: Serialize + ?Sized,
     {
         match self {
-            Self::Map { values, next_key } => {
+            Self::Map { values, next_key, .. } => {
                 if next_key.is_some() {
                     return Err(invalid_state(JsonSerializerStateError::MapKeyAlreadyPending));
                 }
-                Self::insert(values, key.to_owned(), value)
+                Self::insert(values, key.to_owned(), value).map_err(|error| self.retain_error(error))
             }
-            Self::RawValue { text, state } => {
+            Self::RawValue { text, state, .. } => {
                 Self::set_private_payload(text, state, JsonPrivateProtocolKind::RawValue, key, value)
+                    .map_err(|error| self.retain_error(error))
             }
-            Self::Number { text, state } => {
+            Self::Number { text, state, .. } => {
                 Self::set_private_payload(text, state, JsonPrivateProtocolKind::Number, key, value)
+                    .map_err(|error| self.retain_error(error))
             }
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         }
@@ -582,8 +656,11 @@ impl SerializeStruct for JsonValueCompound {
     /// incomplete private protocol, or invalid raw/number payload.
     #[inline(always)]
     fn end(self) -> Result<Value, Self::Error> {
+        if let Some(error) = self.retained_error() {
+            return Err(error);
+        }
         match self {
-            Self::Map { values, next_key } => {
+            Self::Map { values, next_key, .. } => {
                 if next_key.is_some() {
                     return Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey));
                 }
@@ -592,6 +669,7 @@ impl SerializeStruct for JsonValueCompound {
             Self::RawValue {
                 text: Some(text),
                 state,
+                ..
             } => {
                 state
                     .finish()
@@ -605,6 +683,7 @@ impl SerializeStruct for JsonValueCompound {
             Self::Number {
                 text: Some(text),
                 state,
+                ..
             } => {
                 state
                     .finish()
@@ -643,10 +722,14 @@ impl SerializeStructVariant for JsonValueCompound {
     where
         T: Serialize + ?Sized,
     {
-        let Self::StructVariant { values, .. } = self else {
+        if !matches!(self, Self::StructVariant { .. }) {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
+        }
+        let result = match self {
+            Self::StructVariant { values, .. } => Self::insert(values, key.to_owned(), value),
+            _ => unreachable!(),
         };
-        Self::insert(values, key.to_owned(), value)
+        result.map_err(|error| self.retain_error(error))
     }
 
     /// Returns the struct variant as a nested single-key object.
@@ -659,7 +742,10 @@ impl SerializeStructVariant for JsonValueCompound {
     ///
     /// Returns an invalid-state error if this is not a struct variant.
     fn end(self) -> Result<Value, Self::Error> {
-        let Self::StructVariant { variant, values } = self else {
+        if let Some(error) = self.retained_error() {
+            return Err(error);
+        }
+        let Self::StructVariant { variant, values, .. } = self else {
             return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
         };
         let mut object = Map::new();

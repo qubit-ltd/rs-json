@@ -73,6 +73,19 @@ impl Serialize for DuplicateKeyProbe {
     }
 }
 
+struct SwallowedNestedFailure;
+
+impl Serialize for SwallowedNestedFailure {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(1))?;
+        let _ = sequence.serialize_element(&f64::NAN);
+        sequence.end()
+    }
+}
+
 struct RejectedValueProbe<'a>(&'a Cell<usize>);
 
 impl Serialize for RejectedValueProbe<'_> {
@@ -472,6 +485,15 @@ fn test_json_value_encoder_encodes_nested_value() {
         .encode(&json!({"items": [1, true, null], "name": "Ada"}))
         .expect("strict JSON-compatible values should encode");
     assert_eq!(actual, json!({"items": [1, true, null], "name": "Ada"}));
+}
+
+#[test]
+fn test_json_value_encoder_preserves_swallowed_nested_error() {
+    let error = JsonValueEncoder::new()
+        .encode(&SwallowedNestedFailure)
+        .expect_err("a compound must retain an ignored nested serialization error");
+
+    assert_eq!(error.kind(), JsonSerializationErrorKind::NonFiniteFloat);
 }
 
 /// Preserves the complete signed and unsigned 64-bit integer range.
