@@ -286,9 +286,11 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects output,
-    /// or a serialization/writer error on failure. Accepted output prefixes
-    /// remain written when a later operation fails.
+    /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget)
+    /// when accounting rejects value resources or output bytes, or a
+    /// serialization/writer error on failure. Accepted output prefixes remain
+    /// written and charged when a later operation fails; value-resource charges
+    /// commit only after the complete operation succeeds.
     pub fn write_incremental<O, T>(&mut self, writer: O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         O: Output<Item = u8>,

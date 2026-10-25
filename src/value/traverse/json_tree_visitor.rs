@@ -21,28 +21,44 @@ use super::JsonTreeContext;
 /// # Examples
 ///
 /// ```
-/// use qubit_json::value::traverse::{
-///     JsonTreeContext, JsonTreeVisitor,
-/// };
+/// use std::convert::Infallible;
+///
+/// use qubit_budget::json::JsonResource;
+/// use qubit_budget::json::JsonValueLimits;
+/// use qubit_json::value::traverse::JsonTreeContext;
+/// use qubit_json::value::traverse::JsonTreeReader;
+/// use qubit_json::value::traverse::JsonTreeVisitor;
 /// use serde_json::Value;
+/// use serde_json::json;
 ///
 /// struct CountingVisitor {
-///     count: usize,
+///     entered: usize,
+///     left: usize,
 /// }
-/// impl JsonTreeVisitor for CountingVisitor {
-///     type Error = std::convert::Infallible;
 ///
-///     fn enter(
-///         &mut self,
-///         _: &Value,
-///         _: JsonTreeContext<'_>,
-///     ) -> Result<(), Self::Error> {
-///         self.count += 1;
+/// impl JsonTreeVisitor for CountingVisitor {
+///     type Error = Infallible;
+///
+///     fn enter(&mut self, _: &Value, _: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+///         self.entered += 1;
+///         Ok(())
+///     }
+///
+///     fn leave(&mut self, _: &Value, _: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+///         self.left += 1;
 ///         Ok(())
 ///     }
 /// }
 ///
-/// let _visitor = CountingVisitor { count: 0 };
+/// let limits = JsonValueLimits::<JsonResource, usize>::builder().max_nodes(4).build();
+/// let mut budget = limits.budget();
+/// let mut transaction = budget.transaction();
+/// let mut visitor = CountingVisitor { entered: 0, left: 0 };
+/// let value = json!({"items": [true, null]});
+/// JsonTreeReader::new(&mut transaction).process(&value, &mut visitor).unwrap();
+/// assert_eq!((visitor.entered, visitor.left), (4, 4));
+/// transaction.commit().unwrap();
+/// assert_eq!(budget.used_nodes(), Some(4));
 /// ```
 pub trait JsonTreeVisitor {
     /// Domain-specific failure returned by this visitor.
