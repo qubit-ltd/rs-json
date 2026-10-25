@@ -74,7 +74,7 @@ impl JcsRenderer {
                         Value::Object(object) => {
                             let mut entries = Vec::new();
                             memory
-                                .reserve_object_entries(&mut entries, object.len())
+                                .reserve_object_entries(&mut entries, object.len(), &mut stack)
                                 .map_err(map_reserve_error)?;
                             entries.extend(object.iter().map(|(key, value)| (key.as_str(), value)));
                             entries.sort_unstable_by(|left, right| compare_utf16(left.0, right.0));

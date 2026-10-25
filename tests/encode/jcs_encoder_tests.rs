@@ -471,6 +471,85 @@ fn test_jcs_encoder_working_memory_exact_boundary_for_object() {
 }
 
 #[test]
+fn test_jcs_encoder_preserves_exact_budgets_for_wide_deep_mixed_trees() {
+    let limits = JsonEncodeLimits::<JsonResource, usize>::new();
+    // Derive layout costs through public failures instead of assuming a frame layout.
+    let frame_bytes = JcsEncoder::with_limits(limits, 0)
+        .to_vec(&serde_json::json!([null]))
+        .expect_err("a nonempty array needs a traversal frame")
+        .working_memory_error()
+        .expect("working memory must be the limiting resource")
+        .requested();
+    let entry_bytes = JcsEncoder::with_limits(limits, 0)
+        .to_vec(&serde_json::json!({"a": null}))
+        .expect_err("a nonempty object needs a member table")
+        .working_memory_error()
+        .expect("working memory must be the limiting resource")
+        .requested();
+
+    for depth in [0, 1, 5, 13, 33] {
+        for width in [1, 16, 129] {
+            let members = (0..width)
+                .map(|index| (format!("key-{index:03}"), serde_json::Value::Null))
+                .collect();
+            let mut value = serde_json::Value::Object(members);
+            for _ in 0..depth {
+                value = serde_json::Value::Array(vec![value]);
+            }
+            let expected = serde_json_canonicalizer::to_vec(&value).expect("fixture is canonicalizable");
+            let exact = (depth + 1) * frame_bytes + width * entry_bytes;
+            for budget in [exact, exact + 1, exact + frame_bytes] {
+                assert_eq!(
+                    JcsEncoder::with_limits(limits, budget)
+                        .to_vec(&value)
+                        .expect("the original exact-capacity mixed tree budget must remain accepted"),
+                    expected,
+                    "depth={depth}, width={width}, budget={budget}",
+                );
+            }
+            let error = JcsEncoder::with_limits(limits, exact - 1)
+                .to_vec(&value)
+                .expect_err("one byte below the live-capacity lower bound must fail");
+            assert_eq!(error.kind(), JcsEncodeErrorKind::WorkingMemory);
+            assert_eq!(error.working_memory_error().expect("limit details").requested(), exact);
+        }
+    }
+}
+
+#[test]
+fn test_jcs_encoder_reclaim_preserves_ancestor_object_tables_and_later_siblings() {
+    let limits = JsonEncodeLimits::<JsonResource, usize>::new();
+    let frame_bytes = JcsEncoder::with_limits(limits, 0)
+        .to_vec(&serde_json::json!([null]))
+        .expect_err("array frame needs memory")
+        .working_memory_error()
+        .expect("working memory details")
+        .requested();
+    let entry_bytes = JcsEncoder::with_limits(limits, 0)
+        .to_vec(&serde_json::json!({"a": null}))
+        .expect_err("object table needs memory")
+        .working_memory_error()
+        .expect("working memory details")
+        .requested();
+    let members = (0..16)
+        .map(|index| (format!("key-{index:03}"), serde_json::Value::Null))
+        .collect();
+    let mut child = serde_json::Value::Object(members);
+    for _ in 0..5 {
+        child = serde_json::Value::Array(vec![child]);
+    }
+    let value = serde_json::json!({"a": child, "z": {"later": [1, 2]}});
+    // Seven simultaneous frames plus the ancestor's two and child's sixteen entries.
+    let exact = 7 * frame_bytes + 18 * entry_bytes;
+    assert_eq!(
+        JcsEncoder::with_limits(limits, exact)
+            .to_vec(&value)
+            .expect("reclamation preserves live ancestor frames and their tables"),
+        serde_json_canonicalizer::to_vec(&value).expect("fixture is canonicalizable"),
+    );
+}
+
+#[test]
 fn test_jcs_encoder_zero_byte_destination_is_write_zero_and_rolls_back_value() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_nodes(8)
