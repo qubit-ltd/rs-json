@@ -20,6 +20,9 @@ pub(super) struct JcsWorkingMemory {
     stack_bytes: usize,
     /// Bytes currently held by object member tables.
     object_bytes: usize,
+    /// Whether object-table pressure disabled speculative stack growth for
+    /// the rest of this render, avoiding repeated copies of deep ancestors.
+    stack_growth_is_exact: bool,
     /// Largest combined tracked capacity observed so far.
     peak_bytes: usize,
     /// Successful stack growths observed by the allocation diagnostic.
@@ -62,6 +65,7 @@ impl JcsWorkingMemory {
             limit,
             stack_bytes: 0,
             object_bytes: 0,
+            stack_growth_is_exact: false,
             peak_bytes: 0,
             #[cfg(feature = "jcs-allocation-diagnostics")]
             stack_growth_count: 0,
@@ -233,7 +237,7 @@ impl JcsWorkingMemory {
         let mut without_old = current
             .checked_sub(old_bytes)
             .ok_or_else(|| self.limit_error(usize::MAX))?;
-        let target_capacity = if is_stack {
+        let target_capacity = if is_stack && !self.stack_growth_is_exact {
             let preferred = values.capacity().max(1).saturating_mul(2).max(required_capacity);
             let preferred = if self.limit == usize::MAX {
                 preferred
@@ -348,6 +352,10 @@ impl JcsWorkingMemory {
                     return Err(self.limit_error(minimum_total));
                 }
                 self.replace_stack(stack, stack.len())?;
+                // Future siblings may need progressively larger tables.
+                // Reusing their reclaimed spare would copy these ancestors
+                // again on each sibling, even when the old exact path fits.
+                self.stack_growth_is_exact = true;
                 *without_old = without_old
                     .checked_sub(old_stack_bytes)
                     .and_then(|bytes| bytes.checked_add(self.stack_bytes))
@@ -587,6 +595,39 @@ mod tests {
         assert!(memory.peak_bytes() <= memory.limit);
         #[cfg(feature = "jcs-allocation-diagnostics")]
         assert_eq!(memory.stack_replacement_count, 1);
+    }
+
+    #[test]
+    fn test_growing_sibling_tables_do_not_repeatedly_copy_deep_ancestors() {
+        let depth = 8192;
+        let widths = 128;
+        let mut memory = JcsWorkingMemory::new(
+            (depth + 1) * std::mem::size_of::<[u64; 4]>() + widths * std::mem::size_of::<[u64; 3]>(),
+        );
+        let mut stack = Vec::new();
+        for _ in 0..depth {
+            memory
+                .reserve_stack(&mut stack, 1)
+                .expect("ancestor stack fits the exact budget");
+            stack.push([0_u64; 4]);
+        }
+        let mut replacements = 0;
+        for width in 1..=widths {
+            let mut entries = Vec::<[u64; 3]>::new();
+            let old_capacity = stack.capacity();
+            memory
+                .reserve_object_entries(&mut entries, width, &mut stack)
+                .expect("all sibling tables fit alongside the exact stack high-water capacity");
+            replacements += usize::from(stack.capacity() < old_capacity);
+            memory.reserve_stack(&mut stack, 1).expect("the sibling's frame fits");
+            stack.push([0_u64; 4]);
+            stack.pop();
+            memory
+                .release_object_entries(&entries)
+                .expect("release the completed sibling table");
+        }
+        assert!(replacements <= 1, "repeated ancestor copies: {replacements}");
+        assert!(memory.peak_bytes() <= memory.limit);
     }
 
     #[test]

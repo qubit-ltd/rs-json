@@ -517,6 +517,50 @@ fn test_jcs_encoder_preserves_exact_budgets_for_wide_deep_mixed_trees() {
 }
 
 #[test]
+fn test_jcs_encoder_accepts_gradually_wider_siblings_at_exact_budget() {
+    let limits = JsonEncodeLimits::<JsonResource, usize>::new();
+    let frame_bytes = JcsEncoder::with_limits(limits, 0)
+        .to_vec(&serde_json::json!([null]))
+        .expect_err("array frame needs memory")
+        .working_memory_error()
+        .expect("working memory details")
+        .requested();
+    let entry_bytes = JcsEncoder::with_limits(limits, 0)
+        .to_vec(&serde_json::json!({"a": null}))
+        .expect_err("object table needs memory")
+        .working_memory_error()
+        .expect("working memory details")
+        .requested();
+    let depth = 33;
+    let width = 128;
+    let siblings = (1..=width)
+        .map(|size| {
+            serde_json::Value::Object(
+                (0..size)
+                    .map(|index| (format!("key-{index:03}"), serde_json::Value::Null))
+                    .collect(),
+            )
+        })
+        .collect();
+    let mut value = serde_json::Value::Array(siblings);
+    for _ in 1..depth {
+        value = serde_json::Value::Array(vec![value]);
+    }
+    let exact = (depth + 1) * frame_bytes + width * entry_bytes;
+    assert_eq!(
+        JcsEncoder::with_limits(limits, exact)
+            .to_vec(&value)
+            .expect("gradually wider siblings fit the original exact-capacity budget"),
+        serde_json_canonicalizer::to_vec(&value).expect("fixture is canonicalizable"),
+    );
+    let error = JcsEncoder::with_limits(limits, exact - 1)
+        .to_vec(&value)
+        .expect_err("the widest sibling exceeds a budget one byte below the exact boundary");
+    assert_eq!(error.kind(), JcsEncodeErrorKind::WorkingMemory);
+    assert_eq!(error.working_memory_error().expect("limit details").requested(), exact);
+}
+
+#[test]
 fn test_jcs_encoder_reclaim_preserves_ancestor_object_tables_and_later_siblings() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::new();
     let frame_bytes = JcsEncoder::with_limits(limits, 0)
