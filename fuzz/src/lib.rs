@@ -10,6 +10,7 @@
 pub mod fuzz_record;
 pub mod input_limit;
 pub mod jcs_decode_invariants;
+pub mod json_budget_invariants;
 pub mod json_decode_differential_oracle;
 pub mod json_encode_invariants;
 pub mod json_encode_output;

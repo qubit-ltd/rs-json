@@ -10,17 +10,12 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use qubit_budget::ResourceBudget;
 use qubit_budget::ResourceLimit;
 use qubit_budget::StructureLimits;
-use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use qubit_json::decode::JsonDecoder;
-use qubit_json::value::AccountingJsonValueSeed;
 use qubit_json_fuzz::input_limit::bounded_input;
-use serde_json::Value;
+use qubit_json_fuzz::json_budget_invariants::assert_json_budget_invariants;
 
 mod internal;
 
@@ -50,29 +45,5 @@ fuzz_target!(|data: &[u8]| {
         .number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, number_bytes))
         .payload_bytes_limit(ResourceLimit::new(JsonResource::PayloadBytes, payload_bytes))
         .build();
-    let mut input_budget = ResourceBudget::new(JsonResource::InputBytes, bytes);
-    let mut value_budget = JsonValueBudget::new(value_limits);
-    {
-        let session = JsonDecodeSession::borrowing_input(&mut input_budget, &mut value_budget);
-        let mut decoder = JsonDecoder::new(session);
-        let _ = decoder.decode_utf8::<Value>(input);
-        let session = decoder.into_session();
-        assert_eq!(session.max_input_bytes(), Some(bytes));
-        assert!(session.value_budget().used_nodes() <= Some(nodes));
-    }
-
-    assert!(input_budget.used() <= bytes);
-    assert_eq!(input_budget.used() + input_budget.remaining(), bytes);
-    assert!(value_budget.used_nodes() <= Some(nodes));
-
-    {
-        let mut transaction = value_budget.transaction();
-        let mut deserializer = serde_json::Deserializer::from_slice(input);
-        let decoded =
-            serde::de::DeserializeSeed::deserialize(AccountingJsonValueSeed::new(&mut transaction), &mut deserializer);
-        if decoded.is_ok() && deserializer.end().is_ok() {
-            transaction.commit().expect("admitted transaction commits");
-        }
-    }
-    assert!(value_budget.used_nodes() <= Some(nodes));
+    assert_json_budget_invariants(input, bytes, value_limits);
 });
