@@ -59,7 +59,8 @@ pub trait JsonTreeMutVisitor {
     /// # Parameters
     ///
     /// * `value` - Current node available for mutation.
-    /// * `context` - Root-relative location and depth of the node.
+    /// * `context` - The node's immediate-parent location and root-inclusive
+    ///   depth.
     ///
     /// # Returns
     ///
