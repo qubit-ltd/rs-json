@@ -567,7 +567,7 @@ assert_eq!(value, json!({"name": "qubit"}));
 - **已经物化的 `Value` 树：** `JsonTreeReader` 按现有 Number 的紧凑显示内容长度计量，不先转 `f64`，也不改写数字。启用 `arbitrary_precision` 后，树读取器能按实际表示计量 `1e400` 或 39 位整数。这条计量规则不代表普通或 JCS encoder 会接受该数字。
 - **JCS 文本：** `JcsDecoder` 对所有 token（包括整数词法）使用有限 IEEE-754 binary64。例如 `9007199254740993` 会舍入为 `9007199254740992`；`1e400` 这类溢出会被拒绝。解码还会拒绝反转义后重复的键，并保留 127 层容器物化保护。
 
-encoder 识别 serde_json 的两种精确私有 struct 协议：`RawValue` 与 `Number`。真实 Number 协议只有一个字符串 payload，通过 `serialize_str` 或一次 `collect_str` 提交；文本在输出或 Value 构造前会完成验证。普通 map 即使含有 `$serde_json::private::Number` 键，仍按对象处理。手写协议结构不合法时返回 `JsonSerializationErrorKind::InvalidSerializerState`，其状态原因是 `JsonSerializerStateError::InvalidRawValueProtocol` 或 `InvalidNumberProtocol`。错误类型是穷举类型，下游 `match` 必须增加新变体处理。诊断不会保留私有 payload 文本。
+encoder 识别 serde_json 的两种精确私有 struct 协议：`RawValue` 与 `Number`。真实 Number 协议只有一个字符串 payload，通过 `serialize_str` 或一次 `collect_str` 提交；文本在输出或 Value 构造前会完成验证。普通 map 即使含有 `$serde_json::private::Number` 键，仍按对象处理。手写协议结构不合法时返回 `JsonSerializationErrorKind::InvalidSerializerState`，其状态原因是 `JsonSerializerStateError::InvalidRawValueProtocol` 或 `InvalidNumberProtocol`。诊断不会保留私有 payload 文本。
 
 `JsonValueEncoder` 会透明序列化所有 newtype struct，不根据名称特殊处理。自定义类型即使叫
 `$serde_json::private::RawValue`，它的字符串、布尔值或 `Option` payload 也仍按普通值保留，不会重新解析。
@@ -672,8 +672,6 @@ CR 都会开始新行；CRLF 只算一个换行。对于 `Deserialize`，坐标�
 反序列化器安全。
 
 ## 延伸阅读
-
-- [0.12 迁移指南](migration_0_12.zh_CN.md) · [English migration guide](migration_0_12.md)
 
 - [中文 README](../README.zh_CN.md) · [English README](../README.md)
 - [English user guide](user_guide.md)

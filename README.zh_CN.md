@@ -138,11 +138,6 @@ JCS 数值遵循 IEEE 754 双精度语义，因此 `9007199254740993` 可能输�
 以及舍入、Unicode、深度和输入缓冲边界见[用户手册](doc/user_guide.zh_CN.md#按-jcs-规则解码原始文本)。
 `JcsDecoder` 解析输入但不验证输入字节是否已经规范化；规范输出仍由 `JcsEncoder` 生成。
 
-## 0.12 迁移指南
-
-0.12 严格处理 `serde_json::RawValue` 与 `serde_json::Number` 使用的私有 Serde 协议。
-[迁移指南](doc/migration_0_12.zh_CN.md)说明新增的 `InvalidNumberProtocol` 状态错误、预算类型身份变化及下游版本调整。
-
 ## 为什么需要这个项目
 
 语法正确的 JSON 仍可能过大、嵌套过深，或在构造内存对象时消耗过多资源。`qubit-json` 保留
@@ -205,7 +200,6 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
   [JSON number contract](doc/number_contract.md)
 - [设计文档](doc/json_design.zh_CN.md) ·
   [Design documents](doc/json_design.md)
-- [0.12 迁移指南](doc/migration_0_12.zh_CN.md) · [English migration guide](doc/migration_0_12.md)
 - [基准测试指南](doc/benchmark_baseline.zh_CN.md) ·
   [Benchmark guide](doc/benchmark_baseline.md)
 - [已发布 API 文档](https://docs.rs/qubit-json)；当前分支 API 请运行

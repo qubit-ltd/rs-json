@@ -683,7 +683,7 @@ Choose one of three numeric boundaries deliberately:
 - **An already materialized `Value` tree:** `JsonTreeReader` counts each existing Number's actual compact display representation without converting it to `f64` or normalizing it. With `arbitrary_precision`, it can count a stored `1e400` or a 39-digit integer at its actual representation length. This accounting rule does not make the number acceptable to an ordinary or JCS encoder.
 - **JCS text:** `JcsDecoder` uses finite IEEE-754 binary64 for every token, including integer lexemes. For example, `9007199254740993` rounds to `9007199254740992`; overflow such as `1e400` is rejected. It also rejects keys duplicated after JSON unescaping and keeps the 127-container materialization guard.
 
-The encoder recognizes two exact serde_json private struct protocols: `RawValue` and `Number`. A genuine Number protocol contains one string payload, accepted through `serialize_str` or one `collect_str`; the text is validated before emission or Value construction. A normal map containing a key named `$serde_json::private::Number` remains an object. Invalid hand-written protocol shapes produce `JsonSerializationErrorKind::InvalidSerializerState` with `JsonSerializerStateError::InvalidRawValueProtocol` or `InvalidNumberProtocol`. The error type is exhaustive, so downstream `match` expressions must handle the added variant. Diagnostics do not retain the private payload text.
+The encoder recognizes two exact serde_json private struct protocols: `RawValue` and `Number`. A genuine Number protocol contains one string payload, accepted through `serialize_str` or one `collect_str`; the text is validated before emission or Value construction. A normal map containing a key named `$serde_json::private::Number` remains an object. Invalid hand-written protocol shapes produce `JsonSerializationErrorKind::InvalidSerializerState` with `JsonSerializerStateError::InvalidRawValueProtocol` or `InvalidNumberProtocol`. Diagnostics do not retain the private payload text.
 
 Newtype structs are serialized transparently by `JsonValueEncoder`,
 regardless of their name. A custom newtype named
@@ -815,8 +815,6 @@ untrusted inputs onto the Rust call stack and does not make arbitrary target
 deserializers safe.
 
 ## Further reading
-
-- [0.12 migration guide](migration_0_12.md) · [简体中文迁移指南](migration_0_12.zh_CN.md)
 
 - [English README](../README.md) · [中文 README](../README.zh_CN.md)
 - [中文用户手册](user_guide.zh_CN.md)

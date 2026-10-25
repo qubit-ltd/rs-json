@@ -157,13 +157,6 @@ finite-budget usage and the rounding, Unicode, depth, and input-buffering
 boundaries. `JcsDecoder` parses input; it does not verify that the input bytes
 are already canonical. `JcsEncoder` still produces canonical output.
 
-## Version 0.12 migration
-
-Version 0.12 adds strict handling for the private Serde protocols used by
-`serde_json::RawValue` and `serde_json::Number`. See the [migration guide](doc/migration_0_12.md)
-for the new `InvalidNumberProtocol` state error, the budget type identity change,
-and downstream version updates.
-
 ## Why this project exists
 
 Valid JSON can still be too large, too deep, or too expensive to materialize.
@@ -253,7 +246,6 @@ renderer collection capacity, not an exact heap ceiling.
   [JSON 数字契约](doc/number_contract.zh_CN.md)
 - [Design documents](doc/json_design.md) ·
   [设计文档](doc/json_design.zh_CN.md)
-- [0.12 migration guide](doc/migration_0_12.md) · [迁移指南](doc/migration_0_12.zh_CN.md)
 - [Benchmark guide](doc/benchmark_baseline.md) ·
   [基准测试指南](doc/benchmark_baseline.zh_CN.md)
 - [Released API documentation](https://docs.rs/qubit-json); for the current

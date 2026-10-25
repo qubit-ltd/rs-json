@@ -220,5 +220,4 @@ renderer 前先暂存值资源用量，完整编码成功后才提交。`Budget`
 
 - [用户手册](user_guide.zh_CN.md) · [User guide](user_guide.md)
 - [数字契约](number_contract.zh_CN.md) · [Number contract](number_contract.md)
-- [0.12 迁移指南](migration_0_12.zh_CN.md) · [English migration guide](migration_0_12.md)
 - [基准测试指南](benchmark_baseline.zh_CN.md) · [Benchmark guide](benchmark_baseline.md)
