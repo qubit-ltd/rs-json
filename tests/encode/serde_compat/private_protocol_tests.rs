@@ -20,8 +20,10 @@ use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
+use qubit_json::encode::JsonEncodeError;
 use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
+use qubit_json::encode::JsonSerializationErrorKind;
 use qubit_json::encode::JsonSerializerStateError;
 use serde::Serialize;
 use serde::Serializer;
@@ -273,10 +275,7 @@ fn encode(
     encoder: &mut JsonEncoder<'static, JsonResource, usize>,
     mode: OutputMode,
     value: &impl Serialize,
-) -> (
-    Result<Vec<u8>, qubit_json::encode::JsonEncodeError<JsonResource>>,
-    Vec<u8>,
-) {
+) -> (Result<Vec<u8>, JsonEncodeError<JsonResource>>, Vec<u8>) {
     match mode {
         OutputMode::Vec => (encoder.to_vec(value), Vec::new()),
         OutputMode::Buffered => {
@@ -385,7 +384,7 @@ fn test_private_protocol_wrong_field_and_invalid_payloads_are_classified() {
         .expect_err("out-of-range number must fail");
     assert_eq!(
         error.serialization_error().map(|error| error.kind()),
-        Some(qubit_json::encode::JsonSerializationErrorKind::NonFiniteFloat),
+        Some(JsonSerializationErrorKind::NonFiniteFloat),
     );
 }
 
@@ -523,7 +522,7 @@ fn test_failed_number_payload_stays_failed_and_never_runs_second_callback() {
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(
         error.serialization_error().map(|error| error.kind()),
-        Some(qubit_json::encode::JsonSerializationErrorKind::NonFiniteFloat),
+        Some(JsonSerializationErrorKind::NonFiniteFloat),
     );
 }
 
@@ -577,7 +576,7 @@ fn test_failed_number_display_is_called_once_and_keeps_first_error() {
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(
         error.serialization_error().map(|error| error.kind()),
-        Some(qubit_json::encode::JsonSerializationErrorKind::DisplayFormattingFailed),
+        Some(JsonSerializationErrorKind::DisplayFormattingFailed),
     );
 }
 
@@ -718,7 +717,7 @@ fn test_number_collect_str_preserves_empty_number_error() {
     assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
     assert_eq!(
         error.serialization_error().expect("serialization source").kind(),
-        qubit_json::encode::JsonSerializationErrorKind::InvalidNumberRepresentation
+        JsonSerializationErrorKind::InvalidNumberRepresentation
     );
     assert_eq!(calls.get(), 0);
     assert_eq!(encoder.session().value_budget().used_nodes(), None);

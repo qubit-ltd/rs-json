@@ -8,6 +8,8 @@
 //! Tests the independent JSON number-contract classifier.
 
 use qubit_json_fuzz::json_number_contract::numbers_fit_contract;
+use serde_json::Value;
+use serde_json::from_slice;
 
 /// Verifies every inclusive numeric boundary is admitted.
 #[test]
@@ -19,7 +21,7 @@ fn test_numbers_fit_contract_accepts_supported_boundaries() {
         "numeric text": "18446744073709551616"
     }"#;
 
-    serde_json::from_slice::<serde_json::Value>(input).expect("the reference input must be valid JSON");
+    from_slice::<Value>(input).expect("the reference input must be valid JSON");
     assert!(numbers_fit_contract(input));
 }
 
@@ -27,7 +29,7 @@ fn test_numbers_fit_contract_accepts_supported_boundaries() {
 #[test]
 fn test_numbers_fit_contract_rejects_unsupported_ranges() {
     for input in [&b"-9223372036854775809"[..], &b"18446744073709551616"[..]] {
-        serde_json::from_slice::<serde_json::Value>(input).expect("serde_json must accept the reference input");
+        from_slice::<Value>(input).expect("serde_json must accept the reference input");
         assert!(
             !numbers_fit_contract(input),
             "number must be outside the contract: {input:?}"

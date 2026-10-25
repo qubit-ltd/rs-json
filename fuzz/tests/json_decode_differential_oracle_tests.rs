@@ -9,6 +9,7 @@
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json_fuzz::json_decode_differential_oracle::assert_decode_contract;
@@ -40,14 +41,14 @@ fn test_decode_contract_accepts_literal_private_raw_value_key() {
 #[test]
 fn test_decode_contract_allows_deserialize_failure_beyond_reference_recursion_limit() {
     let input = nested_arrays(128);
-    let validation_session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let validation_limits = JsonDecodeLimits::<JsonResource, usize>::builder().build();
+    let validation_session = JsonDecodeSession::from_limits(validation_limits);
     JsonDecoder::new(validation_session)
         .validate_utf8(&input)
         .expect("deep JSON must remain lexically admissible");
 
-    let decode_session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder().build());
+    let decode_limits = JsonDecodeLimits::<JsonResource, usize>::builder().build();
+    let decode_session = JsonDecodeSession::from_limits(decode_limits);
     let error = JsonDecoder::new(decode_session)
         .decode_utf8::<serde_json::Value>(&input)
         .expect_err("serde_json Value materialization must reach its recursion boundary");

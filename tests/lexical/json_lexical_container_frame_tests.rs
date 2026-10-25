@@ -11,14 +11,17 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
+use serde_json::Value;
+use serde_json::json;
 
 /// Verifies nested arrays resume their enclosing container frames.
 #[test]
 fn test_container_frames_resume_nested_arrays() {
-    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder().build();
+    let session = JsonDecodeSession::from_limits(limits);
     let value = JsonDecoder::new(session)
-        .decode_utf8::<serde_json::Value>(br#"[[1],2]"#)
+        .decode_utf8::<Value>(br#"[[1],2]"#)
         .expect("nested array JSON should decode");
 
-    assert_eq!(value, serde_json::json!([[1], 2]));
+    assert_eq!(value, json!([[1], 2]));
 }

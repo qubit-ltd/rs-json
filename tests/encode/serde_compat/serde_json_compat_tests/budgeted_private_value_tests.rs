@@ -165,7 +165,8 @@ fn test_budgeted_private_value_delegates_scalar_serializer_paths() {
         PrivateScalar::HumanReadable,
     ];
     for value in values {
-        let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+        let limits = JsonEncodeLimits::<JsonResource, usize>::builder().build();
+        let mut session = JsonEncodeSession::from_limits(limits);
         let result = encode(&PrivateShape { value }, &mut session);
         if matches!(value, PrivateScalar::HumanReadable) {
             assert_eq!(

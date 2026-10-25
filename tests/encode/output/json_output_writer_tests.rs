@@ -62,6 +62,8 @@ struct ScriptedWriter {
     flush_error: Option<io::ErrorKind>,
 }
 
+/// Writer that can fail once during writing or flushing to preserve an error
+/// source.
 struct SourceWriter {
     write_error: Option<io::Error>,
     flush_error: Option<io::Error>,
@@ -83,6 +85,8 @@ impl Write for SourceWriter {
     }
 }
 
+/// Distinct source error used to verify that wrapped I/O errors retain their
+/// cause.
 #[derive(Debug)]
 struct MarkerError;
 
@@ -94,6 +98,7 @@ impl fmt::Display for MarkerError {
 
 impl std::error::Error for MarkerError {}
 
+/// Selects which original I/O error shape the encoder must preserve.
 #[derive(Clone, Copy)]
 enum PreservedError {
     Os,
@@ -124,6 +129,7 @@ impl PreservedError {
     }
 }
 
+/// Selects the encoder output operation that receives an injected failure.
 #[derive(Clone, Copy)]
 enum OutputFailure {
     BufferedWrite,
@@ -131,6 +137,7 @@ enum OutputFailure {
     IncrementalFlush,
 }
 
+/// Creates a writer that injects the selected error at the selected operation.
 fn source_writer(failure: OutputFailure, error: PreservedError) -> SourceWriter {
     match failure {
         OutputFailure::BufferedWrite | OutputFailure::IncrementalWrite => SourceWriter {
@@ -144,6 +151,7 @@ fn source_writer(failure: OutputFailure, error: PreservedError) -> SourceWriter 
     }
 }
 
+/// Checks that JSON encoding reports the write error without losing its source.
 fn assert_json_error_preserves_original(failure: OutputFailure, original: PreservedError) {
     let mut encoder = JsonEncoder::new(bounded_session());
     let result = match failure {
@@ -157,6 +165,7 @@ fn assert_json_error_preserves_original(failure: OutputFailure, original: Preser
     original.assert_preserved(error.write_error().expect("write error"));
 }
 
+/// Checks that JCS encoding reports the write error without losing its source.
 #[cfg(feature = "jcs")]
 fn assert_jcs_error_preserves_original(failure: OutputFailure, original: PreservedError) {
     use qubit_json::encode::JcsEncoder;
@@ -217,6 +226,8 @@ fn bounded_session() -> JsonEncodeSession<'static, JsonResource, usize> {
     )
 }
 
+/// Serializer that replaces element-write errors with its own serialization
+/// error.
 struct MaskedWriteFailures;
 
 impl Serialize for MaskedWriteFailures {

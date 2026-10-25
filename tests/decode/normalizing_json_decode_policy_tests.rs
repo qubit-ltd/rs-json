@@ -94,13 +94,13 @@ fn test_builders_set_requested_policies() {
     assert_eq!(policy.diagnostic_policy(), DiagnosticPolicy::Detailed,);
 }
 
-/// Verifies that policy are cloneable and equatable.
+/// Verifies that a policy is cloneable and equatable.
 ///
 /// # Panics
 ///
 /// Panics when the expected behavior is not observed.
 #[test]
-fn test_policy_are_clone_and_equatable() {
+fn test_policy_is_cloneable_and_equatable() {
     let policy = NormalizingJsonDecodePolicy::default();
     let cloned = policy.clone();
     assert_eq!(policy, cloned);

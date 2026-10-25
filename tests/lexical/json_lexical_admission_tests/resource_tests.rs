@@ -224,12 +224,12 @@ fn test_json_lexical_preflight_does_not_special_case_private_number_token() {
 
     assert!(matches!(
         error.budget_error().and_then(|error| error.budget_error()),
-                Some(BudgetError::LimitExceeded {
-                    resource: JsonResource::KeyBytes,
-                    observed: Observation::Exact(actual),
-                    maximum,
-                }) if *actual == PRIVATE_NUMBER_TOKEN.len()
-                    && *maximum == PRIVATE_NUMBER_TOKEN.len() - 1
+        Some(BudgetError::LimitExceeded {
+            resource: JsonResource::KeyBytes,
+            observed: Observation::Exact(actual),
+            maximum,
+        }) if *actual == PRIVATE_NUMBER_TOKEN.len()
+            && *maximum == PRIVATE_NUMBER_TOKEN.len() - 1
     ));
 }
 

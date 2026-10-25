@@ -139,6 +139,7 @@ impl Serialize for SwallowedCustomElement {
     }
 }
 
+/// Returns a custom serialization error without emitting a value.
 struct ImmediateCustomFailure;
 
 impl Serialize for ImmediateCustomFailure {
@@ -150,6 +151,7 @@ impl Serialize for ImmediateCustomFailure {
     }
 }
 
+/// Ignores a custom error before completing a sequence.
 struct SwallowedCustomBeforeOutput;
 
 impl Serialize for SwallowedCustomBeforeOutput {
@@ -163,6 +165,7 @@ impl Serialize for SwallowedCustomBeforeOutput {
     }
 }
 
+/// Ignores a custom error while serializing a map value.
 struct SwallowedCustomMapValue;
 
 impl Serialize for SwallowedCustomMapValue {
@@ -176,6 +179,7 @@ impl Serialize for SwallowedCustomMapValue {
     }
 }
 
+/// Ignores a custom error while serializing a struct field.
 struct SwallowedCustomStructField;
 
 impl Serialize for SwallowedCustomStructField {
@@ -189,6 +193,7 @@ impl Serialize for SwallowedCustomStructField {
     }
 }
 
+/// Emits a sensitive key fragment before returning a custom error.
 struct PartialCustomKey;
 
 impl Serialize for PartialCustomKey {
@@ -201,6 +206,7 @@ impl Serialize for PartialCustomKey {
     }
 }
 
+/// Ignores a custom error while serializing a map key.
 struct SwallowedCustomMapKey;
 
 impl Serialize for SwallowedCustomMapKey {
@@ -214,6 +220,7 @@ impl Serialize for SwallowedCustomMapKey {
     }
 }
 
+/// Emits a private payload fragment before returning a custom error.
 struct PartialCustomPrivatePayload;
 
 impl Serialize for PartialCustomPrivatePayload {
@@ -226,6 +233,7 @@ impl Serialize for PartialCustomPrivatePayload {
     }
 }
 
+/// Serializes a private Serde payload while swallowing its nested error.
 struct SwallowedCustomPrivatePayload(&'static str);
 
 impl Serialize for SwallowedCustomPrivatePayload {
@@ -239,6 +247,8 @@ impl Serialize for SwallowedCustomPrivatePayload {
     }
 }
 
+/// Checks that nested custom errors remain typed and sensitive text stays
+/// hidden.
 fn assert_custom_serialization_failure<T: Serialize>(value: &T) {
     let mut encoder = JsonEncoder::unlimited();
     let error = encoder
@@ -268,6 +278,8 @@ type SwallowedNestedOutput = (
     Option<usize>,
 );
 
+/// Runs a value whose nested serialization error may be swallowed by its
+/// parent.
 fn run_swallowed_nested<T: Serialize>(value: &T, mode: OutputMode, finite: bool) -> SwallowedNestedOutput {
     let limits = if finite {
         JsonEncodeLimits::builder().max_nodes(64).max_output_bytes(256).build()
@@ -288,6 +300,8 @@ fn run_swallowed_nested<T: Serialize>(value: &T, mode: OutputMode, finite: bool)
     (result, output, used_nodes, used_output_bytes)
 }
 
+/// Checks error precedence, transaction state, and output publication for one
+/// run.
 fn check_swallowed_nested_error(
     result: Result<(), qubit_json::encode::JsonEncodeError<JsonResource>>,
     output: &[u8],

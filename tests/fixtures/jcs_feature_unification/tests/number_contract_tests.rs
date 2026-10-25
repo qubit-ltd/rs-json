@@ -6,8 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-#[cfg(feature = "arbitrary_precision")]
-use qubit_budget::ResourceLimit;
 use qubit_budget::json::JsonDecodeLimits;
 #[cfg(feature = "arbitrary_precision")]
 use qubit_budget::json::JsonEncodeLimits;
@@ -16,6 +14,8 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
+#[cfg(feature = "arbitrary_precision")]
+use qubit_budget::ResourceLimit;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 #[cfg(feature = "arbitrary_precision")]
@@ -26,12 +26,12 @@ use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use qubit_json::value::DuplicateKeyRejectingJsonValueSeed;
 use qubit_json::value::JsonValueEncoder;
 use qubit_json::value::traverse::JsonTreeBudgetTracker;
-use serde::Serialize;
-use serde::Serializer;
 use serde::de::DeserializeSeed;
 use serde::de::value::I128Deserializer;
 use serde::de::value::U128Deserializer;
 use serde::ser::SerializeMap;
+use serde::Serialize;
+use serde::Serializer;
 use serde_json::Number;
 use serde_json::Value;
 use serde_json::from_value;

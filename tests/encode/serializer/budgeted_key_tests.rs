@@ -194,7 +194,8 @@ fn test_budgeted_key_checks_each_scalar_serializer_path() {
         (ScalarKey::HumanReadable, Expected::Bytes(br#"{"human":true}"#)),
     ];
     for (key, expected) in cases {
-        let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+        let limits = JsonEncodeLimits::<JsonResource, usize>::builder().build();
+        let mut session = JsonEncodeSession::from_limits(limits);
         let result = encode(&OneKey(key), &mut session);
         match expected {
             Expected::Bytes(bytes) => {
