@@ -2,7 +2,7 @@
 
 [简体中文](migration_0_12.zh_CN.md)
 
-This guide covers the source and behavior changes from `qubit-json` 0.11 to 0.12. The candidate requires Rust 1.94 and pairs `qubit-json` 0.12 with `qubit-budget` 0.9.1 or later in the compatible 0.9 series.
+This guide covers the source and behavior changes from `qubit-json` 0.11 to 0.12. The candidate requires Rust 1.94 and pairs `qubit-json` 0.12 with `qubit-budget` 0.9.1 or later in the compatible 0.9 series. In a multi-crate local checkout, ensure all crates resolve `qubit-budget` from the same source: a path dependency and a crates.io dependency with the same version still have distinct Rust type identities. A downstream crate that uses the checkout's local `qubit-budget` should patch the crates.io source to that same path while testing the local integration, then compile the JSON type exchange path.
 
 ## f32 value and object-key representation
 

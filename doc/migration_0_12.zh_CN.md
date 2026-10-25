@@ -2,7 +2,7 @@
 
 [English](migration_0_12.md)
 
-本文说明从 `qubit-json` 0.11 升级到 0.12 时的源码与行为变化。候选版本要求 Rust 1.94，并与 `qubit-budget` 0.9.1 或兼容的 0.9 系列更新版本配套使用。
+本文说明从 `qubit-json` 0.11 升级到 0.12 时的源码与行为变化。候选版本要求 Rust 1.94，并与 `qubit-budget` 0.9.1 或兼容的 0.9 系列更新版本配套使用。在多 crate 本地 checkout 中，还要确保所有 crate 从同一来源解析 `qubit-budget`：即使 path 依赖和 crates.io 依赖版本号相同，它们的 Rust 类型身份仍然不同。若下游 crate 使用本地 checkout 中的 `qubit-budget`，本地联调时应将 crates.io 来源 patch 到同一路径，再编译实际的 JSON 类型传递路径。
 
 ## f32 值与对象键表示
 
