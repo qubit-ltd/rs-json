@@ -107,10 +107,7 @@ impl MutChildCursor {
     ///
     /// Panics when `parent_depth` is `usize::MAX` and the child depth cannot be
     /// represented.
-    pub(in crate::value::traverse) unsafe fn next(
-        &mut self,
-        parent_depth: usize,
-    ) -> Option<MutFrame> {
+    pub(in crate::value::traverse) unsafe fn next(&mut self, parent_depth: usize) -> Option<MutFrame> {
         let depth = parent_depth
             .checked_add(1)
             .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
