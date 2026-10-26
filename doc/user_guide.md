@@ -727,11 +727,13 @@ coordinates: columns count UTF-8 characters, and the byte-based location is
 available from `syntax_error().offset()`. LF, CRLF, and standalone CR each
 start a new line; CRLF counts as one line break. For `Deserialize`, the
 coordinates preserve `serde_json`'s one-based line and byte column, and a zero
-backend coordinate is exposed as `None`. Normalizing decoders report positions
-in the normalized text after normalization; they do not map positions back to
-the original input. Under `Detailed` diagnostics, a retained
-parser source can format coordinates according to its backend, so its text
-coordinates need not match the structured scanner coordinates.
+backend coordinate is exposed as `None`. Unique-key materialization counts
+bytes before the offending token, and only LF starts a new line. Target-seed
+errors do not have an original source position. Normalizing decoders report
+positions in normalized text and do not map them back to the original input.
+Under `Detailed` diagnostics, a retained parser source can format coordinates
+according to its backend, so its text coordinates need not match the
+structured scanner coordinates.
 
 Adapters that own the error can instead call `into_source()` and exhaustively
 match `JsonDecodeErrorSource` without cloning budget or syntax details.

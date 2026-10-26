@@ -35,6 +35,7 @@ use crate::decode::NormalizedJsonDocument;
 use crate::lexical::JsonLexicalError;
 use crate::lexical::JsonLexicalScanner;
 use crate::lexical::JsonNumberModel;
+#[cfg(feature = "jcs")]
 use crate::lexical::line_column_at;
 use crate::value::internal::JsonValueMaterializationError;
 use crate::value::internal::LexicalJsonValueBuilder;
@@ -199,6 +200,23 @@ where
         self.decode_seed_utf8_with_number_model(seed, input, diagnostic_policy, JsonNumberModel::Integer64)
     }
 
+    /// Returns one-based Serde-compatible coordinates for a materialization token.
+    ///
+    /// Counts bytes before the token offset; only LF starts a new line.
+    fn materialization_error_position(input: &[u8], offset: usize) -> (usize, usize) {
+        let mut line = 1;
+        let mut column = 1;
+        for byte in &input[..offset.min(input.len())] {
+            if *byte == b'\n' {
+                line += 1;
+                column = 1;
+            } else {
+                column += 1;
+            }
+        }
+        (line, column)
+    }
+
     /// Admits a unique-key document and deserializes native events atomically.
     ///
     /// Returns a decode error for admission, materialization, or seed failure;
@@ -233,7 +251,7 @@ where
                 }
                 JsonValueMaterializationError::InvalidNumber { offset } => ("invalid strict JSON number", offset),
             };
-            let (line, column) = line_column_at(input, offset);
+            let (line, column) = Self::materialization_error_position(input, offset);
             let error = serde_json::Error::custom(format_args!("{message} at line {line} column {column}"));
             JsonDecodeError::deserialize(error, input.len(), None, diagnostic_policy)
         })?;

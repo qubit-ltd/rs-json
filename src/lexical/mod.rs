@@ -15,6 +15,7 @@ mod json_lexical_failure;
 mod json_lexical_scanner;
 mod json_number_model;
 
+#[cfg(any(feature = "jcs", test))]
 pub(crate) use internal::json_lexical_cursor::line_column_at;
 pub(crate) use json_lexical_error::JsonLexicalError;
 pub(crate) use json_lexical_error_reason::JsonLexicalErrorReason;

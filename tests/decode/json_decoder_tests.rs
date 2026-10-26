@@ -140,6 +140,62 @@ fn test_unique_decoder_bounds_materialization_and_preserves_syntax_admission() {
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
 }
 
+#[test]
+fn test_unique_decoder_materialization_uses_byte_coordinates() {
+    for policy in [DiagnosticPolicy::Redacted, DiagnosticPolicy::Detailed] {
+        for (input, line, column) in [
+            ("{\"é\":0,\"é\":1}", 1, 9),
+            ("{\n\"é\":0,\"é\":1}", 2, 8),
+            ("{\r\n\"é\":0,\"é\":1}", 2, 8),
+            ("{\r\"é\":0,\"é\":1}", 1, 10),
+        ] {
+            let error = JsonDecoder::unlimited()
+                .with_diagnostic_policy(policy)
+                .decode_unique_str::<DuplicateKeyRejectingJsonValue>(input)
+                .unwrap_err();
+            assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+            assert_eq!(error.stage(), JsonDecodeStage::Deserialize);
+            assert_eq!(error.line(), Some(line), "input={input:?}");
+            assert_eq!(error.column(), Some(column), "input={input:?}");
+            if policy == DiagnosticPolicy::Detailed {
+                let JsonDecodeErrorSource::Deserialize { source: Some(source), .. } = error.into_source() else {
+                    panic!("detailed diagnostics must retain the Serde source");
+                };
+                let source = source
+                    .downcast_ref::<serde_json::Error>()
+                    .expect("detailed source must be a serde_json error");
+                assert_eq!(source.line(), line, "input={input:?}");
+                assert_eq!(source.column(), column, "input={input:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn test_unique_decoder_depth_error_uses_byte_coordinates() {
+    let input = format!("{{\"é\":{}}}", nested_array(127));
+    for policy in [DiagnosticPolicy::Redacted, DiagnosticPolicy::Detailed] {
+        let error = JsonDecoder::unlimited()
+            .with_diagnostic_policy(policy)
+            .decode_unique_str::<DuplicateKeyRejectingJsonValue>(&input)
+            .unwrap_err();
+        assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+        assert_eq!(error.stage(), JsonDecodeStage::Deserialize);
+        assert_eq!(error.line(), Some(1));
+        assert_eq!(error.column(), Some(133));
+        if policy == DiagnosticPolicy::Detailed {
+            let JsonDecodeErrorSource::Deserialize { source: Some(source), .. } = error.into_source() else {
+                panic!("detailed diagnostics must retain the Serde source");
+            };
+            let source = source
+                .downcast_ref::<serde_json::Error>()
+                .expect("detailed source must be a serde_json error");
+            assert_eq!(source.line(), 1);
+            assert_eq!(source.column(), 133);
+        }
+    }
+}
+
 struct FailingSeed;
 
 impl<'de> DeserializeSeed<'de> for FailingSeed {
