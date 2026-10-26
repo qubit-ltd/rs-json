@@ -142,8 +142,16 @@ fn assert_values_equal(actual: &Value, expected: &Value) {
     assert_eq!(actual, expected, "unique output must equal the literal reference value");
     match (actual, expected) {
         (Value::Number(actual), Value::Number(expected)) => {
-            assert_eq!(actual.is_i64(), expected.is_i64(), "signed-integer category must be preserved");
-            assert_eq!(actual.is_u64(), expected.is_u64(), "unsigned-integer category must be preserved");
+            assert_eq!(
+                actual.is_i64(),
+                expected.is_i64(),
+                "signed-integer category must be preserved"
+            );
+            assert_eq!(
+                actual.is_u64(),
+                expected.is_u64(),
+                "unsigned-integer category must be preserved"
+            );
             assert_eq!(actual.is_f64(), expected.is_f64(), "number category must be preserved");
             if actual.is_f64() {
                 assert_eq!(
