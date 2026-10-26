@@ -153,7 +153,7 @@ pub(crate) fn success_fixture(shape: StructuralShape, count: usize) -> Structura
         max_number_bytes,
     };
     let expected_bytes = match shape {
-        StructuralShape::WideObject => 19 * count + 1,
+        StructuralShape::WideObject => 20 * count + 1,
         StructuralShape::RecordArray => 29 * count + 1,
     };
     assert_eq!(fixture.text.len(), expected_bytes, "fixture byte budget formula");
@@ -201,7 +201,7 @@ pub(crate) fn reject_fixture(count: usize, position: DuplicatePosition) -> Struc
     };
     assert_eq!(
         fixture.text.len(),
-        19 * count + 22,
+        20 * count + 23,
         "duplicate fixture byte budget formula"
     );
     assert_eq!(fixture.text.matches("\"k000000\"").count(), 2);

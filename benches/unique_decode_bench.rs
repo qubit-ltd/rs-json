@@ -28,6 +28,10 @@ use unique_decode_support::decode_path::finite_decoder;
 use unique_decode_support::fixtures::Shape;
 use unique_decode_support::fixtures::fixture;
 use unique_decode_support::fixtures::reject_fixture;
+use unique_decode_support::structural_decode;
+use unique_decode_support::structural_fixtures::COUNTS;
+use unique_decode_support::structural_fixtures::DuplicatePosition;
+use unique_decode_support::structural_fixtures::StructuralShape;
 
 const SIZES: [usize; 3] = [1024, 64 * 1024, 1024 * 1024];
 
@@ -123,5 +127,113 @@ fn unique_decode(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, unique_decode);
+fn unique_decode_structural(c: &mut Criterion) {
+    for shape in StructuralShape::ALL {
+        for count in COUNTS {
+            let fixture = unique_decode_support::structural_fixtures::success_fixture(shape, count);
+            for path in DecodePath::ALL {
+                for finite in [false, true] {
+                    if path.is_direct_serde() && finite {
+                        continue;
+                    }
+                    let budget = if path.is_direct_serde() {
+                        "no_budget"
+                    } else if finite {
+                        "finite"
+                    } else {
+                        "unlimited"
+                    };
+                    let decoded = structural_decode::decode_once(path, &fixture, finite);
+                    structural_decode::assert_decoded(&decoded, &fixture);
+                    black_box(decoded);
+
+                    let mut batch_decoder = if finite {
+                        structural_decode::finite_decoder(&fixture, 8)
+                    } else {
+                        JsonDecoder::unlimited()
+                    };
+                    for decoded in structural_decode::decode_batch_with_decoder(
+                        path,
+                        &fixture,
+                        &mut batch_decoder,
+                    ) {
+                        structural_decode::assert_decoded(&decoded, &fixture);
+                        black_box(decoded);
+                    }
+
+                    let base = format!(
+                        "unique_decode_structural/{}/{}items/{}/{budget}",
+                        shape.name(),
+                        fixture.count,
+                        path.name()
+                    );
+                    let mut fresh = c.benchmark_group(format!("{base}/fresh"));
+                    fresh.throughput(Throughput::Bytes(fixture.text.len() as u64));
+                    fresh.bench_function("decode", |bencher| {
+                        bencher.iter(|| {
+                            black_box(structural_decode::decode_once(path, &fixture, finite))
+                        });
+                    });
+                    fresh.finish();
+
+                    let mut batch = c.benchmark_group(format!("{base}/batch8"));
+                    batch.throughput(Throughput::Bytes((fixture.text.len() * 8) as u64));
+                    batch.bench_function("decode", |bencher| {
+                        bencher.iter_batched(
+                            || {
+                                if finite {
+                                    structural_decode::finite_decoder(&fixture, 8)
+                                } else {
+                                    JsonDecoder::unlimited()
+                                }
+                            },
+                            |mut decoder| {
+                                let decoded = structural_decode::decode_batch_with_decoder(
+                                    path,
+                                    &fixture,
+                                    &mut decoder,
+                                );
+                                black_box(decoded);
+                            },
+                            BatchSize::SmallInput,
+                        );
+                    });
+                    batch.finish();
+                }
+            }
+        }
+    }
+
+    for count in COUNTS {
+        for position in [DuplicatePosition::Early, DuplicatePosition::Late] {
+            let fixture =
+                unique_decode_support::structural_fixtures::reject_fixture(count, position);
+            for finite in [false, true] {
+                let budget = if finite { "finite" } else { "unlimited" };
+                let error = unique_decode_support::decode_path::assert_duplicate_rejected(
+                    structural_decode::decode_reject_once(&fixture, finite),
+                );
+                let _ = black_box(error);
+                let name = format!(
+                    "unique_decode_structural_reject/wide_object/{}items/{}/{budget}/fresh",
+                    fixture.count,
+                    position.name()
+                );
+                let mut group = c.benchmark_group(name);
+                group.throughput(Throughput::Bytes(fixture.text.len() as u64));
+                group.bench_function("duplicate_key", |bencher| {
+                    bencher.iter(|| {
+                        let error = unique_decode_support::decode_path::assert_duplicate_rejected(
+                            structural_decode::decode_reject_once(black_box(&fixture), finite),
+                        );
+                        let _ = black_box(error);
+                    });
+                });
+                group.finish();
+            }
+        }
+    }
+}
+
+criterion_group!(benches, unique_decode, unique_decode_structural);
 criterion_main!(benches);

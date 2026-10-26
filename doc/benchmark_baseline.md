@@ -87,6 +87,46 @@ request traffic during the operation, not peak live memory, exact auxiliary
 working memory, or RSS. Fixture setup, warm-up, result checks, and formatting
 are outside the measurement window.
 
+The unique-key benchmarks also include structural-size fixtures in addition to
+the byte-size fixtures above. The structural cases cover `wide_object` and
+`record_array` with 32, 512, and 4096 members or records. Their scalar strings
+remain short as the number of entries grows. Typed paths decode the complete
+target (`BTreeMap<String, String>` or `Vec<StructuralRecord>`); dynamic paths
+retain the complete `Value`. The direct `serde_json` paths have no finite-budget
+variant and do not enforce the decoder's global duplicate-key rejection
+contract.
+
+The structural Criterion cases can be selected with:
+
+```bash
+cargo bench --locked --bench unique_decode_bench -- unique_decode_structural --noplot
+```
+
+They include fresh operations and batches of eight. Fresh timing includes
+decoder construction and result destruction. A batch creates its decoder in
+Criterion setup, then decodes eight inputs and destroys the results in the
+timed operation. Fixture generation, full-result preflight checks, and batch
+decoder setup are outside timing. Finite batch preflight uses limits sized for
+eight cumulative inputs.
+
+Duplicate rejection cases use a wide object with the same repeated key inserted
+early or after all unique members. Both fixtures contain the same number of
+unique members and one extra duplicate member; each is checked to fail for
+`DuplicateKey` under finite and unlimited budgets.
+
+The allocation target preserves `UNIQUE_DECODE_ALLOC` and adds records with
+this schema:
+
+```text
+UNIQUE_DECODE_STRUCT_ALLOC,shape,items,bytes,path,budget,mode,allocation_count,allocated_request_bytes,reallocation_count
+```
+
+Here `shape` is `wide_object`, `record_array`, `wide_object_reject_early`, or
+`wide_object_reject_late`. Batch8 measurements report the total for all eight
+decodes. Total requested bytes include successful allocation and reallocation
+requests; they describe allocation traffic and do not equal peak live memory
+or bytes physically moved.
+
 The JCS target exercises three materially different `Value` shapes: objects
 with many members (sorting-table cost), deeply nested objects (traversal
 stack cost), and large arrays (many values with little sorting state). It

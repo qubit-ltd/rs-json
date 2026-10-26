@@ -73,6 +73,33 @@ Criterion 会比较唯一键动态包装器、类型化 decode、typed seed、�
 计数器测量操作期间成功的分配请求流量，不表示峰值存活内存、精确辅助工作内存或 RSS。fixture 准备、预热、结果检查和
 格式化输出均在测量窗口之外。
 
+唯一键基准还包含结构规模 fixture，与上面的字节规模 fixture 并列。结构样例覆盖 `wide_object` 和 `record_array`，分别使用
+32、512、4096 个成员或记录；随着条目数增长，单个标量字符串仍保持短小。类型化路径会解码完整目标
+（`BTreeMap<String, String>` 或 `Vec<StructuralRecord>`），动态路径会保留完整 `Value`。直接 `serde_json` 路径没有有限预算版本，
+也不具备 decoder 的全局重复键拒绝契约。
+
+可用以下命令筛选结构规模 Criterion 样例：
+
+```bash
+cargo bench --locked --bench unique_decode_bench -- unique_decode_structural --noplot
+```
+
+每种结构样例包含 fresh 操作和八次 batch。fresh 计时包含 decoder 创建和结果析构。batch 在 Criterion setup 中创建 decoder，
+计时操作连续解码八次并析构结果。fixture 生成、完整结果预检和 batch decoder 创建都在计时窗口之外。有限预算 batch 的预检额度
+按八份累计输入设置。
+
+重复键拒绝样例使用宽对象，将同一个重复键分别放在较前位置或所有唯一成员之后。两类 fixture 都包含相同数量的唯一成员，
+再附加一个重复成员；有限和无限预算下均检查错误原因为 `DuplicateKey`。
+
+分配目标保留 `UNIQUE_DECODE_ALLOC`，并新增以下 schema 的记录：
+
+```text
+UNIQUE_DECODE_STRUCT_ALLOC,shape,items,bytes,path,budget,mode,allocation_count,allocated_request_bytes,reallocation_count
+```
+
+其中 `shape` 为 `wide_object`、`record_array`、`wide_object_reject_early` 或 `wide_object_reject_late`。batch8 报告八次解码的总量。
+请求字节总量包含成功分配请求和重新分配请求，用于描述分配流量；它不等于峰值存活内存，也不等于实际搬移的字节数。
+
 JCS 编码目标覆盖三种 `Value` 形态：成员很多的对象（排序表开销）、深层对象（遍历栈开销）
 以及大数组（值节点多但排序状态少）。它在相同 fixture 上比较有限的值、输出和工作内存限制，
 `JcsEncoder::unlimited`，以及直接使用 `serde_json_canonicalizer` 的对照路径。canonicalizer 对照测量其完整输出路径，
