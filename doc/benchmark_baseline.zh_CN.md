@@ -100,6 +100,30 @@ UNIQUE_DECODE_STRUCT_ALLOC,shape,items,bytes,path,budget,mode,allocation_count,a
 其中 `shape` 为 `wide_object`、`record_array`、`wide_object_reject_early` 或 `wide_object_reject_late`。batch8 报告八次解码的总量。
 请求字节总量包含成功分配请求和重新分配请求，用于描述分配流量；它不等于峰值存活内存，也不等于实际搬移的字节数。
 
+### 结构规模首次采样（2026-10-27）
+
+首次结构规模采样对应 revision `5947f5d`，采样时没有未提交代码变更。执行命令：
+
+```bash
+cargo bench --locked --bench unique_decode_bench -- unique_decode_structural --noplot
+```
+
+Criterion 使用默认的 100 个样本、预热和测量设置。代表性的有限预算 `unique_typed` / `fresh` 场景如下：
+
+| 形状 | 条目数 | 输入字节 | 延迟估计（95% 置信区间） | 分配次数 | 请求字节 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `wide_object` | 32 | 641 | 11.307 µs（11.232–11.396） | 77 | 6,904 |
+| `wide_object` | 512 | 10,241 | 421.56 µs（392.66–448.78） | 1,195 | 108,448 |
+| `wide_object` | 4096 | 81,921 | 2.6601 ms（2.6443–2.6773） | 9,557 | 877,016 |
+| `record_array` | 32 | 929 | 17.047 µs（16.935–17.175） | 136 | 24,064 |
+| `record_array` | 512 | 14,849 | 353.86 µs（337.10–375.93） | 2,060 | 381,184 |
+| `record_array` | 4096 | 118,785 | 2.2605 ms（2.2441–2.2792） | 16,399 | 3,047,680 |
+
+4096 个唯一成员时，有限预算 fresh 重复键拒绝场景的 early 延迟为 325.81 µs（323.73–328.74），late 为 2.3056 ms（2.2629–2.3583）。两者输入均为 81,943 字节；分配次数和请求字节分别为 11 / 1,204 与 8,881 / 497,510。
+
+测量主机为 Intel Core i5-9600K、Ubuntu 24.04.4（Linux 7.0.0-38-generic）、Rust 1.94.0、Criterion 0.8.2、`serde_json` 1.0.154 和 `qubit-budget` 0.10.0。`Cargo.lock` SHA-256 为
+`ae1dfa7427aef55f7c6cd96ea3661d274070d1c6a8de2051e84a4a369cb78a52`。使用系统分配器；CPU governor 为 `powersave`，可用 CPU 为 0–5，未设置 CPU 亲和性。采样期间主机上还有其他编译和审查任务。Criterion 提示部分场景采集 100 个样本需要超过 5 秒目标时间，随后仍完成了全部样本。该结果是共享主机上的描述性首次基线，不代表空闲机器结果，也不用于性能对比。
+
 JCS 编码目标覆盖三种 `Value` 形态：成员很多的对象（排序表开销）、深层对象（遍历栈开销）
 以及大数组（值节点多但排序状态少）。它在相同 fixture 上比较有限的值、输出和工作内存限制，
 `JcsEncoder::unlimited`，以及直接使用 `serde_json_canonicalizer` 的对照路径。canonicalizer 对照测量其完整输出路径，

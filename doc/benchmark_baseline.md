@@ -127,6 +127,43 @@ decodes. Total requested bytes include successful allocation and reallocation
 requests; they describe allocation traffic and do not equal peak live memory
 or bytes physically moved.
 
+### Structural-size first sample (2026-10-27)
+
+The first structural-size sample was collected at revision `5947f5d` with no
+uncommitted code changes. The command was:
+
+```bash
+cargo bench --locked --bench unique_decode_bench -- unique_decode_structural --noplot
+```
+
+Criterion used its default 100 samples, warm-up, and measurement settings. The
+representative finite `unique_typed` / `fresh` cases were:
+
+| Shape | Items | Input bytes | Latency estimate (95% CI) | Allocation count | Requested bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `wide_object` | 32 | 641 | 11.307 µs (11.232–11.396) | 77 | 6,904 |
+| `wide_object` | 512 | 10,241 | 421.56 µs (392.66–448.78) | 1,195 | 108,448 |
+| `wide_object` | 4096 | 81,921 | 2.6601 ms (2.6443–2.6773) | 9,557 | 877,016 |
+| `record_array` | 32 | 929 | 17.047 µs (16.935–17.175) | 136 | 24,064 |
+| `record_array` | 512 | 14,849 | 353.86 µs (337.10–375.93) | 2,060 | 381,184 |
+| `record_array` | 4096 | 118,785 | 2.2605 ms (2.2441–2.2792) | 16,399 | 3,047,680 |
+
+At 4096 unique members, the finite fresh duplicate-rejection cases measured
+325.81 µs (323.73–328.74) for `early` and 2.3056 ms (2.2629–2.3583) for
+`late`. Their input was 81,943 bytes; allocation counts and requested bytes
+were 11 / 1,204 and 8,881 / 497,510, respectively.
+
+The host was an Intel Core i5-9600K with Ubuntu 24.04.4 (Linux
+7.0.0-38-generic), Rust 1.94.0, Criterion 0.8.2, `serde_json` 1.0.154, and
+`qubit-budget` 0.10.0. `Cargo.lock` SHA-256 was
+`ae1dfa7427aef55f7c6cd96ea3661d274070d1c6a8de2051e84a4a369cb78a52`. The
+system allocator was used; the CPU governor was `powersave`, CPUs 0–5 were
+available, and no affinity was set. Other compilation and review work was
+active on the host during sampling. Criterion warned that some cases needed
+more than its 5-second target to collect 100 samples, then completed those
+samples. Treat these results as a descriptive first baseline for this shared
+host, not as an idle-machine result or a performance comparison.
+
 The JCS target exercises three materially different `Value` shapes: objects
 with many members (sorting-table cost), deeply nested objects (traversal
 stack cost), and large arrays (many values with little sorting state). It
