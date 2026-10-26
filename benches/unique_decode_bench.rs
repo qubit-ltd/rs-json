@@ -152,11 +152,7 @@ fn unique_decode_structural(c: &mut Criterion) {
                     } else {
                         JsonDecoder::unlimited()
                     };
-                    for decoded in structural_decode::decode_batch_with_decoder(
-                        path,
-                        &fixture,
-                        &mut batch_decoder,
-                    ) {
+                    for decoded in structural_decode::decode_batch_with_decoder(path, &fixture, &mut batch_decoder) {
                         structural_decode::assert_decoded(&decoded, &fixture);
                         black_box(decoded);
                     }
@@ -170,9 +166,7 @@ fn unique_decode_structural(c: &mut Criterion) {
                     let mut fresh = c.benchmark_group(format!("{base}/fresh"));
                     fresh.throughput(Throughput::Bytes(fixture.text.len() as u64));
                     fresh.bench_function("decode", |bencher| {
-                        bencher.iter(|| {
-                            black_box(structural_decode::decode_once(path, &fixture, finite))
-                        });
+                        bencher.iter(|| black_box(structural_decode::decode_once(path, &fixture, finite)));
                     });
                     fresh.finish();
 
@@ -188,11 +182,8 @@ fn unique_decode_structural(c: &mut Criterion) {
                                 }
                             },
                             |mut decoder| {
-                                let decoded = structural_decode::decode_batch_with_decoder(
-                                    path,
-                                    &fixture,
-                                    &mut decoder,
-                                );
+                                let decoded =
+                                    structural_decode::decode_batch_with_decoder(path, &fixture, &mut decoder);
                                 black_box(decoded);
                             },
                             BatchSize::SmallInput,
@@ -206,8 +197,7 @@ fn unique_decode_structural(c: &mut Criterion) {
 
     for count in COUNTS {
         for position in [DuplicatePosition::Early, DuplicatePosition::Late] {
-            let fixture =
-                unique_decode_support::structural_fixtures::reject_fixture(count, position);
+            let fixture = unique_decode_support::structural_fixtures::reject_fixture(count, position);
             for finite in [false, true] {
                 let budget = if finite { "finite" } else { "unlimited" };
                 let error = unique_decode_support::decode_path::assert_duplicate_rejected(

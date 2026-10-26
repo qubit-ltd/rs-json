@@ -148,14 +148,12 @@ fn main() {
                     } else {
                         JsonDecoder::unlimited()
                     };
-                    let warmup =
-                        structural_decode::decode_with_decoder(path, &fixture, &mut warmup_decoder);
+                    let warmup = structural_decode::decode_with_decoder(path, &fixture, &mut warmup_decoder);
                     structural_decode::assert_decoded(&warmup, &fixture);
                     std::hint::black_box(warmup);
 
-                    let (fresh_result, fresh) = allocation_counter::measure(|| {
-                        structural_decode::decode_once(path, &fixture, finite)
-                    });
+                    let (fresh_result, fresh) =
+                        allocation_counter::measure(|| structural_decode::decode_once(path, &fixture, finite));
                     structural_decode::assert_decoded(&fresh_result, &fixture);
                     std::hint::black_box(fresh_result);
                     println!(
@@ -175,11 +173,7 @@ fn main() {
                     } else {
                         JsonDecoder::unlimited()
                     };
-                    let warmup = structural_decode::decode_batch_with_decoder(
-                        path,
-                        &fixture,
-                        &mut warmup_decoder,
-                    );
+                    let warmup = structural_decode::decode_batch_with_decoder(path, &fixture, &mut warmup_decoder);
                     for decoded in warmup {
                         structural_decode::assert_decoded(&decoded, &fixture);
                         std::hint::black_box(decoded);
@@ -214,17 +208,15 @@ fn main() {
 
     for count in COUNTS {
         for position in [DuplicatePosition::Early, DuplicatePosition::Late] {
-            let fixture =
-                unique_decode_support::structural_fixtures::reject_fixture(count, position);
+            let fixture = unique_decode_support::structural_fixtures::reject_fixture(count, position);
             for finite in [false, true] {
                 let budget = if finite { "finite" } else { "unlimited" };
                 let warmup = unique_decode_support::decode_path::assert_duplicate_rejected(
                     structural_decode::decode_reject_once(&fixture, finite),
                 );
                 let _ = std::hint::black_box(warmup);
-                let (result, measurement) = allocation_counter::measure(|| {
-                    structural_decode::decode_reject_once(&fixture, finite)
-                });
+                let (result, measurement) =
+                    allocation_counter::measure(|| structural_decode::decode_reject_once(&fixture, finite));
                 let error = unique_decode_support::decode_path::assert_duplicate_rejected(result);
                 let _ = std::hint::black_box(error);
                 println!(
