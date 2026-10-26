@@ -109,6 +109,47 @@ output buffers; they are total requested allocation traffic, not auxiliary
 working bytes, peak live memory, or process RSS. The prebuilt input `Value` and
 diagnostic formatting are outside the measured operation.
 
++### Bounded JCS stack-growth observation (2026-10-26)
+
+The existing single-child-array depth fixture was sampled at revision
+`44b70043ef6ded7de68bd6fd6e22581e1b720fef` with Rust 1.94.0, an Intel Core
+i5-9600K, Ubuntu 24.04.4 (Linux 7.0.0-38-generic), and Rust's `System`
+allocator. The CPU governor was `powersave`; CPUs 0–5 were available and no
+CPU affinity was set. The locked run used `serde_json 1.0.154`,
+`serde_json_canonicalizer 0.4.1`, `qubit-budget 0.10.0`, and `criterion
+0.8.2`; the `Cargo.lock` SHA-256 was
+`ae1dfa7427aef55f7c6cd96ea3661d274070d1c6a8de2051e84a4a369cb78a52`. The
+finite fixture used a 1 MiB working-memory limit and exact output, depth, and
+node limits. Criterion used its default 100 samples per case. The commands
+were:
+
+```bash
+cargo bench --locked --features jcs --bench jcs_bench -- jcs-depth --noplot --save-baseline rj002-before
+JCS_RENDERER_ALLOCATION_DIAGNOSTICS=1 cargo bench --locked --features 'jcs jcs-allocation-diagnostics' --bench jcs_bench -- --noplot
+cargo bench --locked --features jcs --bench jcs_bench -- jcs-encode --noplot --save-baseline rj002-before
+```
+
+| Depth | Unlimited estimate (interval) | Finite estimate (interval) | Stack growths, unlimited / finite | Finite cumulative requested stack bytes |
+| ---: | ---: | ---: | ---: | ---: |
+| 32 | 1.4781 µs (1.3486–1.6258) | 3.4467 µs (3.3876–3.5111) | 5 / 32 | 16,896 |
+| 128 | 3.0330 µs (3.0160–3.0521) | 11.908 µs (11.728–12.163) | 7 / 128 | 264,192 |
+| 512 | 11.420 µs (11.176–11.721) | 93.461 µs (80.569–107.09) | 9 / 512 | 4,202,496 |
+| 2048 | 140.08 µs (120.90–165.33) | 449.09 µs (398.87–501.24) | 11 / 2048 | 67,141,632 |
+| 8192 | 209.08 µs (197.12–221.99) | 848.90 µs (769.90–928.19) | 13 / 8192 | 1,073,872,896 |
+
+For the 8192-depth case, both paths reported a maximum actual stack capacity
+of 262,144 bytes. The finite cumulative requested-byte total sums requests
+across growth events; it is neither peak/live memory nor bytes actually moved.
+The end-to-end finite/unlimited estimates also include different budget
+admission work. Representative finite/unlimited estimates were 1.4002/1.0836
+ms for the large object, 83.323/48.029 µs for the deep object, and
+1.9309/1.4695 ms for the large array. These are descriptive observations,
+not a before/after comparison or proof that stack growth alone caused the
+latency differences. The exact finite-capacity policy was retained because
+speculative stack capacity can consume bytes needed by a later object member
+table; reclaiming that capacity would require additional coordination with
+renderer admission.
+
 ## Measurement procedure
 
 1. Record the code revision and uncommitted changes, Rust toolchain, dependency
