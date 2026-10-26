@@ -15,14 +15,14 @@ use qubit_budget::StructureLimits;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::value::AccountingJsonValueSeed;
+use serde::Deserializer as SerdeDeserializer;
 use serde::de::DeserializeSeed;
 use serde::de::IntoDeserializer;
 use serde::de::Visitor;
 use serde::de::value;
 use serde::forward_to_deserialize_any;
-use serde::Deserializer as SerdeDeserializer;
-use serde_json::json;
 use serde_json::Deserializer;
+use serde_json::json;
 
 struct TrackedUnit {
     calls: Rc<Cell<usize>>,
@@ -79,9 +79,10 @@ fn test_json_value_child_seed_checks_prospective_array_item() {
 fn test_json_value_child_seed_rejects_before_child_deserialization() {
     for maximum in [0_usize, 1, 2] {
         let limits = JsonValueLimits::<JsonResource, usize>::builder()
-            .structure_limits(StructureLimits::builder().sequence_items_limit(
-                ResourceLimit::new(JsonResource::SequenceItems, maximum),
-            ))
+            .structure_limits(
+                StructureLimits::builder()
+                    .sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, maximum)),
+            )
             .build();
         let mut budget = limits.budget();
         let mut transaction = budget.transaction();
@@ -108,9 +109,7 @@ fn test_json_value_child_seed_rejects_before_child_deserialization() {
             );
         } else {
             assert_eq!(result.unwrap(), json!([null, null]));
-            transaction
-                .commit()
-                .expect("both admitted children must commit");
+            transaction.commit().expect("both admitted children must commit");
         }
     }
 }

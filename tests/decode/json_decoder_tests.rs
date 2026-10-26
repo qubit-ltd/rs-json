@@ -158,7 +158,10 @@ fn test_unique_decoder_materialization_uses_byte_coordinates() {
             assert_eq!(error.line(), Some(line), "input={input:?}");
             assert_eq!(error.column(), Some(column), "input={input:?}");
             if policy == DiagnosticPolicy::Detailed {
-                let JsonDecodeErrorSource::Deserialize { source: Some(source), .. } = error.into_source() else {
+                let JsonDecodeErrorSource::Deserialize {
+                    source: Some(source), ..
+                } = error.into_source()
+                else {
                     panic!("detailed diagnostics must retain the Serde source");
                 };
                 let source = source
@@ -184,7 +187,10 @@ fn test_unique_decoder_depth_error_uses_byte_coordinates() {
         assert_eq!(error.line(), Some(1));
         assert_eq!(error.column(), Some(133));
         if policy == DiagnosticPolicy::Detailed {
-            let JsonDecodeErrorSource::Deserialize { source: Some(source), .. } = error.into_source() else {
+            let JsonDecodeErrorSource::Deserialize {
+                source: Some(source), ..
+            } = error.into_source()
+            else {
                 panic!("detailed diagnostics must retain the Serde source");
             };
             let source = source

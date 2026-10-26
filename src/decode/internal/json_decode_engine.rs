@@ -200,7 +200,8 @@ where
         self.decode_seed_utf8_with_number_model(seed, input, diagnostic_policy, JsonNumberModel::Integer64)
     }
 
-    /// Returns one-based Serde-compatible coordinates for a materialization token.
+    /// Returns one-based Serde-compatible coordinates for a materialization
+    /// token.
     ///
     /// Counts bytes before the token offset; only LF starts a new line.
     fn materialization_error_position(input: &[u8], offset: usize) -> (usize, usize) {
