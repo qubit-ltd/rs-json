@@ -34,6 +34,8 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
     Sequence(
         /// Values accumulated in encounter order.
         Vec<Value>,
+        /// First serialization failure, retained until this sequence ends.
+        /// This preserves a child error even if its caller ignores the `Err`.
         Option<JsonSerializationError>,
     ),
     /// Object entries and a key awaiting its value.
@@ -42,6 +44,8 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
         values: Map<String, Value>,
         /// Serialized key supplied through split map calls.
         next_key: Option<String>,
+        /// First serialization failure, retained until this map ends, even if
+        /// a caller ignores the `Err` returned by a child operation.
         failure: Option<JsonSerializationError>,
     },
     /// Tuple variant fields nested below one variant name.
@@ -50,6 +54,9 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
         variant: String,
         /// Ordered tuple fields.
         values: Vec<Value>,
+        /// First serialization failure, retained until this tuple variant
+        /// ends, even if a caller ignores the `Err` returned by a child
+        /// operation.
         failure: Option<JsonSerializationError>,
     },
     /// Struct variant fields nested below one variant name.
@@ -58,6 +65,9 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
         variant: String,
         /// Unique named struct fields.
         values: Map<String, Value>,
+        /// First serialization failure, retained until this struct variant
+        /// ends, even if a caller ignores the `Err` returned by a child
+        /// operation.
         failure: Option<JsonSerializationError>,
     },
     /// Text carried by serde_json's RawValue struct protocol.
@@ -66,6 +76,9 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
         text: Option<String>,
         /// Validated private protocol lifecycle.
         state: JsonPrivateProtocolState,
+        /// First serialization failure, retained until this protocol compound
+        /// ends, even if a caller ignores the `Err` returned by a child
+        /// operation.
         failure: Option<JsonSerializationError>,
     },
     /// Text carried by serde_json's private Number protocol.
@@ -74,6 +87,9 @@ pub(in crate::value::json_value_encoder) enum JsonValueCompound {
         text: Option<String>,
         /// Validated private protocol lifecycle.
         state: JsonPrivateProtocolState,
+        /// First serialization failure, retained until this protocol compound
+        /// ends, even if a caller ignores the `Err` returned by a child
+        /// operation.
         failure: Option<JsonSerializationError>,
     },
 }
@@ -183,6 +199,10 @@ impl JsonValueCompound {
         }
     }
 
+    /// Retains a candidate failure if this compound has not failed already.
+    ///
+    /// Returns the first retained failure, which may be an earlier error
+    /// rather than `error`.
     #[inline]
     fn retain_error(&mut self, error: JsonSerializationError) -> JsonSerializationError {
         let slot = match self {
@@ -199,6 +219,9 @@ impl JsonValueCompound {
         slot.unwrap_or(error)
     }
 
+    /// Returns a copy of the retained first failure without clearing it.
+    /// `None` means no failure has been retained. The compound's `end` handling
+    /// must use this state to reject successful completion after a failure.
     #[inline]
     fn retained_error(&self) -> Option<JsonSerializationError> {
         match self {
