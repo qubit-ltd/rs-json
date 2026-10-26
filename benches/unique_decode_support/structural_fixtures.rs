@@ -54,7 +54,6 @@ pub(crate) struct StructuralRecord {
 
 #[derive(Debug)]
 pub(crate) enum StructuralExpected {
-    Value(serde_json::Value),
     Object(BTreeMap<String, String>),
     Records(Vec<StructuralRecord>),
 }
