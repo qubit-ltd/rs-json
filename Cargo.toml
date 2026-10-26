@@ -79,6 +79,14 @@ name = "jcs_bench"
 harness = false
 required-features = ["jcs"]
 
+[[bench]]
+name = "unique_decode_bench"
+harness = false
+
+[[bench]]
+name = "unique_decode_allocations"
+harness = false
+
 [profile.release]
 opt-level = 3
 lto = true
