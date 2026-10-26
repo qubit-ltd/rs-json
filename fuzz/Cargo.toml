@@ -60,3 +60,10 @@ path = "fuzz_targets/jcs_invariants.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "json_unique_decode_invariants"
+path = "fuzz_targets/json_unique_decode_invariants.rs"
+test = false
+doc = false
+bench = false

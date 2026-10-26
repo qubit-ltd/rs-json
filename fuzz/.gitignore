@@ -17,4 +17,9 @@ corpus/json_encode_invariants/*
 corpus/json_tree_invariants/*
 !corpus/json_tree_invariants/nested-redaction
 !corpus/json_tree_invariants/regression-repro-1396173dd49756199687b03656ed506586bd9c7e
+!corpus/json_unique_decode_invariants/
+corpus/json_unique_decode_invariants/*
+!corpus/json_unique_decode_invariants/escaped-duplicate
+!corpus/json_unique_decode_invariants/marker-numbers
+!corpus/json_unique_decode_invariants/depth-128
 artifacts
