@@ -549,6 +549,39 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 }
 ```
 
+The unique-key path provides a safe construction reason through
+`JsonDecodeError::materialization_error_reason()`. Read and preserve it before
+consuming the error with `into_source()`:
+
+```rust
+use qubit_json::decode::{JsonDecodeError, JsonDecodeErrorKind, JsonDecoder};
+use qubit_json::decode::JsonDecodeErrorSource;
+use qubit_json::decode::JsonMaterializationErrorReason;
+use serde_json::Value;
+
+fn main() -> Result<(), JsonDecodeError> {
+    let mut decoder = JsonDecoder::unlimited();
+    let error = decoder
+        .decode_unique_str::<Value>(r#"{"role":"user","role":"admin"}"#)
+        .expect_err("duplicate keys must fail materialization");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    let reason = error.materialization_error_reason();
+    assert_eq!(reason, Some(JsonMaterializationErrorReason::DuplicateKey));
+    let source = error.into_source();
+    assert!(matches!(source, JsonDecodeErrorSource::Deserialize { .. }));
+    Ok(())
+}
+```
+
+The accessor returns `Some` for duplicate keys, the fixed 127-container
+construction limit, or a defensive invalid-number materialization failure.
+Admission, input, configured-budget, and target-deserialization failures
+return `None`. Reasons contain no key or backend text and remain available
+under redacted diagnostics. `into_source()` still returns the existing
+`JsonDecodeErrorSource`; adapters that need both values must save the reason
+first. Materialization coordinates remain one-based UTF-8 byte columns, and
+only LF starts a new line.
+
 With `serde_json`'s `raw_value` feature enabled, ordinary `serde_json::Value`
 also gives special meaning to a first object key named
 `$serde_json::private::RawValue`. The admitted source
@@ -719,7 +752,7 @@ Branch on the stable category returned by `kind()`:
 | `InvalidUtf8` | A byte input was not valid UTF-8 | `utf8_valid_up_to()`, `utf8_error_len()` |
 | `InvalidJson` | Syntax or the numeric contract was invalid | `syntax_error()`, `line()`, `column()` |
 | `UnexpectedTopLevel` | An object/array-specific API received the wrong root kind | `expected_top_level()`, `actual_top_level()` |
-| `Deserialize` | An admitted document could not materialize as the requested type | `line()`, `column()`, and a detailed source when enabled |
+| `Deserialize` | An admitted document could not materialize as the requested type | `line()`, `column()`, unique-key `materialization_error_reason()`, and a detailed source when enabled |
 | `Read` | The input source failed before document decoding completed | `read_error_kind()`, `raw_input_bytes()`, and `read_error()` under detailed diagnostics |
 
 For `InvalidJson`, `line()` and `column()` use the lexical scanner's one-based

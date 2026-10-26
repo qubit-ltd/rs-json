@@ -455,6 +455,34 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 }
 ```
 
+唯一键路径会通过 `JsonDecodeError::materialization_error_reason()` 提供安全的构造原因。
+如果后续还要消费 `into_source()`，请先读取并保存原因：
+
+```rust
+use qubit_json::decode::{JsonDecodeError, JsonDecodeErrorKind, JsonDecoder};
+use qubit_json::decode::JsonDecodeErrorSource;
+use qubit_json::decode::JsonMaterializationErrorReason;
+use serde_json::Value;
+
+fn main() -> Result<(), JsonDecodeError> {
+    let mut decoder = JsonDecoder::unlimited();
+    let error = decoder
+        .decode_unique_str::<Value>(r#"{"role":"user","role":"admin"}"#)
+        .expect_err("重复键必须导致物化失败");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    let reason = error.materialization_error_reason();
+    assert_eq!(reason, Some(JsonMaterializationErrorReason::DuplicateKey));
+    let source = error.into_source();
+    assert!(matches!(source, JsonDecodeErrorSource::Deserialize { .. }));
+    Ok(())
+}
+```
+
+重复键、固定的 127 层构造上限，以及防御性的无效数字物化失败会返回 `Some`；准入、输入、配置预算和目标类型
+反序列化失败返回 `None`。原因不含键名或后端文本，脱敏诊断下也能读取。`into_source()` 仍返回原有的
+`JsonDecodeErrorSource`；适配层若还需要原因，应先保存它。物化错误坐标继续使用从 1 开始的 UTF-8 字节列，
+只有 LF 会开始新行。
+
 启用 `serde_json` 的 `raw_value` feature 后，普通 `serde_json::Value` 还会特殊处理对象中的首个
 `$serde_json::private::RawValue` 键。已准入的源文本
 `{"$serde_json::private::RawValue":"null"}` 会变成 `null`；若对应值不是字符串，例如
@@ -595,7 +623,7 @@ encoder 识别 serde_json 的两种精确私有 struct 协议：`RawValue` 与 `
 | `InvalidUtf8` | 字节输入不是合法 UTF-8 | `utf8_valid_up_to()`、`utf8_error_len()` |
 | `InvalidJson` | JSON 语法或数字契约不合法 | `syntax_error()`、`line()`、`column()` |
 | `UnexpectedTopLevel` | 仅接受对象或数组的方法收到错误的根类型 | `expected_top_level()`、`actual_top_level()` |
-| `Deserialize` | 已准入文档无法构造为请求的 Rust 类型 | `line()`、`column()`，启用详细诊断后还可读取来源错误 |
+| `Deserialize` | 已准入文档无法构造为请求的 Rust 类型 | `line()`、`column()`、唯一键路径的 `materialization_error_reason()`，以及详细诊断下的来源错误 |
 | `Read` | 输入源在文档解码完成前发生读取错误 | `read_error_kind()`、`raw_input_bytes()`；仅详细诊断保留 `read_error()` |
 
 对于 `InvalidJson`，`line()` 和 `column()` 使用词法扫描器提供的从 1 开始的坐标：列按

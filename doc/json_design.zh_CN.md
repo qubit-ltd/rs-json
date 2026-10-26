@@ -99,6 +99,12 @@ seed）。该路径先执行普通严格词法准入，并暂存源文档的 val
 或被拒绝容器处的一基源坐标。目标 seed 自身的失败没有原文坐标。只有目标构造成功后才提交 value 计量；失败时
 已接受的输入计量仍保留。详见[重复对象键指南](user_guide.zh_CN.md#重复对象键)。
 
+`JsonDecodeError::materialization_error_reason()` 为唯一键构造失败提供可复制的旁路原因：
+`DuplicateKey`、`DepthLimit { limit }` 或防御性的 `InvalidNumber`。其他解码失败返回 `None`。
+原因不受 `DiagnosticPolicy` 影响、不含输入文本，并会由 `Clone` 保留。调用 `into_source()` 前应先读取原因；
+`JsonDecodeErrorSource` 及其公开变体保持不变，因此现有粗粒度错误映射无需迁移。构造错误坐标仍按
+UTF-8 字节计列，列号从 1 开始，只有 LF 会开始新行。
+
 `JsonEncoder` 持有一个 `JsonEncodeSession`，提供 `to_vec`、`write_buffered` 和
 `write_incremental`。buffered 写入在完整字节序列可用后才写入目标；incremental 写入可在失败
 时保留已接受前缀。

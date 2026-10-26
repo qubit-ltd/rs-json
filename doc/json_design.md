@@ -72,6 +72,15 @@ not have original source coordinates. Value accounting commits only after
 target construction succeeds; accepted input charges remain consumed on
 failure. See the [duplicate object keys guide](user_guide.md#duplicate-object-keys).
 
+`JsonDecodeError::materialization_error_reason()` adds a copyable side-channel
+reason for unique-key construction failures: `DuplicateKey`,
+`DepthLimit { limit }`, or defensive `InvalidNumber`. Other decode failures
+return `None`. The reason is independent of `DiagnosticPolicy`, contains no
+input text, and is preserved by `Clone`. Read it before `into_source()`;
+`JsonDecodeErrorSource` and its public variants remain unchanged, so existing
+coarse error mappings remain compatible. Materialization coordinates retain
+one-based UTF-8 byte columns and LF line breaks.
+
 ## Normalizing facade
 
 `NormalizingJsonDecoder` holds an immutable `NormalizingJsonDecodePolicy` and

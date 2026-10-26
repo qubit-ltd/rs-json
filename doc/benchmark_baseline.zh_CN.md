@@ -13,6 +13,8 @@
 | `tree_bench` | 大数组、大对象和深层树的迭代读取与修改 |
 | `jcs_bench` | 大对象、深层对象和大数组的 JCS 编码，比较有限/无限配置及直接 canonicalizer 对照；`jcs-depth` 测量单子节点数组的多种深度 |
 | `decoder_bench` / `jcs_decode` | JCS 文本解码：数字数组、嵌套对象、普通/转义键和重复键拒绝；区分有限/无限预算及 fresh/reused session |
+| `unique_decode_bench` | 配置对象、元数据字符串 map 和 wire envelope 的唯一键解码；规模约 1 KiB、64 KiB、1 MiB；比较动态值、类型化目标、typed seed、普通 decoder 和直接 Serde |
+| `unique_decode_allocations` | 对相同路径及重复键拒绝单独统计分配请求，不注册 Criterion 计时样本 |
 
 在仓库根目录运行：
 
@@ -23,6 +25,8 @@ cargo bench --bench tree_bench -- --noplot
 cargo bench --features jcs --bench jcs_bench -- --noplot
 cargo bench --features jcs --bench decoder_bench -- jcs_decode --noplot
 JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --features "jcs jcs-allocation-diagnostics" --bench jcs_bench -- --noplot
+cargo bench --locked --bench unique_decode_bench -- --noplot
+cargo bench --locked --bench unique_decode_allocations
 ```
 
 通过过滤器缩小测量范围：
@@ -58,6 +62,17 @@ tree 基准区分纯 visitor 遍历、无限制与有限制的 reader，以及 m
 计时前会断言成功 fixture 确实解码成功。有限和无限配置都分别测量 fresh decoder；reused session 场景在同一 decoder 中连续成功解码
 8 次，每个 Criterion batch 都重新创建 session。因此用量会在一个 batch 内累计，但不会跨 Criterion 样本耗尽。
 
+唯一键目标使用三种自有 fixture：配置对象、字符串元数据 map，以及包含版本和记录列表的 wire envelope。
+预算按实际 UTF-8 字节数和源节点数配置；每种形态都有约 1 KiB、64 KiB、1 MiB 的成功输入，并单独测量重复键拒绝。
+Criterion 会比较唯一键动态包装器、类型化 decode、typed seed、普通 `JsonDecoder` 和直接 `serde_json`。
+直接对照不提供全局重复键拒绝契约。有限预算覆盖输入与值资源；复用场景每个 batch 都新建 decoder，再连续成功解码
+8 份文档，并为整批累计用量预留足够额度。
+
+延迟目标使用系统默认分配器。独立分配目标输出 `UNIQUE_DECODE_ALLOC` 记录，包含形态、字节数、路径、预算、模式、
+分配次数、请求字节总量和 realloc 次数。realloc 请求计入请求字节总量并单独计数，不代表新增存活字节。
+计数器测量操作期间成功的分配请求流量，不表示峰值存活内存、精确辅助工作内存或 RSS。fixture 准备、预热、结果检查和
+格式化输出均在测量窗口之外。
+
 JCS 编码目标覆盖三种 `Value` 形态：成员很多的对象（排序表开销）、深层对象（遍历栈开销）
 以及大数组（值节点多但排序状态少）。它在相同 fixture 上比较有限的值、输出和工作内存限制，
 `JcsEncoder::unlimited`，以及直接使用 `serde_json_canonicalizer` 的对照路径。canonicalizer 对照测量其完整输出路径，
@@ -92,6 +107,8 @@ taskset -c 3 cargo bench --bench tree_bench -- --noplot
 
 定向采样应保留 Criterion 给出的估计值和置信区间，并记录机器、Rust 版本、依赖解析结果、fixture 大小、预算配置和完整命令。
 如果没有同机、同 fixture 的修改前基线，当前单次采样只能描述本次环境，不能据此声称性能提升或退化。这些 fixture 不测分配次数或峰值内存。
+
+唯一键测量遵循相同边界：缺少匹配的修改前结果时，只报告当前 revision 的观测，不从不同 fixture 或机器的对比推断性能提升或退化。
 
 ## 结果解释边界
 

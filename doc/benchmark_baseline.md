@@ -14,6 +14,8 @@ changes. Results depend on the hardware, inputs, and enabled limits.
 | `tree_bench` | Iterative readers and mutators over large arrays, large objects, and deep trees |
 | `jcs_bench` | JCS encoding of large objects, deep objects, and large arrays, with bounded and unlimited configurations and a direct canonicalizer control; `jcs-depth` measures single-child arrays at increasing depths |
 | `decoder_bench` / `jcs_decode` | JCS text decoding of number arrays, nested objects, ordinary/escaped keys, and duplicate-key rejection with finite/unlimited budgets and fresh/reused sessions |
+| `unique_decode_bench` | Unique-key decoding across config, metadata-map, and wire-envelope fixtures at approximately 1 KiB, 64 KiB, and 1 MiB, with dynamic, typed, typed-seed, ordinary decoder, and direct Serde paths |
+| `unique_decode_allocations` | Separate one-shot allocation-request diagnostics for the same paths and duplicate-key rejection; no Criterion samples |
 
 Run from the repository root:
 
@@ -24,6 +26,8 @@ cargo bench --bench tree_bench -- --noplot
 cargo bench --features jcs --bench jcs_bench -- --noplot
 cargo bench --features jcs --bench decoder_bench -- jcs_decode --noplot
 JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --features "jcs jcs-allocation-diagnostics" --bench jcs_bench -- --noplot
+cargo bench --locked --bench unique_decode_bench -- --noplot
+cargo bench --locked --bench unique_decode_allocations
 ```
 
 Use filters for focused measurements:
@@ -63,6 +67,25 @@ finite configurations each measure fresh decoder construction; reused-session
 cases run a bounded batch of eight successful decodes in one decoder. Every
 batch starts with a new session, so usage can accumulate within that batch but
 cannot exhaust one session across Criterion samples.
+
+The unique-key targets use three owned fixture shapes: a configuration object,
+a string metadata map, and a versioned wire envelope with records. Fixture
+budgets use actual UTF-8 byte sizes and source node counts. Each shape has successful fixtures
+near 1 KiB, 64 KiB, and 1 MiB, plus a separate duplicate-key rejection case.
+The Criterion target compares the unique dynamic wrapper, typed decode, typed
+seed, ordinary `JsonDecoder`, and direct `serde_json`. Direct controls do not
+enforce global duplicate-key rejection. Finite cases cap input and value
+resources; reused samples create a fresh decoder per batch and decode eight
+documents with cumulative limits sized for the whole batch.
+
+The latency target uses the system allocator. The separate allocation target
+prints `UNIQUE_DECODE_ALLOC` records with shape, bytes, path, budget, mode,
+allocation count, total requested bytes, and reallocations. Reallocation
+requests contribute to total requested bytes and are also counted separately;
+they are not newly live bytes. The counter measures successful allocation
+request traffic during the operation, not peak live memory, exact auxiliary
+working memory, or RSS. Fixture setup, warm-up, result checks, and formatting
+are outside the measurement window.
 
 The JCS target exercises three materially different `Value` shapes: objects
 with many members (sorting-table cost), deeply nested objects (traversal
@@ -113,6 +136,10 @@ sizes, limits, and exact command. A single current-code sample without a
 same-machine pre-change baseline is descriptive only; it does not establish a
 performance improvement or regression. These fixtures do not measure
 allocation counts or peak memory.
+
+Unique-key measurements follow the same boundary: without a matching
+pre-change run, report observations for the current revision only. Do not infer
+a speedup or regression from different fixtures or machines.
 
 ## Interpretation boundaries
 
