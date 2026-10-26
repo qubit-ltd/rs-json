@@ -100,8 +100,11 @@ impl MutChildCursor {
     /// # Safety
     ///
     /// The parent container must remain alive and structurally stable while
-    /// the cursor is active. Any child frame yielded by the previous call and
-    /// all its descendants must be dropped before advancing this cursor.
+    /// the cursor is active. No conflicting read or write access to the parent
+    /// or its cursor-managed children may occur through any other path; only
+    /// the currently yielded child frame may exclusively access its child.
+    /// All previously yielded child frames and their descendants must be
+    /// dropped before advancing this cursor.
     ///
     /// # Panics
     ///
