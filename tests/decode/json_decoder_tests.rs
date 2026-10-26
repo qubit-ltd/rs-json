@@ -29,6 +29,7 @@ use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
 use serde::de::Error as DeError;
+use serde_json::Error as SerdeJsonError;
 use serde_json::Value;
 use serde_json::json;
 
@@ -165,10 +166,12 @@ fn test_unique_decoder_materialization_uses_byte_coordinates() {
                     panic!("detailed diagnostics must retain the Serde source");
                 };
                 let source = source
-                    .downcast_ref::<serde_json::Error>()
+                    .downcast_ref::<SerdeJsonError>()
                     .expect("detailed source must be a serde_json error");
                 assert_eq!(source.line(), line, "input={input:?}");
                 assert_eq!(source.column(), column, "input={input:?}");
+            } else {
+                assert!(error.source().is_none());
             }
         }
     }
@@ -194,10 +197,12 @@ fn test_unique_decoder_depth_error_uses_byte_coordinates() {
                 panic!("detailed diagnostics must retain the Serde source");
             };
             let source = source
-                .downcast_ref::<serde_json::Error>()
+                .downcast_ref::<SerdeJsonError>()
                 .expect("detailed source must be a serde_json error");
             assert_eq!(source.line(), 1);
             assert_eq!(source.column(), 133);
+        } else {
+            assert!(error.source().is_none());
         }
     }
 }

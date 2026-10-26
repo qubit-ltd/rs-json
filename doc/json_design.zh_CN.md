@@ -79,6 +79,26 @@ codec 不实现 `Default`，避免把无限预算伪装成安全默认值。deco
 入口和 `validate_str`/`validate_utf8`。每次尝试先记录输入，再经共享 scanner 准入；值
 transaction 只在完整成功时提交。
 
+### 唯一键拥有型解码
+
+`JsonDecoder::decode_unique_str`、`decode_unique_utf8` 与
+`decode_unique_seed_utf8` 要求结果拥有所有权（分别使用 `DeserializeOwned`，或输出类型不依赖输入生命周期的
+seed）。该路径先执行普通严格词法准入，并暂存源文档的 value 计量；随后再次扫描字节，构造中间
+`serde_json::Value`。第二遍同步发出词法事件，但关闭重复计量，因此每项源资源只计费一次。目标 seed
+接收来自该拥有型中间树的 Serde 事件，不会借用原始文本。
+
+中间树使用严格的 `Integer64` 数字模型：负整数构造为 `i64`，非负整数为 `u64`，小数或指数数字为有限
+`f64`。从该树反序列化会发出原生整数和浮点 Serde 事件，即使启用了 `arbitrary_precision` 也是如此。
+对象键按 JSON 反转义后的字符串查重，不做 Unicode 规范化。构造最多接受 127 层嵌套容器；第 128 层会独立于
+配置的深度预算而失败。临时树与最终目标可能同时驻留内存，词法资源预算不是精确的堆内存上限。对象按
+`serde_json::Map` 的迭代顺序处理。
+
+`RawValue` 目标接收从中间树重新序列化的 JSON，而非原文切片。`serde_json::Value` 仍会按自身语义解释私有键
+`$serde_json::private::RawValue`；若要求私有标记键保留为普通数据，应使用
+`DuplicateKeyRejectingJsonValue`。重复键与构造深度失败会作为反序列化错误返回，并附带第二个重复键起始引号
+或被拒绝容器处的一基源坐标。目标 seed 自身的失败没有原文坐标。只有目标构造成功后才提交 value 计量；失败时
+已接受的输入计量仍保留。详见[重复对象键指南](user_guide.zh_CN.md#重复对象键)。
+
 `JsonEncoder` 持有一个 `JsonEncodeSession`，提供 `to_vec`、`write_buffered` 和
 `write_incremental`。buffered 写入在完整字节序列可用后才写入目标；incremental 写入可在失败
 时保留已接受前缀。

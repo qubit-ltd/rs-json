@@ -38,6 +38,40 @@ facades only select whether normalization happens first and shape the public
 entry points. This avoids conflating trust boundaries or maintaining two
 error and accounting implementations.
 
+### Owned unique-key decoding
+
+`JsonDecoder::decode_unique_str`, `decode_unique_utf8`, and
+`decode_unique_seed_utf8` require an owned result (`DeserializeOwned`, or a
+seed whose output type is independent of the input lifetime). This path first
+performs ordinary strict lexical admission and stages the source document's
+value accounting. It then scans the bytes a second time to build an
+intermediate `serde_json::Value`; the second scan emits synchronous lexical
+events and disables a second round of accounting. Thus each source resource is
+charged once. The target seed receives Serde events from this owned tree, not
+events borrowing the source text.
+
+The intermediate tree uses the strict `Integer64` number model: negative
+integers become `i64`, non-negative integers become `u64`, and fractional or
+exponential numbers become finite `f64`. Deserializing that tree exposes
+native integer and floating-point Serde events, including when
+`arbitrary_precision` is enabled. Object keys are compared after JSON
+unescaping, without Unicode normalization. Construction accepts at most 127
+nested containers; the 128th fails independently of configured depth limits.
+The temporary tree and final target can coexist, and the lexical resource
+budgets do not represent a precise heap-memory ceiling. Objects use
+`serde_json::Map` iteration order.
+
+`RawValue` targets receive reconstructed JSON serialized from the intermediate
+tree, rather than a slice of the original text. `serde_json::Value` retains
+its own interpretation of the private `$serde_json::private::RawValue` marker;
+use `DuplicateKeyRejectingJsonValue` when literal private marker keys must
+remain ordinary data. Duplicate-key and construction-depth failures are
+reported as deserialization errors with one-based source coordinates at the
+second key's opening quote or the rejected container. Target seed failures do
+not have original source coordinates. Value accounting commits only after
+target construction succeeds; accepted input charges remain consumed on
+failure. See the [duplicate object keys guide](user_guide.md#duplicate-object-keys).
+
 ## Normalizing facade
 
 `NormalizingJsonDecoder` holds an immutable `NormalizingJsonDecodePolicy` and
