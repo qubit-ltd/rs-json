@@ -184,25 +184,25 @@ where
     where
         V: JsonTreeMutVisitor,
     {
-        let mut stack = vec![MutFrame::root(root)];
+        // SAFETY: the stack is local to this call and is dropped before the
+        // exclusive borrow of `root` ends, including on error or panic exits.
+        let mut stack = vec![unsafe { MutFrame::root(root) }];
         while !stack.is_empty() {
             let index = stack.len() - 1;
             if !stack[index].entered {
                 let frame = &mut stack[index];
-                let context = frame.location.context(frame.depth);
-                // SAFETY: frames originate from the caller's exclusive root
-                // borrow. No ancestor container is accessed while a child
-                // frame is live, and each frame is removed before its parent
-                // resumes structural traversal.
-                let value = unsafe { frame.value.as_mut() };
-                let control = visitor.visit(value, context)?;
+                // SAFETY: this is the top unentered frame, it has no cursor,
+                // and all ancestors remain suspended for the callback.
+                let control = unsafe { frame.visit(visitor) }?;
                 frame.entered = true;
                 if control != JsonTreeControl::Descend {
                     frame.finished = true;
                 }
                 continue;
             }
-            if let Some(child) = stack[index].next_child() {
+            // SAFETY: only the active top frame is advanced, after its visitor
+            // returned and its previously yielded child frame has been popped.
+            if let Some(child) = unsafe { stack[index].next_child() } {
                 stack.push(child);
                 continue;
             }

@@ -56,8 +56,16 @@ impl MutChildCursor {
     ///
     /// A cursor over the root's direct children, or an empty cursor for a
     /// scalar value.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must identify a live value inside the exclusively borrowed
+    /// root and have no conflicting borrow. The value must remain stable, with
+    /// its container structure and backing allocation unchanged, until this
+    /// cursor and every frame it yields are dropped. Ancestor frames must
+    /// remain suspended while this cursor is active.
     #[must_use]
-    pub(in crate::value::traverse) fn new(mut value: NonNull<Value>) -> Self {
+    pub(in crate::value::traverse) unsafe fn new(mut value: NonNull<Value>) -> Self {
         // SAFETY: the pointer originates from the caller's exclusive root
         // borrow, and no child cursor or visitor borrow of this node is live.
         match unsafe { value.as_mut() } {
@@ -89,11 +97,20 @@ impl MutChildCursor {
     /// `Some` with the next child frame, or `None` when the cursor is empty or
     /// has no remaining children.
     ///
+    /// # Safety
+    ///
+    /// The parent container must remain alive and structurally stable while
+    /// the cursor is active. Any child frame yielded by the previous call and
+    /// all its descendants must be dropped before advancing this cursor.
+    ///
     /// # Panics
     ///
     /// Panics when `parent_depth` is `usize::MAX` and the child depth cannot be
     /// represented.
-    pub(in crate::value::traverse) fn next(&mut self, parent_depth: usize) -> Option<MutFrame> {
+    pub(in crate::value::traverse) unsafe fn next(
+        &mut self,
+        parent_depth: usize,
+    ) -> Option<MutFrame> {
         let depth = parent_depth
             .checked_add(1)
             .expect("a materialized JSON tree cannot have usize::MAX nesting depth");
@@ -106,11 +123,15 @@ impl MutChildCursor {
                 let index = *next;
                 let child = values.get_mut(index)?;
                 *next = next.checked_add(1)?;
-                Some(MutFrame::child(OwnedLocation::ArrayElement(index), depth, child))
+                // SAFETY: this child belongs to the stable parent array, and
+                // the cursor will not advance again until the child frame drops.
+                Some(unsafe { MutFrame::child(OwnedLocation::ArrayElement(index), depth, child) })
             }
-            Self::Object { iter } => iter
-                .next()
-                .map(|(key, child)| MutFrame::child(OwnedLocation::ObjectValue(key.clone()), depth, child)),
+            Self::Object { iter } => iter.next().map(|(key, child)| {
+                // SAFETY: the iterator yields a disjoint value in the stable
+                // parent object; it advances again only after this frame drops.
+                unsafe { MutFrame::child(OwnedLocation::ObjectValue(key.clone()), depth, child) }
+            }),
             Self::Empty => None,
         }
     }
