@@ -221,7 +221,11 @@ raw-text entry point when JCS number and duplicate-key rules are required.
 JCS numbers follow the IEEE 754 binary64 model. A value containing
 `9007199254740993` can therefore produce the canonical number
 `9007199254740992`. Represent an integer as a JSON string when its exact digits
-must survive canonicalization.
+must survive canonicalization. With `arbitrary_precision`, a `Number` that is
+stored but cannot be represented as a finite binary64 value is still rejected
+by the JCS encoder. The inner serialization error is `NonFiniteFloat` in the
+`Number` category; the outer JCS error remains `Serialize`. Diagnostics do not
+retain the original number token.
 
 `to_vec` and `to_string` return a complete result. Serialization into their
 temporary buffer does not publish output charges on failure. `write_buffered`
@@ -837,10 +841,15 @@ binary rounding should use a string or explicit domain representation. See the
 - An `UnexpectedTopLevel` error: compare `expected_top_level()` with
   `actual_top_level()`, then either fix the payload or select a decoder method
   whose root contract matches it.
-- A `Deserialize` error: the JSON was admitted but does not match the target
-  type; fix the payload or target schema. This typed-deserialization behavior
-  is separate from JCS Value construction, which returns
-  `JcsDecodeError::MaterializationDepthLimit` at the fixed 127-container
+- A `Deserialize` error: first inspect
+  `materialization_error_reason()`. `DuplicateKey` identifies repeated object
+  keys (see [Duplicate object keys](#duplicate-object-keys)); `DepthLimit { limit }`
+  identifies serde_json's fixed construction limit, independent of configured
+  `max_depth`; `InvalidNumber` identifies a defensive number-materialization
+  failure. Save this reason before calling `into_source()`. If it is `None`,
+  then investigate the target schema, custom seed, or Serde construction
+  protection. Typed-deserialization behavior is separate from JCS Value
+  construction, which returns `JcsDecodeError::MaterializationDepthLimit` at the fixed 127-container
   boundary. For JCS, handle `Decode`, `DuplicateKey`, and
   `MaterializationDepthLimit` explicitly; the latter two include the relevant
   source line and column.
