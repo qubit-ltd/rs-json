@@ -30,11 +30,12 @@ use super::internal::JsonValueVisitor;
 /// bytes are unavailable.
 ///
 /// Do not pass this seed to [`crate::decode::JsonDecoder::decode_seed_str`] or
-/// [`crate::decode::JsonDecoder::decode_seed_utf8`] when its transaction and
-/// the decoder represent the same logical decoded-value budget. `JsonDecoder`
-/// already accounts the complete value during lexical admission, so the seed
-/// would charge that value a second time. In that pipeline, use a seed that
-/// performs only domain deserialization and domain-specific checks.
+/// [`crate::decode::JsonDecoder::decode_seed_utf8`] or
+/// [`crate::decode::JsonDecoder::decode_unique_seed_utf8`] when its transaction
+/// and the decoder represent the same logical decoded-value budget.
+/// `JsonDecoder` already accounts the complete value during lexical admission,
+/// so the seed would charge that value a second time. In that pipeline, use a
+/// seed that performs only domain deserialization and domain-specific checks.
 ///
 /// # Type Parameters
 ///

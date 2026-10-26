@@ -323,6 +323,62 @@ where
         self.engine.decode_seed_utf8(seed, input, self.diagnostic_policy)
     }
 
+    /// Decodes a unique-key JSON document into an owned target.
+    ///
+    /// The document is first materialized under the strict number contract,
+    /// then exposed as native Serde events even with `arbitrary_precision`.
+    /// Construction accepts at most 127 nested containers. Targets cannot
+    /// borrow the input, and RawValue targets receive reconstructed JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input, syntax, budget, duplicate-key, construction-depth,
+    /// or target-deserialization error. Value usage commits only on success.
+    pub fn decode_unique_str<T>(&mut self, input: &str) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        T: DeserializeOwned,
+    {
+        self.decode_unique_utf8(input.as_bytes())
+    }
+
+    /// Decodes a unique-key UTF-8 JSON document into an owned target.
+    ///
+    /// See [`Self::decode_unique_str`] for numeric and materialization rules.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input, UTF-8, syntax, budget, materialization, or target
+    /// error.
+    pub fn decode_unique_utf8<T>(&mut self, input: &[u8]) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        T: DeserializeOwned,
+    {
+        self.decode_unique_seed_utf8(TypedSeed::new(), input)
+    }
+
+    /// Decodes unique-key JSON through a seed producing an owned result.
+    ///
+    /// The seed receives native scalar, sequence, and map events from an
+    /// intermediate strict JSON tree. Input and value budgets cover the source
+    /// document. The temporary tree and target can coexist during decoding;
+    /// these lexical budgets are not a precise heap-memory bound.
+    /// Object iteration follows `serde_json::Map` ordering. The target's own
+    /// Serde semantics still apply: use `DuplicateKeyRejectingJsonValue`
+    /// instead of a bare `serde_json::Value` to preserve literal private keys.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured decode error for input admission, invalid syntax,
+    /// duplicate keys, more than 127 nested containers, or seed failure.
+    /// Materialization errors retain source coordinates; target errors have
+    /// no original source position and are redacted by default.
+    pub fn decode_unique_seed_utf8<S, T>(&mut self, seed: S, input: &[u8]) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        S: for<'de> DeserializeSeed<'de, Value = T>,
+    {
+        self.engine.decode_unique_seed_utf8(seed, input, self.diagnostic_policy)
+    }
+
     /// Decodes a complete JSON string while requiring a top-level object.
     ///
     /// The top-level check is performed before the decoded value is committed,

@@ -98,6 +98,7 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 | 输入契约 | API |
 | --- | --- |
 | 输入必须已经是完整、严格的 JSON | `JsonDecoder` |
+| 拥有结果所有权、拒绝重复键，并在 feature 合并后仍提供原生数字事件 | `JsonDecoder::decode_unique_str` / `decode_unique_utf8` / `decode_unique_seed_utf8` |
 | 从字节输入源读取到 EOF，并生成拥有所有权的结果 | `JsonDecoder::decode_input` |
 | 严格解码前允许清理指定的展示痕迹 | 使用显式策略构造的 `NormalizingJsonDecoder` |
 | 需要检查规范化结果、重复解码，或让结果借用规范化文本 | 先调用 `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`，再由 `NormalizingJsonDecoder::decode_precharged_document`、`decode_precharged_object_document` 或 `decode_precharged_array_document` 解码 |

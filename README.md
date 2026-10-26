@@ -111,6 +111,7 @@ happens to parse:
 | Input contract | API |
 | --- | --- |
 | Input must already be complete, strict JSON | `JsonDecoder` |
+| An owned document must reject duplicate keys and preserve native numeric events across feature unification | `JsonDecoder::decode_unique_str` / `decode_unique_utf8` / `decode_unique_seed_utf8` |
 | A byte-oriented source should be read through EOF into an owned result | `JsonDecoder::decode_input` |
 | Specific presentation artifacts are allowed before strict decoding | `NormalizingJsonDecoder` with an explicit policy |
 | Normalized text must be inspected, decoded repeatedly, or borrowed by the result | `NormalizingJsonDecoder::prepare_str` / `prepare_utf8`, followed by `NormalizingJsonDecoder::decode_precharged_document`, `decode_precharged_object_document`, or `decode_precharged_array_document` |

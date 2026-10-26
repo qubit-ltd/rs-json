@@ -10,9 +10,27 @@
 use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use qubit_json::value::DuplicateKeyRejectingJsonValueSeed;
 use serde::de::DeserializeSeed;
+use serde::de::value::Error as ValueError;
+use serde::de::value::MapDeserializer;
 use serde_json::Deserializer;
 use serde_json::from_str;
 use serde_json::json;
+
+#[test]
+fn test_duplicate_key_rejecting_seed_preserves_native_map_events() {
+    for key in [
+        "ordinary",
+        "$serde_json::private::RawValue",
+        "$serde_json::private::Number",
+    ] {
+        let deserializer = MapDeserializer::<_, ValueError>::new([(key, "[1.5]")].into_iter());
+        let value = DuplicateKeyRejectingJsonValueSeed::new()
+            .deserialize(deserializer)
+            .expect("native map fields must remain literal")
+            .into_inner();
+        assert_eq!(value, json!({key: "[1.5]"}));
+    }
+}
 
 /// Verifies strict values retain valid nested JSON documents.
 #[test]

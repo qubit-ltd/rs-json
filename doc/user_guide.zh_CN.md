@@ -417,8 +417,8 @@ fn main() -> Result<(), JsonDecodeError> {
 `serde_json::Value` 与 `serde_json::Map` 采用“后值覆盖前值”，许多派生结构体则会拒绝重复的
 已知字段。因此，应通过目标类型表达文档契约，不能把严格准入理解为自动校验键唯一。
 
-动态 JSON 若要求每层对象的键都唯一，可将严格文本准入与
-`DuplicateKeyRejectingJsonValue` 组合：
+动态 JSON 若要求每层对象的键都唯一，并在 `arbitrary_precision` feature 合并后仍保留数字类型，
+可将 `decode_unique_str` 与 `DuplicateKeyRejectingJsonValue` 组合：
 
 ```rust
 use qubit_budget::json::JsonDecodeLimits;
@@ -448,7 +448,7 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 
     let mut unique_key_decoder = JsonDecoder::with_limits(limits);
     let error = unique_key_decoder
-        .decode_str::<DuplicateKeyRejectingJsonValue>(input)
+        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(input)
         .expect_err("duplicate object keys must be rejected");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
     Ok(())
@@ -479,16 +479,20 @@ assert_eq!(projected.as_array().unwrap().len(), 3);
 assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
 
 let mut literal_decoder = JsonDecoder::with_limits(limits);
-let literal: DuplicateKeyRejectingJsonValue = literal_decoder.decode_str(text)?;
+let literal: DuplicateKeyRejectingJsonValue = literal_decoder.decode_unique_str(text)?;
 let literal = literal.into_inner();
 assert!(literal.is_object());
 assert_eq!(literal["$serde_json::private::RawValue"], "[1,2,3]");
 # Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
 ```
 
-`DuplicateKeyRejectingJsonValue` 会按字面保留这个标记键对象，并递归拒绝重复键。它还会执行重复键校验和自身的物化工作，
-因此代价不同于普通 `Value` 投影。启用 `arbitrary_precision` 后，上游 Serde 可能把数字作为 map 形状事件提供；包装器无法判断事件来源，
-会将其视为普通对象。文本准入无法恢复这些事件的来源信息。
+唯一键入口先构造严格值树，再调用目标反序列化；规范构造的数字即使在 `arbitrary_precision` 下也会作为原生事件提供。
+这些入口要求目标拥有数据所有权，最多接受 127 层容器；中间树和目标可能同时占用内存，对象迭代顺序遵循
+`serde_json::Map`。RawValue 目标得到重建后的 JSON，而非原始词法表示。重复键和深度错误保留源坐标，
+目标反序列化错误没有原始源码位置。失败时已接受的输入计费保留，源值预算仅在整个操作成功后提交。
+
+`DuplicateKeyRejectingJsonValue` 会按字面保留标记键对象。裸 `serde_json::Value` 目标仍遵循其自身的私有键投影规则，
+即使用于唯一键入口也如此。
 
 该包装类型会递归检查嵌套对象；如果输入契约本来就包含文本规范化，也可将它作为
 `NormalizingJsonDecoder` 的目标类型。调用方自行持有 Serde 反序列化器时，可使用对应的
@@ -496,7 +500,8 @@ assert_eq!(literal["$serde_json::private::RawValue"], "[1,2,3]");
 
 原生 `i64`、`u64` 和有限 `f64` 事件会保留各自的数字表示。启用
 `arbitrary_precision` 的上游反序列化器可能把数字作为 map 事件提供；包装器无法判断这些事件的来源，
-因此会把它们当作普通对象处理。先用 `JsonDecoder` 扫描文本也不会恢复来源信息。详见
+因此会把它们当作普通对象处理。普通 `decode_str` 和 `decode_seed_utf8` 的准入不会恢复来源信息；
+完整且拥有结果所有权的 JSON 文档应使用 `decode_unique_*` 方法。通用 Serde 入口继续保持原有事件语义。详见
 [JSON 数字契约](number_contract.zh_CN.md)。JCS 使用 binary64，超出其精确范围的整数会舍入，
 不能作为精确整数表示的通用替代方案。
 

@@ -26,6 +26,8 @@ use super::internal::DuplicateKeyRejectingJsonVisitor;
 /// representation. See [`DuplicateKeyRejectingJsonValue`] for the corresponding
 /// wrapper behavior and `doc/number_contract.md` in the repository for the
 /// numeric contract.
+/// For complete JSON input with native numeric events across feature
+/// unification, use [`crate::decode::JsonDecoder::decode_unique_seed_utf8`].
 ///
 /// # Examples
 ///

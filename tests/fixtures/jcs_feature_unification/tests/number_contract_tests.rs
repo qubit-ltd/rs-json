@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+#[cfg(feature = "arbitrary_precision")]
+use qubit_budget::ResourceLimit;
 use qubit_budget::json::JsonDecodeLimits;
 #[cfg(feature = "arbitrary_precision")]
 use qubit_budget::json::JsonEncodeLimits;
@@ -14,8 +16,6 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-#[cfg(feature = "arbitrary_precision")]
-use qubit_budget::ResourceLimit;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 #[cfg(feature = "arbitrary_precision")]
@@ -26,12 +26,12 @@ use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use qubit_json::value::DuplicateKeyRejectingJsonValueSeed;
 use qubit_json::value::JsonValueEncoder;
 use qubit_json::value::traverse::JsonTreeBudgetTracker;
+use serde::Serialize;
+use serde::Serializer;
 use serde::de::DeserializeSeed;
 use serde::de::value::I128Deserializer;
 use serde::de::value::U128Deserializer;
 use serde::ser::SerializeMap;
-use serde::Serialize;
-use serde::Serializer;
 use serde_json::Number;
 use serde_json::Value;
 use serde_json::from_value;
@@ -39,6 +39,103 @@ use serde_json::to_vec;
 
 /// Emits a single scalar map key for cross-encoder contract checks.
 struct FloatKeyProbe<T>(T);
+
+#[test]
+fn test_unique_key_values_preserve_numbers_across_feature_unification() {
+    for (text, expected) in [
+        ("1.5", 1.5_f64),
+        ("1e2", 100.0),
+        ("-0", -0.0),
+        ("0e+10", 0.0),
+        ("-1e-400", -0.0),
+        ("5e-324", f64::from_bits(1)),
+    ] {
+        let value: DuplicateKeyRejectingJsonValue = JsonDecoder::unlimited()
+            .decode_unique_str(text)
+            .expect("a finite number must decode");
+        assert_eq!(
+            value.into_inner().as_f64().map(f64::to_bits),
+            Some(expected.to_bits()),
+            "number must retain its type and sign: {text}",
+        );
+    }
+}
+
+#[test]
+fn test_unique_decoder_preserves_integer_union_and_rejects_overflow() {
+    let unsigned: DuplicateKeyRejectingJsonValue = JsonDecoder::unlimited()
+        .decode_unique_str("18446744073709551615")
+        .expect("u64 maximum must remain exact");
+    assert_eq!(unsigned.into_inner().as_u64(), Some(u64::MAX));
+    let signed: DuplicateKeyRejectingJsonValue = JsonDecoder::unlimited()
+        .decode_unique_str("-9223372036854775808")
+        .expect("i64 minimum must remain exact");
+    assert_eq!(signed.into_inner().as_i64(), Some(i64::MIN));
+    for text in ["18446744073709551616", "-9223372036854775809", "1e400"] {
+        let error = JsonDecoder::unlimited()
+            .decode_unique_str::<DuplicateKeyRejectingJsonValue>(text)
+            .expect_err("wide numbers must not bypass strict source admission");
+        assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+    }
+}
+
+#[test]
+fn test_unique_key_values_preserve_nested_numbers_and_marker_objects() {
+    let text = r#"{"amount":1.5,"items":[1e2,-0],"marker":{"$serde_json::private::Number":"1.5"}}"#;
+    let value = JsonDecoder::unlimited()
+        .decode_unique_seed_utf8(DuplicateKeyRejectingJsonValueSeed::new(), text.as_bytes())
+        .expect("nested numbers and marker objects must decode")
+        .into_inner();
+    assert_eq!(value["amount"].as_f64(), Some(1.5));
+    assert_eq!(value["items"][0].as_f64(), Some(100.0));
+    assert_eq!(value["items"][1].as_f64().map(f64::to_bits), Some((-0.0_f64).to_bits()));
+    assert_eq!(value["marker"]["$serde_json::private::Number"], "1.5");
+    assert!(
+        JsonDecoder::unlimited()
+            .decode_unique_str::<DuplicateKeyRejectingJsonValue>(r#"{"amount":1.5,"amount":2.5}"#)
+            .is_err()
+    );
+}
+
+#[test]
+fn test_unique_key_values_preserve_raw_marker_objects() {
+    let text = r#"{"$serde_json::private::RawValue":"[1.5]","other":1.5}"#;
+    let value: DuplicateKeyRejectingJsonValue = JsonDecoder::unlimited()
+        .decode_unique_str(text)
+        .expect("source marker-named fields must remain literal");
+    let value = value.into_inner();
+    assert_eq!(value["$serde_json::private::RawValue"], "[1.5]");
+    assert_eq!(value["other"].as_f64(), Some(1.5));
+    let decoded: DuplicateKeyRejectingJsonValue = JsonDecoder::unlimited()
+        .decode_unique_utf8(&to_vec(&value).unwrap())
+        .expect("re-encoded marker objects must remain literal");
+    assert_eq!(decoded.into_inner(), value);
+}
+
+#[test]
+fn test_unique_key_values_reject_nested_decoded_duplicate_keys() {
+    let error = JsonDecoder::unlimited()
+        .with_diagnostic_policy(qubit_json::decode::DiagnosticPolicy::Detailed)
+        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(r#"{"items":[{"amount":1.5,"\u0061mount":2.5}]}"#)
+        .expect_err("decoded duplicate keys must still be rejected");
+    assert!(error.to_string().contains("duplicate JSON object key"));
+    assert_eq!(error.line(), Some(1));
+    assert!(error.column().is_some_and(|column| column > 0));
+}
+
+#[test]
+fn test_unique_decoder_supports_typed_containers_and_enum() {
+    let value: std::collections::BTreeMap<u64, Vec<Option<f64>>> = JsonDecoder::unlimited()
+        .decode_unique_str(r#"{"42":[1.5,null,-0]}"#)
+        .expect("typed map keys and options must decode");
+    assert_eq!(value[&42][0], Some(1.5));
+    assert_eq!(value[&42][1], None);
+    assert_eq!(value[&42][2].map(f64::to_bits), Some((-0.0_f64).to_bits()));
+    let value: Result<(f64, bool), String> = JsonDecoder::unlimited()
+        .decode_unique_str(r#"{"Ok":[1.5,true]}"#)
+        .expect("externally tagged enums must decode");
+    assert_eq!(value, Ok((1.5, true)));
+}
 
 impl<T: Serialize> Serialize for FloatKeyProbe<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

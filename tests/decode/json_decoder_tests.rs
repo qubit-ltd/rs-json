@@ -25,11 +25,120 @@ use qubit_json::decode::JsonDecodeErrorSource;
 use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonSyntaxErrorReason;
+use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
 use serde::de::Error as DeError;
 use serde_json::Value;
 use serde_json::json;
+
+#[derive(Debug, serde::Deserialize, PartialEq)]
+#[serde(untagged)]
+enum UniqueUntaggedValue {
+    Empty(Vec<()>),
+    Json(DuplicateKeyRejectingJsonValue),
+}
+
+#[derive(Debug, serde::Deserialize, PartialEq)]
+enum UniqueEnum {
+    Unit,
+    New(f64),
+    Tuple(f64, bool),
+    Struct { amount: f64 },
+}
+
+#[derive(serde::Deserialize)]
+struct UniqueNewtype(f64);
+
+#[test]
+fn test_unique_decoder_exposes_native_events_before_untagged_buffering() {
+    let decoded: UniqueUntaggedValue = JsonDecoder::unlimited()
+        .decode_unique_str(r#"{"amount":1.5,"$serde_json::private::RawValue":"null"}"#)
+        .expect("untagged buffering must receive native numeric events");
+    let UniqueUntaggedValue::Json(value) = decoded else {
+        panic!("an object must select the JSON variant");
+    };
+    assert_eq!(
+        value.into_inner(),
+        json!({"amount": 1.5, "$serde_json::private::RawValue": "null"})
+    );
+}
+
+#[test]
+fn test_unique_decoder_supports_enum_newtype_and_raw_targets() {
+    for (input, expected) in [
+        (r#""Unit""#, UniqueEnum::Unit),
+        (r#"{"New":1.5}"#, UniqueEnum::New(1.5)),
+        (r#"{"Tuple":[1.5,true]}"#, UniqueEnum::Tuple(1.5, true)),
+        (r#"{"Struct":{"amount":1.5}}"#, UniqueEnum::Struct { amount: 1.5 }),
+    ] {
+        assert_eq!(
+            JsonDecoder::unlimited().decode_unique_str::<UniqueEnum>(input).unwrap(),
+            expected
+        );
+    }
+    assert_eq!(
+        JsonDecoder::unlimited()
+            .decode_unique_str::<UniqueNewtype>("1.5")
+            .unwrap()
+            .0,
+        1.5
+    );
+    let raw: Box<serde_json::value::RawValue> = JsonDecoder::unlimited()
+        .decode_unique_str(r#"{"amount":1.5}"#)
+        .expect("owned RawValue targets must be reconstructed");
+    assert_eq!(raw.get(), r#"{"amount":1.5}"#);
+    for input in [r#"{"New":1.5,"Unit":null}"#, r#"{"Tuple":[1.5,true,7]}"#] {
+        assert!(JsonDecoder::unlimited().decode_unique_str::<UniqueEnum>(input).is_err());
+    }
+}
+
+#[test]
+fn test_unique_decoder_retains_input_charges_and_rolls_back_value_failures() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(64)
+        .max_nodes(3)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    assert!(decoder.decode_unique_seed_utf8(FailingSeed, b"[1]").is_err());
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 3);
+    let duplicate = "{\n \"x\":1,\"x\":2}";
+    let error = decoder
+        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(duplicate)
+        .unwrap_err();
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.line(), Some(2));
+    assert_eq!(error.column(), Some(8));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 3 + duplicate.len());
+    assert_eq!(decoder.decode_unique_str::<Vec<u8>>("[1]").unwrap(), vec![1]);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
+    let error = decoder.decode_unique_str::<Vec<u8>>("[2]").unwrap_err();
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
+}
+
+#[test]
+fn test_unique_decoder_bounds_materialization_and_preserves_syntax_admission() {
+    JsonDecoder::unlimited()
+        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(&nested_array(127))
+        .expect("127 nested containers must fit");
+    let error = JsonDecoder::unlimited()
+        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(&nested_array(128))
+        .unwrap_err();
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.column(), Some(128));
+    assert!(
+        JsonDecoder::unlimited()
+            .decode_unique_str::<bool>("true false")
+            .is_err()
+    );
+    let error = JsonDecoder::unlimited()
+        .decode_unique_utf8::<bool>(&[0xff])
+        .unwrap_err();
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
+}
 
 struct FailingSeed;
 

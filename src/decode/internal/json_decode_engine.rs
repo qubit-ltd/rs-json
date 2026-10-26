@@ -16,6 +16,7 @@ use qubit_budget::json::JsonDecodeAttempt;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_io::Input;
 use serde::de::DeserializeSeed;
+use serde::de::Error as _;
 use serde_json::from_slice;
 use serde_json::value::RawValue;
 
@@ -32,14 +33,10 @@ use crate::decode::JsonDecodeStage;
 use crate::decode::JsonRootKind;
 use crate::decode::NormalizedJsonDocument;
 use crate::lexical::JsonLexicalError;
-#[cfg(feature = "jcs")]
 use crate::lexical::JsonLexicalScanner;
 use crate::lexical::JsonNumberModel;
-#[cfg(feature = "jcs")]
 use crate::lexical::line_column_at;
-#[cfg(feature = "jcs")]
-use crate::value::internal::JsonValueMaterializationError as JcsMaterializationError;
-#[cfg(feature = "jcs")]
+use crate::value::internal::JsonValueMaterializationError;
 use crate::value::internal::LexicalJsonValueBuilder;
 
 /// Shared generic execution core used by both public decoder facades.
@@ -200,6 +197,56 @@ where
         S: DeserializeSeed<'de>,
     {
         self.decode_seed_utf8_with_number_model(seed, input, diagnostic_policy, JsonNumberModel::Integer64)
+    }
+
+    /// Admits a unique-key document and deserializes native events atomically.
+    ///
+    /// Returns a decode error for admission, materialization, or seed failure;
+    /// input charges remain consumed while staged value charges roll back.
+    pub(in crate::decode) fn decode_unique_seed_utf8<S, T>(
+        &mut self,
+        seed: S,
+        input: &[u8],
+        diagnostic_policy: DiagnosticPolicy,
+    ) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        S: for<'de> DeserializeSeed<'de, Value = T>,
+    {
+        let metadata = DecodeMetadata {
+            raw_input_bytes: input.len(),
+            normalized_input_bytes: None,
+            diagnostic_policy,
+            number_model: JsonNumberModel::Integer64,
+        };
+        let has_value_limits = self.session.value_budget().limits().has_limits();
+        let mut attempt = self.session.begin_value();
+        Self::prepare_attempt(&mut attempt, input, metadata, true, has_value_limits)?;
+        let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Integer64);
+        JsonLexicalScanner::new(attempt.value_transaction_mut(), false)
+            .scan_with_events(input, |event| builder.accept(event))
+            .map_err(|error| Self::map_lexical_error(error, input, metadata))?;
+        let tree = builder.finish().map_err(|error| {
+            let (message, offset) = match error {
+                JsonValueMaterializationError::DuplicateKey { offset } => ("duplicate JSON object key", offset),
+                JsonValueMaterializationError::DepthLimit { offset, .. } => {
+                    ("JSON materialization depth limit exceeded", offset)
+                }
+                JsonValueMaterializationError::InvalidNumber { offset } => ("invalid strict JSON number", offset),
+            };
+            let (line, column) = line_column_at(input, offset);
+            let error = serde_json::Error::custom(format_args!("{message} at line {line} column {column}"));
+            JsonDecodeError::deserialize(error, input.len(), None, diagnostic_policy)
+        })?;
+        // The builder constructs canonical i64/u64/f64 Numbers. Unlike direct
+        // arbitrary-precision text parsing, Value deserialization exposes these
+        // as native numeric events, without guessing map-key provenance.
+        let value = seed
+            .deserialize(tree)
+            .map_err(|error| JsonDecodeError::deserialize(error, input.len(), None, diagnostic_policy))?;
+        attempt.commit().map_err(|error| {
+            JsonDecodeError::budget(error, JsonDecodeStage::Admission, input.len(), None, diagnostic_policy)
+        })?;
+        Ok(value)
     }
 
     /// Decodes a complete document with an explicit internal number contract.
@@ -582,15 +629,15 @@ where
         }
         let value = match builder.finish() {
             Ok(value) => value,
-            Err(JcsMaterializationError::DuplicateKey { offset }) => {
+            Err(JsonValueMaterializationError::DuplicateKey { offset }) => {
                 let (line, column) = line_column_at(input, offset);
                 return Err(JcsDecodeError::DuplicateKey { line, column });
             }
-            Err(JcsMaterializationError::DepthLimit { offset, limit }) => {
+            Err(JsonValueMaterializationError::DepthLimit { offset, limit }) => {
                 let (line, column) = line_column_at(input, offset);
                 return Err(JcsDecodeError::MaterializationDepthLimit { limit, line, column });
             }
-            Err(JcsMaterializationError::InvalidNumber { offset }) => {
+            Err(JsonValueMaterializationError::InvalidNumber { offset }) => {
                 let (line, column) = line_column_at(input, offset);
                 let failure = crate::lexical::JsonLexicalFailure {
                     offset,

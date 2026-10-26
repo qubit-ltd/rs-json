@@ -58,6 +58,7 @@ JCS `Value` 构造最多接受 127 层嵌套容器。`JsonValueEncoder` 投影�
 
 数字规则取决于入口：
 
+- `JsonDecoder::decode_unique_str`、`decode_unique_utf8` 和 `decode_unique_seed_utf8` 先准入源文档，按严格整数/有限 f64 契约构造无重复键的树，再将规范构造的 `Number` 作为原生数字事件交给 Serde。即使启用 `arbitrary_precision`，也无需猜测对象键的含义即可保留数字类型。结果拥有数据所有权，物化最多接受 127 层容器；仅在目标反序列化成功后提交源值预算。中间树会增加内存开销，目标反序列化错误没有原始源码坐标。目标自身的 Serde 语义仍然适用；需要按字面保留私有同名字段对象时，应选择 `DuplicateKeyRejectingJsonValue`。
 - 文本解码、规范化解码、普通序列化及 Serde 原生整数事件采用上文普通契约。`i128`/`u128` 只有能表示为相应 `i64` 或 `u64` 时才接受。
 - `AccountingJsonValueSeed` 与 `DuplicateKeyRejectingJsonValueSeed` 接收的是已解码事件，而不是源文本，因此都看不到原始 number lexeme。`AccountingJsonValueSeed` 会检查原生整数事件是否在 64 位范围内，并按构造后 `Number` 的紧凑显示长度执行 `NumberBytes` 预算；该长度可能与源 token 长度不同。`DuplicateKeyRejectingJsonValueSeed` 只检查重复键，本身不执行资源预算。如果 `arbitrary_precision` 将数字呈现为 map 事件，任一 seed 都无法区分它与同形状的真实对象，因此按对象保留。需要可靠文本来源时，使用受控文本、RawValue 或 JCS 入口。
 - `JsonTreeReader` 读取的是已存在的 `serde_json::Value`，按 Number 当前紧凑显示表示的字节长度计量；不转换为 `f64`，也不套用普通文本 encoder 的范围限制。启用 `arbitrary_precision` 后，已有的 `1e400` 可安全计量，39 位整数则按 39 字节计费。普通 `JsonEncoder` 与 `JcsEncoder` 仍会拒绝超出各自契约的数字。

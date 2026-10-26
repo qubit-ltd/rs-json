@@ -28,6 +28,8 @@ pub use duplicate_key_rejecting_json_value_seed::DuplicateKeyRejectingJsonValueS
 /// [`crate::decode::JsonDecoder`] does not change the subsequent Serde event
 /// representation. See `doc/number_contract.md` in the repository for the
 /// numeric contract.
+/// Use [`crate::decode::JsonDecoder::decode_unique_str`] for owned JSON text
+/// decoding that preserves native numbers under feature unification.
 ///
 /// # Examples
 ///
