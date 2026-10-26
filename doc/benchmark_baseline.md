@@ -109,15 +109,15 @@ output buffers; they are total requested allocation traffic, not auxiliary
 working bytes, peak live memory, or process RSS. The prebuilt input `Value` and
 diagnostic formatting are outside the measured operation.
 
-+### Bounded JCS stack-growth observation (2026-10-26)
+### Bounded JCS stack-growth observation (2026-10-26)
 
 The existing single-child-array depth fixture was sampled at revision
 `44b70043ef6ded7de68bd6fd6e22581e1b720fef` with Rust 1.94.0, an Intel Core
 i5-9600K, Ubuntu 24.04.4 (Linux 7.0.0-38-generic), and Rust's `System`
 allocator. The CPU governor was `powersave`; CPUs 0–5 were available and no
 CPU affinity was set. The locked run used `serde_json 1.0.154`,
-`serde_json_canonicalizer 0.4.1`, `qubit-budget 0.10.0`, and `criterion
-0.8.2`; the `Cargo.lock` SHA-256 was
+`serde_json_canonicalizer 0.4.1`, `qubit-budget 0.10.0`, and `criterion 0.8.2`;
+the `Cargo.lock` SHA-256 was
 `ae1dfa7427aef55f7c6cd96ea3661d274070d1c6a8de2051e84a4a369cb78a52`. The
 finite fixture used a 1 MiB working-memory limit and exact output, depth, and
 node limits. Criterion used its default 100 samples per case. The commands
@@ -129,7 +129,7 @@ JCS_RENDERER_ALLOCATION_DIAGNOSTICS=1 cargo bench --locked --features 'jcs jcs-a
 cargo bench --locked --features jcs --bench jcs_bench -- jcs-encode --noplot --save-baseline rj002-before
 ```
 
-| Depth | Unlimited estimate (interval) | Finite estimate (interval) | Stack growths, unlimited / finite | Finite cumulative requested stack bytes |
+| Depth | Unlimited estimate (reported confidence interval) | Finite estimate (reported confidence interval) | Stack growths, unlimited / finite | Finite cumulative requested stack bytes |
 | ---: | ---: | ---: | ---: | ---: |
 | 32 | 1.4781 µs (1.3486–1.6258) | 3.4467 µs (3.3876–3.5111) | 5 / 32 | 16,896 |
 | 128 | 3.0330 µs (3.0160–3.0521) | 11.908 µs (11.728–12.163) | 7 / 128 | 264,192 |
