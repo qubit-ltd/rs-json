@@ -9,3 +9,5 @@
 
 pub(crate) mod decode_path;
 pub(crate) mod fixtures;
+pub(crate) mod structural_decode;
+pub(crate) mod structural_fixtures;
