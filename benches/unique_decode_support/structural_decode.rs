@@ -179,8 +179,13 @@ pub(crate) fn assert_decoded(decoded: &StructuralDecoded, fixture: &StructuralFi
             let actual = actual.as_array().expect("record array decodes to array Value");
             assert_eq!(actual.len(), want.len());
             for (value, record) in actual.iter().zip(want) {
-                assert_eq!(value["id"], record.id);
-                assert_eq!(value["payload"], record.payload);
+                let object = value.as_object().expect("record Value must be an object");
+                assert_eq!(object.len(), 2);
+                assert_eq!(object.get("id"), Some(&serde_json::Value::from(record.id)));
+                assert_eq!(
+                    object.get("payload").and_then(serde_json::Value::as_str),
+                    Some(record.payload.as_str())
+                );
             }
         }
         (StructuralDecoded::Object(actual), StructuralExpected::Object(want)) => {
