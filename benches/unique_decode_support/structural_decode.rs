@@ -87,9 +87,7 @@ fn decode_typed<T: DeserializeOwned>(
         DecodePath::OrdinaryTyped => decoder
             .decode_str::<T>(&fixture.text)
             .expect("ordinary typed structural fixture must decode"),
-        DecodePath::SerdeTyped => {
-            serde_json::from_str::<T>(&fixture.text).expect("serde typed fixture must decode")
-        }
+        DecodePath::SerdeTyped => serde_json::from_str::<T>(&fixture.text).expect("serde typed fixture must decode"),
         _ => unreachable!("typed dispatch requires a typed path"),
     }
 }
@@ -97,8 +95,7 @@ fn decode_typed<T: DeserializeOwned>(
 fn decode_direct_serde(path: DecodePath, fixture: &StructuralFixture) -> StructuralDecoded {
     match (path, fixture.shape) {
         (DecodePath::SerdeValue, _) => StructuralDecoded::Value(
-            serde_json::from_str(&fixture.text)
-                .expect("serde value structural fixture must decode"),
+            serde_json::from_str(&fixture.text).expect("serde value structural fixture must decode"),
         ),
         (DecodePath::SerdeTyped, StructuralShape::WideObject) => StructuralDecoded::Object(
             serde_json::from_str::<BTreeMap<String, String>>(&fixture.text)
@@ -132,29 +129,20 @@ pub(crate) fn decode_with_decoder(
                 .decode_str::<serde_json::Value>(&fixture.text)
                 .expect("ordinary value structural fixture must decode"),
         ),
-        (
-            DecodePath::UniqueTyped | DecodePath::UniqueSeed | DecodePath::OrdinaryTyped,
-            StructuralShape::WideObject,
-        ) => StructuralDecoded::Object(decode_typed::<BTreeMap<String, String>>(
-            path, fixture, decoder,
-        )),
+        (DecodePath::UniqueTyped | DecodePath::UniqueSeed | DecodePath::OrdinaryTyped, StructuralShape::WideObject) => {
+            StructuralDecoded::Object(decode_typed::<BTreeMap<String, String>>(path, fixture, decoder))
+        }
         (
             DecodePath::UniqueTyped | DecodePath::UniqueSeed | DecodePath::OrdinaryTyped,
             StructuralShape::RecordArray,
-        ) => StructuralDecoded::Records(decode_typed::<Vec<StructuralRecord>>(
-            path, fixture, decoder,
-        )),
+        ) => StructuralDecoded::Records(decode_typed::<Vec<StructuralRecord>>(path, fixture, decoder)),
         (DecodePath::SerdeTyped | DecodePath::SerdeValue, _) => {
             unreachable!("direct serde returned above")
         }
     }
 }
 
-pub(crate) fn decode_once(
-    path: DecodePath,
-    fixture: &StructuralFixture,
-    finite: bool,
-) -> StructuralDecoded {
+pub(crate) fn decode_once(path: DecodePath, fixture: &StructuralFixture, finite: bool) -> StructuralDecoded {
     if path.is_direct_serde() {
         return decode_direct_serde(path, fixture);
     }
@@ -181,21 +169,14 @@ pub(crate) fn assert_decoded(decoded: &StructuralDecoded, fixture: &StructuralFi
         .expect("successful fixture has expected content");
     match (decoded, expected) {
         (StructuralDecoded::Value(actual), StructuralExpected::Object(want)) => {
-            let actual = actual
-                .as_object()
-                .expect("wide object decodes to object Value");
+            let actual = actual.as_object().expect("wide object decodes to object Value");
             assert_eq!(actual.len(), want.len());
             for (key, value) in want {
-                assert_eq!(
-                    actual.get(key),
-                    Some(&serde_json::Value::String(value.clone()))
-                );
+                assert_eq!(actual.get(key), Some(&serde_json::Value::String(value.clone())));
             }
         }
         (StructuralDecoded::Value(actual), StructuralExpected::Records(want)) => {
-            let actual = actual
-                .as_array()
-                .expect("record array decodes to array Value");
+            let actual = actual.as_array().expect("record array decodes to array Value");
             assert_eq!(actual.len(), want.len());
             for (value, record) in actual.iter().zip(want) {
                 assert_eq!(value["id"], record.id);
