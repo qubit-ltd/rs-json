@@ -355,6 +355,7 @@ where
                     writer.into_result(result).map_err(JcsEncodeError::from_json_encode)
                 }
                 Err(JcsRendererError::WorkingMemory(error)) => Err(JcsEncodeError::working_memory(error)),
+                Err(JcsRendererError::Number(source)) => Err(JcsEncodeError::serialization(source)),
                 Err(JcsRendererError::Allocation) => Err(JcsEncodeError::serialization(JsonSerializationError::new(
                     JsonSerializationErrorKind::CustomSerialization,
                 ))),
@@ -397,6 +398,7 @@ where
         match JcsRenderer::render(value, &mut output, max_working_bytes) {
             Ok(()) => output.into_result(Ok(())).map_err(JcsEncodeError::from_json_encode),
             Err(JcsRendererError::WorkingMemory(error)) => Err(JcsEncodeError::working_memory(error)),
+            Err(JcsRendererError::Number(source)) => Err(JcsEncodeError::serialization(source)),
             Err(JcsRendererError::Allocation) => Err(JcsEncodeError::serialization(JsonSerializationError::new(
                 JsonSerializationErrorKind::CustomSerialization,
             ))),

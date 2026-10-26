@@ -10,12 +10,15 @@
 use std::cmp::Ordering;
 use std::io::Write;
 
+use serde_json::Number;
 use serde_json::Value;
 
 use super::jcs_renderer_error::JcsRendererError;
 use super::jcs_renderer_frame::JcsRendererFrame;
 use super::jcs_reserve_error::JcsReserveError;
 use super::jcs_working_memory::JcsWorkingMemory;
+use crate::encode::JsonSerializationError;
+use crate::encode::JsonSerializationErrorKind;
 
 /// Renders JSON values iteratively without allocating a recursive traversal
 /// stack.
@@ -89,7 +92,11 @@ impl JcsRenderer {
                                 current = Some(child);
                             }
                         }
-                        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+                        Value::Number(number) => {
+                            validate_number(number)?;
+                            serde_json_canonicalizer::to_writer(value, writer).map_err(JcsRendererError::Serialize)?;
+                        }
+                        Value::Null | Value::Bool(_) | Value::String(_) => {
                             serde_json_canonicalizer::to_writer(value, writer).map_err(JcsRendererError::Serialize)?;
                         }
                     }
@@ -133,6 +140,40 @@ impl JcsRenderer {
         #[cfg(feature = "jcs-allocation-diagnostics")]
         memory.report_diagnostics(result.is_ok());
         result
+    }
+}
+
+/// Validates that a number converts to a finite binary64 value without
+/// changing the number representation passed to the canonicalizer.
+///
+/// # Parameters
+///
+/// * `number` - Number at the current renderer position.
+///
+/// # Returns
+///
+/// Returns `Ok(())` when the number has a finite binary64 representation.
+///
+/// # Errors
+///
+/// Returns a privacy-safe number error for non-finite or unavailable binary64
+/// conversions.
+fn validate_number(number: &Number) -> Result<(), JcsRendererError> {
+    match number.as_f64() {
+        Some(value) if value.is_finite() => Ok(()),
+        Some(_) => Err(JcsRendererError::Number(JsonSerializationError::new(
+            JsonSerializationErrorKind::NonFiniteFloat,
+        ))),
+        None => {
+            // `serde_json` with `arbitrary_precision` filters non-finite
+            // parsed values from `as_f64`, so distinguish overflow without
+            // retaining or reporting the number text.
+            let kind = match number.to_string().parse::<f64>() {
+                Ok(value) if !value.is_finite() => JsonSerializationErrorKind::NonFiniteFloat,
+                _ => JsonSerializationErrorKind::InvalidNumberRepresentation,
+            };
+            Err(JcsRendererError::Number(JsonSerializationError::new(kind)))
+        }
     }
 }
 

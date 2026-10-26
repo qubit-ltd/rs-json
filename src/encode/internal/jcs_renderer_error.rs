@@ -10,6 +10,7 @@
 use serde_json::Error;
 
 use crate::encode::JcsWorkingMemoryError;
+use crate::encode::JsonSerializationError;
 
 /// Describes failures encountered while rendering a JSON value as JCS.
 #[must_use]
@@ -19,6 +20,8 @@ pub(in crate::encode) enum JcsRendererError {
     WorkingMemory(JcsWorkingMemoryError),
     /// Canonical JSON serialization or output writing failed.
     Serialize(Error),
+    /// A privacy-safe number classification retained from the current value.
+    Number(JsonSerializationError),
     /// An auxiliary allocation could not be completed.
     Allocation,
 }

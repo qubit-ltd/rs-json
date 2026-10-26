@@ -9,12 +9,135 @@
 #![cfg(feature = "jcs")]
 
 use qubit_budget::json::JsonDecodeLimits;
+#[cfg(feature = "arbitrary_precision")]
+use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::JcsDecodeError;
 use qubit_json::decode::JcsDecoder;
+#[cfg(feature = "arbitrary_precision")]
+use qubit_json::encode::JcsEncodeErrorKind;
 use qubit_json::encode::JcsEncoder;
+#[cfg(feature = "arbitrary_precision")]
+use qubit_json::encode::JsonSerializationErrorCategory;
+#[cfg(feature = "arbitrary_precision")]
+use qubit_json::encode::JsonSerializationErrorKind;
 use serde_json::Value;
+
+#[cfg(feature = "arbitrary_precision")]
+#[test]
+fn test_jcs_numeric_overflow_has_structured_reason() {
+    for text in ["1e400", "-1e400"] {
+        let value: Value = serde_json::from_str(text).unwrap();
+        let error = JcsEncoder::unlimited().to_vec(&value).unwrap_err();
+        assert_eq!(error.kind(), JcsEncodeErrorKind::Serialize);
+        let source = error.serialization_error().unwrap();
+        assert_eq!(source.kind(), JsonSerializationErrorKind::NonFiniteFloat);
+        assert_eq!(source.category(), JsonSerializationErrorCategory::Number);
+        assert!(!format!("{error:?} {error}").contains(text));
+    }
+}
+
+#[cfg(feature = "arbitrary_precision")]
+#[test]
+fn test_jcs_numeric_failure_retains_output_boundaries() {
+    let value: Value = serde_json::from_str("[0,1e400]").unwrap();
+    for mode in 0..4 {
+        let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+            .max_nodes(8)
+            .max_output_bytes(64)
+            .build();
+        let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
+        let mut bytes = Vec::new();
+        let error = match mode {
+            0 => encoder.to_vec(&value).unwrap_err(),
+            1 => encoder.to_string(&value).unwrap_err(),
+            2 => encoder.write_buffered(&mut bytes, &value).unwrap_err(),
+            _ => encoder.write_incremental(&mut bytes, &value).unwrap_err(),
+        };
+        assert_eq!(error.kind(), JcsEncodeErrorKind::Serialize);
+        assert_eq!(
+            error.serialization_error().unwrap().kind(),
+            JsonSerializationErrorKind::NonFiniteFloat,
+        );
+        let expected: &[u8] = if mode == 3 { b"[0," } else { b"" };
+        assert_eq!(bytes, expected);
+        assert_eq!(encoder.session().output_budget().unwrap().used(), expected.len());
+        assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+    }
+}
+
+#[cfg(feature = "arbitrary_precision")]
+#[test]
+fn test_jcs_numeric_failure_respects_value_and_output_budgets() {
+    let value: Value = serde_json::from_str("[0,1e400]").unwrap();
+
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(1).build();
+    let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
+    let mut bytes = Vec::new();
+    let error = encoder.write_incremental(&mut bytes, &value).unwrap_err();
+    assert_eq!(error.kind(), JcsEncodeErrorKind::Budget);
+    assert!(bytes.is_empty());
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_nodes(8)
+        .max_output_bytes(0)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
+    let mut bytes = Vec::new();
+    let error = encoder.write_incremental(&mut bytes, &value).unwrap_err();
+    assert_eq!(error.kind(), JcsEncodeErrorKind::Budget);
+    assert!(bytes.is_empty());
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(encoder.session().output_budget().unwrap().used(), 0);
+}
+
+#[cfg(feature = "arbitrary_precision")]
+#[test]
+fn test_jcs_numeric_failure_does_not_override_writer_failure() {
+    struct RejectingWriter;
+
+    impl std::io::Write for RejectingWriter {
+        fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("injected destination failure"))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let value: Value = serde_json::from_str("[0,1e400]").unwrap();
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_nodes(8)
+        .max_output_bytes(64)
+        .build();
+    let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
+    let error = encoder.write_incremental(&mut RejectingWriter, &value).unwrap_err();
+    assert_eq!(error.kind(), JcsEncodeErrorKind::Write);
+    assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(encoder.session().output_budget().unwrap().used(), 0);
+}
+
+#[cfg(feature = "arbitrary_precision")]
+#[test]
+fn test_jcs_numeric_finite_binary64_controls_are_unchanged() {
+    for (input, expected) in [
+        ("-0", "0"),
+        ("1.5", "1.5"),
+        ("9007199254740993", "9007199254740992"),
+        ("5e-324", "5e-324"),
+        ("1e-400", "0"),
+    ] {
+        let value: Value = serde_json::from_str(input).unwrap();
+        assert_eq!(
+            JcsEncoder::unlimited().to_vec(&value).unwrap(),
+            expected.as_bytes(),
+            "{input}"
+        );
+    }
+}
 
 #[test]
 fn test_number_contract_and_all_entry_points_are_stable() {
