@@ -16,6 +16,7 @@ use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecodeErrorSource;
 use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::JsonMaterializationErrorReason;
 use qubit_json::decode::JsonRootKind;
 use qubit_json::decode::JsonSyntaxErrorReason;
 use qubit_json::decode::MarkdownFencePolicy;
@@ -259,4 +260,96 @@ fn test_json_decode_error_into_source_exposes_owned_variants() {
         }
         source => panic!("expected deserialization source, got {source:?}"),
     }
+}
+
+/// Verifies unique-key construction failures expose safe structured reasons.
+#[test]
+fn test_unique_decode_materialization_reason_matrix() {
+    let mut decoder = JsonDecoder::unlimited();
+    let error = decoder
+        .decode_unique_str::<serde_json::Value>(r#"{"RJ_SECRET":1,"RJ_SECRET":2}"#)
+        .expect_err("duplicate decoded keys must fail construction");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.stage(), JsonDecodeStage::Deserialize);
+    assert_eq!(
+        error.materialization_error_reason(),
+        Some(JsonMaterializationErrorReason::DuplicateKey)
+    );
+    assert_eq!(
+        error.clone().materialization_error_reason(),
+        error.materialization_error_reason()
+    );
+    assert!(!error.to_string().contains("RJ_SECRET"));
+    assert!(!format!("{error:?}").contains("RJ_SECRET"));
+    assert!(std::error::Error::source(&error).is_none());
+    let reason = error.materialization_error_reason();
+    assert!(matches!(error.into_source(), JsonDecodeErrorSource::Deserialize { .. }));
+    assert_eq!(reason, Some(JsonMaterializationErrorReason::DuplicateKey));
+
+    let mut detailed = JsonDecoder::unlimited().with_diagnostic_policy(DiagnosticPolicy::Detailed);
+    let error = detailed
+        .decode_unique_str::<serde_json::Value>(r#"{"x":1,"x":2}"#)
+        .expect_err("detailed duplicate construction must fail");
+    assert_eq!(
+        error.materialization_error_reason(),
+        Some(JsonMaterializationErrorReason::DuplicateKey)
+    );
+    assert!(std::error::Error::source(&error).is_some());
+
+    let nested = format!("{}0{}", "[".repeat(128), "]".repeat(128));
+    let error = decoder
+        .decode_unique_str::<serde_json::Value>(&nested)
+        .expect_err("128 nested containers exceed the construction limit");
+    assert_eq!(
+        error.materialization_error_reason(),
+        Some(JsonMaterializationErrorReason::DepthLimit { limit: 127 })
+    );
+    assert_eq!(error.line(), Some(1));
+    assert_eq!(error.column(), Some(128));
+
+    let mut detailed = JsonDecoder::unlimited().with_diagnostic_policy(DiagnosticPolicy::Detailed);
+    let error = detailed
+        .decode_unique_str::<serde_json::Value>(&nested)
+        .expect_err("detailed depth construction must fail");
+    assert_eq!(
+        error.materialization_error_reason(),
+        Some(JsonMaterializationErrorReason::DepthLimit { limit: 127 })
+    );
+    assert!(std::error::Error::source(&error).is_some());
+
+    let accepted = format!("{}0{}", "[".repeat(127), "]".repeat(127));
+    assert!(decoder.decode_unique_str::<serde_json::Value>(&accepted).is_ok());
+
+    let mut decoder = JsonDecoder::unlimited();
+    let target_error = decoder
+        .decode_unique_str::<bool>("1")
+        .expect_err("target type mismatch");
+    assert_eq!(target_error.materialization_error_reason(), None);
+    let syntax_error = decoder
+        .decode_unique_str::<serde_json::Value>("{")
+        .expect_err("invalid syntax");
+    assert_eq!(syntax_error.materialization_error_reason(), None);
+    let ordinary_error = decoder
+        .decode_str::<serde_json::Value>("{")
+        .expect_err("ordinary syntax error");
+    assert_eq!(ordinary_error.materialization_error_reason(), None);
+    let utf8_error = decoder
+        .decode_unique_utf8::<serde_json::Value>(&[0xff])
+        .expect_err("invalid UTF-8");
+    assert_eq!(utf8_error.materialization_error_reason(), None);
+
+    let limits = JsonDecodeLimits::builder().max_depth(2_usize).build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let budget_error = decoder
+        .decode_unique_str::<serde_json::Value>("[[[0]]]")
+        .expect_err("configured depth budget is checked before materialization");
+    assert_eq!(budget_error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(budget_error.materialization_error_reason(), None);
+
+    let input_limits = JsonDecodeLimits::builder().max_input_bytes(0_usize).build();
+    let mut decoder = JsonDecoder::with_limits(input_limits);
+    let input_error = decoder
+        .decode_unique_str::<serde_json::Value>("null")
+        .expect_err("input budget must reject the document");
+    assert_eq!(input_error.materialization_error_reason(), None);
 }

@@ -30,6 +30,7 @@ use crate::decode::DiagnosticPolicy;
 use crate::decode::JcsDecodeError;
 use crate::decode::JsonDecodeError;
 use crate::decode::JsonDecodeStage;
+use crate::decode::JsonMaterializationErrorReason;
 use crate::decode::JsonRootKind;
 use crate::decode::NormalizedJsonDocument;
 use crate::lexical::JsonLexicalError;
@@ -245,16 +246,26 @@ where
             .scan_with_events(input, |event| builder.accept(event))
             .map_err(|error| Self::map_lexical_error(error, input, metadata))?;
         let tree = builder.finish().map_err(|error| {
-            let (message, offset) = match error {
-                JsonValueMaterializationError::DuplicateKey { offset } => ("duplicate JSON object key", offset),
-                JsonValueMaterializationError::DepthLimit { offset, .. } => {
-                    ("JSON materialization depth limit exceeded", offset)
-                }
-                JsonValueMaterializationError::InvalidNumber { offset } => ("invalid strict JSON number", offset),
+            let (reason, message, offset) = match error {
+                JsonValueMaterializationError::DuplicateKey { offset } => (
+                    JsonMaterializationErrorReason::DuplicateKey,
+                    "duplicate JSON object key",
+                    offset,
+                ),
+                JsonValueMaterializationError::DepthLimit { offset, limit } => (
+                    JsonMaterializationErrorReason::DepthLimit { limit },
+                    "JSON materialization depth limit exceeded",
+                    offset,
+                ),
+                JsonValueMaterializationError::InvalidNumber { offset } => (
+                    JsonMaterializationErrorReason::InvalidNumber,
+                    "invalid strict JSON number",
+                    offset,
+                ),
             };
             let (line, column) = Self::materialization_error_position(input, offset);
             let error = serde_json::Error::custom(format_args!("{message} at line {line} column {column}"));
-            JsonDecodeError::deserialize(error, input.len(), None, diagnostic_policy)
+            JsonDecodeError::materialization(error, reason, input.len(), diagnostic_policy)
         })?;
         // The builder constructs canonical i64/u64/f64 Numbers. Unlike direct
         // arbitrary-precision text parsing, Value deserialization exposes these

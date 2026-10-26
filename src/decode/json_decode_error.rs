@@ -21,6 +21,7 @@ use super::DiagnosticPolicy;
 use super::JsonDecodeErrorKind;
 use super::JsonDecodeErrorSource;
 use super::JsonDecodeStage;
+use super::JsonMaterializationErrorReason;
 use super::JsonRootKind;
 use super::JsonSyntaxError;
 use crate::lexical::JsonLexicalFailure;
@@ -55,6 +56,8 @@ where
 {
     /// Policy controlling input-derived source retention.
     diagnostic_policy: DiagnosticPolicy,
+    /// Safe reason for a unique-key intermediate-tree construction failure.
+    materialization_reason: Option<JsonMaterializationErrorReason>,
     /// Mutually exclusive structured failure.
     failure: JsonDecodeErrorSource<R, Q>,
 }
@@ -80,6 +83,7 @@ where
         let source = (diagnostic_policy == DiagnosticPolicy::Detailed).then(|| Arc::new(source));
         Self {
             diagnostic_policy,
+            materialization_reason: None,
             failure: JsonDecodeErrorSource::Read {
                 raw_input_bytes,
                 kind,
@@ -111,6 +115,7 @@ where
     ) -> Self {
         Self {
             diagnostic_policy,
+            materialization_reason: None,
             failure: JsonDecodeErrorSource::Budget {
                 stage,
                 raw_input_bytes,
@@ -140,6 +145,7 @@ where
     ) -> Self {
         Self {
             diagnostic_policy,
+            materialization_reason: None,
             failure: JsonDecodeErrorSource::EmptyInput {
                 stage,
                 raw_input_bytes,
@@ -170,6 +176,7 @@ where
         let source = (diagnostic_policy == DiagnosticPolicy::Detailed).then_some(source);
         Self {
             diagnostic_policy,
+            materialization_reason: None,
             failure: JsonDecodeErrorSource::InvalidUtf8 {
                 raw_input_bytes,
                 valid_up_to,
@@ -203,6 +210,7 @@ where
     ) -> Self {
         Self {
             diagnostic_policy,
+            materialization_reason: None,
             failure: JsonDecodeErrorSource::InvalidJson {
                 raw_input_bytes,
                 normalized_input_bytes,
@@ -234,6 +242,7 @@ where
     ) -> Self {
         Self {
             diagnostic_policy,
+            materialization_reason: None,
             failure: JsonDecodeErrorSource::UnexpectedTopLevel {
                 raw_input_bytes,
                 normalized_input_bytes,
@@ -269,6 +278,7 @@ where
             (diagnostic_policy == DiagnosticPolicy::Detailed).then(|| Arc::new(source) as Arc<dyn Error + Send + Sync>);
         Self {
             diagnostic_policy,
+            materialization_reason: None,
             failure: JsonDecodeErrorSource::Deserialize {
                 raw_input_bytes,
                 normalized_input_bytes,
@@ -277,6 +287,18 @@ where
                 source,
             },
         }
+    }
+
+    /// Creates a unique-key materialization failure with a safe subreason.
+    pub(crate) fn materialization(
+        source: JsonError,
+        reason: JsonMaterializationErrorReason,
+        raw_input_bytes: usize,
+        diagnostic_policy: DiagnosticPolicy,
+    ) -> Self {
+        let mut error = Self::deserialize(source, raw_input_bytes, None, diagnostic_policy);
+        error.materialization_reason = Some(reason);
+        error
     }
 
     /// Returns the stable failure category.
@@ -296,6 +318,35 @@ where
             JsonDecodeErrorSource::UnexpectedTopLevel { .. } => JsonDecodeErrorKind::UnexpectedTopLevel,
             JsonDecodeErrorSource::Deserialize { .. } => JsonDecodeErrorKind::Deserialize,
         }
+    }
+
+    /// Returns the safe reason for a unique-key intermediate-tree failure.
+    ///
+    /// Returns `Some(reason)` when construction failed because of a duplicate
+    /// key, the fixed container limit, or an unrepresentable admitted number.
+    /// Returns `None` for lexical, input, budget, and target-deserialization
+    /// failures. The reason remains available under redacted diagnostics and
+    /// contains no input-derived text. Read it before consuming the error with
+    /// [`Self::into_source`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qubit_json::decode::{JsonDecoder, JsonMaterializationErrorReason};
+    /// use serde_json::Value;
+    ///
+    /// let mut decoder = JsonDecoder::unlimited();
+    /// let error = decoder
+    ///     .decode_unique_str::<Value>(r#"{"id":1,"id":2}"#)
+    ///     .expect_err("duplicate keys must be rejected");
+    /// assert_eq!(
+    ///     error.materialization_error_reason(),
+    ///     Some(JsonMaterializationErrorReason::DuplicateKey),
+    /// );
+    /// ```
+    #[inline(always)]
+    pub const fn materialization_error_reason(&self) -> Option<JsonMaterializationErrorReason> {
+        self.materialization_reason
     }
 
     /// Returns the semantic stage that produced the failure.
@@ -562,6 +613,7 @@ where
         formatter
             .debug_struct("JsonDecodeError")
             .field("diagnostic_policy", &self.diagnostic_policy)
+            .field("materialization_reason", &self.materialization_reason)
             .field("failure", &self.failure)
             .finish()
     }
