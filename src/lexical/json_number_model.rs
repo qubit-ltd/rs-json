@@ -12,6 +12,10 @@
 pub(crate) enum JsonNumberModel {
     /// Preserve the ordinary JSON decoder's signed and unsigned integer limits.
     Integer64,
+    /// Admit out-of-range integer tokens when their finite binary64 fallback exists.
+    Integer64WithFiniteFallback,
+    /// Validate grammar without imposing a numeric representation range.
+    SyntaxOnly,
     /// Interpret every JSON number using finite IEEE 754 binary64 semantics.
     #[cfg(feature = "jcs")]
     Binary64,

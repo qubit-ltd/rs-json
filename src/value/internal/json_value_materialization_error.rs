@@ -10,7 +10,7 @@
 
 /// A materialization failure stores only its kind, location, and fixed limit.
 #[must_use]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum JsonValueMaterializationError {
     /// A decoded object key was already present in the current object.
     DuplicateKey {

@@ -12,9 +12,12 @@ use qubit_budget::json::JsonValueTransaction;
 
 use super::internal::JsonLexicalContainerFrame;
 use super::internal::json_lexical_cursor::JsonLexicalCursor;
+use super::json_lexical_consumer::JsonLexicalConsumer;
+use super::json_lexical_consumer::JsonLexicalScanPoint;
 use super::json_lexical_error::JsonLexicalError;
 use super::json_lexical_error_reason::JsonLexicalErrorReason;
 use super::json_lexical_event::JsonLexicalEvent;
+use super::json_lexical_scan_error::JsonLexicalScanError;
 use super::json_number_model::JsonNumberModel;
 
 /// Lexically validates and charges one JSON document without recursion.
@@ -36,6 +39,8 @@ where
     has_value_limits: bool,
     /// Numeric range contract selected by the owning decoder.
     number_model: JsonNumberModel,
+    depth_limit: Option<Q>,
+    max_encoded_string_bytes: Option<usize>,
 }
 
 impl<'transaction, 'budget, R, Q> JsonLexicalScanner<'transaction, 'budget, R, Q>
@@ -63,6 +68,8 @@ where
             root_depth: 1,
             has_value_limits,
             number_model: JsonNumberModel::Integer64,
+            depth_limit: None,
+            max_encoded_string_bytes: None,
         }
     }
 
@@ -88,6 +95,8 @@ where
             root_depth,
             has_value_limits,
             number_model: JsonNumberModel::Integer64,
+            depth_limit: None,
+            max_encoded_string_bytes: None,
         }
     }
 
@@ -103,6 +112,16 @@ where
     #[inline(always)]
     pub(crate) const fn with_number_model(mut self, number_model: JsonNumberModel) -> Self {
         self.number_model = number_model;
+        self
+    }
+
+    pub(crate) const fn with_depth_limit(mut self, depth_limit: Option<Q>) -> Self {
+        self.depth_limit = depth_limit;
+        self
+    }
+
+    pub(crate) const fn with_max_encoded_string_bytes(mut self, maximum: Option<usize>) -> Self {
+        self.max_encoded_string_bytes = maximum;
         self
     }
 
@@ -156,19 +175,107 @@ where
     where
         F: FnMut(JsonLexicalEvent<'input>),
     {
-        let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
+        let mut cursor =
+            JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         cursor.set_number_model(self.number_model);
+        cursor.set_depth_limit(self.depth_limit);
+        cursor.set_max_encoded_string_bytes(self.max_encoded_string_bytes);
+        let mut adapter = |point| match point {
+            JsonLexicalScanPoint::Event(event) => {
+                emit(event);
+                true
+            }
+            _ => true,
+        };
         let mut stack: Vec<JsonLexicalContainerFrame> = Vec::new();
         cursor.skip_whitespace();
-        cursor.value(self.root_depth, &mut stack, &mut emit)?;
+        cursor.value(self.root_depth, &mut stack, &mut adapter)?;
         while let Some(frame) = stack.pop() {
-            cursor.resume(frame, &mut stack, &mut emit)?;
+            cursor.resume(frame, &mut stack, &mut adapter)?;
         }
         cursor.skip_whitespace();
         if cursor.is_at_end() {
             Ok(())
         } else {
             Err(cursor.syntax(JsonLexicalErrorReason::TrailingCharacters))
+        }
+    }
+
+    /// Scans through the shared grammar and stops immediately on consumer failure.
+    pub(crate) fn scan_with_consumer<'input, C>(
+        &mut self,
+        input: &'input [u8],
+        consumer: &mut C,
+    ) -> Result<(), JsonLexicalScanError<C::Error, R, Q>>
+    where
+        C: JsonLexicalConsumer<'input>,
+    {
+        let mut cursor =
+            JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
+        cursor.set_number_model(self.number_model);
+        cursor.set_depth_limit(self.depth_limit);
+        cursor.set_max_encoded_string_bytes(self.max_encoded_string_bytes);
+        cursor.set_defer_number_delimiter(true);
+        let mut consumer_error = None;
+        let mut dispatch = |point| {
+            let result = match point {
+                JsonLexicalScanPoint::BeforeValue { depth, offset } => {
+                    consumer.before_value(depth, offset)
+                }
+                JsonLexicalScanPoint::BeforeKey { offset } => consumer.before_key(offset),
+                JsonLexicalScanPoint::BeforeNumber { token, offset } => {
+                    consumer.before_number(token, offset)
+                }
+                JsonLexicalScanPoint::Event(event) => consumer.event(event),
+            };
+            match result {
+                Ok(()) => true,
+                Err(error) => {
+                    consumer_error = Some(error);
+                    false
+                }
+            }
+        };
+        let mut stack = Vec::new();
+        let scan = (|| {
+            cursor.skip_whitespace();
+            cursor.value(self.root_depth, &mut stack, &mut dispatch)?;
+            while let Some(frame) = stack.pop() {
+                cursor.resume(frame, &mut stack, &mut dispatch)?;
+            }
+            cursor.skip_whitespace();
+            if cursor.is_at_end() {
+                Ok(())
+            } else {
+                Err(cursor.syntax(JsonLexicalErrorReason::TrailingCharacters))
+            }
+        })();
+        match scan {
+            Ok(()) => Ok(()),
+            Err(JsonLexicalError::Syntax(failure)) => match failure.reason {
+                JsonLexicalErrorReason::EncodedStringLimit { maximum, observed } => {
+                    Err(JsonLexicalScanError::EncodedStringLimit {
+                        maximum,
+                        observed,
+                        offset: failure.offset,
+                    })
+                }
+                JsonLexicalErrorReason::ConsumerStopped if consumer_error.is_some() => {
+                    Err(JsonLexicalScanError::Consumer(
+                        consumer_error.expect("consumer failure was captured"),
+                    ))
+                }
+                _ if consumer_error.is_some() => {
+                    Err(JsonLexicalScanError::Consumer(consumer_error.unwrap()))
+                }
+                _ => Err(JsonLexicalScanError::Lexical(JsonLexicalError::Syntax(
+                    failure,
+                ))),
+            },
+            Err(_error) if consumer_error.is_some() => {
+                Err(JsonLexicalScanError::Consumer(consumer_error.unwrap()))
+            }
+            Err(error) => Err(JsonLexicalScanError::Lexical(error)),
         }
     }
 }

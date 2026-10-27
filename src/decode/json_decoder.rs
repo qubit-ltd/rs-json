@@ -7,10 +7,13 @@
 // =============================================================================
 //! Stateful strict JSON decoding with caller-owned resource accounting.
 
+use std::convert::Infallible;
+
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
+use qubit_io::ByteInput;
 use qubit_io::Input;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -18,9 +21,16 @@ use serde::de::DeserializeSeed;
 
 use super::DiagnosticPolicy;
 use super::JsonDecodeError;
+use super::JsonDecodeNumberModel;
+use super::JsonNumberPolicy;
+use super::JsonNumberToken;
+use super::JsonPathSegment;
 use super::JsonRootKind;
+use super::JsonValidatedDecodeError;
+use super::JsonValidatedDecodeOptions;
 use super::internal::JsonDecodeEngine;
 use super::internal::TypedSeed;
+use crate::value::SafeJsonValue;
 
 /// Strictly decodes complete JSON documents while retaining cumulative usage.
 ///
@@ -98,6 +108,250 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Decodes one complete document into a guarded value and rejects duplicate keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Complete UTF-8 JSON document.
+    ///
+    /// # Returns
+    ///
+    /// The protected owned value after input and value accounting succeed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error for invalid UTF-8, syntax, numeric range,
+    /// duplicate keys, or configured resource limits.
+    pub fn decode_value_utf8(
+        &mut self,
+        input: &[u8],
+    ) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
+        let options = JsonValidatedDecodeOptions::builder().build();
+        match self.engine.decode_unique_validated_utf8(
+            input,
+            &options,
+            |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve),
+            self.diagnostic_policy,
+        ) {
+            Ok(value) => Ok(value),
+            Err(JsonValidatedDecodeError::Decode { error, .. }) => Err(error),
+            Err(JsonValidatedDecodeError::Policy { source, .. }) => match source {},
+            Err(
+                JsonValidatedDecodeError::ExactSafeInteger { .. }
+                | JsonValidatedDecodeError::Limit { .. },
+            ) => unreachable!("default value decode uses no failing policy or extra limits"),
+        }
+    }
+
+    /// UTF-8 string form of [`Self::decode_value_utf8`].
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Complete JSON document text.
+    ///
+    /// # Returns
+    ///
+    /// The protected owned value.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error for syntax, numeric range, duplicate keys,
+    /// or configured resource limits.
+    pub fn decode_value_str(
+        &mut self,
+        input: &str,
+    ) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
+        self.decode_value_utf8(input.as_bytes())
+    }
+
+    /// Reads one unique-key document through EOF and decodes it into a guarded value.
+    ///
+    /// Reads in bounded chunks, with at most one probe byte beyond an active
+    /// input limit. Accepted bytes remain charged when later validation fails.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Byte input read through EOF.
+    ///
+    /// # Returns
+    ///
+    /// The protected owned value.
+    ///
+    /// # Errors
+    ///
+    /// Returns read, input-budget, UTF-8, syntax, numeric-range, duplicate-key,
+    /// or value-budget failures.
+    pub fn decode_value_input<I: ByteInput + ?Sized>(
+        &mut self,
+        input: &mut I,
+    ) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
+        let options = JsonValidatedDecodeOptions::builder().build();
+        match self.engine.decode_unique_validated_input(
+            input,
+            &options,
+            |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve),
+            self.diagnostic_policy,
+        ) {
+            Ok(value) => Ok(value),
+            Err(JsonValidatedDecodeError::Decode { error, .. }) => Err(error),
+            Err(JsonValidatedDecodeError::Policy { source, .. }) => match source {},
+            Err(
+                JsonValidatedDecodeError::ExactSafeInteger { .. }
+                | JsonValidatedDecodeError::Limit { .. },
+            ) => unreachable!("default value decode uses no failing policy or extra limits"),
+        }
+    }
+
+    /// Decodes one document while applying a caller policy to each source number.
+    ///
+    /// The callback runs in source order after a number token is syntactically
+    /// complete and before its configured representation range is checked. It
+    /// receives the typed path and borrowed source spelling; its first error
+    /// stops scanning immediately. Object keys must be unique after decoding.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Complete UTF-8 JSON document.
+    /// * `options` - Root, number model, and per-document source-token limits.
+    /// * `number_policy` - Synchronous policy called for each complete number.
+    ///
+    /// # Returns
+    ///
+    /// The protected owned value after complete scanning and accounting.
+    ///
+    /// # Errors
+    ///
+    /// Returns structured decode errors, callback errors with source offsets,
+    /// exact-safe-integer errors, or validated-limit failures.
+    pub fn decode_unique_validated_utf8<E, F>(
+        &mut self,
+        input: &[u8],
+        options: &JsonValidatedDecodeOptions,
+        number_policy: F,
+    ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
+    where
+        R: std::fmt::Debug,
+        F: for<'call> FnMut(
+            &'call [JsonPathSegment],
+            JsonNumberToken<'call>,
+        ) -> Result<JsonNumberPolicy, E>,
+    {
+        self.engine.decode_unique_validated_utf8(
+            input,
+            options,
+            number_policy,
+            self.diagnostic_policy,
+        )
+    }
+
+    /// UTF-8 string form of [`Self::decode_unique_validated_utf8`].
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Complete JSON document text.
+    /// * `options` - Root, number model, and per-document source-token limits.
+    /// * `number_policy` - Synchronous number policy callback.
+    ///
+    /// # Returns
+    ///
+    /// The protected owned value.
+    ///
+    /// # Errors
+    ///
+    /// Returns decode, callback, exact-safe-integer, or validated-limit errors.
+    pub fn decode_unique_validated_str<E, F>(
+        &mut self,
+        input: &str,
+        options: &JsonValidatedDecodeOptions,
+        number_policy: F,
+    ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
+    where
+        R: std::fmt::Debug,
+        F: for<'call> FnMut(
+            &'call [JsonPathSegment],
+            JsonNumberToken<'call>,
+        ) -> Result<JsonNumberPolicy, E>,
+    {
+        self.decode_unique_validated_utf8(input.as_bytes(), options, number_policy)
+    }
+
+    /// Reads a byte input through EOF and applies a source-number policy during decoding.
+    ///
+    /// Accepted input bytes remain charged if the callback or later validation
+    /// fails; value charges commit only after the complete document succeeds.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Byte input read through EOF.
+    /// * `options` - Root, number model, and per-document token limits.
+    /// * `number_policy` - Synchronous callback for each source number.
+    ///
+    /// # Returns
+    ///
+    /// The protected owned value.
+    ///
+    /// # Errors
+    ///
+    /// Returns structured decode, read, callback, exact-integer, or limit errors.
+    pub fn decode_unique_validated_input<E, F, I>(
+        &mut self,
+        input: &mut I,
+        options: &JsonValidatedDecodeOptions,
+        number_policy: F,
+    ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
+    where
+        R: std::fmt::Debug,
+        I: ByteInput + ?Sized,
+        F: for<'call> FnMut(
+            &'call [JsonPathSegment],
+            JsonNumberToken<'call>,
+        ) -> Result<JsonNumberPolicy, E>,
+    {
+        self.engine.decode_unique_validated_input(
+            input,
+            options,
+            number_policy,
+            self.diagnostic_policy,
+        )
+    }
+
+    /// Decodes one byte input using an explicit integer/fallback number model.
+    ///
+    /// The fallback model converts only integer tokens outside `i64`/`u64`
+    /// to finite `f64`; decimal and exponent forms use the finite-float rule
+    /// in both models.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Byte input read through EOF.
+    /// * `model` - Integer representation model for admitted source numbers.
+    ///
+    /// # Returns
+    ///
+    /// The owned value produced by Serde.
+    ///
+    /// # Errors
+    ///
+    /// Returns read, UTF-8, syntax, numeric-range, budget, or Serde errors.
+    pub fn decode_input_with_number_model<T, I>(
+        &mut self,
+        input: &mut I,
+        model: JsonDecodeNumberModel,
+    ) -> Result<T, JsonDecodeError<R, Q>>
+    where
+        T: DeserializeOwned,
+        I: ByteInput + ?Sized,
+    {
+        let model = match model {
+            JsonDecodeNumberModel::Integer64 => crate::lexical::JsonNumberModel::Integer64,
+            JsonDecodeNumberModel::Integer64WithFiniteFallback => {
+                crate::lexical::JsonNumberModel::Integer64WithFiniteFallback
+            }
+        };
+        self.engine
+            .decode_input_seed(TypedSeed::new(), input, self.diagnostic_policy, model)
+    }
+
     /// Creates a strict decoder around a reusable cumulative session.
     ///
     /// # Parameters
@@ -290,7 +544,11 @@ where
     ///
     /// Returns a structured error when accounting, parsing, or seeded
     /// deserialization fails.
-    pub fn decode_seed_str<'de, S>(&mut self, seed: S, input: &'de str) -> Result<S::Value, JsonDecodeError<R, Q>>
+    pub fn decode_seed_str<'de, S>(
+        &mut self,
+        seed: S,
+        input: &'de str,
+    ) -> Result<S::Value, JsonDecodeError<R, Q>>
     where
         S: DeserializeSeed<'de>,
     {
@@ -316,19 +574,25 @@ where
     ///
     /// Returns a structured error when accounting, UTF-8 validation, parsing,
     /// or seeded deserialization fails.
-    pub fn decode_seed_utf8<'de, S>(&mut self, seed: S, input: &'de [u8]) -> Result<S::Value, JsonDecodeError<R, Q>>
+    pub fn decode_seed_utf8<'de, S>(
+        &mut self,
+        seed: S,
+        input: &'de [u8],
+    ) -> Result<S::Value, JsonDecodeError<R, Q>>
     where
         S: DeserializeSeed<'de>,
     {
-        self.engine.decode_seed_utf8(seed, input, self.diagnostic_policy)
+        self.engine
+            .decode_seed_utf8(seed, input, self.diagnostic_policy)
     }
 
     /// Decodes a unique-key JSON document into an owned target.
     ///
     /// The document is first materialized under the strict number contract,
     /// then exposed as native Serde events even with `arbitrary_precision`.
-    /// Construction accepts at most 127 nested containers. Targets cannot
-    /// borrow the input, and RawValue targets receive reconstructed JSON.
+    /// Source construction uses the configured value depth budget and has no
+    /// separate fixed container limit. Targets cannot borrow the input, and
+    /// RawValue targets receive reconstructed JSON.
     ///
     /// # Errors
     ///
@@ -369,14 +633,19 @@ where
     /// # Errors
     ///
     /// Returns a structured decode error for input admission, invalid syntax,
-    /// duplicate keys, more than 127 nested containers, or seed failure.
+    /// duplicate keys, configured value-depth failure, or seed failure.
     /// Materialization errors retain source coordinates; target errors have
     /// no original source position and are redacted by default.
-    pub fn decode_unique_seed_utf8<S, T>(&mut self, seed: S, input: &[u8]) -> Result<T, JsonDecodeError<R, Q>>
+    pub fn decode_unique_seed_utf8<S, T>(
+        &mut self,
+        seed: S,
+        input: &[u8],
+    ) -> Result<T, JsonDecodeError<R, Q>>
     where
         S: for<'de> DeserializeSeed<'de, Value = T>,
     {
-        self.engine.decode_unique_seed_utf8(seed, input, self.diagnostic_policy)
+        self.engine
+            .decode_unique_seed_utf8(seed, input, self.diagnostic_policy)
     }
 
     /// Decodes a complete JSON string while requiring a top-level object.
@@ -429,7 +698,10 @@ where
     ///
     /// Returns a structured error for accounting, UTF-8 validation, parsing,
     /// top-level-kind, or deserialization failures.
-    pub fn decode_object_utf8<'de, T>(&mut self, input: &'de [u8]) -> Result<T, JsonDecodeError<R, Q>>
+    pub fn decode_object_utf8<'de, T>(
+        &mut self,
+        input: &'de [u8],
+    ) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {
@@ -459,7 +731,10 @@ where
     ///
     /// Returns a structured error for accounting, parsing, top-level-kind, or
     /// deserialization failures.
-    pub fn decode_array_str<'de, T>(&mut self, input: &'de str) -> Result<Vec<T>, JsonDecodeError<R, Q>>
+    pub fn decode_array_str<'de, T>(
+        &mut self,
+        input: &'de str,
+    ) -> Result<Vec<T>, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {
@@ -485,7 +760,10 @@ where
     ///
     /// Returns a structured error for accounting, UTF-8 validation, parsing,
     /// top-level-kind, or deserialization failures.
-    pub fn decode_array_utf8<'de, T>(&mut self, input: &'de [u8]) -> Result<Vec<T>, JsonDecodeError<R, Q>>
+    pub fn decode_array_utf8<'de, T>(
+        &mut self,
+        input: &'de [u8],
+    ) -> Result<Vec<T>, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {

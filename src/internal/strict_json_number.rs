@@ -13,6 +13,7 @@ use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use serde_json::Number;
 
+use crate::decode::JsonDecodeNumberModel;
 use crate::encode::JsonIntegerSignedness;
 use crate::encode::JsonSerializationError;
 use crate::encode::JsonSerializationErrorKind;
@@ -103,6 +104,36 @@ impl StrictJsonNumber {
                 .parse::<u64>()
                 .map_err(|_| integer_error(JsonIntegerSignedness::Unsigned))?;
             Ok(Number::from(value))
+        }
+    }
+
+    /// Constructs an admitted lexeme under the selected public number model.
+    ///
+    /// The finite fallback applies only when an integer token is outside the
+    /// signed/unsigned 64-bit ranges. Fractional and exponent forms retain the
+    /// ordinary finite-f64 behavior in both models.
+    pub(crate) fn from_admitted_lexeme_with_model(
+        text: &str,
+        model: JsonDecodeNumberModel,
+    ) -> Result<Number, JsonSerializationError> {
+        match Self::from_admitted_lexeme(text) {
+            Ok(number) => Ok(number),
+            Err(error)
+                if model == JsonDecodeNumberModel::Integer64WithFiniteFallback
+                    && matches!(
+                        error.kind(),
+                        JsonSerializationErrorKind::IntegerOutOfRange { .. }
+                    )
+                    && !text.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E')) =>
+            {
+                let value = text.parse::<f64>().map_err(|_| error)?;
+                if !value.is_finite() {
+                    return Err(number_error(JsonSerializationErrorKind::NonFiniteFloat));
+                }
+                Number::from_f64(value)
+                    .ok_or_else(|| number_error(JsonSerializationErrorKind::NonFiniteFloat))
+            }
+            Err(error) => Err(error),
         }
     }
 
