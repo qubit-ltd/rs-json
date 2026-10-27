@@ -75,6 +75,23 @@ where
         Ok(())
     }
 
+    pub(in crate::value::json_value_encoder) fn check_admit(
+        &mut self,
+        measurement: JsonMeasurement,
+    ) -> Result<(), JsonSerializationError> {
+        if self.failure.is_some() {
+            return Err(self.ser_error());
+        }
+        if !self.transaction.has_limits() {
+            return Ok(());
+        }
+        if let Err(error) = self.transaction.check_admit(measurement) {
+            self.failure = Some(JsonValueEncodeFailure::Budget(error));
+            return Err(self.ser_error());
+        }
+        Ok(())
+    }
+
     pub(in crate::value::json_value_encoder) fn enter_container(
         &mut self,
         kind: JsonContainerKind,

@@ -518,7 +518,7 @@ where
             ))
         })?;
         self.check_count(JsonContainerKind::Map, next)?;
-        let key = match key.serialize(JsonValueMapKeySerializer) {
+        let key = match key.serialize(JsonValueMapKeySerializer::new(self.context)) {
             Ok(key) => key,
             Err(error) => return Err(self.fail(error)),
         };

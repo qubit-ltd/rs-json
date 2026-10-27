@@ -7,6 +7,7 @@
 // =============================================================================
 //! Serde serializer for strict JSON object keys.
 
+use std::cell::RefCell;
 use std::fmt::Display;
 use std::fmt::Write as _;
 
@@ -16,14 +17,54 @@ use serde::ser::Impossible;
 use serde_json::Number;
 use serde_json::to_string;
 
+use super::JsonValueDisplayCollector;
+use super::JsonValueDisplayKind;
+use super::JsonValueEncodeContext;
+
 use crate::encode::JsonMapKeyKind;
 use crate::encode::JsonSerializationError;
 use crate::encode::JsonSerializationErrorKind;
 use crate::internal::JsonMapKey;
 
+type ContextCell<'context, 'transaction, 'budget, R, Q> =
+    &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
+
 /// Converts supported scalar map keys into JSON object key strings.
-#[derive(Debug, Clone, Copy)]
-pub(in crate::value::json_value_encoder) struct JsonValueMapKeySerializer;
+#[derive(Clone, Copy)]
+pub(in crate::value::json_value_encoder) struct JsonValueMapKeySerializer<'context, 'transaction, 'budget, R, Q>
+where
+    Q: qubit_budget::ResourceQuantity,
+{
+    context: ContextCell<'context, 'transaction, 'budget, R, Q>,
+}
+
+impl<'context, 'transaction, 'budget, R, Q> JsonValueMapKeySerializer<'context, 'transaction, 'budget, R, Q>
+where
+    R: Clone,
+    Q: qubit_budget::ResourceQuantity,
+{
+    pub(in crate::value::json_value_encoder) fn new(
+        context: ContextCell<'context, 'transaction, 'budget, R, Q>,
+    ) -> Self {
+        Self { context }
+    }
+
+    fn check_key(&self, bytes: usize) -> Result<(), JsonSerializationError> {
+        self.context
+            .borrow_mut()
+            .check_admit(qubit_budget::json::JsonMeasurement::Key { bytes })
+    }
+
+    fn finish_key(self, value: String) -> Result<String, JsonSerializationError> {
+        self.check_key(value.len())?;
+        Ok(value)
+    }
+
+    fn finish_key_str(self, value: &str) -> Result<String, JsonSerializationError> {
+        self.check_key(value.len())?;
+        Ok(value.to_owned())
+    }
+}
 
 /// Implements canonical textual serialization for integer key types.
 macro_rules! serialize_key_integer {
@@ -45,13 +86,17 @@ macro_rules! serialize_key_integer {
             #[doc = "This conversion is infallible."]
             #[inline]
             fn $method(self, value: $type) -> Result<String, Self::Error> {
-                Ok(value.to_string())
+                self.finish_key(value.to_string())
             }
         )+
     };
 }
 
-impl Serializer for JsonValueMapKeySerializer {
+impl<R, Q> Serializer for JsonValueMapKeySerializer<'_, '_, '_, R, Q>
+where
+    R: Clone,
+    Q: qubit_budget::ResourceQuantity,
+{
     type Ok = String;
     type Error = JsonSerializationError;
     type SerializeSeq = Impossible<String, JsonSerializationError>;
@@ -78,7 +123,7 @@ impl Serializer for JsonValueMapKeySerializer {
     /// This conversion is infallible.
     #[inline]
     fn serialize_bool(self, value: bool) -> Result<String, Self::Error> {
-        Ok(value.to_string())
+        self.finish_key(value.to_string())
     }
 
     serialize_key_integer!(
@@ -108,7 +153,7 @@ impl Serializer for JsonValueMapKeySerializer {
     /// This conversion is infallible.
     #[inline]
     fn serialize_i128(self, value: i128) -> Result<String, Self::Error> {
-        Ok(JsonMapKey::signed_wide(value))
+        self.finish_key(JsonMapKey::signed_wide(value))
     }
 
     /// Serializes a full-range unsigned integer key as canonical decimal text.
@@ -127,7 +172,7 @@ impl Serializer for JsonValueMapKeySerializer {
     /// This conversion is infallible.
     #[inline]
     fn serialize_u128(self, value: u128) -> Result<String, Self::Error> {
-        Ok(JsonMapKey::unsigned_wide(value))
+        self.finish_key(JsonMapKey::unsigned_wide(value))
     }
 
     /// Serializes a finite 32-bit floating-point key.
@@ -149,8 +194,8 @@ impl Serializer for JsonValueMapKeySerializer {
         if !value.is_finite() {
             return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
         }
-        to_string(&value)
-            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))
+        self.finish_key(to_string(&value)
+            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))?)
     }
 
     /// Serializes a finite 64-bit floating-point key.
@@ -168,9 +213,9 @@ impl Serializer for JsonValueMapKeySerializer {
     ///
     /// Returns `NonFiniteFloat` when the input is non-finite.
     fn serialize_f64(self, value: f64) -> Result<String, Self::Error> {
-        Number::from_f64(value)
+        self.finish_key(Number::from_f64(value)
             .map(|number| number.to_string())
-            .ok_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat))
+            .ok_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat))?)
     }
 
     /// Serializes a character key.
@@ -189,7 +234,7 @@ impl Serializer for JsonValueMapKeySerializer {
     /// This conversion is infallible.
     #[inline]
     fn serialize_char(self, value: char) -> Result<String, Self::Error> {
-        Ok(value.to_string())
+        self.finish_key(value.to_string())
     }
 
     /// Copies a string key.
@@ -208,7 +253,7 @@ impl Serializer for JsonValueMapKeySerializer {
     /// This conversion is infallible.
     #[inline]
     fn serialize_str(self, value: &str) -> Result<String, Self::Error> {
-        Ok(value.to_owned())
+        self.finish_key_str(value)
     }
 
     /// Rejects byte sequences as object keys.
@@ -333,7 +378,7 @@ impl Serializer for JsonValueMapKeySerializer {
         _variant_index: u32,
         variant: &'static str,
     ) -> Result<String, Self::Error> {
-        Ok(variant.to_owned())
+        self.finish_key_str(variant)
     }
 
     /// Delegates a newtype-struct key to its wrapped value.
@@ -577,10 +622,11 @@ impl Serializer for JsonValueMapKeySerializer {
     where
         T: Display + ?Sized,
     {
-        let mut text = String::new();
-        write!(&mut text, "{value}")
-            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
-        Ok(text)
+        let mut collector = JsonValueDisplayCollector::new(self.context, JsonValueDisplayKind::Key);
+        if write!(&mut collector, "{value}").is_err() {
+            return Err(JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed));
+        }
+        Ok(collector.into_string())
     }
 }
 

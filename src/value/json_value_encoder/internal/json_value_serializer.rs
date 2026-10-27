@@ -21,6 +21,8 @@ use serde_json::Value;
 use serde_json::to_string;
 
 use super::JsonValueCompound;
+use super::JsonValueDisplayCollector;
+use super::JsonValueDisplayKind;
 use super::JsonValueEncodeContext;
 use crate::encode::JsonCollectionKind;
 use crate::encode::JsonIntegerSignedness;
@@ -392,12 +394,16 @@ where
     where
         T: Display + ?Sized,
     {
-        let mut text = String::new();
-        write!(&mut text, "{value}").map_err(|_| {
-            self.fail(JsonSerializationError::new(
+        let mut collector = JsonValueDisplayCollector::new(
+            self.context,
+            JsonValueDisplayKind::String { depth: self.depth },
+        );
+        if write!(&mut collector, "{value}").is_err() {
+            return Err(self.fail(JsonSerializationError::new(
                 JsonSerializationErrorKind::DisplayFormattingFailed,
-            ))
-        })?;
+            )));
+        }
+        let text = collector.into_string();
         self.string(text)
     }
 }

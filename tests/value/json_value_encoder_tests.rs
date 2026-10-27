@@ -44,6 +44,141 @@ use serde_json::value::RawValue;
 
 const RAW_VALUE_TOKEN: &str = concat!("$", "serde_json", ":", ":private::RawValue");
 
+struct CountedChunkDisplay<'a>(&'a Cell<usize>);
+
+impl fmt::Display for CountedChunkDisplay<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for _ in 0..100 {
+            self.0.set(self.0.get() + 1);
+            formatter.write_str("abcd")?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for CountedChunkDisplay<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+struct CollectedChunkString<'a>(&'a Cell<usize>);
+
+impl Serialize for CollectedChunkString<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(&CountedChunkDisplay(self.0))
+    }
+}
+
+struct CollectedChunkKey<'a>(&'a Cell<usize>);
+
+impl Serialize for CollectedChunkKey<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(&CountedChunkDisplay(self.0), &())?;
+        map.end()
+    }
+}
+
+struct StaticCollectedText(&'static str);
+
+impl fmt::Display for StaticCollectedText {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.0)
+    }
+}
+
+struct CollectedStaticKey(&'static str);
+
+impl Serialize for CollectedStaticKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(&StaticCollectedText(self.0), &true)?;
+        map.end()
+    }
+}
+
+struct FailingAfterChunk;
+
+impl fmt::Display for FailingAfterChunk {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("part")?;
+        Err(fmt::Error)
+    }
+}
+
+impl Serialize for FailingAfterChunk {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+struct TwoExactCollectedStrings;
+
+impl Serialize for TwoExactCollectedStrings {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(2))?;
+        sequence.serialize_element(&StaticCollectedText("ab"))?;
+        sequence.serialize_element(&StaticCollectedText("cd"))?;
+        sequence.end()
+    }
+}
+
+impl Serialize for StaticCollectedText {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+struct TwoCollectedStrings<'a>(&'a Cell<usize>);
+
+impl Serialize for TwoCollectedStrings<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(2))?;
+        sequence.serialize_element(&StaticCollectedText("abcd"))?;
+        sequence.serialize_element(&CollectedChunkString(self.0))?;
+        sequence.end()
+    }
+}
+
+struct SwallowedChunkFailure<'a>(&'a Cell<usize>);
+
+impl Serialize for SwallowedChunkFailure<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(2))?;
+        let _ = sequence.serialize_element(&CollectedChunkString(self.0));
+        sequence.serialize_element(&true)?;
+        sequence.end()
+    }
+}
+
 /// Emits a value under serde_json's private RawValue newtype name.
 struct RawValueNameProbe<T>(T);
 
@@ -1116,5 +1251,223 @@ fn test_projection_budget_failures_preserve_resource_and_roll_back() {
             &json!(true)
         );
         transaction.commit().expect("replacement value commits");
+    }
+}
+
+#[test]
+fn test_budgeted_collect_string_stops_at_rejected_chunk_and_rolls_back() {
+    let calls = Cell::new(0);
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_string_bytes(8)
+        .max_nodes(100)
+        .max_payload_bytes(1_000)
+        .build();
+    let mut budget = JsonValueBudget::new(limits);
+    let error = {
+        let mut transaction = budget.transaction();
+        JsonValueEncoder::new()
+            .encode_in_transaction(&CollectedChunkString(&calls), &mut transaction)
+            .expect_err("the third chunk exceeds the string limit")
+    };
+    assert_eq!(calls.get(), 3);
+    assert!(matches!(error, JsonValueEncodeError::Budget(_)));
+    assert_eq!(budget.used_nodes(), Some(0));
+    assert_eq!(budget.used_payload_bytes(), Some(0));
+}
+
+#[test]
+fn test_budgeted_collect_key_stops_at_rejected_chunk_and_rolls_back() {
+    let calls = Cell::new(0);
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_key_bytes(8)
+        .max_nodes(100)
+        .max_payload_bytes(1_000)
+        .build();
+    let mut budget = JsonValueBudget::new(limits);
+    let error = {
+        let mut transaction = budget.transaction();
+        JsonValueEncoder::new()
+            .encode_in_transaction(&CollectedChunkKey(&calls), &mut transaction)
+            .expect_err("the third chunk exceeds the key limit")
+    };
+    assert_eq!(calls.get(), 3);
+    assert!(matches!(error, JsonValueEncodeError::Budget(_)));
+    assert_eq!(budget.used_nodes(), Some(0));
+    assert_eq!(budget.used_payload_bytes(), Some(0));
+}
+
+#[test]
+fn test_budgeted_collect_zero_limit_stops_on_first_chunk() {
+    let calls = Cell::new(0);
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_string_bytes(0)
+        .max_nodes(10)
+        .max_payload_bytes(100)
+        .build();
+    let mut budget = JsonValueBudget::new(limits);
+    let error = {
+        let mut transaction = budget.transaction();
+        JsonValueEncoder::new()
+            .encode_in_transaction(&CollectedChunkString(&calls), &mut transaction)
+            .expect_err("a nonempty Display exceeds a zero byte limit")
+    };
+    assert_eq!(calls.get(), 1);
+    assert!(matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &JsonResource::StringBytes));
+    assert_eq!(budget.used_nodes(), Some(0));
+    assert_eq!(budget.used_payload_bytes(), Some(0));
+}
+
+#[test]
+fn test_budgeted_collect_exact_utf8_boundary_and_narrow_quantity() {
+    let limits = JsonValueLimits::<JsonResource, u8>::builder()
+        .max_string_bytes(2)
+        .max_nodes(10)
+        .max_payload_bytes(10)
+        .build();
+    let mut budget = JsonValueBudget::new(limits);
+    let mut transaction = budget.transaction();
+    let value = JsonValueEncoder::new()
+        .encode_in_transaction(&StaticCollectedText("é"), &mut transaction)
+        .expect("two UTF-8 bytes exactly meet the configured boundary");
+    assert_eq!(value.as_value(), &json!("é"));
+    transaction.commit().expect("the exact boundary commits");
+    assert_eq!(budget.used_payload_bytes(), Some(2));
+}
+
+#[test]
+fn test_budgeted_collect_cumulative_payload_stops_at_rejected_chunk() {
+    let calls = Cell::new(0);
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_payload_bytes(8)
+        .max_nodes(10)
+        .build();
+    let mut budget = JsonValueBudget::new(limits);
+    let error = {
+        let mut transaction = budget.transaction();
+        JsonValueEncoder::new()
+            .encode_in_transaction(&TwoCollectedStrings(&calls), &mut transaction)
+            .expect_err("the second string exceeds cumulative payload after two chunks")
+    };
+    assert_eq!(calls.get(), 2);
+    assert!(matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &JsonResource::PayloadBytes));
+    assert_eq!(budget.used_payload_bytes(), Some(0));
+}
+
+#[test]
+fn test_budgeted_collect_cumulative_payload_exact_boundary_is_counted_once() {
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_payload_bytes(4)
+        .max_nodes(10)
+        .build();
+    let mut budget = JsonValueBudget::new(limits);
+    let mut transaction = budget.transaction();
+    let value = JsonValueEncoder::new()
+        .encode_in_transaction(&TwoExactCollectedStrings, &mut transaction)
+        .expect("both projections exactly fit cumulative payload");
+    assert_eq!(value.as_value(), &json!(["ab", "cd"]));
+    transaction.commit().expect("exact cumulative payload commits");
+    assert_eq!(budget.used_payload_bytes(), Some(4));
+}
+
+#[test]
+fn test_budgeted_collect_key_zero_and_exact_utf8_boundaries() {
+    let calls = Cell::new(0);
+    let zero_limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_key_bytes(0)
+        .max_nodes(10)
+        .max_payload_bytes(100)
+        .build();
+    let mut zero_budget = JsonValueBudget::new(zero_limits);
+    let error = {
+        let mut transaction = zero_budget.transaction();
+        JsonValueEncoder::new()
+            .encode_in_transaction(&CollectedChunkKey(&calls), &mut transaction)
+            .expect_err("nonempty Display key exceeds a zero byte limit")
+    };
+    assert_eq!(calls.get(), 1);
+    assert!(matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &JsonResource::KeyBytes));
+    assert_eq!(zero_budget.used_payload_bytes(), Some(0));
+
+    let exact_limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_key_bytes(2)
+        .max_nodes(10)
+        .max_payload_bytes(10)
+        .build();
+    let mut exact_budget = JsonValueBudget::new(exact_limits);
+    let mut transaction = exact_budget.transaction();
+    let value = JsonValueEncoder::new()
+        .encode_in_transaction(&CollectedStaticKey("é"), &mut transaction)
+        .expect("the UTF-8 key exactly fits its byte limit");
+    assert_eq!(value.as_value(), &json!({"é": true}));
+    transaction.commit().expect("exact key boundary commits");
+    assert_eq!(exact_budget.used_payload_bytes(), Some(2));
+}
+
+#[test]
+fn test_budgeted_collect_display_failure_after_chunk_remains_formatting_error() {
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_string_bytes(4)
+        .max_nodes(10)
+        .max_payload_bytes(10)
+        .build();
+    let mut budget = JsonValueBudget::new(limits);
+    let error = {
+        let mut transaction = budget.transaction();
+        JsonValueEncoder::new()
+            .encode_in_transaction(&FailingAfterChunk, &mut transaction)
+            .expect_err("Display reports its own formatting failure after writing")
+    };
+    assert_eq!(error.kind(), Some(JsonSerializationErrorKind::DisplayFormattingFailed));
+    assert_eq!(budget.used_nodes(), Some(0));
+    assert_eq!(budget.used_payload_bytes(), Some(0));
+}
+
+#[test]
+fn test_budgeted_collect_failure_remains_sticky_when_swallowed() {
+    let calls = Cell::new(0);
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_string_bytes(8)
+        .max_nodes(10)
+        .max_payload_bytes(100)
+        .build();
+    let mut budget = JsonValueBudget::new(limits);
+    let error = {
+        let mut transaction = budget.transaction();
+        JsonValueEncoder::new()
+            .encode_in_transaction(&SwallowedChunkFailure(&calls), &mut transaction)
+            .expect_err("swallowing the child error cannot clear the sticky budget failure")
+    };
+    assert_eq!(calls.get(), 3);
+    assert!(matches!(error, JsonValueEncodeError::Budget(_)));
+    assert_eq!(budget.used_payload_bytes(), Some(0));
+}
+
+#[test]
+fn test_budgeted_empty_collect_still_checks_nodes_and_depth() {
+    for (limits, resource) in [
+        (
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_nodes(0)
+                .max_payload_bytes(100)
+                .build(),
+            JsonResource::Nodes,
+        ),
+        (
+            JsonValueLimits::builder()
+                .max_depth(0)
+                .max_nodes(10)
+                .max_payload_bytes(100)
+                .build(),
+            JsonResource::Depth,
+        ),
+    ] {
+        let mut budget = JsonValueBudget::new(limits);
+        let mut transaction = budget.transaction();
+        let error = JsonValueEncoder::new()
+            .encode_in_transaction(&StaticCollectedText(""), &mut transaction)
+            .expect_err("empty Display output still admits a string node");
+        assert!(matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &resource));
+        drop(transaction);
+        assert_eq!(budget.used_nodes(), Some(0));
     }
 }
