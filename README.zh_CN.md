@@ -173,7 +173,7 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 | `decode::NormalizingJsonDecoder` | 外部文本 → `T`，或通过 `prepare_*` → `NormalizedJsonDocument` | 按显式的 `NormalizingJsonDecodePolicy` 清理文本，再严格解码，资源用量计入累计会话。一次性解码要求目标实现 `DeserializeOwned`。 |
 | `decode::NormalizedJsonDocument<'input>` | 准备好的文档 → 规范化 `&str` 或后续解码得到的 `T` | 通过 `Cow<'input, str>` 借用或持有文本，并记录原始、规范化字节数。结果需要借用规范化文本时，先准备文档，再从文档解码。 |
 | `encode::JsonEncoder` | `&T: Serialize` → `Vec<u8>` 或字节输出源 | 持有累计计量的编码会话，通过 `to_vec`、`write_buffered`、`write_incremental` 输出严格 JSON。 |
-| `value::JsonValueEncoder` | `&T: Serialize` → `Value`；事务投影 → `SafeJsonValue` | 无状态地将 Serde 数据投影为严格 JSON 树。`encode_in_transaction` 把计量暂存在调用方事务中，由调用方稍后提交。 |
+| `value::JsonValueEncoder` | `&T: Serialize` → `Value`；事务投影 → `SafeJsonValue` | 无状态地将 Serde 数据投影为严格 JSON 树。可选的 `encode_in_transaction_with_private_text_limit` 分别限制私有 payload；详见[投影指南](doc/user_guide.zh_CN.md#投影值树并排版输出)。 |
 | `value::SafeJsonValue` | `Value` → 受保护所有者；`as_value` → `&Value`；`into_value` → `Value` | 持有值树，复制、比较和清理等操作使用显式栈。`new` 只接管所有权，不执行预算准入。 |
 | `value::traverse::JsonTreeReader` | `&Value` + `JsonTreeVisitor` → 进入、离开节点的回调 | 借用值事务，在遍历中对节点进行准入计量；只需计量整棵树时使用 `account`。 |
 | `value::traverse::JsonTreeMutator` | `&mut Value` + `JsonTreeMutVisitor` → 修改后的树 | 分别借用输入、输出值事务，先检查输入，再执行修改，最后检查输出；后续失败会保留此前的修改。 |
@@ -227,12 +227,14 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 
 - 普通严格准入会检查 JSON 语法和数字范围，但不会自动要求对象键唯一。若唯一性属于输入契约，
   可使用 `DuplicateKeyRejectingJsonValue`；JCS 原始文本路径则使用 `JcsDecoder`。
-- 普通文本解码和编码要求负整数装入 `i64`、非负整数装入 `u64`；`JcsDecoder` 则将所有数字舍入为
-  有限 `f64`。例如 `9007199254740993` 会变成 `9007199254740992`。要求精确保留各位数字时，使用字符串或领域类型。
+- 普通文本解码默认采用 `Integer64`：负整数装入 `i64`，非负整数装入 `u64`。只有明确支持
+  `Integer64WithFiniteFallback` 的解码入口才会将范围外整数按有限 `f64` 接受，且可能舍入；这不会自动
+  应用于规范化入口或切片入口。`JcsDecoder` 将所有数字转换为有限 binary64，因此
+  `9007199254740993` 会变成 `9007199254740992`。严格编码仍按自身范围校验，不继承解码 fallback。要求精确保留各位数字时，使用字符串或领域类型。
 - `JsonValueEncoder` 只识别 `serde_json::Number` 对应的精确私有 Serde struct 协议；普通 map 即使字段同名也仍是对象。格式错误的 `RawValue` 与 `Number` 协议分别返回 `JsonSerializerStateError::InvalidRawValueProtocol` 和 `InvalidNumberProtocol`。seed 只看到原生数字事件，无法从普通 map 猜出私有协议来源。
 - `JsonDecoder::decode_value_*` 返回 `SafeJsonValue`，其自有树操作和清理使用显式栈。唯一的深度限制是调用方配置的 `max_depth`（包含根值）；旧 `decode_*<T>` 仍依赖目标类型自身的构造能力，不保证任意深度都能构造或析构。`JcsDecoder` 保留历史深度错误变体，但不再另设固定的 127 层上限；它返回裸 `serde_json::Value`，处理深结果时应立即用 `SafeJsonValue::new` 接管。
 - `decode_unique_validated_*` 使用 `JsonValidatedDecodeOptions`，并为每个原始数字 token 调用带路径的策略回调。额外的节点数和字符串长度限制按文档计算；`JsonDecodeSession` 的资源用量跨调用累计。若之后遇到语法错误，先前回调产生的副作用不会回滚。
-- `JsonValueEncoder::encode_in_transaction` 会把测量结果暂存在调用方的值事务中，并返回受保护的 owner。只有全部投影成功后才提交；遇到错误或 panic 时应丢弃整笔事务。可以继续把 owner 交给 `JsonEncoder` 生成严格 JSON，再交给 `format_json_tokens` 排版；后者验证 JSON 语法并保留数字、字符串 token 原文及重复键，不构造 `Value`，也不执行规范化。
+- `JsonValueEncoder::encode_in_transaction` 会把测量结果暂存在调用方的值事务中，并返回受保护的 owner。可选的 `encode_in_transaction_with_private_text_limit` 分别限制每个 RawValue/Number 私有 payload 的 UTF-8 原文字节；额度不累计、不限制普通字符串、不影响旧入口，并独立于 `JsonEncoder` 的输出字节上限。遇到 `PrivateTextLimitExceeded` 后应丢弃整笔事务。详见[投影指南](doc/user_guide.zh_CN.md#投影值树并排版输出)。可以继续把 owner 交给 `JsonEncoder` 生成严格 JSON，再交给 `format_json_tokens` 排版；后者验证 JSON 语法并保留数字、字符串 token 原文及重复键，不构造 `Value`，也不执行规范化。
 - `JsonSerializationErrorKind::InvalidRawValue` 表示原始值未通过严格物化契约，失败原因可能不只是语法错误。普通 newtype 仍保持透明；需要按原始 JSON 物化时应使用 `serde_json::value::RawValue`。
 - 树遍历按现有 `serde_json::Number` 的紧凑显示长度计量。启用 `arbitrary_precision` 时，树读取器可计量已保存的宽数字（例如 `1e400`）；普通和 JCS 编码器仍按各自规则拒绝超出有限范围的数字。
 - 所有不可信边界都应设置有限资源上限。`unlimited()` 会同时取消值、输出和工作内存限制，

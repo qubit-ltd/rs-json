@@ -21,12 +21,15 @@
 //!
 //! # Number contract
 //!
-//! Strict text codecs accept negative integers in `i64`, non-negative
-//! integers in `u64`, and fractional or exponential tokens representable as
-//! finite `f64`. This intentionally includes integers above JavaScript's safe
-//! integer limit. Wider exact integers and exact decimals must use strings or
-//! an explicit domain wire format. `NumberBytes` limits lexical size; it does
-//! not expand the supported numeric range.
+//! Ordinary strict and normalizing text decoding defaults to the `Integer64`
+//! model: negative integers fit `i64`, non-negative integers fit `u64`, and
+//! fractional or exponential tokens are finite `f64`. An explicit supported
+//! decode entry point can select finite fallback for out-of-range integer
+//! tokens; this may round them. `JcsDecoder` instead converts every number to
+//! finite binary64. Strict encoding retains its own range checks and does not
+//! inherit a decode fallback. Wider exact integers and exact decimals should
+//! use strings or an explicit domain wire format. `NumberBytes` limits lexical
+//! size; it does not expand the supported numeric range.
 
 #![deny(missing_docs)]
 

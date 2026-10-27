@@ -336,6 +336,7 @@ for depth in [128, 129] {
 `JsonSerializationError` 以及普通的 `JsonDecodeError` / `JsonEncodeError` 领域错误。
 
 `JsonValueEncoder` 使用相同的 builder 物化真正的 `serde_json::value::RawValue`；事务入口返回受保护 owner。
+
 `JsonSerializationErrorKind::InvalidRawValue` 表示原始值未通过严格物化契约（例如语法错误或重复键），
 不再表示固定层数上限。
 
@@ -475,6 +476,27 @@ assert!(std::str::from_utf8(&pretty)?.contains("\"ok\": true"));
 参数是可选的排版输出字节上限，不约束输入、深度或堆内存。`write_json_tokens` 在写入前验证并
 规划整份文档，语法或输出上限失败不会改动输出，也不会 flush 目标。写入开始后若发生 I/O
 故障，目标仍可能保留部分前缀；应用应按失败处理，不能把该前缀当作完整文档。
+
+若 Serde 实现可能生成较长的 RawValue 或 Number 私有文本，可使用有界事务入口，在库复制或追加超限内容前限制每个 payload：
+
+```rust
+use qubit_budget::json::{JsonResource, JsonValueBudget, JsonValueLimits};
+use qubit_json::value::JsonValueEncoder;
+use serde_json::value::RawValue;
+
+let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
+let mut transaction = budget.transaction();
+let raw = RawValue::from_string("{\"ok\":true}".to_owned())?;
+let owner = JsonValueEncoder::new()
+    .encode_in_transaction_with_private_text_limit(&raw, &mut transaction, 64)?;
+transaction.commit()?;
+assert_eq!(owner.as_value()["ok"], true);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+上限包含边界，按每个私有 payload 的 UTF-8 原文字节分别计算，不累计、不限制普通字符串，也不代表分配容量或进程总内存上限。
+旧 `encode_in_transaction` 入口不受此私有文本限额约束。该临时文本限额独立于 `JsonEncoder` 的输出字节上限。
+超限返回 `JsonValueEncodeError::PrivateTextLimitExceeded { maximum }`；任何投影失败后都应丢弃整笔事务，不提交其中暂存的计量。
 
 ```rust
 use qubit_json::format::{JsonPrettyOptions, format_json_tokens};
@@ -839,7 +861,7 @@ encoder 识别 serde_json 的两种精确私有 struct 协议：`RawValue` 与 `
 `InvalidSerializerState`。`JsonValueEncoder` 将普通 compound 长度用作预分配提示，不执行相同的声明检查；其
 `RawValue` 和 `Number` 私有协议仍会严格验证。
 
-把 `Display` 编码成 JSON 字符串或对象键时，collector 会先检查本次写入后完整字符串/键的预计测量值，再追加该分块。预检成功不扣预算；格式化完成后才对完整测量准入一次。这能阻止库的 collector 在字符串或键超过限制后继续增长，但库无法控制用户 `Display::fmt` 内部的任意分配、分配器元数据或进程 RSS。`RawValue`/Number 的原始输出 payload 仍要等完整文本收集后才能校验 JSON 结构；收集期间仍受输出字节上限约束。
+把 `Display` 编码成 JSON 字符串或对象键时，collector 会先检查本次写入后完整字符串/键的预计测量值，再追加该分块。预检成功不扣预算；格式化完成后才对完整测量准入一次。这能阻止库的 collector 在字符串或键超过限制后继续增长，但库无法控制用户 `Display::fmt` 内部的任意分配、分配器元数据或进程 RSS。`JsonEncoder` 的 RawValue/Number 输出 payload 仍要等完整文本收集后才能校验 JSON 结构；该输出收集受 `JsonEncoder` 的输出字节上限约束。`JsonValueEncoder` 不使用这个输出额度；需限制它的临时私有文本时，应使用上面的有界事务入口。
 
 ## 错误与诊断
 

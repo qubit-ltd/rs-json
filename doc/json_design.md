@@ -184,14 +184,26 @@ configured depth contract to genuine `serde_json::value::RawValue` payloads. Its
 contract, including duplicate keys, numeric constraints, or depth; it is not
 a syntax-only classification.
 
+The bounded transaction projection entry point limits each private RawValue or
+Number payload by its UTF-8 source-byte length before copying or appending past
+the configured maximum. The inclusive maximum is per payload, not cumulative;
+it does not apply to ordinary strings, does not measure total memory, and does
+not affect the older unbounded transaction entry point. A rejection is
+`PrivateTextLimitExceeded { maximum }`. Callers should drop the whole
+transaction after any projection failure. This temporary text limit is
+independent of `JsonEncoder` output-byte accounting.
+
 ### Numeric representation
 
-Strict and normalizing text paths default to `Integer64`: negative integers
+Strict and normalizing text decoding defaults to `Integer64`: negative integers
 fit `i64`, non-negative integers fit `u64`, and fractional or exponential
 values must be finite `f64`. The opt-in `Integer64WithFiniteFallback` model
 allows an out-of-range integer token when it converts to finite `f64`, which
 can round its value; it does not relax the finite rule for decimal or exponent
-tokens. The feature-gated `JcsDecoder` uses a separate binary64 model,
+tokens. Fallback is available only on decode entry points that explicitly
+expose model selection; normalizing and ordinary slice entry points do not
+automatically enable it. Strict encoding has separate range checks and does
+not inherit decode fallback. The feature-gated `JcsDecoder` uses a separate binary64 model,
 converting every number (including in-range integers) to `f64` and rejecting
 duplicate object keys during materialization. Both ordinary models admit the
 original `NumberBytes` before range validation, so budget failures have

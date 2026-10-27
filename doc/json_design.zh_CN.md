@@ -130,9 +130,10 @@ builder 在插入值之前检查重复键。共享 builder 没有独立固定容
 
 ### 数字表示
 
-strict 与 normalizing 文本路径默认采用 `Integer64`：负整数装入 `i64`，非负整数装入 `u64`，
+strict 与 normalizing 文本解码默认采用 `Integer64`：负整数装入 `i64`，非负整数装入 `u64`，
 小数或指数装入有限 `f64`。可选的 `Integer64WithFiniteFallback` 允许超出整数范围、但可转换为有限 `f64` 的
-整数 token，因此可能舍入；它不会放宽小数或指数 token 的有限值要求。feature-gated 的 `JcsDecoder` 单独采用
+整数 token，因此可能舍入；它不会放宽小数或指数 token 的有限值要求。只有明确公开模型选择的解码入口才能启用
+fallback；规范化与普通切片入口不会自动启用。严格编码有独立范围校验，不继承解码 fallback。feature-gated 的 `JcsDecoder` 单独采用
 binary64 模型，将所有数字（包括整数范围内的值）转为 `f64`，并在物化时拒绝对象内重复键。普通两种模型都先准入
 原始 `NumberBytes`，再校验范围，因此预算错误优先。crate 自身不启用 serde_json `arbitrary_precision`；但若其他依赖启用该 feature，仍会处理精确的私有 `Number` struct 协议。普通 map 即使有同名键也仍是对象。
 模型对照和配置示例见 [JSON 数字契约](number_contract.zh_CN.md)。
@@ -146,6 +147,11 @@ JCS Value 构造复用共享 builder，没有独立固定容器上限；包含�
 
 `JsonValueEncoder` 使用同一个 RawValue 物化器，因此真正的 `serde_json::value::RawValue` payload 也遵循同一配置深度契约。
 `InvalidRawValue` 表示严格物化契约拒绝输入，可能涉及重复键、数字约束或深度，并非仅用于语法错误。
+
+有界事务投影入口会在复制或追加超出配置长度前，按 UTF-8 原文字节数限制每个 RawValue 或 Number 私有 payload。
+上限包含边界、按 payload 独立计算，不累计、不约束普通字符串，也不计量总内存；旧事务入口不受此上限影响。
+超限返回 `PrivateTextLimitExceeded { maximum }`。投影失败后调用方应丢弃整笔事务。此临时文本上限独立于
+`JsonEncoder` 的输出字节计量。
 
 私有 Number 协议只有在 Serde struct 名称和 payload 形状完全匹配时才会识别；真实对象中名为 `$serde_json::private::Number` 的键仍是普通键。`RawValue` 私有协议也会识别并严格验证。
 有限浮点的紧凑 JSON 文本长度通过公开的 `serde_json::ser::CompactFormatter` 接口计算，

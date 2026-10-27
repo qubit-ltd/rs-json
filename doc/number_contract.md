@@ -7,6 +7,12 @@ It is a deliberate implementation contract, not an additional JSON grammar.
 RFC 8259 does not set a maximum number length, but permits implementations to
 limit numeric range and precision.
 
+## Default strict model
+
+Unless an entry point explicitly selects another model, ordinary strict and
+normalizing text decoding uses `Integer64`. The ranges below describe that
+default model, not every decoder.
+
 ## Accepted values
 
 | JSON token | Contract |
@@ -21,10 +27,11 @@ produce `IntegerOutOfRange`. A fraction or exponent that overflows binary64,
 such as `1e400`, produces `FloatOutOfRange`. Underflow and normal decimal
 rounding follow `f64`/serde_json behavior.
 
-Encoding is symmetric. All `i64` and `u64` values are accepted. Serde `i128`
-is accepted only if it fits `i64`, or is non-negative and fits `u64`; `u128`
-must fit `u64`. Values outside the range fail instead of being truncated or
-implicitly converted to strings. Non-finite floats are rejected.
+Strict encoding has its own range checks: all `i64` and `u64` values are
+accepted. Serde `i128` is accepted only if it fits `i64`, or is non-negative
+and fits `u64`; `u128` must fit `u64`. Values outside the range fail instead
+of being truncated or implicitly converted to strings. Non-finite floats are
+rejected. A decode fallback does not change this encoding contract.
 
 ## Select a text-decoding number model
 
@@ -34,6 +41,10 @@ it admits one when conversion to a finite `f64` succeeds. Ordinary decimal and
 exponent tokens must be finite in either model. `JcsDecoder` is a separate
 contract: it converts every number, including values inside the integer range,
 to finite binary64, as required by JCS.
+
+Fallback is available only through decode entry points that explicitly expose
+number-model selection. It is not automatically enabled by normalizing decode
+or by ordinary slice methods.
 
 | Entry point | In-range integers | Out-of-range integer token | Decimal/exponent token |
 | --- | --- | --- | --- |

@@ -553,6 +553,32 @@ the original number and string token spellings, and permits duplicate object
 keys because it does not construct a `Value`. I/O failures can still leave an
 accepted prefix in the destination.
 
+For generated RawValue or Number payloads, the bounded entry point limits each
+private payload's UTF-8 source bytes before the library copies or appends past
+the maximum:
+
+```rust
+use qubit_budget::json::{JsonResource, JsonValueBudget, JsonValueLimits};
+use qubit_json::value::JsonValueEncoder;
+use serde_json::value::RawValue;
+
+let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
+let mut transaction = budget.transaction();
+let raw = RawValue::from_string("{\"ok\":true}".to_owned())?;
+let owner = JsonValueEncoder::new()
+    .encode_in_transaction_with_private_text_limit(&raw, &mut transaction, 64)?;
+transaction.commit()?;
+assert_eq!(owner.as_value()["ok"], true);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The inclusive limit applies independently to each private payload; it is not
+cumulative, does not limit ordinary strings, and does not measure allocation
+capacity or total process memory. The older `encode_in_transaction` entry
+point has no private-text limit. This limit is separate from `JsonEncoder`'s
+output-byte limit. On `JsonValueEncodeError::PrivateTextLimitExceeded { maximum }`,
+drop the whole transaction instead of committing staged measurements.
+
 `JsonPrettyOptions::builder()` defaults to two spaces per level, no displayed
 depth cap, and no trailing newline. `max_indent_levels` changes indentation
 only; it does not restrict accepted nesting. The third argument to
