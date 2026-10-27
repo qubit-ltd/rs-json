@@ -10,6 +10,7 @@
 mod decode;
 mod encode;
 mod fixtures;
+mod format;
 mod internal;
 mod lexical;
 mod value;

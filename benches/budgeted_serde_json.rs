@@ -27,6 +27,8 @@ use qubit_json::decode::MarkdownFencePolicy;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use qubit_json::encode::JsonEncoder;
+use qubit_json::format::JsonPrettyOptions;
+use qubit_json::format::format_json_tokens;
 use serde::Deserialize;
 use serde::Serialize;
 use serde::Serializer;
@@ -45,6 +47,26 @@ const DOCUMENT_SUFFIX: &[u8] = br#"]}"#;
 const SERDE_JSON_NUMBER_TOKEN: &str = concat!("$", "serde_json", ":", ":private::Number");
 const NUMBER_LEXEME: &str = "1234567890.125";
 const T10_PAYLOAD_SIZES: [usize; 2] = [1_024, 65_536];
+const TOKEN_FORMAT_ITEMS: [usize; 3] = [32, 512, 4_096];
+
+/// Benchmarks full token formatting with and without a small output limit.
+fn benchmark_token_format_limit(criterion: &mut Criterion) {
+    let options = JsonPrettyOptions::builder().build().expect("valid default options");
+    let mut group = criterion.benchmark_group("token_format_limit");
+    for count in TOKEN_FORMAT_ITEMS {
+        let input = format!("[{}]", vec!["0"; count].join(",")).into_bytes();
+        let output = format_json_tokens(&input, &options, None).expect("fixture must format");
+        assert!(output.len() > 8, "fixture must exceed the rejection limit");
+        let error = format_json_tokens(&input, &options, Some(8)).expect_err("fixture must exceed the rejection limit");
+        assert_eq!(error.kind(), qubit_json::format::JsonPrettyErrorKind::OutputLimit);
+        for (label, maximum) in [("unlimited-success", None), ("limit-8-reject", Some(8))] {
+            group.bench_with_input(BenchmarkId::new(label, count), &input, |bencher, input| {
+                bencher.iter(|| black_box(format_json_tokens(black_box(input), &options, maximum)));
+            });
+        }
+    }
+    group.finish();
+}
 
 /// Emits one valid private serde_json Number protocol value.
 struct PrivateNumber(&'static str);
@@ -579,5 +601,11 @@ fn encode(criterion: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, decode, encode, benchmark_t10_workloads);
+criterion_group!(
+    benches,
+    decode,
+    encode,
+    benchmark_t10_workloads,
+    benchmark_token_format_limit
+);
 criterion_main!(benches);

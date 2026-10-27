@@ -41,6 +41,7 @@ struct Container {
 struct Planner<'a> {
     input: &'a [u8],
     options: &'a JsonPrettyOptions,
+    maximum: Option<usize>,
     actions: Vec<Action>,
     stack: Vec<Container>,
     length: usize,
@@ -52,10 +53,13 @@ impl Planner<'_> {
         Ok(())
     }
     fn push(&mut self, action: Action, length: usize) -> Result<(), JsonPrettyError> {
+        self.add_len(length)?;
+        if self.maximum.is_some_and(|maximum| self.length > maximum) {
+            return Ok(());
+        }
         self.actions
             .try_reserve(1)
             .map_err(|error| capacity_error(Some(Box::new(error))))?;
-        self.add_len(length)?;
         self.actions.push(action);
         Ok(())
     }
@@ -234,6 +238,7 @@ fn make_plan(input: &[u8], options: &JsonPrettyOptions, maximum: Option<usize>) 
     let mut planner = Planner {
         input,
         options,
+        maximum,
         actions: Vec::new(),
         stack: Vec::new(),
         length: 0,
@@ -305,11 +310,17 @@ fn io_error(error: std::io::Error) -> JsonPrettyError {
 
 #[cfg(test)]
 mod tests {
+    use qubit_budget::json::JsonDecodeLimits;
+    use qubit_budget::json::JsonDecodeSession;
+    use qubit_budget::json::JsonResource;
+
     use super::Container;
     use super::ContainerKind;
     use super::Planner;
     use crate::format::JsonPrettyErrorKind;
     use crate::format::JsonPrettyOptions;
+    use crate::lexical::JsonLexicalScanner;
+    use crate::lexical::JsonNumberModel;
 
     #[test]
     fn test_planner_rejects_invalid_spans_and_unmatched_end() {
@@ -317,6 +328,7 @@ mod tests {
         let mut planner = Planner {
             input: b"[]",
             options: &options,
+            maximum: None,
             actions: Vec::new(),
             stack: Vec::new(),
             length: 0,
@@ -342,6 +354,7 @@ mod tests {
             let mut planner = Planner {
                 input: b"[]",
                 options: &options,
+                maximum: None,
                 actions: Vec::new(),
                 length: 0,
                 stack: vec![Container {
@@ -361,5 +374,64 @@ mod tests {
             assert_eq!(planner.stack[0].count, usize::MAX);
             assert!(planner.actions.is_empty());
         }
+    }
+
+    #[test]
+    fn test_planner_stops_retaining_actions_after_output_limit() {
+        fn planned_storage(input: &[u8], options: &JsonPrettyOptions) -> (usize, usize) {
+            let mut planner = Planner {
+                input,
+                options,
+                maximum: Some(8),
+                actions: Vec::new(),
+                stack: Vec::new(),
+                length: 0,
+            };
+            let limits = JsonDecodeLimits::<JsonResource, usize>::new();
+            let mut session = JsonDecodeSession::from_limits(limits);
+            let mut attempt = session.begin_value();
+            let mut scanner = JsonLexicalScanner::new(attempt.value_transaction_mut(), false)
+                .with_number_model(JsonNumberModel::SyntaxOnly);
+            scanner
+                .scan_with_consumer(input, &mut planner)
+                .expect("valid array must scan");
+            (planner.actions.len(), planner.actions.capacity())
+        }
+
+        let options = JsonPrettyOptions::builder().build().expect("valid defaults");
+        let mut zero_limit_planner = Planner {
+            input: b"0",
+            options: &options,
+            maximum: Some(0),
+            actions: Vec::new(),
+            stack: Vec::new(),
+            length: 0,
+        };
+        zero_limit_planner
+            .push(super::Action::Byte(b'0'), 1)
+            .expect("crossing the limit does not stop scanning");
+        assert_eq!(zero_limit_planner.actions.len(), 0, "zero limit retains no actions");
+        assert_eq!(
+            zero_limit_planner.actions.capacity(),
+            0,
+            "zero limit allocates no action storage"
+        );
+
+        let small = format!("[{}]", vec!["0"; 32].join(","));
+        let large = format!("[{}]", vec!["0"; 4_096].join(","));
+        let small_storage = planned_storage(small.as_bytes(), &options);
+        let large_storage = planned_storage(large.as_bytes(), &options);
+        assert_eq!(
+            small_storage.0, large_storage.0,
+            "retained actions must stop at the same prefix"
+        );
+        assert_eq!(
+            small_storage.1, large_storage.1,
+            "action capacity must not grow after the limit"
+        );
+        assert!(
+            large_storage.0 > 0,
+            "the planner retains the prefix before exceeding the limit"
+        );
     }
 }
