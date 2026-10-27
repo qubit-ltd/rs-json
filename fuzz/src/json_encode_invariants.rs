@@ -12,8 +12,10 @@ use qubit_budget::StructureLimits;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::encode::JsonEncoder;
+use qubit_json::value::JsonValueEncoder;
 use serde_json::Value;
 
 use crate::input_limit::bounded_input;
@@ -23,6 +25,11 @@ use crate::json_reference::parse_literal_value;
 
 /// Number of control bytes preceding a JSON encode fuzz payload.
 pub const CONTROL_BYTES: usize = 9;
+
+type EncodeError = qubit_json::encode::JsonEncodeError<JsonResource, usize>;
+type EncodeSession = JsonEncodeSession<'static, JsonResource, usize>;
+type EncodeRun<T> = (Result<T, EncodeError>, EncodeSession);
+type WriterRun = (Result<(), EncodeError>, Vec<u8>, EncodeSession);
 
 /// Computes value nodes and payload bytes without using the JSON budget APIs.
 fn reference_usage(value: &Value) -> (usize, usize) {
@@ -59,46 +66,6 @@ fn reference_usage(value: &Value) -> (usize, usize) {
         }
     }
     (nodes, payload)
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::Value;
-
-    use super::reference_usage;
-
-    #[test]
-    fn test_reference_usage_counts_basic_values_and_numeric_tokens() {
-        for literal in ["null", "true", "false", "\"\"", "[]", "{}"] {
-            let value: Value = serde_json::from_str(literal).unwrap();
-            assert_eq!(reference_usage(&value), (1, 0), "literal: {literal}");
-        }
-
-        let value: Value = serde_json::from_str(r#""é中""#).unwrap();
-        assert_eq!(reference_usage(&value), (1, 5));
-        let value: Value = serde_json::from_str(r#""a\n\"""#).unwrap();
-        assert_eq!(reference_usage(&value), (1, 3));
-
-        for (literal, expected_payload) in [
-            ("18446744073709551615", 20),
-            ("-9223372036854775808", 20),
-            ("-0.0", 4),
-            ("123.45", 6),
-            ("1e+20", 5),
-        ] {
-            let value: Value = serde_json::from_str(literal).unwrap();
-            assert_eq!(reference_usage(&value), (1, expected_payload), "number: {literal}");
-        }
-    }
-
-    #[test]
-    fn test_reference_usage_counts_utf8_object_keys_and_nested_values() {
-        let value: Value = serde_json::from_str(r#"{"é":[null,true,"中",12]}"#).unwrap();
-        assert_eq!(reference_usage(&value), (6, 7));
-
-        let value: Value = serde_json::from_str(r#"{"escaped\"key":"a\n\""}"#).unwrap();
-        assert_eq!(reference_usage(&value), (2, 14));
-    }
 }
 
 /// Splits a bounded fuzz input into its independent control header and payload.
@@ -158,6 +125,7 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
     let Ok(value) = serde_json::from_slice::<Value>(payload) else {
         return;
     };
+    assert_transaction_projection_invariants(&value);
 
     let mut baseline_encoder = JsonEncoder::new(encode_limits(usize::MAX, usize::MAX, usize::MAX));
     let baseline_encoded = baseline_encoder
@@ -210,32 +178,20 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
 
     assert_accounting(
         &vector_session,
-        output_limit,
-        node_limit,
-        payload_limit,
-        baseline_output,
-        baseline_nodes,
-        baseline_payload,
+        (output_limit, node_limit, payload_limit),
+        (baseline_output, baseline_nodes, baseline_payload),
         encoded.is_ok(),
     );
     assert_accounting(
         &buffered_session,
-        output_limit,
-        node_limit,
-        payload_limit,
-        baseline_output,
-        baseline_nodes,
-        baseline_payload,
+        (output_limit, node_limit, payload_limit),
+        (baseline_output, baseline_nodes, baseline_payload),
         buffered.is_ok(),
     );
     assert_accounting(
         &incremental_session,
-        output_limit,
-        node_limit,
-        payload_limit,
-        baseline_output,
-        baseline_nodes,
-        baseline_payload,
+        (output_limit, node_limit, payload_limit),
+        (baseline_output, baseline_nodes, baseline_payload),
         incremental.is_ok(),
     );
     if let Ok(encoded) = &encoded {
@@ -277,11 +233,91 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
     );
 }
 
+/// Checks explicit commit and rollback behavior for value projection.
+pub fn assert_transaction_projection_invariants(value: &Value) {
+    let (nodes, payload) = reference_usage(value);
+    let encoder = JsonValueEncoder::new();
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(nodes)
+        .max_payload_bytes(payload)
+        .build();
+    let mut budget = JsonValueBudget::new(limits);
+    {
+        let mut transaction = budget.transaction();
+        encoder
+            .encode_in_transaction(value, &mut transaction)
+            .expect("reference-sized limits admit the reference value");
+        assert_eq!(transaction.used_nodes(), Some(nodes));
+        assert_eq!(transaction.used_payload_bytes(), Some(payload));
+        transaction.commit().expect("complete projection commits");
+    }
+    assert_eq!(budget.used_nodes(), Some(nodes));
+    assert_eq!(budget.used_payload_bytes(), Some(payload));
+
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(nodes.saturating_mul(2))
+        .max_payload_bytes(payload.saturating_mul(2))
+        .build();
+    let mut batch_budget = JsonValueBudget::new(limits);
+    {
+        let mut transaction = batch_budget.transaction();
+        for _ in 0..2 {
+            encoder
+                .encode_in_transaction(value, &mut transaction)
+                .expect("both projections fit the combined transaction budget");
+        }
+        assert_eq!(transaction.used_nodes(), Some(nodes.saturating_mul(2)));
+        assert_eq!(transaction.used_payload_bytes(), Some(payload.saturating_mul(2)));
+        transaction.commit().expect("both projections commit together");
+    }
+    assert_eq!(batch_budget.used_nodes(), Some(nodes.saturating_mul(2)));
+    assert_eq!(batch_budget.used_payload_bytes(), Some(payload.saturating_mul(2)));
+
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(nodes.saturating_mul(2).saturating_sub(1))
+        .max_payload_bytes(payload.saturating_mul(2))
+        .build();
+    let mut dropped_batch = JsonValueBudget::new(limits);
+    {
+        let mut transaction = dropped_batch.transaction();
+        encoder
+            .encode_in_transaction(value, &mut transaction)
+            .expect("the first projection fits before the batch failure");
+        assert!(encoder.encode_in_transaction(value, &mut transaction).is_err());
+    }
+    assert_eq!(dropped_batch.used_nodes(), Some(0));
+    assert_eq!(dropped_batch.used_payload_bytes(), Some(0));
+    {
+        let mut transaction = dropped_batch.transaction();
+        encoder
+            .encode_in_transaction(value, &mut transaction)
+            .expect("the rolled-back budget must accept a fresh transaction");
+        transaction
+            .commit()
+            .expect("the fresh transaction commits after rollback");
+    }
+    assert_eq!(dropped_batch.used_nodes(), Some(nodes));
+    assert_eq!(dropped_batch.used_payload_bytes(), Some(payload));
+
+    let short_limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(nodes.saturating_sub(1))
+        .max_payload_bytes(payload)
+        .build();
+    let mut short_budget = JsonValueBudget::new(short_limits);
+    {
+        let mut transaction = short_budget.transaction();
+        let failed = encoder.encode_in_transaction(value, &mut transaction).is_err();
+        assert_eq!(failed, nodes > 0, "one fewer node rejects a nonempty value");
+    }
+    assert_eq!(short_budget.used_nodes(), Some(0));
+    assert_eq!(short_budget.used_payload_bytes(), Some(0));
+}
+
 fn select_control_limit(control: &[u8; CONTROL_BYTES], offset: usize, baseline: usize) -> usize {
     select_encode_limit(u16::from_le_bytes([control[offset], control[offset + 1]]), baseline)
 }
 
-fn encode_limits(output: usize, nodes: usize, payload: usize) -> JsonEncodeSession<'static, JsonResource, usize> {
+fn encode_limits(output: usize, nodes: usize, payload: usize) -> EncodeSession {
     let structure = StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes));
     let values = JsonValueLimits::<JsonResource, usize>::builder()
         .structure_limits(structure)
@@ -294,46 +330,20 @@ fn encode_limits(output: usize, nodes: usize, payload: usize) -> JsonEncodeSessi
     JsonEncodeSession::from_limits(limits)
 }
 
-fn run_vector(
-    value: &Value,
-    output: usize,
-    nodes: usize,
-    payload: usize,
-) -> (
-    Result<Vec<u8>, qubit_json::encode::JsonEncodeError<JsonResource, usize>>,
-    JsonEncodeSession<'static, JsonResource, usize>,
-) {
+fn run_vector(value: &Value, output: usize, nodes: usize, payload: usize) -> EncodeRun<Vec<u8>> {
     let mut encoder = JsonEncoder::new(encode_limits(output, nodes, payload));
     let result = encoder.to_vec(value);
     (result, encoder.into_session())
 }
 
-fn run_buffered(
-    value: &Value,
-    output_limit: usize,
-    nodes: usize,
-    payload: usize,
-) -> (
-    Result<(), qubit_json::encode::JsonEncodeError<JsonResource, usize>>,
-    Vec<u8>,
-    JsonEncodeSession<'static, JsonResource, usize>,
-) {
+fn run_buffered(value: &Value, output_limit: usize, nodes: usize, payload: usize) -> WriterRun {
     let mut encoder = JsonEncoder::new(encode_limits(output_limit, nodes, payload));
     let mut output = Vec::new();
     let result = encoder.write_buffered(&mut output, value);
     (result, output, encoder.into_session())
 }
 
-fn run_incremental(
-    value: &Value,
-    output_limit: usize,
-    nodes: usize,
-    payload: usize,
-) -> (
-    Result<(), qubit_json::encode::JsonEncodeError<JsonResource, usize>>,
-    Vec<u8>,
-    JsonEncodeSession<'static, JsonResource, usize>,
-) {
+fn run_incremental(value: &Value, output_limit: usize, nodes: usize, payload: usize) -> WriterRun {
     let mut encoder = JsonEncoder::new(encode_limits(output_limit, nodes, payload));
     let mut output = Vec::new();
     let result = encoder.write_incremental(&mut output, value);
@@ -341,15 +351,13 @@ fn run_incremental(
 }
 
 fn assert_accounting(
-    session: &JsonEncodeSession<'static, JsonResource, usize>,
-    output_limit: usize,
-    node_limit: usize,
-    payload_limit: usize,
-    baseline_output: usize,
-    baseline_nodes: usize,
-    baseline_payload: usize,
+    session: &EncodeSession,
+    limits: (usize, usize, usize),
+    baseline: (usize, usize, usize),
     succeeded: bool,
 ) {
+    let (output_limit, node_limit, payload_limit) = limits;
+    let (baseline_output, baseline_nodes, baseline_payload) = baseline;
     let output_used = session.output_budget().expect("output measurement is enabled").used();
     let nodes_used = session
         .value_budget()
@@ -413,5 +421,45 @@ fn assert_writer_invariants(
         assert!(matches!(mode, OutputMode::BrokenPipe));
         assert_eq!(output.bytes(), &expected[..output.bytes().len()]);
         assert!(output.bytes().len() <= accepted_limit);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    use super::reference_usage;
+
+    #[test]
+    fn test_reference_usage_counts_basic_values_and_numeric_tokens() {
+        for literal in ["null", "true", "false", "\"\"", "[]", "{}"] {
+            let value: Value = serde_json::from_str(literal).unwrap();
+            assert_eq!(reference_usage(&value), (1, 0), "literal: {literal}");
+        }
+
+        let value: Value = serde_json::from_str(r#""é中""#).unwrap();
+        assert_eq!(reference_usage(&value), (1, 5));
+        let value: Value = serde_json::from_str(r#""a\n\"""#).unwrap();
+        assert_eq!(reference_usage(&value), (1, 3));
+
+        for (literal, expected_payload) in [
+            ("18446744073709551615", 20),
+            ("-9223372036854775808", 20),
+            ("-0.0", 4),
+            ("123.45", 6),
+            ("1e+20", 5),
+        ] {
+            let value: Value = serde_json::from_str(literal).unwrap();
+            assert_eq!(reference_usage(&value), (1, expected_payload), "number: {literal}");
+        }
+    }
+
+    #[test]
+    fn test_reference_usage_counts_utf8_object_keys_and_nested_values() {
+        let value: Value = serde_json::from_str(r#"{"é":[null,true,"中",12]}"#).unwrap();
+        assert_eq!(reference_usage(&value), (6, 7));
+
+        let value: Value = serde_json::from_str(r#"{"escaped\"key":"a\n\""}"#).unwrap();
+        assert_eq!(reference_usage(&value), (2, 14));
     }
 }

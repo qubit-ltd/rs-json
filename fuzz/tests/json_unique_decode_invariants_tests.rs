@@ -7,6 +7,8 @@
 // =============================================================================
 //! Deterministic regressions for unique-key JSON decode invariants.
 
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonMaterializationErrorReason;
@@ -52,17 +54,22 @@ fn test_unique_decode_invariants_cover_depth_boundary() {
         assert_unique_decode_invariants(&input, 0);
         assert_unique_decode_invariants(&input, input.len());
         let result = JsonDecoder::unlimited().decode_unique_utf8::<DuplicateKeyRejectingJsonValue>(&input);
-        if depth == 127 {
-            result.expect("127 nested containers must materialize");
-        } else {
-            assert_eq!(
-                result
-                    .expect_err("128 nested containers must exceed the construction limit")
-                    .materialization_error_reason(),
-                Some(JsonMaterializationErrorReason::DepthLimit { limit: 127 }),
-            );
-        }
+        result.expect("both depths must materialize without a configured depth limit");
     }
+
+    let limited = nested_arrays(4);
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(limited.len())
+        .max_depth(3)
+        .build();
+    let error = JsonDecoder::with_limits(limits)
+        .decode_value_utf8(&limited)
+        .expect_err("configured maximum depth must be enforced");
+    let depth_budget_error = error.budget_error().and_then(|error| error.budget_error());
+    assert!(
+        depth_budget_error
+            .is_some_and(|error| { error.resource() == &JsonResource::Depth && error.configured_limit() == 3 })
+    );
 }
 
 /// Verifies duplicate, UTF-8, syntax, and numeric failures retain stable
@@ -77,13 +84,12 @@ fn test_unique_decode_invariants_classify_fixed_failures() {
         Some(JsonMaterializationErrorReason::DuplicateKey)
     );
 
-    for input in [b"\xff".as_slice()] {
-        let error = JsonDecoder::unlimited()
-            .decode_unique_utf8::<DuplicateKeyRejectingJsonValue>(input)
-            .expect_err("invalid UTF-8 must be rejected");
-        assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
-        assert_eq!(error.materialization_error_reason(), None);
-    }
+    let invalid_utf8 = b"\xff".as_slice();
+    let error = JsonDecoder::unlimited()
+        .decode_unique_utf8::<DuplicateKeyRejectingJsonValue>(invalid_utf8)
+        .expect_err("invalid UTF-8 must be rejected");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidUtf8);
+    assert_eq!(error.materialization_error_reason(), None);
     for input in [
         b"null trailing".as_slice(),
         b"1e400",
