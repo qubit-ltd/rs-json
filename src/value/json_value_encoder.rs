@@ -97,6 +97,11 @@ impl JsonValueEncoder {
                     crate::encode::JsonSerializationErrorKind::CustomSerialization,
                 ));
             }
+            Err(JsonValueEncodeError::PrivateTextLimitExceeded { .. }) => {
+                return Err(JsonSerializationError::new(
+                    crate::encode::JsonSerializationErrorKind::CustomSerialization,
+                ));
+            }
         };
         transaction
             .commit()
@@ -141,7 +146,63 @@ impl JsonValueEncoder {
         R: Clone,
         Q: ResourceQuantity,
     {
-        let context = std::cell::RefCell::new(JsonValueEncodeContext::new(transaction));
+        self.encode_in_transaction_impl(value, transaction, None)
+    }
+
+    /// Projects one value while bounding each private RawValue or Number text
+    /// payload before it is copied or appended.
+    ///
+    /// The limit counts UTF-8 bytes in each payload independently and includes
+    /// the exact boundary. It does not limit ordinary strings or consume the
+    /// transaction's native value budget. If this method fails, drop the whole
+    /// transaction rather than committing staged state.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Borrowed Serde value to project.
+    /// * `transaction` - Caller-owned transaction receiving native value
+    ///   measurements.
+    /// * `max_private_text_bytes` - Inclusive UTF-8 byte limit for each private
+    ///   RawValue or Number payload.
+    ///
+    /// # Returns
+    ///
+    /// A protected JSON owner when serialization and measurement succeed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first budget or serialization failure, or
+    /// `PrivateTextLimitExceeded` when a private text payload exceeds the
+    /// configured byte limit. The limit error does not contain payload text.
+    pub fn encode_in_transaction_with_private_text_limit<T, R, Q>(
+        &self,
+        value: &T,
+        transaction: &mut JsonValueTransaction<'_, R, Q>,
+        max_private_text_bytes: usize,
+    ) -> Result<SafeJsonValue, JsonValueEncodeError<R, Q>>
+    where
+        T: Serialize + ?Sized,
+        R: Clone,
+        Q: ResourceQuantity,
+    {
+        self.encode_in_transaction_impl(value, transaction, Some(max_private_text_bytes))
+    }
+
+    fn encode_in_transaction_impl<T, R, Q>(
+        &self,
+        value: &T,
+        transaction: &mut JsonValueTransaction<'_, R, Q>,
+        max_private_text_bytes: Option<usize>,
+    ) -> Result<SafeJsonValue, JsonValueEncodeError<R, Q>>
+    where
+        T: Serialize + ?Sized,
+        R: Clone,
+        Q: ResourceQuantity,
+    {
+        let context = std::cell::RefCell::new(JsonValueEncodeContext::new(
+            transaction,
+            max_private_text_bytes,
+        ));
         let result = value.serialize(JsonValueSerializer::new(&context, 1));
         if let Err(error) = result.as_ref() {
             let _ = context.borrow_mut().record_serialization_error(*error);
@@ -149,6 +210,9 @@ impl JsonValueEncoder {
         match context.into_inner().take_failure() {
             Some(JsonValueEncodeFailure::Budget(error)) => Err(JsonValueEncodeError::Budget(error)),
             Some(JsonValueEncodeFailure::Serialization(error)) => Err(JsonValueEncodeError::Serialization(error)),
+            Some(JsonValueEncodeFailure::PrivateTextLimitExceeded { maximum }) => {
+                Err(JsonValueEncodeError::PrivateTextLimitExceeded { maximum })
+            }
             None => result.map_err(JsonValueEncodeError::Serialization),
         }
     }

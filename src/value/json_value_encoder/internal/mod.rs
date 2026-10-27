@@ -13,6 +13,7 @@ mod json_value_display_kind;
 mod json_value_encode_context;
 mod json_value_map_key_serializer;
 mod json_value_serializer;
+mod private_text_collector;
 mod private_text_serializer;
 
 pub(super) use json_value_compound::JsonValueCompound;

@@ -15,17 +15,20 @@ use serde::ser::Impossible;
 use serde_json::Value;
 
 use super::json_value_compound::private_invalid_state;
+use super::private_text_collector::PrivateTextCollector;
 use crate::encode::JsonSerializationError;
 use crate::encode::JsonSerializationErrorKind;
 use crate::internal::JsonPrivateProtocolKind;
 
 /// Serializer that accepts only string and Display based private payloads.
-pub(super) struct PrivateTextSerializer {
+pub(super) struct PrivateTextSerializer<'a> {
     /// Selects which serde_json private protocol the text belongs to.
     pub(super) kind: JsonPrivateProtocolKind,
+    /// Checks prospective private payload lengths against the projection context.
+    pub(super) check_text_bytes: &'a mut dyn FnMut(usize) -> Result<(), JsonSerializationError>,
 }
 
-impl Serializer for PrivateTextSerializer {
+impl Serializer for PrivateTextSerializer<'_> {
     /// JSON value produced by an accepted text payload.
     type Ok = Value;
     /// Stable error reported when the private payload has an unsupported shape.
@@ -312,8 +315,10 @@ impl Serializer for PrivateTextSerializer {
     ///
     /// # Errors
     ///
-    /// This conversion is infallible.
+    /// Returns a serialization carrier error if the configured private-text
+    /// byte limit rejects `value`.
     fn serialize_str(self, value: &str) -> Result<Value, Self::Error> {
+        (self.check_text_bytes)(value.len())?;
         Ok(Value::String(value.to_owned()))
     }
 
@@ -636,11 +641,17 @@ impl Serializer for PrivateTextSerializer {
     ///
     /// # Errors
     ///
-    /// Returns `DisplayFormattingFailed` if formatting rejects a write.
+    /// Returns the first private-text limit failure, or
+    /// `DisplayFormattingFailed` if formatting rejects a write before any
+    /// limit failure occurs.
     fn collect_str<T: fmt::Display + ?Sized>(self, value: &T) -> Result<Value, Self::Error> {
-        let mut text = String::new();
-        fmt::write(&mut text, format_args!("{value}"))
-            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
+        let mut collector = PrivateTextCollector::new(self.check_text_bytes);
+        let formatted = fmt::write(&mut collector, format_args!("{value}"));
+        if let Some(error) = collector.take_failure() {
+            return Err(error);
+        }
+        formatted.map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
+        let text = collector.into_string();
         Ok(Value::String(text))
     }
 }

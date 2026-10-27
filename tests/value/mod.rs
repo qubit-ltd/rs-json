@@ -11,6 +11,7 @@ mod accounting_json_value_seed_tests;
 mod duplicate_key_rejecting_json_value_tests;
 mod internal;
 mod json_value_encoder_tests;
+mod json_value_encoder_private_text_limit_tests;
 mod private_number_protocol_tests;
 mod safe_json_value_tests;
 mod traverse;

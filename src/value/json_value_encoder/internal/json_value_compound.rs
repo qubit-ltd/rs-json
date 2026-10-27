@@ -250,9 +250,12 @@ where
     where
         T: Serialize + ?Sized,
     {
+        let context = self.context;
+        let mut check_text_bytes = |length| context.borrow_mut().check_private_text_bytes(length);
         let result = match &mut self.state {
-            CompoundState::RawValue { text, state, .. } | CompoundState::Number { text, state, .. } => {
-                set_private_payload(text, state, kind, key, value)
+            CompoundState::RawValue { text, state, .. }
+            | CompoundState::Number { text, state, .. } => {
+                set_private_payload(text, state, kind, key, value, &mut check_text_bytes)
             }
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         };
@@ -331,6 +334,7 @@ fn set_private_payload<T>(
     kind: JsonPrivateProtocolKind,
     key: &'static str,
     value: &T,
+    check_text_bytes: &mut dyn FnMut(usize) -> Result<(), JsonSerializationError>,
 ) -> Result<(), JsonSerializationError>
 where
     T: Serialize + ?Sized,
@@ -338,7 +342,10 @@ where
     if state.begin(key).is_err() {
         return Err(private_invalid_state(kind));
     }
-    let value = match value.serialize(PrivateTextSerializer { kind }) {
+    let value = match value.serialize(PrivateTextSerializer {
+        kind,
+        check_text_bytes,
+    }) {
         Ok(Value::String(value)) => value,
         Ok(_) => {
             state.fail();
@@ -811,7 +818,7 @@ mod tests {
             for overflow_count in [true, false] {
                 let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
                 let mut transaction = budget.transaction();
-                let context = RefCell::new(JsonValueEncodeContext::new(&mut transaction));
+                let context = RefCell::new(JsonValueEncodeContext::new(&mut transaction, None));
                 let mut compound = match path {
                     "sequence" => JsonValueCompound::sequence(&context, 1, JsonContainerKind::Sequence, 0),
                     "tuple-variant" => JsonValueCompound::tuple_variant(&context, "Tuple", 1, 0),

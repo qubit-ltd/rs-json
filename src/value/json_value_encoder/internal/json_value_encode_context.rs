@@ -22,6 +22,7 @@ where
 {
     Budget(MeasuredBudgetError<R, Q>),
     Serialization(JsonSerializationError),
+    PrivateTextLimitExceeded { maximum: usize },
 }
 
 pub(in crate::value::json_value_encoder) struct JsonValueEncodeContext<'transaction, 'budget, R, Q>
@@ -30,6 +31,7 @@ where
 {
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
     failure: Option<JsonValueEncodeFailure<R, Q>>,
+    max_private_text_bytes: Option<usize>,
 }
 
 impl<'transaction, 'budget, R, Q> JsonValueEncodeContext<'transaction, 'budget, R, Q>
@@ -39,10 +41,12 @@ where
 {
     pub(in crate::value::json_value_encoder) fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+        max_private_text_bytes: Option<usize>,
     ) -> Self {
         Self {
             transaction,
             failure: None,
+            max_private_text_bytes,
         }
     }
 
@@ -56,6 +60,24 @@ where
 
     pub(in crate::value::json_value_encoder) fn has_failure(&self) -> bool {
         self.failure.is_some()
+    }
+
+    pub(in crate::value::json_value_encoder) fn check_private_text_bytes(
+        &mut self,
+        length: usize,
+    ) -> Result<(), JsonSerializationError> {
+        if self.failure.is_some() {
+            return Err(self.ser_error());
+        }
+        if let Some(maximum) = self.max_private_text_bytes {
+            if length > maximum {
+                self.failure = Some(JsonValueEncodeFailure::PrivateTextLimitExceeded {
+                    maximum,
+                });
+                return Err(self.ser_error());
+            }
+        }
+        Ok(())
     }
 
     pub(in crate::value::json_value_encoder) fn admit(
@@ -152,6 +174,9 @@ where
         match self.failure.as_ref() {
             Some(JsonValueEncodeFailure::Serialization(error)) => *error,
             Some(JsonValueEncodeFailure::Budget(_)) => {
+                JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization)
+            }
+            Some(JsonValueEncodeFailure::PrivateTextLimitExceeded { .. }) => {
                 JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization)
             }
             None => JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization),

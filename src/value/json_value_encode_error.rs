@@ -31,6 +31,12 @@ where
     Budget(MeasuredBudgetError<R, Q>),
     /// The Serde value could not be represented as strict JSON.
     Serialization(JsonSerializationError),
+    /// A private RawValue or Number payload exceeded its configured UTF-8 text
+    /// limit.
+    PrivateTextLimitExceeded {
+        /// Maximum UTF-8 byte length allowed for one private text payload.
+        maximum: usize,
+    },
 }
 
 impl<R, Q> JsonValueEncodeError<R, Q>
@@ -42,6 +48,7 @@ where
         match self {
             Self::Serialization(error) => Some(error),
             Self::Budget(_) => None,
+            Self::PrivateTextLimitExceeded { .. } => None,
         }
     }
 
@@ -50,6 +57,7 @@ where
         match self {
             Self::Serialization(error) => Some(error.kind()),
             Self::Budget(_) => None,
+            Self::PrivateTextLimitExceeded { .. } => None,
         }
     }
 
@@ -58,6 +66,7 @@ where
         match self {
             Self::Serialization(error) => Some(error.category()),
             Self::Budget(_) => None,
+            Self::PrivateTextLimitExceeded { .. } => None,
         }
     }
 
@@ -86,6 +95,7 @@ where
         match self {
             Self::Serialization(error) => error.integer_signedness(),
             Self::Budget(_) => None,
+            Self::PrivateTextLimitExceeded { .. } => None,
         }
     }
 
@@ -94,6 +104,7 @@ where
         match self {
             Self::Serialization(error) => error.map_key_kind(),
             Self::Budget(_) => None,
+            Self::PrivateTextLimitExceeded { .. } => None,
         }
     }
 
@@ -102,6 +113,7 @@ where
         match self {
             Self::Serialization(error) => error.collection_kind(),
             Self::Budget(_) => None,
+            Self::PrivateTextLimitExceeded { .. } => None,
         }
     }
 
@@ -110,6 +122,7 @@ where
         match self {
             Self::Serialization(error) => error.serializer_state_error(),
             Self::Budget(_) => None,
+            Self::PrivateTextLimitExceeded { .. } => None,
         }
     }
 }
@@ -122,6 +135,9 @@ where
         match self {
             Self::Budget(_) => f.write_str("JSON value budget rejected serialization"),
             Self::Serialization(error) => write!(f, "{error}"),
+            Self::PrivateTextLimitExceeded { maximum } => {
+                write!(f, "private JSON text exceeded the {maximum}-byte limit")
+            }
         }
     }
 }
@@ -135,6 +151,7 @@ where
         match self {
             Self::Budget(error) => Some(error),
             Self::Serialization(error) => Some(error),
+            Self::PrivateTextLimitExceeded { .. } => None,
         }
     }
 }
