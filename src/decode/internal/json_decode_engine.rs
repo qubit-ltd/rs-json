@@ -197,13 +197,14 @@ where
             JsonLexicalEvent::Key { token, offset } => {
                 self.check_encoded_limit(token.len(), offset)?;
                 let key = serde_json::from_slice::<String>(token).expect("scanner admitted valid key token");
-                self.builder
-                    .try_accept_decoded_key(key.clone(), offset)
-                    .map_err(|source| ValidatedConsumerError::Materialization {
+                let path_key = self.track_path.then(|| key.clone());
+                self.builder.try_accept_decoded_key(key, offset).map_err(|source| {
+                    ValidatedConsumerError::Materialization {
                         source,
                         context: JsonDecodeContext::ObjectKey,
-                    })?;
-                if self.track_path {
+                    }
+                })?;
+                if let Some(key) = path_key {
                     self.path.push(JsonPathSegment::Key(key));
                 }
             }

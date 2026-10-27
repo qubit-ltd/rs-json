@@ -232,4 +232,43 @@ fn main() {
             }
         }
     }
+
+    println!(
+        "OWNED_VALUE_ALLOC,key_style,items,bytes,path,budget,mode,allocation_count,allocated_request_bytes,reallocation_count"
+    );
+    for count in COUNTS {
+        for (key_style, fixture) in [
+            (
+                "short_key",
+                unique_decode_support::structural_fixtures::success_fixture(StructuralShape::WideObject, count),
+            ),
+            (
+                "long_prefix",
+                unique_decode_support::structural_fixtures::long_prefix_success_fixture(count),
+            ),
+        ] {
+            for (path, decode) in [
+                ("owned_value", structural_decode::decode_owned_value as fn(_) -> _),
+                (
+                    "validated_preserve",
+                    structural_decode::decode_validated_preserve as fn(_) -> _,
+                ),
+            ] {
+                let warmup = decode(&fixture);
+                structural_decode::assert_decoded(&warmup, &fixture);
+                drop(std::hint::black_box(warmup));
+                let (decoded, measurement) = allocation_counter::measure(|| decode(&fixture));
+                structural_decode::assert_decoded(&decoded, &fixture);
+                drop(std::hint::black_box(decoded));
+                println!(
+                    "OWNED_VALUE_ALLOC,{key_style},{},{},{path},unlimited,fresh,{},{},{}",
+                    fixture.count,
+                    fixture.text.len(),
+                    measurement.allocation_count,
+                    measurement.allocated_request_bytes,
+                    measurement.reallocation_count
+                );
+            }
+        }
+    }
 }
