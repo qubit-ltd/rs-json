@@ -17,6 +17,15 @@ use super::JsonTreeControl;
 /// Output admission runs only after every visitor callback succeeds. Returning
 /// [`JsonTreeControl::SkipSubtree`] skips descendant callbacks but does not
 /// skip final output accounting.
+///
+/// Callbacks can visit descendants added by earlier callbacks. Output
+/// `max_nodes` and `max_depth` apply only to the complete final tree; they do
+/// not bound callback count or intermediate expansion. A visitor that adds
+/// descendants must enforce its own expansion bound and ensure traversal
+/// terminates. `SkipSubtree` skips descent from the current node, but does not
+/// exempt the resulting tree from
+/// final output admission. See the
+/// [mutable tree traversal guidance](../../../doc/user_guide.md).
 /// [`crate::value::traverse::JsonTreeMutator::process`] supplies the context to
 /// each callback during traversal.
 ///

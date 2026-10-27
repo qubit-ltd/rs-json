@@ -115,6 +115,15 @@ where
     /// than Rust recursion. `SkipSubtree` affects callbacks only; final output
     /// admission always covers every resulting descendant.
     ///
+    /// Callbacks may visit descendants added by earlier callbacks. Output
+    /// `max_nodes` and `max_depth` are checked only against the complete final
+    /// tree; they do not limit callback count or intermediate expansion. A
+    /// visitor that adds descendants must bound its own expansion and ensure
+    /// traversal terminates. Returning [`JsonTreeControl::SkipSubtree`] skips
+    /// descent from the current node, but the final tree is still subject to
+    /// output admission. See the
+    /// [mutable tree traversal guidance](../../../doc/user_guide.md).
+    ///
     /// # Type Parameters
     ///
     /// * `V` - Visitor controlling mutations and descendant callbacks.
