@@ -311,6 +311,82 @@ mod migrated_owner {
     }
 
     #[test]
+    fn test_owner_serde_bridge_numeric_semantics_follow_feature() {
+        let arbitrary_precision = serde_json::from_str::<serde_json::Number>("1e400").is_ok();
+
+        for (input, ordinary_serialization, arbitrary_number_text) in [
+            ("1.25", "1.25", Some("1.25")),
+            ("7", "7", None),
+            ("1e2", "100.0", Some("1e+2")),
+            ("-0", "-0.0", Some("-0")),
+        ] {
+            let owner: SafeJsonValue = serde_json::from_str(input).unwrap();
+            if arbitrary_precision {
+                if let Some(number_text) = arbitrary_number_text {
+                    assert_eq!(
+                        owner.as_value(),
+                        &serde_json::json!({"$serde_json::private::Number": number_text}),
+                        "{input} should use the arbitrary-precision Number map",
+                    );
+                } else {
+                    assert_eq!(owner.as_value().as_i64(), Some(7));
+                    assert_eq!(owner.as_value().to_string(), ordinary_serialization);
+                }
+            } else {
+                assert_eq!(owner.as_value().to_string(), ordinary_serialization, "{input}");
+                if input == "-0" {
+                    assert_eq!(
+                        owner.as_value().as_f64().unwrap().to_bits(),
+                        (-0.0_f64).to_bits(),
+                        "negative zero must retain its sign",
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_owner_serde_bridge_nested_numeric_semantics_follow_feature() {
+        let arbitrary_precision = serde_json::from_str::<serde_json::Number>("1e400").is_ok();
+        let owner: SafeJsonValue = serde_json::from_str(r#"{"nested":[1.25,{"x":-0}]}"#).unwrap();
+
+        let expected = if arbitrary_precision {
+            serde_json::json!({
+                "nested": [
+                    {"$serde_json::private::Number": "1.25"},
+                    {"x": {"$serde_json::private::Number": "-0"}},
+                ]
+            })
+        } else {
+            serde_json::json!({"nested": [1.25, {"x": -0.0}]})
+        };
+        assert_eq!(owner.as_value(), &expected);
+        if !arbitrary_precision {
+            assert_eq!(
+                owner.as_value()["nested"][1]["x"].as_f64().unwrap().to_bits(),
+                (-0.0_f64).to_bits(),
+            );
+        }
+    }
+
+    #[test]
+    fn test_owner_decode_value_str_preserves_numeric_semantics_across_features() {
+        let mut decoder = qubit_json::decode::JsonDecoder::unlimited();
+
+        let scalar = decoder.decode_value_str("1.25").unwrap();
+        assert_eq!(scalar.as_value().as_f64(), Some(1.25));
+
+        let nested = decoder.decode_value_str(r#"{"nested":[1.25,1e2,-0]}"#).unwrap();
+        assert_eq!(nested.as_value()["nested"][0].as_f64(), Some(1.25));
+        assert_eq!(nested.as_value()["nested"][1].as_f64(), Some(100.0));
+        assert_eq!(
+            nested.as_value()["nested"][2].as_f64().unwrap().to_bits(),
+            (-0.0_f64).to_bits(),
+            "decoded negative zero must retain its sign",
+        );
+    }
+
+    #[test]
     fn test_owner_serde_bridge_reports_truncated_input() {
         let error = serde_json::from_str::<SafeJsonValue>("[1,").unwrap_err();
         assert!(error.is_eof());
