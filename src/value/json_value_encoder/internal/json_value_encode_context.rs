@@ -80,13 +80,11 @@ where
         if self.failure.is_some() {
             return Err(self.ser_error());
         }
-        if let Some(maximum) = self.max_private_text_bytes {
-            if length > maximum {
-                self.failure = Some(JsonValueEncodeFailure::PrivateTextLimitExceeded {
-                    maximum,
-                });
-                return Err(self.ser_error());
-            }
+        if let Some(maximum) = self.max_private_text_bytes
+            && length > maximum
+        {
+            self.failure = Some(JsonValueEncodeFailure::PrivateTextLimitExceeded { maximum });
+            return Err(self.ser_error());
         }
         Ok(())
     }
