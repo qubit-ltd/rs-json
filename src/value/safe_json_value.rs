@@ -30,6 +30,17 @@ use super::internal::SafeValueBuilder;
 /// serializer or deserializer, which may impose its own recursion limits. The
 /// owner does not enforce an exact heap-memory limit.
 ///
+/// The tree protection and the meaning of values produced by `Deserialize`
+/// are separate concerns. A direct Serde bridge cannot identify whether a
+/// map-shaped event came from an ordinary object or an upstream deserializer's
+/// private number representation. With `serde_json`'s `arbitrary_precision`
+/// feature, number shapes produced by that bridge can therefore differ from
+/// those produced without the feature. When decoding JSON text and preserving
+/// its numeric meaning is important, use [`JsonDecoder::decode_value_str`]
+/// (or the corresponding byte and reader methods) instead.
+///
+/// [`JsonDecoder::decode_value_str`]: crate::decode::JsonDecoder::decode_value_str
+///
 /// # Example
 ///
 /// ```

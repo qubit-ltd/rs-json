@@ -294,16 +294,13 @@ fn test_owner_bridge_rejects_decoded_duplicate_once() {
 
 #[test]
 fn test_owner_serde_bridge_preserves_finite_float_event() {
-    let owner: SafeJsonValue = serde_json::from_str("1.25").unwrap();
-    assert!(
-        owner.as_value().as_f64() == Some(1.25)
-            || owner.as_value()
-                == &serde_json::json!({
-                    "$serde_json::private::Number": "1.25"
-                })
-    );
+    use serde::de::value::F64Deserializer;
+
+    let owner = SafeJsonValue::deserialize(F64Deserializer::<serde_json::Error>::new(1.25))
+        .expect("finite f64 event must deserialize");
+    assert_eq!(owner.as_value().as_f64(), Some(1.25));
     let serialized = serde_json::to_string(&owner).unwrap();
-    assert!(serialized == "1.25" || serialized == r#"{"$serde_json::private::Number":"1.25"}"#);
+    assert_eq!(serialized, "1.25");
 }
 
 #[test]

@@ -321,6 +321,18 @@ Unicode 不做 NFC/NFD 归一化，因而不同码点序列仍是不同键。合
 ## 受保护值、验证解码与排版
 
 应用需要拥有一棵可安全复制、比较和清理的 JSON 树时，使用 `decode_value_*`，它返回 `SafeJsonValue`。
+树操作保护与 Serde 输入语义是两件事：直接反序列化 `SafeJsonValue` 时，桥接无法区分真实对象与上游
+反序列化器提供的私有数字 map。启用 `arbitrary_precision` 后，这类 map 可能作为普通对象保留，
+因此不同 feature 配置下的数字形态可能不同。若解码 JSON 文本时需要保留数字含义，请使用 `JsonDecoder`：
+
+```rust
+use qubit_json::decode::JsonDecoder;
+
+let value = JsonDecoder::unlimited().decode_value_str("1.25")?;
+assert_eq!(value.as_value().as_f64(), Some(1.25));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 若还需要按 JSON 路径检查原始数字词法，则使用 `decode_unique_validated_*`：回调会收到路径、token 原文和偏移；
 额外策略额度按单份文档计算，`JsonDecodeSession` 中配置的资源用量则跨调用累计。
 

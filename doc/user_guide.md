@@ -486,6 +486,21 @@ assert!(std::str::from_utf8(&formatted)?.contains("1e400"));
 `JsonDecoder::decode_value_*` returns `SafeJsonValue` with protected owned-tree
 operations. The older typed `decode_*<T>` methods retain their Serde target
 semantics and do not promise arbitrary-depth construction or destruction.
+Tree protection and Serde input semantics are separate: deserializing a
+`SafeJsonValue` directly cannot distinguish a real object from an upstream
+deserializer's private number map. With `arbitrary_precision`, such bridge
+events may remain ordinary objects, so their numeric shape can differ across
+feature configurations. For JSON text whose numeric meaning must be preserved,
+decode through `JsonDecoder`:
+
+```rust
+use qubit_json::decode::JsonDecoder;
+
+let value = JsonDecoder::unlimited().decode_value_str("1.25")?;
+assert_eq!(value.as_value().as_f64(), Some(1.25));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 Choose a finite `max_depth` for untrusted data; `None` means no configured
 depth ceiling, not unlimited memory use.
 

@@ -102,6 +102,9 @@ target may construct a different value; ordinary `serde_json::Value` can
 reinterpret a first `$serde_json::private::RawValue` key when `raw_value` is
 enabled. See the [user guide's duplicate-key section](doc/user_guide.md#duplicate-object-keys)
 before relying on literal object preservation.
+Direct `SafeJsonValue` deserialization also cannot identify private number maps;
+with `arbitrary_precision`, numeric shapes can differ by feature configuration.
+Use `JsonDecoder::decode_value_*` when decoding JSON text; see the [protected value guide](doc/user_guide.md#protected-values-validated-decoding-and-formatting).
 
 ## Choose the decoding boundary
 

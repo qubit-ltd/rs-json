@@ -90,6 +90,8 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 准入预算和对象/数组检查针对源 JSON，Serde 目标可能构造出不同形态的值。启用 `raw_value` 时，普通
 `serde_json::Value` 会特殊处理首个 `$serde_json::private::RawValue` 键；需要保留字面对象时，请先阅读
 [用户手册的重复键章节](doc/user_guide.zh_CN.md#重复对象键)并选择合适的目标类型。
+直接反序列化 `SafeJsonValue` 也无法识别私有数字 map；启用 `arbitrary_precision` 后，数字形态可能随
+feature 配置变化。解码 JSON 文本时请使用 `JsonDecoder::decode_value_*`，详见[受保护值指南](doc/user_guide.zh_CN.md#受保护值验证解码与排版)。
 
 ## 选择解码边界
 
