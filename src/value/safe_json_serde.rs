@@ -7,6 +7,7 @@
 // =============================================================================
 //! Protected Serde interoperability for [`super::SafeJsonValue`].
 
+use std::collections::BTreeSet;
 use std::fmt;
 
 use serde::Deserialize;
@@ -124,9 +125,10 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Value, A::Error> {
+        let mut keys = BTreeSet::new();
         let mut values: Vec<(String, SafeJsonValue)> = Vec::new();
         while let Some(key) = map.next_key::<String>()? {
-            if values.iter().any(|(existing, _)| existing == &key) {
+            if !keys.insert(key.clone()) {
                 return Err(serde::de::Error::custom("duplicate object key"));
             }
             let value = map.next_value::<SafeJsonValue>()?;

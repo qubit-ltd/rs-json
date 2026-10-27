@@ -25,6 +25,7 @@ use qubit_json::decode::JcsDecoder;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
+use qubit_json::value::SafeJsonValue;
 
 use crate::internal::BenchmarkRecord;
 
@@ -145,6 +146,80 @@ fn benchmark_decoder(c: &mut Criterion) {
     c.bench_function("array/decode_array", |bencher| {
         bencher.iter(|| black_box(default_decoder.decode_array_str::<BenchmarkRecord>(black_box(array_input))));
     });
+}
+
+fn benchmark_safe_value_bridge(c: &mut Criterion) {
+    let mut group = c.benchmark_group("safe_value_bridge");
+    for count in [32_usize, 512, 4096] {
+        for (key_style, key_prefix) in [("short", "k"), ("long_prefix", "shared-prefix-key-")] {
+            let keys = (0..count)
+                .map(|index| format!("{key_prefix}{index:04}"))
+                .collect::<Vec<_>>();
+            for duplicate_position in [None, Some(0), Some(count - 1)] {
+                let mut fields = Vec::with_capacity(count + usize::from(duplicate_position.is_some()));
+                for (index, key) in keys.iter().enumerate() {
+                    fields.push(format!("\"{key}\":{index}"));
+                    if duplicate_position == Some(0) && index == 0 {
+                        fields.push(format!("\"{key}\":{count}"));
+                    }
+                }
+                if let Some(index) = duplicate_position.filter(|index| *index != 0) {
+                    fields.push(format!("\"{}\":{count}", keys[index]));
+                }
+                let input = format!("{{{}}}", fields.join(","));
+                let expected_success = duplicate_position.is_none();
+
+                let direct = serde_json::from_str::<SafeJsonValue>(&input);
+                assert_eq!(direct.is_ok(), expected_success, "direct bridge fixture must validate");
+                if let Ok(owner) = direct {
+                    assert_eq!(
+                        owner.as_value().as_object().map(serde_json::Map::len),
+                        Some(count),
+                        "successful direct bridge fixture must retain every field",
+                    );
+                }
+                let mut validation_decoder = JsonDecoder::unlimited();
+                let decoded = validation_decoder.decode_value_str(&input);
+                assert_eq!(
+                    decoded.is_ok(),
+                    expected_success,
+                    "decoder bridge fixture must validate"
+                );
+                if let Ok(owner) = decoded {
+                    assert_eq!(
+                        owner.as_value().as_object().map(serde_json::Map::len),
+                        Some(count),
+                        "successful decoder fixture must retain every field",
+                    );
+                }
+
+                let case = match duplicate_position {
+                    None => "unique",
+                    Some(0) => "duplicate_early",
+                    Some(_) => "duplicate_tail",
+                };
+                group.throughput(Throughput::Bytes(input.len() as u64));
+                group.bench_with_input(
+                    BenchmarkId::new(format!("serde/{key_style}/{case}"), count),
+                    &input,
+                    |bencher, input| {
+                        bencher.iter(|| black_box(serde_json::from_str::<SafeJsonValue>(black_box(input))));
+                    },
+                );
+                group.bench_with_input(
+                    BenchmarkId::new(format!("json_decoder/{key_style}/{case}"), count),
+                    &input,
+                    |bencher, input| {
+                        bencher.iter(|| {
+                            let mut decoder = JsonDecoder::unlimited();
+                            black_box(decoder.decode_value_str(black_box(input)))
+                        });
+                    },
+                );
+            }
+        }
+    }
+    group.finish();
 }
 
 /// Runs size-scaling benchmarks that mirror the HTTP and LLM SDK consumers.
@@ -587,6 +662,7 @@ fn benchmark_jcs_decode(c: &mut Criterion) {
 criterion_group!(
     benches,
     benchmark_decoder,
+    benchmark_safe_value_bridge,
     benchmark_control_character_scaling,
     benchmark_downstream_scaling,
     benchmark_jcs_decode
@@ -595,6 +671,7 @@ criterion_group!(
 criterion_group!(
     benches,
     benchmark_decoder,
+    benchmark_safe_value_bridge,
     benchmark_control_character_scaling,
     benchmark_downstream_scaling
 );
