@@ -23,6 +23,7 @@ use serde::de::DeserializeOwned;
 use serde::de::DeserializeSeed;
 
 use super::decode_path::DecodePath;
+use super::structural_fixtures::DuplicatePosition;
 use super::structural_fixtures::StructuralExpected;
 use super::structural_fixtures::StructuralFixture;
 use super::structural_fixtures::StructuralRecord;
@@ -210,6 +211,15 @@ pub(crate) fn decode_reject_once(
         JsonDecoder::unlimited()
     };
     decoder.decode_unique_str::<DuplicateKeyRejectingJsonValue>(&fixture.text)
+}
+
+pub(crate) fn assert_reject_fixture(fixture: &StructuralFixture) {
+    assert_eq!(fixture.shape, StructuralShape::WideObject);
+    assert!(fixture.expected.is_none());
+    assert!(matches!(
+        fixture.reject_position,
+        Some(DuplicatePosition::Early | DuplicatePosition::Late)
+    ));
 }
 
 #[allow(dead_code)]

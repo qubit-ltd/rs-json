@@ -211,6 +211,7 @@ fn main() {
             let fixture = unique_decode_support::structural_fixtures::reject_fixture(count, position);
             for finite in [false, true] {
                 let budget = if finite { "finite" } else { "unlimited" };
+                structural_decode::assert_reject_fixture(&fixture);
                 let warmup = unique_decode_support::decode_path::assert_duplicate_rejected(
                     structural_decode::decode_reject_once(&fixture, finite),
                 );

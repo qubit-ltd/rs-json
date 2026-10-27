@@ -22,9 +22,9 @@ use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 #[cfg(feature = "jcs")]
 use qubit_json::decode::JcsDecoder;
-use qubit_json::decode::JsonDecoder;
 #[cfg(feature = "jcs")]
-use qubit_json::decode::JsonMaterializationErrorReason;
+use qubit_json::decode::JcsDecodeError;
+use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;
 use qubit_json::value::SafeJsonValue;
@@ -628,12 +628,8 @@ fn benchmark_jcs_decode(c: &mut Criterion) {
                 "JCS fixture {fixture_name} has an unexpected decode result"
             );
             if !expected_success {
-                assert_eq!(
-                    validation
-                        .as_ref()
-                        .expect_err("duplicate-key fixture must be rejected")
-                        .materialization_error_reason(),
-                    Some(JsonMaterializationErrorReason::DuplicateKey),
+                assert!(
+                    matches!(&validation, Err(JcsDecodeError::DuplicateKey { .. })),
                     "JCS duplicate-key fixture must fail for the duplicate key",
                 );
             }
@@ -647,16 +643,12 @@ fn benchmark_jcs_decode(c: &mut Criterion) {
                     "JCS fixture {fixture_name} has an unexpected batch decode result"
                 );
                 if !expected_success {
-                    assert_eq!(
-                        result
-                            .as_ref()
-                            .expect_err("duplicate-key fixture must be rejected")
-                            .materialization_error_reason(),
-                        Some(JsonMaterializationErrorReason::DuplicateKey),
+                    assert!(
+                        matches!(&result, Err(JcsDecodeError::DuplicateKey { .. })),
                         "JCS duplicate-key fixture must fail for the duplicate key",
                     );
                 }
-                black_box(result);
+                let _ = black_box(result);
             }
 
             let mut fresh_group = c.benchmark_group(format!("jcs_decode/{fixture_name}/{budget_name}/fresh"));
@@ -676,7 +668,7 @@ fn benchmark_jcs_decode(c: &mut Criterion) {
                     make_decoder,
                     |mut decoder| {
                         for _ in 0..8 {
-                            black_box(decoder.decode_str(black_box(input.as_str())));
+                            let _ = black_box(decoder.decode_str(black_box(input.as_str())));
                         }
                     },
                     BatchSize::SmallInput,
