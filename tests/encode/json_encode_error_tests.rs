@@ -86,7 +86,7 @@ fn create_serialization_error() -> JsonEncodeError<JsonResource> {
 fn create_write_error() -> JsonEncodeError<JsonResource> {
     let mut encoder = JsonEncoder::unlimited();
     encoder
-        .write_buffered(RejectingWriter, &true)
+        .write_buffered(&mut RejectingWriter, &true)
         .expect_err("rejecting destination must fail buffered output")
 }
 

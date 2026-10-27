@@ -1,3 +1,10 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 //! Borrowed source JSON number tokens.
 
 use super::JsonNumberTokenError;
@@ -36,10 +43,7 @@ impl<'call> JsonNumberToken<'call> {
             .map(|position| start + position);
         let mantissa_end = exponent_marker.unwrap_or(bytes.len());
         let exponent = exponent_marker.map_or(0_i64, |position| {
-            parse_saturated_exponent(
-                &bytes[position + 1..],
-                bytes.len().saturating_add(32) as i64,
-            )
+            parse_saturated_exponent(&bytes[position + 1..], bytes.len().saturating_add(32) as i64)
         });
         let mut fractional_digits = 0_i64;
         let mut digit_count = 0_usize;

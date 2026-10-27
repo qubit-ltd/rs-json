@@ -114,10 +114,7 @@ where
         self.defer_number_delimiter = defer;
     }
 
-    pub(in crate::lexical) const fn set_max_encoded_string_bytes(
-        &mut self,
-        maximum: Option<usize>,
-    ) {
+    pub(in crate::lexical) const fn set_max_encoded_string_bytes(&mut self, maximum: Option<usize>) {
         self.max_encoded_string_bytes = maximum;
     }
 
@@ -141,10 +138,7 @@ where
     ///
     /// A syntax error containing the cursor's byte offset, line, column, and
     /// supplied reason.
-    pub(in crate::lexical) fn syntax(
-        &self,
-        reason: JsonLexicalErrorReason,
-    ) -> JsonLexicalError<R, Q> {
+    pub(in crate::lexical) fn syntax(&self, reason: JsonLexicalErrorReason) -> JsonLexicalError<R, Q> {
         let (line, column) = self.line_column();
         JsonLexicalError::Syntax(JsonLexicalFailure {
             offset: self.offset,
@@ -198,12 +192,12 @@ where
         F: FnMut(JsonLexicalScanPoint<'input>) -> bool,
     {
         self.skip_whitespace();
-        if let Some(maximum) = self.depth_limit {
-            if Q::try_from_usize(depth).map_or(true, |depth| depth > maximum) {
-                self.transaction
-                    .check_admit(JsonMeasurement::Null { depth })
-                    .map_err(JsonLexicalError::from)?;
-            }
+        if let Some(maximum) = self.depth_limit
+            && Q::try_from_usize(depth).map_or(true, |depth| depth > maximum)
+        {
+            self.transaction
+                .check_admit(JsonMeasurement::Null { depth })
+                .map_err(JsonLexicalError::from)?;
         }
         self.emit_scan_point(
             emit,
@@ -254,13 +248,7 @@ where
                 let bytes = self.number_bytes()?;
                 let token = from_utf8(&self.input[start..self.offset])
                     .map_err(|_| self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber))?;
-                self.emit_scan_point(
-                    emit,
-                    JsonLexicalScanPoint::BeforeNumber {
-                        token,
-                        offset: start,
-                    },
-                )?;
+                self.emit_scan_point(emit, JsonLexicalScanPoint::BeforeNumber { token, offset: start })?;
                 self.admit(JsonMeasurement::Number { depth, bytes })?;
                 self.validate_number_range(start, self.offset)?;
                 self.emit_scan_point(
@@ -342,10 +330,7 @@ where
                     if items == 0 {
                         let offset = self.offset;
                         self.offset += 1;
-                        self.emit_scan_point(
-                            emit,
-                            JsonLexicalScanPoint::Event(JsonLexicalEvent::EndArray { offset }),
-                        )?;
+                        self.emit_scan_point(emit, JsonLexicalScanPoint::Event(JsonLexicalEvent::EndArray { offset }))?;
                         return Ok(());
                     }
                     return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
@@ -371,10 +356,7 @@ where
                     Some(b']') => {
                         let offset = self.offset;
                         self.offset += 1;
-                        self.emit_scan_point(
-                            emit,
-                            JsonLexicalScanPoint::Event(JsonLexicalEvent::EndArray { offset }),
-                        )?;
+                        self.emit_scan_point(emit, JsonLexicalScanPoint::Event(JsonLexicalEvent::EndArray { offset }))?;
                         Ok(())
                     }
                     None => Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd)),
@@ -393,20 +375,10 @@ where
                         )?;
                         return Ok(());
                     }
-                    self.emit_scan_point(
-                        emit,
-                        JsonLexicalScanPoint::BeforeKey {
-                            offset: self.offset,
-                        },
-                    )?;
+                    self.emit_scan_point(emit, JsonLexicalScanPoint::BeforeKey { offset: self.offset })?;
                     return Err(self.syntax(JsonLexicalErrorReason::ExpectedObjectKey));
                 }
-                self.emit_scan_point(
-                    emit,
-                    JsonLexicalScanPoint::BeforeKey {
-                        offset: self.offset,
-                    },
-                )?;
+                self.emit_scan_point(emit, JsonLexicalScanPoint::BeforeKey { offset: self.offset })?;
                 if self.peek() != Some(b'"') {
                     return Err(self.syntax(JsonLexicalErrorReason::ExpectedObjectKey));
                 }
@@ -468,9 +440,7 @@ where
         if !self.has_value_limits {
             return Ok(());
         }
-        self.transaction
-            .try_admit(measurement)
-            .map_err(JsonLexicalError::from)
+        self.transaction.try_admit(measurement).map_err(JsonLexicalError::from)
     }
 
     fn check_encoded_string_limit(&self, start: usize) -> Result<(), JsonLexicalError<R, Q>> {
@@ -479,20 +449,13 @@ where
         };
         let observed = self.offset.saturating_sub(start).saturating_sub(2);
         if observed > maximum {
-            return Err(self.syntax_at(
-                start,
-                JsonLexicalErrorReason::EncodedStringLimit { maximum, observed },
-            ));
+            return Err(self.syntax_at(start, JsonLexicalErrorReason::EncodedStringLimit { maximum, observed }));
         }
         Ok(())
     }
 
     /// Enters one container when value limits are configured.
-    fn enter_container(
-        &mut self,
-        kind: JsonContainerKind,
-        depth: usize,
-    ) -> Result<(), JsonLexicalError<R, Q>> {
+    fn enter_container(&mut self, kind: JsonContainerKind, depth: usize) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.has_value_limits {
             return Ok(());
         }
@@ -502,11 +465,7 @@ where
     }
 
     /// Checks one observed container count when value limits are configured.
-    fn check_container_count(
-        &mut self,
-        kind: JsonContainerKind,
-        count: usize,
-    ) -> Result<(), JsonLexicalError<R, Q>> {
+    fn check_container_count(&mut self, kind: JsonContainerKind, count: usize) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.has_value_limits {
             return Ok(());
         }
@@ -523,11 +482,7 @@ where
     }
 
     /// Charges and consumes one scalar literal.
-    fn literal(
-        &mut self,
-        literal: &[u8],
-        measurement: JsonMeasurement,
-    ) -> Result<(), JsonLexicalError<R, Q>> {
+    fn literal(&mut self, literal: &[u8], measurement: JsonMeasurement) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.input[self.offset..].starts_with(literal) {
             let matched = self.input[self.offset..]
                 .iter()
@@ -724,11 +679,7 @@ where
 
     /// Validates one syntactically complete number against the supported
     /// integer and floating-point representation ranges.
-    fn validate_number_range(
-        &self,
-        start: usize,
-        end: usize,
-    ) -> Result<(), JsonLexicalError<R, Q>> {
+    fn validate_number_range(&self, start: usize, end: usize) -> Result<(), JsonLexicalError<R, Q>> {
         let Ok(token) = from_utf8(&self.input[start..end]) else {
             return Err(self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber));
         };
@@ -783,10 +734,7 @@ where
     #[must_use]
     #[inline]
     const fn is_value_delimiter(byte: Option<u8>) -> bool {
-        matches!(
-            byte,
-            None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}')
-        )
+        matches!(byte, None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}'))
     }
 
     /// Computes one-based line and UTF-8 character column at the cursor.
@@ -849,11 +797,7 @@ pub(crate) fn line_column_at(input: &[u8], offset: usize) -> (usize, usize) {
 ///
 /// A pair of one-based `(line, UTF-8 character column)` coordinates.
 #[must_use]
-fn line_column_at_with_inspection<F>(
-    input: &[u8],
-    offset: usize,
-    mut record_examined_bytes: F,
-) -> (usize, usize)
+fn line_column_at_with_inspection<F>(input: &[u8], offset: usize, mut record_examined_bytes: F) -> (usize, usize)
 where
     F: FnMut(usize),
 {

@@ -33,6 +33,7 @@ mod tests;
 
 pub mod decode;
 pub mod encode;
+pub mod format;
 mod internal;
 mod lexical;
 pub mod value;

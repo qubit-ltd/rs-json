@@ -1,3 +1,10 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 //! Structured errors from validated JSON decoding.
 
 use std::error::Error;
@@ -58,10 +65,29 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Decode { error, context } => f.debug_struct("Decode").field("error", error).field("context", context).finish(),
+            Self::Decode { error, context } => f
+                .debug_struct("Decode")
+                .field("error", error)
+                .field("context", context)
+                .finish(),
             Self::Policy { offset, .. } => f.debug_struct("Policy").field("offset", offset).finish_non_exhaustive(),
-            Self::ExactSafeInteger { source, offset } => f.debug_struct("ExactSafeInteger").field("source", source).field("offset", offset).finish(),
-            Self::Limit { limit, maximum, observed, offset } => f.debug_struct("Limit").field("limit", limit).field("maximum", maximum).field("observed", observed).field("offset", offset).finish(),
+            Self::ExactSafeInteger { source, offset } => f
+                .debug_struct("ExactSafeInteger")
+                .field("source", source)
+                .field("offset", offset)
+                .finish(),
+            Self::Limit {
+                limit,
+                maximum,
+                observed,
+                offset,
+            } => f
+                .debug_struct("Limit")
+                .field("limit", limit)
+                .field("maximum", maximum)
+                .field("observed", observed)
+                .field("offset", offset)
+                .finish(),
         }
     }
 }
@@ -75,8 +101,18 @@ where
         match self {
             Self::Decode { error, context } => write!(f, "JSON decode failed ({context:?}): {error}"),
             Self::Policy { offset, .. } => write!(f, "JSON number policy rejected token at byte {offset}"),
-            Self::ExactSafeInteger { source, offset } => write!(f, "exact safe integer conversion failed at byte {offset}: {source:?}"),
-            Self::Limit { limit, maximum, observed, offset } => write!(f, "JSON limit {limit:?} exceeded at byte {offset}: maximum {maximum}, observed {observed}"),
+            Self::ExactSafeInteger { source, offset } => {
+                write!(f, "exact safe integer conversion failed at byte {offset}: {source:?}")
+            }
+            Self::Limit {
+                limit,
+                maximum,
+                observed,
+                offset,
+            } => write!(
+                f,
+                "JSON limit {limit:?} exceeded at byte {offset}: maximum {maximum}, observed {observed}"
+            ),
         }
     }
 }

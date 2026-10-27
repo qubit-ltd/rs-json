@@ -17,7 +17,8 @@
 pub enum JsonMaterializationErrorReason {
     /// A decoded object key appeared more than once.
     DuplicateKey,
-    /// The fixed intermediate-tree container limit was exceeded.
+    /// Historical compatibility reason; the shared builder no longer produces
+    /// it.
     DepthLimit {
         /// Maximum number of nested containers accepted during construction.
         limit: usize,

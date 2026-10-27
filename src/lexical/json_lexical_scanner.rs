@@ -175,8 +175,7 @@ where
     where
         F: FnMut(JsonLexicalEvent<'input>),
     {
-        let mut cursor =
-            JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
+        let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         cursor.set_number_model(self.number_model);
         cursor.set_depth_limit(self.depth_limit);
         cursor.set_max_encoded_string_bytes(self.max_encoded_string_bytes);
@@ -201,7 +200,8 @@ where
         }
     }
 
-    /// Scans through the shared grammar and stops immediately on consumer failure.
+    /// Scans through the shared grammar and stops immediately on consumer
+    /// failure.
     pub(crate) fn scan_with_consumer<'input, C>(
         &mut self,
         input: &'input [u8],
@@ -210,8 +210,7 @@ where
     where
         C: JsonLexicalConsumer<'input>,
     {
-        let mut cursor =
-            JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
+        let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         cursor.set_number_model(self.number_model);
         cursor.set_depth_limit(self.depth_limit);
         cursor.set_max_encoded_string_bytes(self.max_encoded_string_bytes);
@@ -219,13 +218,9 @@ where
         let mut consumer_error = None;
         let mut dispatch = |point| {
             let result = match point {
-                JsonLexicalScanPoint::BeforeValue { depth, offset } => {
-                    consumer.before_value(depth, offset)
-                }
+                JsonLexicalScanPoint::BeforeValue { depth, offset } => consumer.before_value(depth, offset),
                 JsonLexicalScanPoint::BeforeKey { offset } => consumer.before_key(offset),
-                JsonLexicalScanPoint::BeforeNumber { token, offset } => {
-                    consumer.before_number(token, offset)
-                }
+                JsonLexicalScanPoint::BeforeNumber { token, offset } => consumer.before_number(token, offset),
                 JsonLexicalScanPoint::Event(event) => consumer.event(event),
             };
             match result {
@@ -260,21 +255,13 @@ where
                         offset: failure.offset,
                     })
                 }
-                JsonLexicalErrorReason::ConsumerStopped if consumer_error.is_some() => {
-                    Err(JsonLexicalScanError::Consumer(
-                        consumer_error.expect("consumer failure was captured"),
-                    ))
-                }
-                _ if consumer_error.is_some() => {
-                    Err(JsonLexicalScanError::Consumer(consumer_error.unwrap()))
-                }
-                _ => Err(JsonLexicalScanError::Lexical(JsonLexicalError::Syntax(
-                    failure,
-                ))),
+                JsonLexicalErrorReason::ConsumerStopped if consumer_error.is_some() => Err(
+                    JsonLexicalScanError::Consumer(consumer_error.expect("consumer failure was captured")),
+                ),
+                _ if consumer_error.is_some() => Err(JsonLexicalScanError::Consumer(consumer_error.unwrap())),
+                _ => Err(JsonLexicalScanError::Lexical(JsonLexicalError::Syntax(failure))),
             },
-            Err(_error) if consumer_error.is_some() => {
-                Err(JsonLexicalScanError::Consumer(consumer_error.unwrap()))
-            }
+            Err(_error) if consumer_error.is_some() => Err(JsonLexicalScanError::Consumer(consumer_error.unwrap())),
             Err(error) => Err(JsonLexicalScanError::Lexical(error)),
         }
     }

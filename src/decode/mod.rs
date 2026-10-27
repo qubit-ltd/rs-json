@@ -8,23 +8,23 @@
 //! JSON decoding APIs and their diagnostics.
 
 mod diagnostic_policy;
-mod json_decode_context;
-mod json_decode_number_model;
 #[cfg(feature = "jcs")]
 mod jcs_decode_error;
 #[cfg(feature = "jcs")]
 mod jcs_decoder;
+mod json_decode_context;
 mod json_decode_error;
 mod json_decode_error_kind;
 mod json_decode_error_source;
+mod json_decode_number_model;
 mod json_decode_stage;
 mod json_decoder;
 mod json_materialization_error_reason;
-mod json_root_kind;
 mod json_number_policy;
 mod json_number_token;
 mod json_number_token_error;
 mod json_path_segment;
+mod json_root_kind;
 mod json_syntax_error;
 mod json_syntax_error_reason;
 mod json_validated_decode_error;
@@ -39,23 +39,23 @@ mod normalizing_json_decode_policy_builder;
 mod normalizing_json_decoder;
 
 pub use diagnostic_policy::DiagnosticPolicy;
-pub use json_decode_context::JsonDecodeContext;
-pub use json_decode_number_model::JsonDecodeNumberModel;
 #[cfg(feature = "jcs")]
 pub use jcs_decode_error::JcsDecodeError;
 #[cfg(feature = "jcs")]
 pub use jcs_decoder::JcsDecoder;
+pub use json_decode_context::JsonDecodeContext;
 pub use json_decode_error::JsonDecodeError;
 pub use json_decode_error_kind::JsonDecodeErrorKind;
 pub use json_decode_error_source::JsonDecodeErrorSource;
+pub use json_decode_number_model::JsonDecodeNumberModel;
 pub use json_decode_stage::JsonDecodeStage;
 pub use json_decoder::JsonDecoder;
 pub use json_materialization_error_reason::JsonMaterializationErrorReason;
-pub use json_root_kind::JsonRootKind;
 pub use json_number_policy::JsonNumberPolicy;
 pub use json_number_token::JsonNumberToken;
 pub use json_number_token_error::JsonNumberTokenError;
 pub use json_path_segment::JsonPathSegment;
+pub use json_root_kind::JsonRootKind;
 pub use json_syntax_error::JsonSyntaxError;
 pub use json_syntax_error_reason::JsonSyntaxErrorReason;
 pub use json_validated_decode_error::JsonValidatedDecodeError;

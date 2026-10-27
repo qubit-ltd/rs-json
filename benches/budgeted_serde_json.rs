@@ -483,7 +483,7 @@ fn encode(criterion: &mut Criterion) {
                     let session =
                         JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
                     JsonEncoder::new(session)
-                        .write_incremental(std::io::sink(), black_box(fixture))
+                        .write_incremental(&mut std::io::sink(), black_box(fixture))
                         .expect("the benchmark fixture must fit the configured budget");
                     black_box(())
                 });
@@ -499,7 +499,7 @@ fn encode(criterion: &mut Criterion) {
                         .build();
                     let session = JsonEncodeSession::from_limits(limits);
                     JsonEncoder::new(session)
-                        .write_incremental(std::io::sink(), black_box(fixture))
+                        .write_incremental(&mut std::io::sink(), black_box(fixture))
                         .expect("the benchmark fixture must fit the configured budget");
                     black_box(())
                 });

@@ -17,13 +17,6 @@ pub(crate) enum JsonValueMaterializationError {
         /// Byte offset of the second key token's opening quote.
         offset: usize,
     },
-    /// A container would exceed the fixed construction depth.
-    DepthLimit {
-        /// Byte offset of the first over-limit container token.
-        offset: usize,
-        /// Maximum number of nested containers accepted by the builder.
-        limit: usize,
-    },
     /// An admitted number could not be represented under the selected model.
     InvalidNumber { offset: usize },
 }

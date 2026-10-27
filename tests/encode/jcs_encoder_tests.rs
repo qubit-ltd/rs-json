@@ -255,12 +255,14 @@ fn test_jcs_encoder_output_methods_return_expected_bytes() {
     assert_eq!(encoder.to_string(&value).unwrap(), r#"{"a":1,"b":2}"#);
 
     let buffered = Rc::new(RefCell::new(Vec::new()));
-    encoder.write_buffered(SharedOutput(buffered.clone()), &value).unwrap();
+    encoder
+        .write_buffered(&mut SharedOutput(buffered.clone()), &value)
+        .unwrap();
     assert_eq!(*buffered.borrow(), br#"{"a":1,"b":2}"#);
 
     let incremental = Rc::new(RefCell::new(Vec::new()));
     encoder
-        .write_incremental(SharedOutput(incremental.clone()), &value)
+        .write_incremental(&mut SharedOutput(incremental.clone()), &value)
         .unwrap();
     assert_eq!(*incremental.borrow(), br#"{"a":1,"b":2}"#);
 }
@@ -278,14 +280,14 @@ fn test_jcs_encoder_writes_to_output_only_destination() {
     let mut buffered_encoder = JcsEncoder::unlimited();
     let buffered = Rc::new(RefCell::new(Vec::new()));
     buffered_encoder
-        .write_buffered(OutputOnly(buffered.clone()), &value)
+        .write_buffered(&mut OutputOnly(buffered.clone()), &value)
         .unwrap();
     assert_eq!(*buffered.borrow(), br#"{"a":1,"b":2}"#);
 
     let mut incremental_encoder = JcsEncoder::unlimited();
     let incremental = Rc::new(RefCell::new(Vec::new()));
     incremental_encoder
-        .write_incremental(OutputOnly(incremental.clone()), &value)
+        .write_incremental(&mut OutputOnly(incremental.clone()), &value)
         .unwrap();
     assert_eq!(*incremental.borrow(), br#"{"a":1,"b":2}"#);
 }
@@ -322,14 +324,14 @@ fn test_jcs_encoder_value_and_output_budget_boundaries_are_transactional() {
 
 #[test]
 fn test_jcs_encoder_buffered_write_error_keeps_only_accepted_prefix() {
-    let (output, bytes) = output_bytes(3);
+    let (mut output, bytes) = output_bytes(3);
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(16)
         .max_nodes(8)
         .build();
     let mut encoder = JcsEncoder::with_limits(limits, 4096);
     let error = encoder
-        .write_buffered(output, &serde_json::json!({"a": 1}))
+        .write_buffered(&mut output, &serde_json::json!({"a": 1}))
         .unwrap_err();
     assert_eq!(error.kind(), JcsEncodeErrorKind::Write);
     assert!(error.write_error().is_some());
@@ -341,14 +343,14 @@ fn test_jcs_encoder_buffered_write_error_keeps_only_accepted_prefix() {
 
 #[test]
 fn test_jcs_encoder_incremental_write_error_keeps_only_accepted_prefix() {
-    let (output, bytes) = output_bytes(3);
+    let (mut output, bytes) = output_bytes(3);
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(16)
         .max_nodes(8)
         .build();
     let mut encoder = JcsEncoder::with_limits(limits, 4096);
     let error = encoder
-        .write_incremental(output, &serde_json::json!({"a": 1}))
+        .write_incremental(&mut output, &serde_json::json!({"a": 1}))
         .unwrap_err();
     assert_eq!(error.kind(), JcsEncodeErrorKind::Write);
     assert!(error.write_error().is_some());
@@ -476,7 +478,7 @@ fn test_jcs_encoder_zero_byte_destination_is_write_zero_and_rolls_back_value() {
         .build();
     let mut encoder = JcsEncoder::with_limits(limits, 4096);
     let error = encoder
-        .write_incremental(ZeroOutput, &serde_json::json!({"a": 1}))
+        .write_incremental(&mut ZeroOutput, &serde_json::json!({"a": 1}))
         .unwrap_err();
     assert_eq!(error.kind(), JcsEncodeErrorKind::Write);
     assert_eq!(error.write_error().unwrap().kind(), io::ErrorKind::WriteZero);
@@ -541,7 +543,7 @@ fn test_jcs_encoder_all_output_paths_reject_insufficient_working_memory() {
     let buffered = Rc::new(RefCell::new(Vec::new()));
     assert_eq!(
         buffered_encoder
-            .write_buffered(SharedOutput(buffered.clone()), &value)
+            .write_buffered(&mut SharedOutput(buffered.clone()), &value)
             .unwrap_err()
             .kind(),
         JcsEncodeErrorKind::WorkingMemory,
@@ -553,7 +555,7 @@ fn test_jcs_encoder_all_output_paths_reject_insufficient_working_memory() {
     let incremental = Rc::new(RefCell::new(Vec::new()));
     assert_eq!(
         incremental_encoder
-            .write_incremental(SharedOutput(incremental.clone()), &value)
+            .write_incremental(&mut SharedOutput(incremental.clone()), &value)
             .unwrap_err()
             .kind(),
         JcsEncodeErrorKind::WorkingMemory,
@@ -570,7 +572,7 @@ fn test_jcs_encoder_incremental_flush_failure_keeps_output_and_rolls_back_value(
         .build();
     let mut encoder = JcsEncoder::with_limits(limits, 4096);
     let error = encoder
-        .write_incremental(FlushFailureOutput(bytes.clone()), &serde_json::json!({"a": 1}))
+        .write_incremental(&mut FlushFailureOutput(bytes.clone()), &serde_json::json!({"a": 1}))
         .unwrap_err();
     assert_eq!(error.kind(), JcsEncodeErrorKind::Write);
     assert_eq!(*bytes.borrow(), br#"{"a":1}"#);

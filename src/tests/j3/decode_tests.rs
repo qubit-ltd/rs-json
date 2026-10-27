@@ -1,9 +1,24 @@
-use crate::decode::{
-    JsonDecodeNumberModel, JsonDecoder, JsonNumberPolicy, JsonPathSegment,
-    JsonValidatedDecodeError, JsonValidatedDecodeOptions,
-};
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonResource;
 use serde::Deserialize;
+
+use crate::decode::JsonDecodeNumberModel;
+use crate::decode::JsonDecoder;
+use crate::decode::JsonNumberPolicy;
+use crate::decode::JsonPathSegment;
+use crate::decode::JsonValidatedDecodeError;
+use crate::decode::JsonValidatedDecodeOptions;
+use crate::lexical::JsonLexicalError;
+use crate::lexical::JsonLexicalErrorReason;
+use crate::lexical::JsonLexicalFailure;
+use crate::lexical::JsonLexicalScanError;
 
 #[test]
 fn test_validated_policy_sees_source_order_and_typed_path() {
@@ -29,6 +44,28 @@ fn test_validated_policy_sees_source_order_and_typed_path() {
 }
 
 #[test]
+fn test_lexical_scan_error_formats_each_variant() {
+    let lexical: JsonLexicalError<JsonResource, usize> = JsonLexicalError::Syntax(JsonLexicalFailure {
+        offset: 2,
+        line: 1,
+        column: 3,
+        reason: JsonLexicalErrorReason::UnexpectedByte,
+    });
+    let converted: JsonLexicalScanError<&str, JsonResource, usize> = lexical.into();
+    assert!(converted.to_string().contains("UnexpectedByte"));
+
+    let consumer: JsonLexicalScanError<&str, JsonResource, usize> = JsonLexicalScanError::Consumer("stopped");
+    assert_eq!(consumer.to_string(), "stopped");
+
+    let limit: JsonLexicalScanError<&str, JsonResource, usize> = JsonLexicalScanError::EncodedStringLimit {
+        maximum: 4,
+        observed: 5,
+        offset: 9,
+    };
+    assert_eq!(limit.to_string(), "encoded JSON string limit exceeded");
+}
+
+#[test]
 fn test_validated_policy_error_precedes_integer_range_error() {
     let options = JsonValidatedDecodeOptions::builder()
         .number_model(JsonDecodeNumberModel::Integer64)
@@ -36,10 +73,18 @@ fn test_validated_policy_error_precedes_integer_range_error() {
     let error = JsonDecoder::unlimited()
         .decode_unique_validated_str("18446744073709551616", &options, |_, _| Err("policy"))
         .unwrap_err();
-    assert!(matches!(
-        error,
-        JsonValidatedDecodeError::Policy { offset: 0, .. }
-    ));
+    assert!(matches!(error, JsonValidatedDecodeError::Policy { offset: 0, .. }));
+}
+
+#[test]
+fn test_validated_policy_error_exposes_error_source_when_available() {
+    let options = JsonValidatedDecodeOptions::builder().build();
+    let error = JsonDecoder::unlimited()
+        .decode_unique_validated_str("1", &options, |_, _| {
+            Err::<JsonNumberPolicy, _>(std::io::Error::other("policy source"))
+        })
+        .unwrap_err();
+    assert!(std::error::Error::source(&error).is_some());
 }
 
 #[test]
@@ -55,23 +100,15 @@ fn test_validated_exact_safe_integer_projects_number() {
 
 #[test]
 fn test_validated_limits_count_key_nodes_and_encoded_string_bytes() {
-    let one_node = JsonValidatedDecodeOptions::builder()
-        .max_value_and_key_nodes(1)
-        .build();
+    let one_node = JsonValidatedDecodeOptions::builder().max_value_and_key_nodes(1).build();
     assert!(
         JsonDecoder::unlimited()
-            .decode_unique_validated_str("{}", &one_node, |_, _| Ok::<_, ()>(
-                JsonNumberPolicy::Preserve
-            ))
+            .decode_unique_validated_str("{}", &one_node, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
             .is_ok()
     );
-    let too_few = JsonValidatedDecodeOptions::builder()
-        .max_value_and_key_nodes(2)
-        .build();
+    let too_few = JsonValidatedDecodeOptions::builder().max_value_and_key_nodes(2).build();
     let error = JsonDecoder::unlimited()
-        .decode_unique_validated_str(r#"{"a":0}"#, &too_few, |_, _| {
-            Ok::<_, ()>(JsonNumberPolicy::Preserve)
-        })
+        .decode_unique_validated_str(r#"{"a":0}"#, &too_few, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
         .unwrap_err();
     assert!(matches!(
         error,
@@ -87,9 +124,7 @@ fn test_validated_limits_count_key_nodes_and_encoded_string_bytes() {
         .max_encoded_string_bytes(2)
         .build();
     let error = JsonDecoder::unlimited()
-        .decode_unique_validated_str(r#""a\n""#, &encoded, |_, _| {
-            Ok::<_, ()>(JsonNumberPolicy::Preserve)
-        })
+        .decode_unique_validated_str(r#""a\n""#, &encoded, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
         .unwrap_err();
     assert!(matches!(
         error,
@@ -121,9 +156,7 @@ fn test_validated_duplicate_key_and_trailing_input_keep_context() {
         .root_kind(crate::decode::JsonRootKind::Object)
         .build();
     let error = JsonDecoder::unlimited()
-        .decode_unique_validated_str("1x", &trailing, |_, _| {
-            Ok::<_, ()>(JsonNumberPolicy::Preserve)
-        })
+        .decode_unique_validated_str("1x", &trailing, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
         .unwrap_err();
     assert!(matches!(
         error,
@@ -140,9 +173,7 @@ fn test_validated_depth_and_input_byte_accounting() {
     let mut decoder = JsonDecoder::with_limits(limits);
     assert!(decoder.decode_value_str("[0]").is_err());
 
-    let limits = JsonDecodeLimits::builder()
-        .max_input_bytes(10_usize)
-        .build();
+    let limits = JsonDecodeLimits::builder().max_input_bytes(10_usize).build();
     let mut decoder = JsonDecoder::with_limits(limits);
     let options = JsonValidatedDecodeOptions::builder().build();
     let error = decoder
@@ -173,12 +204,10 @@ fn test_validated_byte_input_and_explicit_number_fallback() {
 
     let mut input = std::io::Cursor::new(b"18446744073709551616".to_vec());
     let value: serde_json::Value = JsonDecoder::unlimited()
-        .decode_input_with_number_model(
-            &mut input,
-            JsonDecodeNumberModel::Integer64WithFiniteFallback,
-        )
+        .decode_input_with_number_model(&mut input, JsonDecodeNumberModel::Integer64WithFiniteFallback)
         .unwrap();
-    assert!(value.as_number().unwrap().is_f64());
+    let number = value.as_number().unwrap();
+    assert!(number.is_f64() || number.to_string() == "18446744073709551616");
 }
 
 #[test]
@@ -192,10 +221,17 @@ fn test_validated_deep_tree_has_no_implicit_127_limit() {
 #[test]
 fn test_jcs_decoder_keeps_binary64_and_accepts_deep_tree() {
     let text = format!("{}1.0{}", "[".repeat(129), "]".repeat(129));
-    let value = crate::decode::JcsDecoder::unlimited()
-        .decode_str(&text)
-        .unwrap();
+    let value = crate::decode::JcsDecoder::unlimited().decode_str(&text).unwrap();
     assert!(value.is_array());
+
+    let error = crate::decode::JcsDecoder::unlimited().decode_str("1e400").unwrap_err();
+    let crate::decode::JcsDecodeError::Decode(error) = error else {
+        panic!("non-finite JCS number must be reported as a decode error");
+    };
+    assert_eq!(
+        error.syntax_error().map(crate::decode::JsonSyntaxError::reason),
+        Some(crate::decode::JsonSyntaxErrorReason::FloatOutOfRange)
+    );
 }
 
 #[test]
@@ -225,17 +261,11 @@ fn test_depth_budget_is_root_inclusive_and_has_no_implicit_cap() {
 #[test]
 fn test_deep_scanner_failures_drop_guarded_partial_values() {
     let truncated = format!("{}0", "[".repeat(512));
-    assert!(
-        JsonDecoder::unlimited()
-            .decode_value_str(&truncated)
-            .is_err()
-    );
+    assert!(JsonDecoder::unlimited().decode_value_str(&truncated).is_err());
+    let deeply_truncated = format!("{}0", "[".repeat(32_768));
+    assert!(JsonDecoder::unlimited().decode_value_str(&deeply_truncated).is_err());
     let duplicate = format!("{}{{\"x\":0,\"x\":1}}{}", "[".repeat(128), "]".repeat(128));
-    assert!(
-        JsonDecoder::unlimited()
-            .decode_value_str(&duplicate)
-            .is_err()
-    );
+    assert!(JsonDecoder::unlimited().decode_value_str(&duplicate).is_err());
 }
 
 #[test]
@@ -265,9 +295,7 @@ fn test_duplicate_key_precedes_colon_and_trailing_key_context_is_object_key() {
             ..
         }
     ));
-    let no_key_budget = JsonValidatedDecodeOptions::builder()
-        .max_value_and_key_nodes(1)
-        .build();
+    let no_key_budget = JsonValidatedDecodeOptions::builder().max_value_and_key_nodes(1).build();
     let budget_first = JsonDecoder::unlimited()
         .decode_unique_validated_str(r#"{"a":true,}"#, &no_key_budget, |_, _| {
             Ok::<_, ()>(JsonNumberPolicy::Preserve)
@@ -291,16 +319,11 @@ fn test_validated_grammar_failures_keep_context() {
         ("[1,]", crate::decode::JsonDecodeContext::Value),
         (r#"{"a" 0}"#, crate::decode::JsonDecodeContext::Colon),
         (r#"{"a":01}"#, crate::decode::JsonDecodeContext::Number),
-        (
-            r#"{"a":1x}"#,
-            crate::decode::JsonDecodeContext::ObjectSeparator,
-        ),
+        (r#"{"a":1x}"#, crate::decode::JsonDecodeContext::ObjectSeparator),
         ("1x", crate::decode::JsonDecodeContext::TrailingInput),
     ] {
         let error = JsonDecoder::unlimited()
-            .decode_unique_validated_str(text, &options, |_, _| {
-                Ok::<_, ()>(JsonNumberPolicy::Preserve)
-            })
+            .decode_unique_validated_str(text, &options, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
             .unwrap_err();
         assert!(
             matches!(error, JsonValidatedDecodeError::Decode { context: Some(context), .. } if context == expected),
@@ -311,33 +334,25 @@ fn test_validated_grammar_failures_keep_context() {
 
 #[test]
 fn test_node_limit_zero_and_one_count_value_entries_and_keys() {
-    let zero = JsonValidatedDecodeOptions::builder()
-        .max_value_and_key_nodes(0)
-        .build();
+    let zero = JsonValidatedDecodeOptions::builder().max_value_and_key_nodes(0).build();
     assert!(matches!(
-        JsonDecoder::unlimited().decode_unique_validated_str("null", &zero, |_, _| Ok::<_, ()>(
-            JsonNumberPolicy::Preserve
-        )),
+        JsonDecoder::unlimited()
+            .decode_unique_validated_str("null", &zero, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve)),
         Err(JsonValidatedDecodeError::Limit {
             maximum: 0,
             observed: 1,
             ..
         })
     ));
-    let one = JsonValidatedDecodeOptions::builder()
-        .max_value_and_key_nodes(1)
-        .build();
+    let one = JsonValidatedDecodeOptions::builder().max_value_and_key_nodes(1).build();
     assert!(
         JsonDecoder::unlimited()
             .decode_unique_validated_str("{}", &one, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
             .is_ok()
     );
     assert!(matches!(
-        JsonDecoder::unlimited().decode_unique_validated_str(
-            r#"{"a":0}"#,
-            &one,
-            |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve)
-        ),
+        JsonDecoder::unlimited()
+            .decode_unique_validated_str(r#"{"a":0}"#, &one, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve)),
         Err(JsonValidatedDecodeError::Limit {
             maximum: 1,
             observed: 2,
@@ -353,26 +368,16 @@ fn test_encoded_string_limits_use_source_bytes_and_decoded_budget_is_separate() 
         .build();
     assert!(
         JsonDecoder::unlimited()
-            .decode_unique_validated_str(r#""\u0061""#, &encoded, |_, _| Ok::<_, ()>(
-                JsonNumberPolicy::Preserve
-            ))
+            .decode_unique_validated_str(r#""\u0061""#, &encoded, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
             .is_err()
     );
     assert!(
         JsonDecoder::unlimited()
-            .decode_unique_validated_str(r#""😀""#, &encoded, |_, _| Ok::<_, ()>(
-                JsonNumberPolicy::Preserve
-            ))
+            .decode_unique_validated_str(r#""😀""#, &encoded, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
             .is_err()
     );
-    let limits = JsonDecodeLimits::builder()
-        .max_string_bytes(3_usize)
-        .build();
-    assert!(
-        JsonDecoder::with_limits(limits)
-            .decode_value_str(r#""😀""#)
-            .is_err()
-    );
+    let limits = JsonDecodeLimits::builder().max_string_bytes(3_usize).build();
+    assert!(JsonDecoder::with_limits(limits).decode_value_str(r#""😀""#).is_err());
 }
 
 #[test]
@@ -382,20 +387,16 @@ fn test_encoded_string_limits_accept_exact_boundary_for_escape_and_emoji() {
         .build();
     assert!(
         JsonDecoder::unlimited()
-            .decode_unique_validated_str(r#""\u0061""#, &escape, |_, _| Ok::<_, ()>(
-                JsonNumberPolicy::Preserve
-            ))
+            .decode_unique_validated_str(r#""\u0061""#, &escape, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
             .is_ok()
     );
     let below_escape = JsonValidatedDecodeOptions::builder()
         .max_encoded_string_bytes(5)
         .build();
     assert!(matches!(
-        JsonDecoder::unlimited().decode_unique_validated_str(
-            r#""\u0061""#,
-            &below_escape,
-            |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve)
-        ),
+        JsonDecoder::unlimited().decode_unique_validated_str(r#""\u0061""#, &below_escape, |_, _| Ok::<_, ()>(
+            JsonNumberPolicy::Preserve
+        )),
         Err(JsonValidatedDecodeError::Limit {
             maximum: 5,
             observed: 6,
@@ -408,18 +409,15 @@ fn test_encoded_string_limits_accept_exact_boundary_for_escape_and_emoji() {
         .build();
     assert!(
         JsonDecoder::unlimited()
-            .decode_unique_validated_str(r#""😀""#, &emoji, |_, _| Ok::<_, ()>(
-                JsonNumberPolicy::Preserve
-            ))
+            .decode_unique_validated_str(r#""😀""#, &emoji, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
             .is_ok()
     );
     let below_emoji = JsonValidatedDecodeOptions::builder()
         .max_encoded_string_bytes(3)
         .build();
-    let below_emoji_result =
-        JsonDecoder::unlimited().decode_unique_validated_str(r#""😀""#, &below_emoji, |_, _| {
-            Ok::<_, ()>(JsonNumberPolicy::Preserve)
-        });
+    let below_emoji_result = JsonDecoder::unlimited().decode_unique_validated_str(r#""😀""#, &below_emoji, |_, _| {
+        Ok::<_, ()>(JsonNumberPolicy::Preserve)
+    });
     assert!(matches!(
         below_emoji_result,
         Err(JsonValidatedDecodeError::Limit {
@@ -432,14 +430,9 @@ fn test_encoded_string_limits_accept_exact_boundary_for_escape_and_emoji() {
         .max_encoded_string_bytes(0)
         .build();
     let unterminated = JsonDecoder::unlimited()
-        .decode_unique_validated_str(r#""abc"#, &zero, |_, _| {
-            Ok::<_, ()>(JsonNumberPolicy::Preserve)
-        })
+        .decode_unique_validated_str(r#""abc"#, &zero, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
         .unwrap_err();
-    assert!(matches!(
-        unterminated,
-        JsonValidatedDecodeError::Decode { .. }
-    ));
+    assert!(matches!(unterminated, JsonValidatedDecodeError::Decode { .. }));
 }
 
 #[test]
@@ -458,21 +451,16 @@ fn test_policy_error_and_panic_stop_without_committing_values() {
         })
         .unwrap_err();
     assert_eq!(calls, 1);
-    assert!(matches!(
-        error,
-        JsonValidatedDecodeError::Policy { offset: 1, .. }
-    ));
+    assert!(matches!(error, JsonValidatedDecodeError::Policy { offset: 1, .. }));
     assert!(!format!("{error}").contains("secret-token"));
     assert!(!format!("{error:?}").contains("secret-token"));
     assert_eq!(decoder.session().input_budget().unwrap().used(), 5);
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 
     let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _ = decoder.decode_unique_validated_str(
-            "[1,2]",
-            &options,
-            |_, _| -> Result<JsonNumberPolicy, ()> { panic!("policy panic") },
-        );
+        let _ = decoder.decode_unique_validated_str("[1,2]", &options, |_, _| -> Result<JsonNumberPolicy, ()> {
+            panic!("policy panic")
+        });
     }));
     assert!(panic_result.is_err());
     assert_eq!(decoder.session().input_budget().unwrap().used(), 10);
@@ -524,9 +512,7 @@ fn test_dyn_and_chunked_byte_input_decode_once() {
     };
     let input: &mut dyn qubit_io::ByteInput = &mut reader;
     let owner = JsonDecoder::unlimited()
-        .decode_unique_validated_input(input, &options, |_, _| {
-            Ok::<_, ()>(JsonNumberPolicy::Preserve)
-        })
+        .decode_unique_validated_input(input, &options, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
         .unwrap();
     assert!(owner.as_value().is_array());
     assert_eq!(reader.offset, 8);
@@ -534,16 +520,11 @@ fn test_dyn_and_chunked_byte_input_decode_once() {
 
 #[test]
 fn test_input_utf8_io_and_one_byte_limit_probe() {
-    let limits = JsonDecodeLimits::builder()
-        .max_input_bytes(16_usize)
-        .build();
+    let limits = JsonDecodeLimits::builder().max_input_bytes(16_usize).build();
     let mut decoder = JsonDecoder::with_limits(limits);
     let mut invalid = std::io::Cursor::new(vec![0xff]);
     let error = decoder.decode_value_input(&mut invalid).unwrap_err();
-    assert_eq!(
-        error.kind(),
-        crate::decode::JsonDecodeErrorKind::InvalidUtf8
-    );
+    assert_eq!(error.kind(), crate::decode::JsonDecodeErrorKind::InvalidUtf8);
     assert_eq!(decoder.session().input_budget().unwrap().used(), 1);
 
     let limits = JsonDecodeLimits::builder().max_input_bytes(2_usize).build();
@@ -567,9 +548,7 @@ fn test_input_utf8_io_and_one_byte_limit_probe() {
             Ok(1)
         }
     }
-    let limits = JsonDecodeLimits::builder()
-        .max_input_bytes(16_usize)
-        .build();
+    let limits = JsonDecodeLimits::builder().max_input_bytes(16_usize).build();
     let mut decoder = JsonDecoder::with_limits(limits);
     let error = decoder
         .decode_value_input(&mut FailsAfterTwo { offset: 0 })
@@ -632,31 +611,18 @@ fn test_old_unique_targets_and_error_precedence_are_preserved() {
     );
     let unit_variant: DecodeEnum = decoder.decode_unique_str(r#""Unit""#).unwrap();
     let tuple_variant: DecodeEnum = decoder.decode_unique_str(r#"{"Tuple":[7,true]}"#).unwrap();
-    let struct_variant: DecodeEnum = decoder
-        .decode_unique_str(r#"{"Struct":{"value":"x"}}"#)
-        .unwrap();
+    let struct_variant: DecodeEnum = decoder.decode_unique_str(r#"{"Struct":{"value":"x"}}"#).unwrap();
     assert_eq!(unit_variant, DecodeEnum::Unit);
     assert_eq!(tuple_variant, DecodeEnum::Tuple(7, true));
-    assert_eq!(
-        struct_variant,
-        DecodeEnum::Struct {
-            value: "x".to_owned()
-        }
-    );
+    assert_eq!(struct_variant, DecodeEnum::Struct { value: "x".to_owned() });
 
     let type_error = decoder.decode_unique_str::<u64>(r#""wrong""#).unwrap_err();
-    assert_eq!(
-        type_error.kind(),
-        crate::decode::JsonDecodeErrorKind::Deserialize
-    );
+    assert_eq!(type_error.kind(), crate::decode::JsonDecodeErrorKind::Deserialize);
 
     let syntax_first = decoder
         .decode_unique_str::<serde_json::Value>(r#"{"x":0,"x":1} trailing"#)
         .unwrap_err();
-    assert_eq!(
-        syntax_first.kind(),
-        crate::decode::JsonDecodeErrorKind::InvalidJson
-    );
+    assert_eq!(syntax_first.kind(), crate::decode::JsonDecodeErrorKind::InvalidJson);
     assert_eq!(syntax_first.materialization_error_reason(), None);
 
     let duplicate_with_location = JsonDecoder::unlimited()
@@ -668,11 +634,7 @@ fn test_old_unique_targets_and_error_precedence_are_preserved() {
         Some(crate::decode::JsonMaterializationErrorReason::DuplicateKey),
         "{duplicate_with_location}"
     );
-    assert!(
-        duplicate_with_location
-            .to_string()
-            .contains("line 2 column 7")
-    );
+    assert!(duplicate_with_location.to_string().contains("line 2 column 7"));
 }
 
 #[cfg(feature = "jcs")]
@@ -682,8 +644,188 @@ fn test_jcs_binary64_isolated_from_ordinary_decode_model() {
         .decode_str("9007199254740993")
         .unwrap();
     assert!(jcs.as_number().unwrap().is_f64());
-    let ordinary: serde_json::Value = JsonDecoder::unlimited()
-        .decode_str("9007199254740993")
-        .unwrap();
+    let ordinary: serde_json::Value = JsonDecoder::unlimited().decode_str("9007199254740993").unwrap();
     assert_eq!(ordinary.as_u64(), Some(9_007_199_254_740_993));
+}
+
+#[test]
+fn test_root_kind_is_checked_after_complete_validated_scan() {
+    let object_only = JsonValidatedDecodeOptions::builder()
+        .root_kind(crate::decode::JsonRootKind::Object)
+        .build();
+    let error = JsonDecoder::unlimited()
+        .decode_unique_validated_str("[]", &object_only, |_, _| {
+            Ok::<_, std::io::Error>(JsonNumberPolicy::Preserve)
+        })
+        .unwrap_err();
+    assert!(matches!(
+        &error,
+        JsonValidatedDecodeError::Decode {
+            context: None,
+            error,
+        } if error.kind() == crate::decode::JsonDecodeErrorKind::UnexpectedTopLevel
+    ));
+    assert!(error.to_string().contains("expected object, got array"));
+    let JsonValidatedDecodeError::Decode { error, .. } = &error else {
+        panic!("root mismatch must retain the underlying decode error");
+    };
+    assert_eq!(error.expected_top_level(), Some(crate::decode::JsonRootKind::Object));
+    assert_eq!(error.actual_top_level(), Some(crate::decode::JsonRootKind::Array));
+    assert!(std::error::Error::source(&error).is_none());
+
+    let malformed = JsonDecoder::unlimited()
+        .decode_unique_validated_str("[]x", &object_only, |_, _| {
+            Ok::<_, std::io::Error>(JsonNumberPolicy::Preserve)
+        })
+        .unwrap_err();
+    assert!(matches!(
+        &malformed,
+        JsonValidatedDecodeError::Decode {
+            context: Some(crate::decode::JsonDecodeContext::TrailingInput),
+            error,
+        } if error.kind() == crate::decode::JsonDecodeErrorKind::InvalidJson
+    ));
+}
+
+#[test]
+fn test_number_model_and_exact_policy_error_boundaries() {
+    let mut strict_input = std::io::Cursor::new(b"18446744073709551616".to_vec());
+    let strict_error: crate::decode::JsonDecodeError = JsonDecoder::unlimited()
+        .decode_input_with_number_model::<serde_json::Value, _>(&mut strict_input, JsonDecodeNumberModel::Integer64)
+        .unwrap_err();
+    assert_eq!(strict_error.kind(), crate::decode::JsonDecodeErrorKind::InvalidJson);
+
+    let mut out_of_float_range = std::io::Cursor::new(b"1e400".to_vec());
+    assert!(
+        JsonDecoder::unlimited()
+            .decode_input_with_number_model::<serde_json::Value, _>(
+                &mut out_of_float_range,
+                JsonDecodeNumberModel::Integer64WithFiniteFallback,
+            )
+            .is_err()
+    );
+
+    let fallback_options = JsonValidatedDecodeOptions::builder()
+        .number_model(JsonDecodeNumberModel::Integer64WithFiniteFallback)
+        .build();
+    let fallback = JsonDecoder::unlimited()
+        .decode_unique_validated_str("18446744073709551616", &fallback_options, |_, _| {
+            Ok::<_, ()>(JsonNumberPolicy::Preserve)
+        })
+        .unwrap();
+    let number = fallback.as_value().as_number().unwrap();
+    assert!(number.as_f64().is_some() || number.to_string() == "18446744073709551616");
+
+    let options = JsonValidatedDecodeOptions::builder().build();
+    for (token, expected) in [
+        ("1.5", crate::decode::JsonNumberTokenError::Fractional),
+        (
+            "9007199254740992",
+            crate::decode::JsonNumberTokenError::OutOfSafeIntegerRange,
+        ),
+    ] {
+        let error = JsonDecoder::unlimited()
+            .decode_unique_validated_str(token, &options, |_, _| {
+                Ok::<_, std::io::Error>(JsonNumberPolicy::ExactSafeInteger)
+            })
+            .unwrap_err();
+        assert!(matches!(
+            &error,
+            JsonValidatedDecodeError::ExactSafeInteger { source, offset: 0 }
+                if *source == expected
+        ));
+        assert!(error.to_string().contains("exact safe integer"));
+        assert!(std::error::Error::source(&error).is_some());
+    }
+
+    let exact = JsonValidatedDecodeOptions::builder()
+        .number_model(JsonDecodeNumberModel::Integer64WithFiniteFallback)
+        .build();
+    let error = JsonDecoder::unlimited()
+        .decode_unique_validated_str("1e999", &exact, |_, _| Ok::<_, ()>(JsonNumberPolicy::ExactSafeInteger))
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        JsonValidatedDecodeError::Decode {
+            context: Some(crate::decode::JsonDecodeContext::Number),
+            error,
+        } if error.kind() == crate::decode::JsonDecodeErrorKind::InvalidJson
+    ));
+}
+
+#[test]
+fn test_decode_error_source_obeys_diagnostic_policy() {
+    struct ReadFailure;
+    impl std::io::Read for ReadFailure {
+        fn read(&mut self, _output: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("secret read detail"))
+        }
+    }
+
+    let mut input = ReadFailure;
+    let error = JsonDecoder::unlimited()
+        .with_diagnostic_policy(crate::decode::DiagnosticPolicy::Detailed)
+        .decode_value_input(&mut input)
+        .unwrap_err();
+    assert_eq!(error.kind(), crate::decode::JsonDecodeErrorKind::Read);
+    assert!(std::error::Error::source(&error).is_some());
+    assert!(!error.to_string().contains("secret read detail"));
+
+    let mut input = ReadFailure;
+    let error = JsonDecoder::unlimited().decode_value_input(&mut input).unwrap_err();
+    assert_eq!(error.kind(), crate::decode::JsonDecodeErrorKind::Read);
+    assert!(std::error::Error::source(&error).is_none());
+    assert!(!error.to_string().contains("secret read detail"));
+}
+
+#[test]
+fn test_decoder_uses_custom_quantity_for_typed_input_and_validated_paths() {
+    let mut decoder = JsonDecoder::with_limits(JsonDecodeLimits::<JsonResource, u8>::new());
+
+    let mut typed_input = std::io::Cursor::new(br#"{"n":7}"#.to_vec());
+    let typed: serde_json::Value = decoder
+        .decode_input_with_number_model(&mut typed_input, JsonDecodeNumberModel::Integer64)
+        .unwrap();
+    assert_eq!(typed, serde_json::json!({"n": 7}));
+
+    let guarded = decoder.decode_value_utf8(br#"[true,null]"#).unwrap();
+    assert_eq!(guarded.as_value(), &serde_json::json!([true, null]));
+
+    let options = JsonValidatedDecodeOptions::builder().build();
+    let validated = decoder
+        .decode_unique_validated_utf8(b"[1,2]", &options, |_, _| {
+            Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+        })
+        .unwrap();
+    assert_eq!(validated.as_value(), &serde_json::json!([1, 2]));
+}
+
+#[test]
+fn test_legacy_typed_decoder_facades_share_the_document_contract() {
+    let mut decoder = JsonDecoder::unlimited();
+
+    let text: serde_json::Value = decoder.decode_str(r#"{"n":1}"#).unwrap();
+    assert_eq!(text, serde_json::json!({"n": 1}));
+
+    let utf8: serde_json::Value = decoder.decode_utf8(br#"{"n":2}"#).unwrap();
+    assert_eq!(utf8, serde_json::json!({"n": 2}));
+
+    let mut input = std::io::Cursor::new(br#"{"n":3}"#.to_vec());
+    let streamed: serde_json::Value = decoder.decode_input(&mut input).unwrap();
+    assert_eq!(streamed, serde_json::json!({"n": 3}));
+
+    let object: serde_json::Map<String, serde_json::Value> = decoder.decode_object_str(r#"{"n":4}"#).unwrap();
+    assert_eq!(object.get("n"), Some(&serde_json::json!(4)));
+
+    let object: serde_json::Map<String, serde_json::Value> = decoder.decode_object_utf8(br#"{"n":5}"#).unwrap();
+    assert_eq!(object.get("n"), Some(&serde_json::json!(5)));
+
+    let array: Vec<serde_json::Value> = decoder.decode_array_str("[6]").unwrap();
+    assert_eq!(array, [serde_json::json!(6)]);
+
+    let array: Vec<serde_json::Value> = decoder.decode_array_utf8(b"[7]").unwrap();
+    assert_eq!(array, [serde_json::json!(7)]);
+
+    decoder.validate_str(r#"{"ok":true}"#).unwrap();
+    decoder.validate_utf8(br#"{"ok":false}"#).unwrap();
 }

@@ -1,19 +1,25 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 use std::io;
 use std::io::Write;
 
-use crate::encode::JsonEncodeErrorKind;
-use crate::encode::JsonEncoder;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonResource;
 use qubit_io::ByteOutput;
+
+use crate::encode::JsonEncodeErrorKind;
+use crate::encode::JsonEncoder;
 
 #[test]
 fn test_encoder_accepts_dyn_byte_output() {
     let mut bytes = Vec::new();
     let output: &mut dyn ByteOutput = &mut bytes;
-    JsonEncoder::unlimited()
-        .write_buffered(output, &true)
-        .unwrap();
+    JsonEncoder::unlimited().write_buffered(output, &true).unwrap();
     assert_eq!(bytes, b"true");
 }
 
@@ -125,10 +131,7 @@ fn test_incremental_writer_reports_write_zero() {
     let error = encoder.write_incremental(output, &true).unwrap_err();
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Write);
-    assert_eq!(
-        error.write_error().unwrap().kind(),
-        io::ErrorKind::WriteZero
-    );
+    assert_eq!(error.write_error().unwrap().kind(), io::ErrorKind::WriteZero);
     assert!(writer.bytes.is_empty());
 }
 

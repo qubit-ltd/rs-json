@@ -121,15 +121,12 @@ fn test_unique_decoder_retains_input_charges_and_rolls_back_value_failures() {
 }
 
 #[test]
-fn test_unique_decoder_bounds_materialization_and_preserves_syntax_admission() {
-    JsonDecoder::unlimited()
-        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(&nested_array(127))
-        .expect("127 nested containers must fit");
-    let error = JsonDecoder::unlimited()
-        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(&nested_array(128))
-        .unwrap_err();
-    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
-    assert_eq!(error.column(), Some(128));
+fn test_unique_decoder_uses_configured_depth_budget_and_preserves_syntax_admission() {
+    let limits = JsonDecodeLimits::builder().max_depth(1_usize).build();
+    let error = JsonDecoder::with_limits(limits)
+        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(&nested_array(1))
+        .expect_err("configured root-inclusive depth budget must be enforced");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     assert!(
         JsonDecoder::unlimited()
             .decode_unique_str::<bool>("true false")
@@ -178,32 +175,14 @@ fn test_unique_decoder_materialization_uses_byte_coordinates() {
 }
 
 #[test]
-fn test_unique_decoder_depth_error_uses_byte_coordinates() {
+fn test_unique_decoder_accepts_legacy_depth_boundary() {
     let input = format!("{{\"é\":{}}}", nested_array(127));
     for policy in [DiagnosticPolicy::Redacted, DiagnosticPolicy::Detailed] {
-        let error = JsonDecoder::unlimited()
+        let value = JsonDecoder::unlimited()
             .with_diagnostic_policy(policy)
             .decode_unique_str::<DuplicateKeyRejectingJsonValue>(&input)
-            .unwrap_err();
-        assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
-        assert_eq!(error.stage(), JsonDecodeStage::Deserialize);
-        assert_eq!(error.line(), Some(1));
-        assert_eq!(error.column(), Some(133));
-        if policy == DiagnosticPolicy::Detailed {
-            let JsonDecodeErrorSource::Deserialize {
-                source: Some(source), ..
-            } = error.into_source()
-            else {
-                panic!("detailed diagnostics must retain the Serde source");
-            };
-            let source = source
-                .downcast_ref::<SerdeJsonError>()
-                .expect("detailed source must be a serde_json error");
-            assert_eq!(source.line(), 1);
-            assert_eq!(source.column(), 133);
-        } else {
-            assert!(error.source().is_none());
-        }
+            .expect("legacy typed decode must not impose the old 127-level cap");
+        assert!(value.into_inner().is_object());
     }
 }
 

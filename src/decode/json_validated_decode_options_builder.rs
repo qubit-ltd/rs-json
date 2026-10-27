@@ -1,3 +1,10 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 //! Builder for validated JSON decode configuration.
 
 use super::JsonDecodeNumberModel;
@@ -15,13 +22,25 @@ pub struct JsonValidatedDecodeOptionsBuilder {
 
 impl JsonValidatedDecodeOptionsBuilder {
     /// Requires a particular root kind.
-    pub fn root_kind(mut self, kind: JsonRootKind) -> Self { self.root_kind = Some(kind); self }
+    pub fn root_kind(mut self, kind: JsonRootKind) -> Self {
+        self.root_kind = Some(kind);
+        self
+    }
     /// Selects the number representation model.
-    pub fn number_model(mut self, model: JsonDecodeNumberModel) -> Self { self.number_model = model; self }
+    pub fn number_model(mut self, model: JsonDecodeNumberModel) -> Self {
+        self.number_model = model;
+        self
+    }
     /// Limits value entries and decoded object-key entries per document.
-    pub fn max_value_and_key_nodes(mut self, maximum: usize) -> Self { self.max_value_and_key_nodes = Some(maximum); self }
+    pub fn max_value_and_key_nodes(mut self, maximum: usize) -> Self {
+        self.max_value_and_key_nodes = Some(maximum);
+        self
+    }
     /// Limits the source bytes inside each string token, excluding quotes.
-    pub fn max_encoded_string_bytes(mut self, maximum: usize) -> Self { self.max_encoded_string_bytes = Some(maximum); self }
+    pub fn max_encoded_string_bytes(mut self, maximum: usize) -> Self {
+        self.max_encoded_string_bytes = Some(maximum);
+        self
+    }
     /// Builds the configured options.
     pub fn build(self) -> JsonValidatedDecodeOptions {
         JsonValidatedDecodeOptions {

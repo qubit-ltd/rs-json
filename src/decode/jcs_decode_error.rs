@@ -15,8 +15,7 @@ use qubit_budget::json::JsonResource;
 
 use super::JsonDecodeError;
 
-/// JCS decoding failure with explicit duplicate-key and construction-depth
-/// cases.
+/// JCS decoding failure with explicit duplicate-key handling.
 ///
 /// # Type Parameters
 ///
@@ -51,7 +50,7 @@ where
         /// One-based UTF-8 character column of the second key token.
         column: usize,
     },
-    /// A valid document exceeds the fixed JCS value construction depth.
+    /// Historical compatibility variant; the shared builder no longer emits it.
     MaterializationDepthLimit {
         /// Maximum number of nested containers accepted during construction.
         limit: usize,

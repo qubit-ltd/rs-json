@@ -203,10 +203,10 @@ where
     /// accounting was committed. This method does not flush the writer. If
     /// the writer buffers output, call its [`Write::flush`] method after this
     /// call succeeds. The writer is borrowed mutably for this call. A later
-    /// flush failure is outside this encoding transaction and does not roll back accounting
-    /// already committed by this method. A successful flush only reports the
-    /// writer's result; it does not confirm persistence to disk or receipt by
-    /// a remote peer.
+    /// flush failure is outside this encoding transaction and does not roll
+    /// back accounting already committed by this method. A successful flush
+    /// only reports the writer's result; it does not confirm persistence to
+    /// disk or receipt by a remote peer.
     ///
     /// # Examples
     ///
@@ -247,11 +247,7 @@ where
     ///
     /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects the value
     /// or output, or a serialization/writer error on failure.
-    pub fn write_buffered<O, T>(
-        &mut self,
-        writer: &mut O,
-        value: &T,
-    ) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_buffered<O, T>(&mut self, writer: &mut O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         O: ByteOutput + ?Sized,
         T: Serialize + ?Sized,
@@ -298,11 +294,7 @@ where
     /// serialization/writer error on failure. Accepted output prefixes remain
     /// written and charged when a later operation fails; value-resource charges
     /// commit only after the complete operation succeeds.
-    pub fn write_incremental<O, T>(
-        &mut self,
-        writer: &mut O,
-        value: &T,
-    ) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_incremental<O, T>(&mut self, writer: &mut O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         O: ByteOutput + ?Sized,
         T: Serialize + ?Sized,

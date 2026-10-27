@@ -40,7 +40,7 @@ fn test_cursor_reports_scalar_and_container_syntax_errors() {
         (b"{1:2}", JsonSyntaxErrorReason::ExpectedObjectKey),
         (br#"{"a" 1}"#, JsonSyntaxErrorReason::ExpectedColon),
         (br#"{"a":1 "b":2}"#, JsonSyntaxErrorReason::ExpectedCommaOrObjectEnd),
-        (br#"{"a":1,}"#, JsonSyntaxErrorReason::UnexpectedByte),
+        (br#"{"a":1,}"#, JsonSyntaxErrorReason::ExpectedObjectKey),
         (br#"{"a":1"#, JsonSyntaxErrorReason::UnexpectedEnd),
         (br#""\q""#, JsonSyntaxErrorReason::InvalidEscape),
         (br#""\u12"#, JsonSyntaxErrorReason::UnexpectedEnd),

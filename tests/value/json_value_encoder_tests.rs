@@ -19,6 +19,7 @@ use qubit_json::encode::JsonSerializationErrorCategory;
 use qubit_json::encode::JsonSerializationErrorKind;
 use qubit_json::encode::JsonSerializerStateError;
 use qubit_json::value::JsonValueEncoder;
+use qubit_json::value::SafeJsonValue;
 use serde::Serialize;
 use serde::Serializer;
 use serde::ser::Error as SerializeError;
@@ -845,25 +846,16 @@ fn test_json_value_encoder_newtype_delegation_and_raw_protocol() {
     assert_eq!(ordinary.to_vec(&raw_option).unwrap(), br#""true""#);
 }
 
-/// Enforces the same fixed RawValue materialization boundary at 127/128.
+/// Uses the shared builder for deep RawValue materialization.
 #[test]
-fn test_json_value_encoder_raw_value_depth_boundary() {
+fn test_json_value_encoder_accepts_deep_raw_value() {
     let encoder = JsonValueEncoder::new();
-    for depth in [127, 128] {
+    for depth in [128, 129] {
         let text = format!("{}null{}", "[".repeat(depth), "]".repeat(depth));
         let raw = RawValue::from_string(text).expect("nested fixture is valid JSON");
-        let result = encoder.encode(&raw);
-        if depth == 127 {
-            let mut value = json!(null);
-            for _ in 0..127 {
-                value = json!([value]);
-            }
-            assert_eq!(result, Ok(value));
-        } else {
-            let error = result.expect_err("128 nested containers exceed the projection limit");
-            assert_eq!(error.kind(), JsonSerializationErrorKind::InvalidRawValue);
-            assert!(error.to_string().contains("127"));
-        }
+        let value = encoder.encode(&raw).expect("shared builder accepts deep RawValue");
+        let protected = SafeJsonValue::new(value);
+        assert!(protected.as_value().is_array());
     }
 }
 

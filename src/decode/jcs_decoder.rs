@@ -18,6 +18,11 @@ use super::JcsDecodeError;
 use super::internal::JsonDecodeEngine;
 
 /// Decodes strict JSON text into an owned value using finite binary64 numbers.
+/// Construction uses the shared builder and the configured, root-inclusive
+/// `max_depth`; there is no additional fixed container limit. The returned
+/// `serde_json::Value` is a bare tree, so callers accepting deep documents must
+/// wrap it with [`crate::value::SafeJsonValue::new`] immediately before
+/// retaining or dropping it.
 /// The decoder borrows its accounting session for `'budget`; `R` selects the
 /// resource kind and `Q` is the quantity representation used by that session.
 /// Calls reuse the same cumulative session, so limits apply across all inputs
@@ -73,8 +78,8 @@ impl JcsDecoder<'static, JsonResource, usize> {
     /// Creates a decoder with no configured resource limits.
     ///
     /// Resource ceilings are not configured, so resource usage is not
-    /// measured by this session. Syntax, numeric, duplicate-key, and fixed
-    /// materialization-depth checks still apply.
+    /// limited by this session. Syntax, numeric, and duplicate-key checks
+    /// still apply; the shared builder has no separate fixed depth cap.
     ///
     /// # Returns
     ///

@@ -63,17 +63,17 @@ impl Output for OnlyOutput {
 #[test]
 fn test_json_encoder_accepts_output_only_destination() {
     let mut encoder = JsonEncoder::unlimited();
-    let buffered = OnlyOutput(std::rc::Rc::default());
+    let mut buffered = OnlyOutput(std::rc::Rc::default());
     let buffered_bytes = buffered.0.clone();
     encoder
-        .write_buffered(buffered, &true)
+        .write_buffered(&mut buffered, &true)
         .expect("buffered encoding must succeed");
     assert_eq!(*buffered_bytes.borrow(), b"true");
 
-    let incremental = OnlyOutput(std::rc::Rc::default());
+    let mut incremental = OnlyOutput(std::rc::Rc::default());
     let incremental_bytes = incremental.0.clone();
     encoder
-        .write_incremental(incremental, &true)
+        .write_incremental(&mut incremental, &true)
         .expect("incremental encoding must succeed");
     assert_eq!(*incremental_bytes.borrow(), b"true");
 }

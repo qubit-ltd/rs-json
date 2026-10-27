@@ -155,9 +155,9 @@ fn source_writer(failure: OutputFailure, error: PreservedError) -> SourceWriter 
 fn assert_json_error_preserves_original(failure: OutputFailure, original: PreservedError) {
     let mut encoder = JsonEncoder::new(bounded_session());
     let result = match failure {
-        OutputFailure::BufferedWrite => encoder.write_buffered(source_writer(failure, original), &true),
+        OutputFailure::BufferedWrite => encoder.write_buffered(&mut source_writer(failure, original), &true),
         OutputFailure::IncrementalWrite | OutputFailure::IncrementalFlush => {
-            encoder.write_incremental(source_writer(failure, original), &true)
+            encoder.write_incremental(&mut source_writer(failure, original), &true)
         }
     };
     let error = result.expect_err("the configured output operation should fail");
@@ -174,9 +174,9 @@ fn assert_jcs_error_preserves_original(failure: OutputFailure, original: Preserv
     let mut encoder = JcsEncoder::new(bounded_session(), 4096);
     let value = json!(true);
     let result = match failure {
-        OutputFailure::BufferedWrite => encoder.write_buffered(source_writer(failure, original), &value),
+        OutputFailure::BufferedWrite => encoder.write_buffered(&mut source_writer(failure, original), &value),
         OutputFailure::IncrementalWrite | OutputFailure::IncrementalFlush => {
-            encoder.write_incremental(source_writer(failure, original), &value)
+            encoder.write_incremental(&mut source_writer(failure, original), &value)
         }
     };
     let error = result.expect_err("the configured output operation should fail");

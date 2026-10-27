@@ -1,0 +1,304 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
+//! Syntax-only formatter that retains every source token verbatim.
+
+use std::error::Error;
+
+use qubit_budget::json::JsonDecodeLimits;
+use qubit_budget::json::JsonDecodeSession;
+use qubit_budget::json::JsonResource;
+use qubit_io::ByteOutput;
+
+use super::JsonPrettyError;
+use super::JsonPrettyErrorKind;
+use super::JsonPrettyOptions;
+use crate::lexical::JsonLexicalConsumer;
+use crate::lexical::JsonLexicalEvent;
+use crate::lexical::JsonLexicalScanError;
+use crate::lexical::JsonLexicalScanner;
+use crate::lexical::JsonNumberModel;
+
+enum Action {
+    Span(usize, usize),
+    Byte(u8),
+    Spaces(usize),
+}
+#[derive(Clone, Copy)]
+enum ContainerKind {
+    Array,
+    Object,
+}
+struct Container {
+    kind: ContainerKind,
+    count: usize,
+    awaiting_value: bool,
+}
+struct Planner<'a> {
+    input: &'a [u8],
+    options: &'a JsonPrettyOptions,
+    actions: Vec<Action>,
+    stack: Vec<Container>,
+    length: usize,
+}
+
+impl Planner<'_> {
+    fn add_len(&mut self, amount: usize) -> Result<(), JsonPrettyError> {
+        self.length = self.length.checked_add(amount).ok_or_else(|| capacity_error(None))?;
+        Ok(())
+    }
+    fn push(&mut self, action: Action, length: usize) -> Result<(), JsonPrettyError> {
+        self.actions
+            .try_reserve(1)
+            .map_err(|error| capacity_error(Some(Box::new(error))))?;
+        self.add_len(length)?;
+        self.actions.push(action);
+        Ok(())
+    }
+    fn byte(&mut self, byte: u8) -> Result<(), JsonPrettyError> {
+        self.push(Action::Byte(byte), 1)
+    }
+    fn span(&mut self, offset: usize, length: usize) -> Result<(), JsonPrettyError> {
+        let end = offset
+            .checked_add(length)
+            .filter(|end| *end <= self.input.len())
+            .ok_or_else(|| capacity_error(None))?;
+        self.push(Action::Span(offset, end), length)
+    }
+    fn spaces(&mut self, levels: usize) -> Result<(), JsonPrettyError> {
+        let shown = self
+            .options
+            .max_indent_levels
+            .map_or(levels, |maximum| levels.min(maximum));
+        let count = self
+            .options
+            .indent_width
+            .checked_mul(shown)
+            .ok_or_else(|| capacity_error(None))?;
+        if count != 0 {
+            self.push(Action::Spaces(count), count)?;
+        }
+        Ok(())
+    }
+    fn prepare_value(&mut self) -> Result<(), JsonPrettyError> {
+        let Some(frame) = self.stack.last_mut() else {
+            return Ok(());
+        };
+        match frame.kind {
+            ContainerKind::Array => {
+                let first = frame.count == 0;
+                frame.count = frame.count.checked_add(1).ok_or_else(|| capacity_error(None))?;
+                if !first {
+                    self.byte(b',')?;
+                }
+                self.byte(b'\n')?;
+                self.spaces(self.stack.len())
+            }
+            ContainerKind::Object => {
+                if !frame.awaiting_value {
+                    return Err(capacity_error(None));
+                }
+                frame.awaiting_value = false;
+                self.byte(b':')?;
+                self.byte(b' ')
+            }
+        }
+    }
+    fn key(&mut self, offset: usize, length: usize) -> Result<(), JsonPrettyError> {
+        let Some(frame) = self.stack.last_mut() else {
+            return Err(capacity_error(None));
+        };
+        if !matches!(frame.kind, ContainerKind::Object) || frame.awaiting_value {
+            return Err(capacity_error(None));
+        }
+        let first = frame.count == 0;
+        frame.count = frame.count.checked_add(1).ok_or_else(|| capacity_error(None))?;
+        frame.awaiting_value = true;
+        if !first {
+            self.byte(b',')?;
+        }
+        self.byte(b'\n')?;
+        self.spaces(self.stack.len())?;
+        self.span(offset, length)
+    }
+    fn begin(&mut self, kind: ContainerKind, offset: usize) -> Result<(), JsonPrettyError> {
+        self.span(offset, 1)?;
+        self.stack
+            .try_reserve(1)
+            .map_err(|error| capacity_error(Some(Box::new(error))))?;
+        self.stack.push(Container {
+            kind,
+            count: 0,
+            awaiting_value: false,
+        });
+        Ok(())
+    }
+    fn end(&mut self, offset: usize, expected: ContainerKind) -> Result<(), JsonPrettyError> {
+        let frame = self.stack.pop().ok_or_else(|| capacity_error(None))?;
+        if !matches!(
+            (frame.kind, expected),
+            (ContainerKind::Array, ContainerKind::Array) | (ContainerKind::Object, ContainerKind::Object)
+        ) || frame.awaiting_value
+        {
+            return Err(capacity_error(None));
+        }
+        if frame.count > 0 {
+            self.byte(b'\n')?;
+            self.spaces(self.stack.len())?;
+        }
+        self.span(offset, 1)?;
+        Ok(())
+    }
+}
+
+impl<'input> JsonLexicalConsumer<'input> for Planner<'_> {
+    type Error = JsonPrettyError;
+    fn before_value(&mut self, _depth: usize, _offset: usize) -> Result<(), Self::Error> {
+        self.prepare_value()
+    }
+    fn before_key(&mut self, _offset: usize) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    fn before_number(&mut self, _token: &'input str, _offset: usize) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    fn event(&mut self, event: JsonLexicalEvent<'input>) -> Result<(), Self::Error> {
+        match event {
+            JsonLexicalEvent::BeginArray { offset } => self.begin(ContainerKind::Array, offset),
+            JsonLexicalEvent::BeginObject { offset } => self.begin(ContainerKind::Object, offset),
+            JsonLexicalEvent::EndArray { offset } => self.end(offset, ContainerKind::Array),
+            JsonLexicalEvent::EndObject { offset } => self.end(offset, ContainerKind::Object),
+            JsonLexicalEvent::Key { token, offset } => self.key(offset, token.len()),
+            JsonLexicalEvent::String { token, offset } | JsonLexicalEvent::Number { token, offset } => {
+                self.span(offset, token.len())
+            }
+            JsonLexicalEvent::Null { offset } => self.span(offset, 4),
+            JsonLexicalEvent::Boolean { value, offset } => self.span(offset, if value { 4 } else { 5 }),
+        }
+    }
+}
+
+/// Validates and pretty-prints JSON while preserving source token spelling.
+/// Syntax or output-limit errors occur before any output is written.
+pub fn format_json_tokens(
+    input: &[u8],
+    options: &JsonPrettyOptions,
+    max_output_bytes: Option<usize>,
+) -> Result<Vec<u8>, JsonPrettyError> {
+    let plan = make_plan(input, options, max_output_bytes)?;
+    let mut output = Vec::new();
+    output
+        .try_reserve(plan.length)
+        .map_err(|error| capacity_error(Some(Box::new(error))))?;
+    render_vec(input, &plan.actions, &mut output);
+    Ok(output)
+}
+
+/// Validates and plans the full document before writing to the supplied output.
+pub fn write_json_tokens<O: ByteOutput + ?Sized>(
+    output: &mut O,
+    input: &[u8],
+    options: &JsonPrettyOptions,
+    max_output_bytes: Option<usize>,
+) -> Result<(), JsonPrettyError> {
+    let plan = make_plan(input, options, max_output_bytes)?;
+    for action in &plan.actions {
+        let bytes: &[u8] = match action {
+            Action::Span(start, end) => &input[*start..*end],
+            Action::Byte(byte) => std::slice::from_ref(byte),
+            Action::Spaces(count) => {
+                const SPACES: [u8; 256] = [b' '; 256];
+                let mut remaining = *count;
+                while remaining > 0 {
+                    let chunk = remaining.min(SPACES.len());
+                    output.write_fully(&SPACES[..chunk]).map_err(io_error)?;
+                    remaining -= chunk;
+                }
+                continue;
+            }
+        };
+        output.write_fully(bytes).map_err(io_error)?;
+    }
+    Ok(())
+}
+
+struct Plan {
+    actions: Vec<Action>,
+    length: usize,
+}
+fn make_plan(input: &[u8], options: &JsonPrettyOptions, maximum: Option<usize>) -> Result<Plan, JsonPrettyError> {
+    let mut planner = Planner {
+        input,
+        options,
+        actions: Vec::new(),
+        stack: Vec::new(),
+        length: 0,
+    };
+    let limits = JsonDecodeLimits::<JsonResource, usize>::new();
+    let mut session = JsonDecodeSession::from_limits(limits);
+    let mut attempt = session.begin_value();
+    let scan = {
+        let mut scanner = JsonLexicalScanner::new(attempt.value_transaction_mut(), false)
+            .with_number_model(JsonNumberModel::SyntaxOnly);
+        scanner.scan_with_consumer(input, &mut planner)
+    };
+    if let Err(error) = scan {
+        return Err(map_scan_error(error));
+    }
+    if !planner.stack.is_empty() {
+        return Err(capacity_error(None));
+    }
+    if options.trailing_newline {
+        planner.byte(b'\n')?;
+    }
+    if maximum.is_some_and(|maximum| planner.length > maximum) {
+        return Err(JsonPrettyError::new(JsonPrettyErrorKind::OutputLimit, None, None));
+    }
+    Ok(Plan {
+        actions: planner.actions,
+        length: planner.length,
+    })
+}
+
+fn render_vec(input: &[u8], actions: &[Action], output: &mut Vec<u8>) {
+    const SPACES: [u8; 256] = [b' '; 256];
+    for action in actions {
+        match action {
+            Action::Span(start, end) => output.extend_from_slice(&input[*start..*end]),
+            Action::Byte(byte) => output.push(*byte),
+            Action::Spaces(count) => {
+                let mut remaining = *count;
+                while remaining > 0 {
+                    let chunk = remaining.min(SPACES.len());
+                    output.extend_from_slice(&SPACES[..chunk]);
+                    remaining -= chunk;
+                }
+            }
+        }
+    }
+}
+
+fn map_scan_error(error: JsonLexicalScanError<JsonPrettyError, JsonResource, usize>) -> JsonPrettyError {
+    match error {
+        JsonLexicalScanError::Lexical(crate::lexical::JsonLexicalError::Syntax(failure)) => JsonPrettyError::new(
+            JsonPrettyErrorKind::Syntax,
+            Some(failure.offset),
+            Some(Box::new(failure)),
+        ),
+        JsonLexicalScanError::Lexical(_) => JsonPrettyError::new(JsonPrettyErrorKind::Syntax, None, None),
+        JsonLexicalScanError::Consumer(error) => error,
+        JsonLexicalScanError::EncodedStringLimit { offset, .. } => {
+            JsonPrettyError::new(JsonPrettyErrorKind::Syntax, Some(offset), None)
+        }
+    }
+}
+fn capacity_error(source: Option<Box<dyn Error + Send + Sync>>) -> JsonPrettyError {
+    JsonPrettyError::new(JsonPrettyErrorKind::Capacity, None, source)
+}
+fn io_error(error: std::io::Error) -> JsonPrettyError {
+    JsonPrettyError::new(JsonPrettyErrorKind::Io, None, Some(Box::new(error)))
+}

@@ -296,29 +296,8 @@ fn test_unique_decode_materialization_reason_matrix() {
     );
     assert!(std::error::Error::source(&error).is_some());
 
-    let nested = format!("{}0{}", "[".repeat(128), "]".repeat(128));
-    let error = decoder
-        .decode_unique_str::<serde_json::Value>(&nested)
-        .expect_err("128 nested containers exceed the construction limit");
-    assert_eq!(
-        error.materialization_error_reason(),
-        Some(JsonMaterializationErrorReason::DepthLimit { limit: 127 })
-    );
-    assert_eq!(error.line(), Some(1));
-    assert_eq!(error.column(), Some(128));
-
-    let mut detailed = JsonDecoder::unlimited().with_diagnostic_policy(DiagnosticPolicy::Detailed);
-    let error = detailed
-        .decode_unique_str::<serde_json::Value>(&nested)
-        .expect_err("detailed depth construction must fail");
-    assert_eq!(
-        error.materialization_error_reason(),
-        Some(JsonMaterializationErrorReason::DepthLimit { limit: 127 })
-    );
-    assert!(std::error::Error::source(&error).is_some());
-
-    let accepted = format!("{}0{}", "[".repeat(127), "]".repeat(127));
-    assert!(decoder.decode_unique_str::<serde_json::Value>(&accepted).is_ok());
+    let legacy_depth_reason = JsonMaterializationErrorReason::DepthLimit { limit: 127 };
+    assert_eq!(format!("{legacy_depth_reason:?}"), "DepthLimit { limit: 127 }");
 
     let mut decoder = JsonDecoder::unlimited();
     let target_error = decoder

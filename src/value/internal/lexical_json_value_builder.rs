@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Builds a guarded owned JSON value from lexical events.
 
@@ -15,6 +17,7 @@ use crate::internal::StrictJsonNumber;
 use crate::lexical::JsonLexicalEvent;
 use crate::lexical::JsonNumberModel;
 use crate::value::SafeJsonValue;
+use crate::value::safe_json_value::SafeValueBuilder;
 
 /// Constructs one owned value from a scanner event sequence.
 pub(crate) struct LexicalJsonValueBuilder {
@@ -36,11 +39,9 @@ impl LexicalJsonValueBuilder {
         }
     }
 
-    /// Consumes one event and returns the first materialization failure immediately.
-    pub(crate) fn try_accept(
-        &mut self,
-        event: JsonLexicalEvent<'_>,
-    ) -> Result<(), JsonValueMaterializationError> {
+    /// Consumes one event and returns the first materialization failure
+    /// immediately.
+    pub(crate) fn try_accept(&mut self, event: JsonLexicalEvent<'_>) -> Result<(), JsonValueMaterializationError> {
         if let Some(error) = self.error.as_ref() {
             return Err(error.clone());
         }
@@ -61,32 +62,16 @@ impl LexicalJsonValueBuilder {
         self.try_push_value(Value::Number(number))
     }
 
-    /// Compatibility facade that records errors for the old scanner callback.
-    pub(crate) fn accept(&mut self, event: JsonLexicalEvent<'_>) {
-        let _ = self.try_accept(event);
-    }
-
     /// Returns the guarded complete value.
     pub(crate) fn finish_guarded(mut self) -> Result<SafeJsonValue, JsonValueMaterializationError> {
         if let Some(error) = self.error.take() {
             return Err(error);
         }
         debug_assert!(self.frames.is_empty());
-        Ok(self
-            .root
-            .take()
-            .expect("scanner-complete event stream has one root"))
+        Ok(self.root.take().expect("scanner-complete event stream has one root"))
     }
 
-    /// Compatibility facade for existing internal consumers.
-    pub(crate) fn finish(self) -> Result<Value, JsonValueMaterializationError> {
-        self.finish_guarded().map(SafeJsonValue::into_value)
-    }
-
-    fn accept_inner(
-        &mut self,
-        event: JsonLexicalEvent<'_>,
-    ) -> Result<(), JsonValueMaterializationError> {
+    fn accept_inner(&mut self, event: JsonLexicalEvent<'_>) -> Result<(), JsonValueMaterializationError> {
         match event {
             JsonLexicalEvent::Null { .. } => self.try_push_value(Value::Null),
             JsonLexicalEvent::Boolean { value, .. } => self.try_push_value(Value::Bool(value)),
@@ -95,15 +80,13 @@ impl LexicalJsonValueBuilder {
                     JsonNumberModel::Integer64 => std::str::from_utf8(token)
                         .ok()
                         .and_then(|text| StrictJsonNumber::from_admitted_lexeme(text).ok()),
-                    JsonNumberModel::Integer64WithFiniteFallback => {
-                        std::str::from_utf8(token).ok().and_then(|text| {
-                            StrictJsonNumber::from_admitted_lexeme_with_model(
-                                text,
-                                crate::decode::JsonDecodeNumberModel::Integer64WithFiniteFallback,
-                            )
-                            .ok()
-                        })
-                    }
+                    JsonNumberModel::Integer64WithFiniteFallback => std::str::from_utf8(token).ok().and_then(|text| {
+                        StrictJsonNumber::from_admitted_lexeme_with_model(
+                            text,
+                            crate::decode::JsonDecodeNumberModel::Integer64WithFiniteFallback,
+                        )
+                        .ok()
+                    }),
                     JsonNumberModel::SyntaxOnly => None,
                     #[cfg(feature = "jcs")]
                     JsonNumberModel::Binary64 => std::str::from_utf8(token)
@@ -118,18 +101,12 @@ impl LexicalJsonValueBuilder {
                 }
             }
             JsonLexicalEvent::String { token, .. } => {
-                let value = serde_json::from_slice::<String>(token)
-                    .expect("scanner admitted valid JSON string");
+                let value = serde_json::from_slice::<String>(token).expect("scanner admitted valid JSON string");
                 self.try_push_value(Value::String(value))
             }
             JsonLexicalEvent::Key { token, offset } => {
-                let key = serde_json::from_slice::<String>(token)
-                    .expect("scanner admitted valid JSON key");
-                let Some(JsonValueFrame::Object {
-                    values,
-                    pending_key,
-                }) = self.frames.last_mut()
-                else {
+                let key = serde_json::from_slice::<String>(token).expect("scanner admitted valid JSON key");
+                let Some(JsonValueFrame::Object { values, pending_key }) = self.frames.last_mut() else {
                     unreachable!("scanner emits keys within objects")
                 };
                 if values.iter().any(|(existing, _)| existing == &key) {
@@ -153,24 +130,22 @@ impl LexicalJsonValueBuilder {
                 let Some(JsonValueFrame::Array(values)) = self.frames.pop() else {
                     unreachable!("scanner emits matched array events")
                 };
-                self.try_push_value(Value::Array(
-                    values.into_iter().map(SafeJsonValue::into_value).collect(),
-                ))
+                let mut builder = SafeValueBuilder::array();
+                for value in values {
+                    builder.push(value);
+                }
+                self.try_push_value(builder.finish())
             }
             JsonLexicalEvent::EndObject { .. } => {
-                let Some(JsonValueFrame::Object {
-                    values,
-                    pending_key,
-                }) = self.frames.pop()
-                else {
+                let Some(JsonValueFrame::Object { values, pending_key }) = self.frames.pop() else {
                     unreachable!("scanner emits matched object events")
                 };
                 debug_assert!(pending_key.is_none());
-                let mut object = serde_json::Map::new();
+                let mut builder = SafeValueBuilder::object();
                 for (key, value) in values {
-                    object.insert(key, value.into_value());
+                    builder.insert(key, value);
                 }
-                self.try_push_value(Value::Object(object))
+                self.try_push_value(builder.finish())
             }
         }
     }
@@ -179,10 +154,7 @@ impl LexicalJsonValueBuilder {
         let guarded = SafeJsonValue::new(value);
         match self.frames.last_mut() {
             Some(JsonValueFrame::Array(values)) => values.push(guarded),
-            Some(JsonValueFrame::Object {
-                values,
-                pending_key,
-            }) => {
+            Some(JsonValueFrame::Object { values, pending_key }) => {
                 let key = pending_key.take().expect("object value follows key event");
                 values.push((key, guarded));
             }

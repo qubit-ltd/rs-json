@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Protected Serde interoperability for [`super::SafeJsonValue`].
 
@@ -72,9 +74,7 @@ impl<'de> Deserialize<'de> for SafeJsonValue {
         D: Deserializer<'de>,
     {
         stacker::maybe_grow(32 * 1024, 1024 * 1024, || {
-            deserializer
-                .deserialize_any(ValueVisitor)
-                .map(SafeJsonValue::new)
+            deserializer.deserialize_any(ValueVisitor).map(SafeJsonValue::new)
         })
     }
 }

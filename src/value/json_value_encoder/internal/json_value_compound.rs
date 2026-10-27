@@ -5,8 +5,14 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Compound Serde serializer states for strict JSON values.
+//! Transaction-aware Serde compound serializers.
 
+use std::cell::Cell;
+use std::cell::RefCell;
+
+use qubit_budget::ResourceQuantity;
+use qubit_budget::json::JsonContainerKind;
+use qubit_budget::json::JsonMeasurement;
 use serde::Serialize;
 use serde::ser::SerializeMap;
 use serde::ser::SerializeSeq;
@@ -15,251 +21,223 @@ use serde::ser::SerializeStructVariant;
 use serde::ser::SerializeTuple;
 use serde::ser::SerializeTupleStruct;
 use serde::ser::SerializeTupleVariant;
-use serde_json::Map;
 use serde_json::Value;
 
+use super::JsonValueEncodeContext;
 use super::JsonValueMapKeySerializer;
 use super::JsonValueSerializer;
-use super::json_value_serializer::decode_raw_value;
 use super::private_text_serializer::PrivateTextSerializer;
 use crate::encode::JsonSerializationError;
 use crate::encode::JsonSerializationErrorKind;
 use crate::encode::JsonSerializerStateError;
 use crate::internal::JsonPrivateProtocolKind;
 use crate::internal::JsonPrivateProtocolState;
+use crate::value::SafeJsonValue;
+use crate::value::safe_json_value::SafeValueBuilder;
 
-/// Accumulates one Serde compound value in its JSON representation state.
-pub(in crate::value::json_value_encoder) enum JsonValueCompound {
-    /// Array-like sequence or tuple values.
-    Sequence(
-        /// Values accumulated in encounter order.
-        Vec<Value>,
-        /// First serialization failure, retained until this sequence ends.
-        /// This preserves a child error even if its caller ignores the `Err`.
-        Option<JsonSerializationError>,
-    ),
-    /// Object entries and a key awaiting its value.
+type ContextCell<'context, 'transaction, 'budget, R, Q> =
+    &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
+
+enum CompoundState {
+    Sequence {
+        values: Vec<SafeJsonValue>,
+        depth: usize,
+        count: usize,
+        kind: JsonContainerKind,
+    },
     Map {
-        /// Completed unique object entries.
-        values: Map<String, Value>,
-        /// Serialized key supplied through split map calls.
+        values: Vec<(String, SafeJsonValue)>,
         next_key: Option<String>,
-        /// First serialization failure, retained until this map ends, even if
-        /// a caller ignores the `Err` returned by a child operation.
-        failure: Option<JsonSerializationError>,
+        depth: usize,
+        count: usize,
     },
-    /// Tuple variant fields nested below one variant name.
     TupleVariant {
-        /// Outer JSON object key.
         variant: String,
-        /// Ordered tuple fields.
-        values: Vec<Value>,
-        /// First serialization failure, retained until this tuple variant
-        /// ends, even if a caller ignores the `Err` returned by a child
-        /// operation.
-        failure: Option<JsonSerializationError>,
+        values: Vec<SafeJsonValue>,
+        depth: usize,
+        count: usize,
     },
-    /// Struct variant fields nested below one variant name.
     StructVariant {
-        /// Outer JSON object key.
         variant: String,
-        /// Unique named struct fields.
-        values: Map<String, Value>,
-        /// First serialization failure, retained until this struct variant
-        /// ends, even if a caller ignores the `Err` returned by a child
-        /// operation.
-        failure: Option<JsonSerializationError>,
+        values: Vec<(String, SafeJsonValue)>,
+        depth: usize,
+        count: usize,
     },
-    /// Text carried by serde_json's RawValue struct protocol.
     RawValue {
-        /// Raw JSON text emitted by the single protocol field.
         text: Option<String>,
-        /// Validated private protocol lifecycle.
         state: JsonPrivateProtocolState,
-        /// First serialization failure, retained until this protocol compound
-        /// ends, even if a caller ignores the `Err` returned by a child
-        /// operation.
-        failure: Option<JsonSerializationError>,
+        depth: usize,
     },
-    /// Text carried by serde_json's private Number protocol.
     Number {
-        /// Number lexeme emitted by the single protocol field.
         text: Option<String>,
-        /// Validated private protocol lifecycle.
         state: JsonPrivateProtocolState,
-        /// First serialization failure, retained until this protocol compound
-        /// ends, even if a caller ignores the `Err` returned by a child
-        /// operation.
-        failure: Option<JsonSerializationError>,
+        depth: usize,
     },
 }
 
-impl JsonValueCompound {
-    /// Creates an array-like compound with reserved storage.
-    ///
-    /// # Parameters
-    ///
-    /// * `capacity` - Initial array element capacity.
-    ///
-    /// # Returns
-    ///
-    /// An empty sequence compound ready to collect values.
-    #[inline]
-    #[must_use]
-    pub(in crate::value::json_value_encoder) fn sequence(capacity: usize) -> Self {
-        Self::Sequence(Vec::with_capacity(capacity), None)
-    }
+/// Accumulates one Serde compound with guarded children and sticky failures.
+pub(in crate::value::json_value_encoder) struct JsonValueCompound<'context, 'transaction, 'budget, R, Q>
+where
+    Q: ResourceQuantity,
+{
+    context: ContextCell<'context, 'transaction, 'budget, R, Q>,
+    state: CompoundState,
+    failure: Cell<Option<JsonSerializationError>>,
+}
 
-    /// Creates an object-like compound with reserved storage.
-    ///
-    /// # Parameters
-    ///
-    /// * `capacity` - Initial object entry capacity.
-    ///
-    /// # Returns
-    ///
-    /// An empty map compound with no pending key.
-    #[inline]
-    #[must_use]
-    pub(in crate::value::json_value_encoder) fn map(capacity: usize) -> Self {
-        Self::Map {
-            values: Map::with_capacity(capacity),
-            next_key: None,
-            failure: None,
+impl<'context, 'transaction, 'budget, R, Q> JsonValueCompound<'context, 'transaction, 'budget, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    pub(in crate::value::json_value_encoder) fn sequence(
+        context: ContextCell<'context, 'transaction, 'budget, R, Q>,
+        depth: usize,
+        kind: JsonContainerKind,
+        capacity: usize,
+    ) -> Self {
+        Self {
+            context,
+            state: CompoundState::Sequence {
+                values: Vec::with_capacity(capacity),
+                depth,
+                count: 0,
+                kind,
+            },
+            failure: Cell::new(None),
         }
     }
 
-    /// Creates a tuple variant with reserved field storage.
-    ///
-    /// # Parameters
-    ///
-    /// * `variant` - Enum variant name used as the outer object key.
-    /// * `capacity` - Initial tuple field capacity.
-    ///
-    /// # Returns
-    ///
-    /// An empty tuple-variant compound.
-    #[inline]
-    #[must_use]
-    pub(in crate::value::json_value_encoder) fn tuple_variant(variant: &str, capacity: usize) -> Self {
-        Self::TupleVariant {
-            variant: variant.to_owned(),
-            values: Vec::with_capacity(capacity),
-            failure: None,
+    pub(in crate::value::json_value_encoder) fn map(
+        context: ContextCell<'context, 'transaction, 'budget, R, Q>,
+        depth: usize,
+        capacity: usize,
+    ) -> Self {
+        Self {
+            context,
+            state: CompoundState::Map {
+                values: Vec::with_capacity(capacity),
+                next_key: None,
+                depth,
+                count: 0,
+            },
+            failure: Cell::new(None),
         }
     }
 
-    /// Creates a struct variant with reserved field storage.
-    ///
-    /// # Parameters
-    ///
-    /// * `variant` - Enum variant name used as the outer object key.
-    /// * `capacity` - Initial named-field capacity.
-    ///
-    /// # Returns
-    ///
-    /// An empty struct-variant compound.
-    #[inline]
-    #[must_use]
-    pub(in crate::value::json_value_encoder) fn struct_variant(variant: &str, capacity: usize) -> Self {
-        Self::StructVariant {
-            variant: variant.to_owned(),
-            values: Map::with_capacity(capacity),
-            failure: None,
+    pub(in crate::value::json_value_encoder) fn tuple_variant(
+        context: ContextCell<'context, 'transaction, 'budget, R, Q>,
+        variant: &str,
+        depth: usize,
+        capacity: usize,
+    ) -> Self {
+        Self {
+            context,
+            state: CompoundState::TupleVariant {
+                variant: variant.to_owned(),
+                values: Vec::with_capacity(capacity),
+                depth,
+                count: 0,
+            },
+            failure: Cell::new(None),
         }
     }
 
-    /// Creates an empty RawValue protocol state.
-    ///
-    /// # Parameters
-    ///
-    /// * `kind` - Private serde_json protocol to track.
-    /// * `state` - Initial validated protocol lifecycle state.
-    ///
-    /// # Returns
-    ///
-    /// An empty RawValue or Number compound matching `kind`.
-    #[inline(always)]
-    #[must_use]
-    pub(in crate::value::json_value_encoder) const fn private(
+    pub(in crate::value::json_value_encoder) fn struct_variant(
+        context: ContextCell<'context, 'transaction, 'budget, R, Q>,
+        variant: &str,
+        depth: usize,
+        capacity: usize,
+    ) -> Self {
+        Self {
+            context,
+            state: CompoundState::StructVariant {
+                variant: variant.to_owned(),
+                values: Vec::with_capacity(capacity),
+                depth,
+                count: 0,
+            },
+            failure: Cell::new(None),
+        }
+    }
+
+    pub(in crate::value::json_value_encoder) fn private(
+        context: ContextCell<'context, 'transaction, 'budget, R, Q>,
+        depth: usize,
         kind: JsonPrivateProtocolKind,
         state: JsonPrivateProtocolState,
     ) -> Self {
-        match kind {
-            JsonPrivateProtocolKind::RawValue => Self::RawValue {
+        let state = match kind {
+            JsonPrivateProtocolKind::RawValue => CompoundState::RawValue {
                 text: None,
                 state,
-                failure: None,
+                depth,
             },
-            JsonPrivateProtocolKind::Number => Self::Number {
+            JsonPrivateProtocolKind::Number => CompoundState::Number {
                 text: None,
                 state,
-                failure: None,
+                depth,
             },
-        }
-    }
-
-    /// Retains a candidate failure if this compound has not failed already.
-    ///
-    /// Returns the first retained failure, which may be an earlier error
-    /// rather than `error`.
-    #[inline]
-    fn retain_error(&mut self, error: JsonSerializationError) -> JsonSerializationError {
-        let slot = match self {
-            Self::Sequence(_, failure)
-            | Self::Map { failure, .. }
-            | Self::TupleVariant { failure, .. }
-            | Self::StructVariant { failure, .. }
-            | Self::RawValue { failure, .. }
-            | Self::Number { failure, .. } => failure,
         };
-        if slot.is_none() {
-            *slot = Some(error);
-        }
-        slot.unwrap_or(error)
-    }
-
-    /// Returns a copy of the retained first failure without clearing it.
-    /// `None` means no failure has been retained. The compound's `end` handling
-    /// must use this state to reject successful completion after a failure.
-    #[inline]
-    fn retained_error(&self) -> Option<JsonSerializationError> {
-        match self {
-            Self::Sequence(_, failure)
-            | Self::Map { failure, .. }
-            | Self::TupleVariant { failure, .. }
-            | Self::StructVariant { failure, .. }
-            | Self::RawValue { failure, .. }
-            | Self::Number { failure, .. } => *failure,
+        Self {
+            context,
+            state,
+            failure: Cell::new(None),
         }
     }
 
-    /// Validates and stores one private protocol text field.
-    ///
-    /// # Parameters
-    ///
-    /// * `text` - Slot that receives the serialized protocol payload.
-    /// * `state` - Protocol lifecycle to advance after validation.
-    /// * `kind` - Private serde_json protocol being decoded.
-    /// * `key` - Struct field token supplied by the serializer.
-    /// * `value` - Payload that must serialize as text.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Payload type accepted by Serde.
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` after the payload has been serialized and the protocol state
-    /// has advanced; otherwise an error is returned.
-    ///
-    /// # Errors
-    ///
-    /// Returns a serialization error if the lifecycle, field token, or payload
-    /// does not match the selected private protocol.
-    fn set_private_payload<T>(
-        text: &mut Option<String>,
-        state: &mut JsonPrivateProtocolState,
+    fn fail(&self, error: JsonSerializationError) -> JsonSerializationError {
+        if self.failure.get().is_none() {
+            self.failure.set(Some(error));
+        }
+        let _ = self.context.borrow_mut().record_serialization_error(error);
+        self.failure.get().unwrap_or(error)
+    }
+
+    fn keep_end_error<T>(
+        context: ContextCell<'_, '_, '_, R, Q>,
+        result: Result<T, JsonSerializationError>,
+    ) -> Result<T, JsonSerializationError> {
+        result.map_err(|error| context.borrow_mut().record_serialization_error(error))
+    }
+
+    fn check_failure(&self) -> Result<(), JsonSerializationError> {
+        if let Some(error) = self.failure.get() {
+            return Err(error);
+        }
+        let failed = self.context.borrow().has_failure();
+        if failed {
+            let error = self.context.borrow().ser_error();
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn admit(&mut self, measurement: JsonMeasurement) -> Result<(), JsonSerializationError> {
+        let result = { self.context.borrow_mut().admit(measurement) };
+        result.map_err(|error| self.fail(error))
+    }
+
+    fn serialize_child<T>(&mut self, value: &T, depth: usize) -> Result<SafeJsonValue, JsonSerializationError>
+    where
+        T: Serialize + ?Sized,
+    {
+        match value.serialize(JsonValueSerializer::new(self.context, depth)) {
+            Ok(value) => {
+                self.check_failure()?;
+                Ok(value)
+            }
+            Err(error) => Err(self.fail(error)),
+        }
+    }
+
+    fn check_count(&mut self, kind: JsonContainerKind, count: usize) -> Result<(), JsonSerializationError> {
+        let result = { self.context.borrow_mut().check_container_count(kind, count) };
+        result.map_err(|error| self.fail(error))
+    }
+
+    fn set_private_field<T>(
+        &mut self,
         kind: JsonPrivateProtocolKind,
         key: &'static str,
         value: &T,
@@ -267,793 +245,532 @@ impl JsonValueCompound {
     where
         T: Serialize + ?Sized,
     {
-        if state.begin(key).is_err() {
+        let result = match &mut self.state {
+            CompoundState::RawValue { text, state, .. } | CompoundState::Number { text, state, .. } => {
+                set_private_payload(text, state, kind, key, value)
+            }
+            _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
+        };
+        result.map_err(|error| self.fail(error))
+    }
+
+    fn finish_sequence(values: Vec<SafeJsonValue>) -> SafeJsonValue {
+        let mut builder = SafeValueBuilder::array();
+        for value in values {
+            builder.push(value);
+        }
+        SafeJsonValue::new(builder.finish())
+    }
+
+    fn finish_object(values: Vec<(String, SafeJsonValue)>) -> SafeJsonValue {
+        let mut object = SafeValueBuilder::object();
+        for (key, value) in values {
+            object.insert(key, value);
+        }
+        SafeJsonValue::new(object.finish())
+    }
+
+    fn finish_private(self) -> Result<SafeJsonValue, JsonSerializationError> {
+        let context = self.context;
+        self.finish_private_inner()
+            .map_err(|error| context.borrow_mut().record_serialization_error(error))
+    }
+
+    fn finish_private_inner(self) -> Result<SafeJsonValue, JsonSerializationError> {
+        match &self.state {
+            CompoundState::RawValue {
+                text: Some(text),
+                state,
+                depth,
+            } => {
+                if state.finish().is_err() {
+                    return Err(private_invalid_state(JsonPrivateProtocolKind::RawValue));
+                }
+                decode_raw_value(text, self.context, *depth)
+            }
+            CompoundState::RawValue { state, .. } => {
+                let _ = state.finish();
+                Err(private_invalid_state(JsonPrivateProtocolKind::RawValue))
+            }
+            CompoundState::Number {
+                text: Some(text),
+                state,
+                depth,
+            } => {
+                if state.finish().is_err() {
+                    return Err(private_invalid_state(JsonPrivateProtocolKind::Number));
+                }
+                match crate::internal::StrictJsonNumber::parse(text) {
+                    Ok(number) => {
+                        let bytes = crate::value::internal::json_number_lexeme_length(&number);
+                        self.context
+                            .borrow_mut()
+                            .admit(JsonMeasurement::Number { depth: *depth, bytes })?;
+                        Ok(SafeJsonValue::new(Value::Number(number)))
+                    }
+                    Err(error) => Err(self.context.borrow_mut().record_serialization_error(error)),
+                }
+            }
+            CompoundState::Number { state, .. } => {
+                let _ = state.finish();
+                Err(private_invalid_state(JsonPrivateProtocolKind::Number))
+            }
+            _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
+        }
+    }
+}
+
+fn set_private_payload<T>(
+    text: &mut Option<String>,
+    state: &mut JsonPrivateProtocolState,
+    kind: JsonPrivateProtocolKind,
+    key: &'static str,
+    value: &T,
+) -> Result<(), JsonSerializationError>
+where
+    T: Serialize + ?Sized,
+{
+    if state.begin(key).is_err() {
+        return Err(private_invalid_state(kind));
+    }
+    let value = match value.serialize(PrivateTextSerializer { kind }) {
+        Ok(Value::String(value)) => value,
+        Ok(_) => {
+            state.fail();
             return Err(private_invalid_state(kind));
         }
-        let value = match value.serialize(PrivateTextSerializer { kind }) {
-            Ok(Value::String(value)) => value,
-            Ok(_) => {
-                state.fail();
-                return Err(private_invalid_state(kind));
-            }
-            Err(error) => {
-                state.fail();
-                return Err(error);
-            }
-        };
-        *text = Some(value);
-        state.complete().map_err(|_| private_invalid_state(kind))
-    }
-
-    /// Inserts one unique object entry into the supplied map.
-    ///
-    /// # Parameters
-    ///
-    /// * `values` - Object entries receiving the new pair.
-    /// * `key` - Serialized object key to insert.
-    /// * `value` - Value to serialize after the key is confirmed unique.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Value type accepted by Serde.
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` after insertion succeeds.
-    ///
-    /// # Errors
-    ///
-    /// Returns `DuplicateObjectKey` when `key` is already present, without
-    /// serializing `value`. Returns a serialization error if `value` cannot be
-    /// projected to a JSON value.
-    fn insert<T>(values: &mut Map<String, Value>, key: String, value: &T) -> Result<(), JsonSerializationError>
-    where
-        T: Serialize + ?Sized,
-    {
-        if values.contains_key(&key) {
-            return Err(JsonSerializationError::new(
-                JsonSerializationErrorKind::DuplicateObjectKey,
-            ));
+        Err(error) => {
+            state.fail();
+            return Err(error);
         }
-        values.insert(key, value.serialize(JsonValueSerializer)?);
-        Ok(())
+    };
+    *text = Some(value);
+    if state.complete().is_err() {
+        return Err(private_invalid_state(kind));
     }
+    Ok(())
 }
 
-impl SerializeSeq for JsonValueCompound {
-    type Ok = Value;
+impl<R, Q> SerializeSeq for JsonValueCompound<'_, '_, '_, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    type Ok = SafeJsonValue;
     type Error = JsonSerializationError;
 
-    /// Serializes and appends one sequence element.
-    ///
-    /// # Parameters
-    ///
-    /// * `value` - Element to serialize and append.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Element type accepted by Serde.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if this is not a sequence compound or element
-    /// serialization fails.
     fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        if !matches!(self, Self::Sequence(..)) {
-            return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
-        }
-        let value = value
-            .serialize(JsonValueSerializer)
-            .map_err(|error| self.retain_error(error))?;
-        let Self::Sequence(values, _) = self else {
+        self.check_failure()?;
+        let (depth, count, kind) = match &self.state {
+            CompoundState::Sequence { depth, count, kind, .. } => (*depth, *count, *kind),
+            _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
+        };
+        let next_count = count.checked_add(1).ok_or_else(|| {
+            self.fail(JsonSerializationError::new(
+                JsonSerializationErrorKind::CollectionLengthOverflow {
+                    kind: crate::encode::JsonCollectionKind::Array,
+                },
+            ))
+        })?;
+        self.check_count(kind, next_count)?;
+        let child_depth = depth
+            .checked_add(1)
+            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
+        let child = self.serialize_child(value, child_depth)?;
+        let CompoundState::Sequence { values, count, .. } = &mut self.state else {
             unreachable!()
         };
-        values.push(value);
+        values.push(child);
+        *count = next_count;
         Ok(())
     }
 
-    /// Returns the accumulated JSON array.
-    ///
-    /// # Returns
-    ///
-    /// The accumulated values as a JSON array.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-state error if this is not a sequence compound.
-    fn end(self) -> Result<Value, Self::Error> {
-        if let Some(error) = self.retained_error() {
-            return Err(error);
-        }
-        let Self::Sequence(values, _) = self else {
-            return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        self.check_failure()?;
+        let context = self.context;
+        let result = match self.state {
+            CompoundState::Sequence { values, .. } => Ok(Self::finish_sequence(values)),
+            _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         };
-        Ok(Value::Array(values))
+        Self::keep_end_error(context, result)
     }
 }
 
-impl SerializeTuple for JsonValueCompound {
-    type Ok = Value;
+impl<R, Q> SerializeTuple for JsonValueCompound<'_, '_, '_, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    type Ok = SafeJsonValue;
     type Error = JsonSerializationError;
-
-    /// Serializes and appends one tuple element.
-    ///
-    /// # Parameters
-    ///
-    /// * `value` - Tuple element to serialize and append.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Tuple element type accepted by Serde.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if element serialization or sequence-state validation
-    /// fails.
-    #[inline(always)]
     fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         SerializeSeq::serialize_element(self, value)
     }
-
-    /// Returns the accumulated tuple as a JSON array.
-    ///
-    /// # Returns
-    ///
-    /// The tuple fields as a JSON array.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-state error if this is not a sequence compound.
-    #[inline(always)]
-    fn end(self) -> Result<Value, Self::Error> {
+    fn end(self) -> Result<Self::Ok, Self::Error> {
         SerializeSeq::end(self)
     }
 }
 
-impl SerializeTupleStruct for JsonValueCompound {
-    type Ok = Value;
+impl<R, Q> SerializeTupleStruct for JsonValueCompound<'_, '_, '_, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    type Ok = SafeJsonValue;
     type Error = JsonSerializationError;
-
-    /// Serializes and appends one tuple-struct field.
-    ///
-    /// # Parameters
-    ///
-    /// * `value` - Tuple-struct field to serialize and append.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Field type accepted by Serde.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if field serialization or sequence-state validation
-    /// fails.
-    #[inline(always)]
     fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         SerializeSeq::serialize_element(self, value)
     }
-
-    /// Returns the accumulated tuple struct as a JSON array.
-    ///
-    /// # Returns
-    ///
-    /// The tuple-struct fields as a JSON array.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-state error if this is not a sequence compound.
-    #[inline(always)]
-    fn end(self) -> Result<Value, Self::Error> {
+    fn end(self) -> Result<Self::Ok, Self::Error> {
         SerializeSeq::end(self)
     }
 }
 
-impl SerializeTupleVariant for JsonValueCompound {
-    type Ok = Value;
+impl<R, Q> SerializeTupleVariant for JsonValueCompound<'_, '_, '_, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    type Ok = SafeJsonValue;
     type Error = JsonSerializationError;
-
-    /// Serializes and appends one tuple variant field.
-    ///
-    /// # Parameters
-    ///
-    /// * `value` - Tuple variant field to serialize and append.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Field type accepted by Serde.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if this is not a tuple variant or field serialization
-    /// fails.
     fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        if !matches!(self, Self::TupleVariant { .. }) {
-            return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
-        }
-        let value = value
-            .serialize(JsonValueSerializer)
-            .map_err(|error| self.retain_error(error))?;
-        let Self::TupleVariant { values, .. } = self else {
+        self.check_failure()?;
+        let (depth, count) = match &self.state {
+            CompoundState::TupleVariant { depth, count, .. } => (*depth, *count),
+            _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
+        };
+        let next = count.checked_add(1).ok_or_else(|| {
+            self.fail(JsonSerializationError::new(
+                JsonSerializationErrorKind::CollectionLengthOverflow {
+                    kind: crate::encode::JsonCollectionKind::Array,
+                },
+            ))
+        })?;
+        self.check_count(JsonContainerKind::Sequence, next)?;
+        let child_depth = depth
+            .checked_add(2)
+            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
+        let child = self.serialize_child(value, child_depth)?;
+        let CompoundState::TupleVariant { values, count, .. } = &mut self.state else {
             unreachable!()
         };
-        values.push(value);
+        values.push(child);
+        *count = next;
         Ok(())
     }
-
-    /// Returns the tuple variant as a single-key object.
-    ///
-    /// # Returns
-    ///
-    /// An object mapping the variant name to its tuple array.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-state error if this is not a tuple variant.
-    fn end(self) -> Result<Value, Self::Error> {
-        if let Some(error) = self.retained_error() {
-            return Err(error);
-        }
-        let Self::TupleVariant { variant, values, .. } = self else {
-            return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        self.check_failure()?;
+        let context = self.context;
+        let result = match self.state {
+            CompoundState::TupleVariant { variant, values, .. } => {
+                let inner = Self::finish_sequence(values);
+                let mut object = SafeValueBuilder::object();
+                object.insert(variant, inner);
+                Ok(SafeJsonValue::new(object.finish()))
+            }
+            _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         };
-        let mut object = Map::new();
-        object.insert(variant, Value::Array(values));
-        Ok(Value::Object(object))
+        Self::keep_end_error(context, result)
     }
 }
 
-impl SerializeMap for JsonValueCompound {
-    type Ok = Value;
+impl<R, Q> SerializeMap for JsonValueCompound<'_, '_, '_, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    type Ok = SafeJsonValue;
     type Error = JsonSerializationError;
-
-    /// Serializes and retains the next map key.
-    ///
-    /// # Parameters
-    ///
-    /// * `key` - Map key to serialize using the JSON key contract.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Key type accepted by Serde.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if this is not a map, another key is pending, or key
-    /// serialization fails.
     fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        if !matches!(self, Self::Map { .. }) {
-            return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
+        self.check_failure()?;
+        let (count, pending) = match &self.state {
+            CompoundState::Map { count, next_key, .. } => (*count, next_key.is_some()),
+            _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
+        };
+        if pending {
+            return Err(self.fail(invalid_state(JsonSerializerStateError::MapKeyAlreadyPending)));
         }
-        let key = key
-            .serialize(JsonValueMapKeySerializer)
-            .map_err(|error| self.retain_error(error))?;
-        if matches!(self, Self::Map { next_key: Some(_), .. }) {
-            let error = invalid_state(JsonSerializerStateError::MapKeyAlreadyPending);
-            return Err(self.retain_error(error));
-        }
-        let Self::Map { next_key, .. } = self else {
+        let next = count.checked_add(1).ok_or_else(|| {
+            self.fail(JsonSerializationError::new(
+                JsonSerializationErrorKind::CollectionLengthOverflow {
+                    kind: crate::encode::JsonCollectionKind::Object,
+                },
+            ))
+        })?;
+        self.check_count(JsonContainerKind::Map, next)?;
+        let key = match key.serialize(JsonValueMapKeySerializer) {
+            Ok(key) => key,
+            Err(error) => return Err(self.fail(error)),
+        };
+        self.admit(JsonMeasurement::Key { bytes: key.len() })?;
+        let CompoundState::Map { next_key, count, .. } = &mut self.state else {
             unreachable!()
         };
         *next_key = Some(key);
+        *count = next;
         Ok(())
     }
-
-    /// Serializes the value paired with the retained map key.
-    ///
-    /// # Parameters
-    ///
-    /// * `value` - Value to serialize for the pending map key.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Map value type accepted by Serde.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if this is not a map, no key is pending, the key is a
-    /// duplicate, or value serialization fails.
     fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        if matches!(self, Self::Map { next_key: None, .. }) {
-            let error = invalid_state(JsonSerializerStateError::MapValueWithoutKey);
-            return Err(self.retain_error(error));
-        }
-        let Self::Map { values, next_key, .. } = self else {
-            return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
+        self.check_failure()?;
+        let (key, depth) = match &self.state {
+            CompoundState::Map {
+                values,
+                next_key,
+                depth,
+                ..
+            } => {
+                let Some(key) = next_key.as_ref() else {
+                    return Err(self.fail(invalid_state(JsonSerializerStateError::MapValueWithoutKey)));
+                };
+                if values.iter().any(|(existing, _)| existing == key) {
+                    return Err(self.fail(JsonSerializationError::new(
+                        JsonSerializationErrorKind::DuplicateObjectKey,
+                    )));
+                }
+                (key.clone(), *depth)
+            }
+            _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
-        let key = next_key.take().expect("the map key was checked above");
-        Self::insert(values, key, value).map_err(|error| self.retain_error(error))
+        let child_depth = depth
+            .checked_add(1)
+            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
+        if let CompoundState::Map { next_key, .. } = &mut self.state {
+            *next_key = None;
+        }
+        let child = self.serialize_child(value, child_depth)?;
+        let CompoundState::Map { values, .. } = &mut self.state else {
+            unreachable!()
+        };
+        values.push((key, child));
+        Ok(())
     }
-
-    /// Returns the completed object after checking split map state.
-    ///
-    /// # Returns
-    ///
-    /// The completed entries as a JSON object.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if this is not a map or a key has no paired value.
-    fn end(self) -> Result<Value, Self::Error> {
-        if let Some(error) = self.retained_error() {
-            return Err(error);
-        }
-        let Self::Map { values, next_key, .. } = self else {
-            return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        self.check_failure()?;
+        let context = self.context;
+        let result = match self.state {
+            CompoundState::Map {
+                values, next_key: None, ..
+            } => Ok(Self::finish_object(values)),
+            CompoundState::Map { next_key: Some(_), .. } => {
+                Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey))
+            }
+            _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         };
-        if next_key.is_some() {
-            return Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey));
-        }
-        Ok(Value::Object(values))
+        Self::keep_end_error(context, result)
     }
 }
 
-impl SerializeStruct for JsonValueCompound {
-    type Ok = Value;
+impl<R, Q> SerializeStruct for JsonValueCompound<'_, '_, '_, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    type Ok = SafeJsonValue;
     type Error = JsonSerializationError;
-
-    /// Rejects skipped fields in either serde_json private protocol.
-    ///
-    /// # Parameters
-    ///
-    /// * `_key` - Struct field name that Serde attempted to skip.
-    ///
-    /// # Errors
-    ///
-    /// Returns a private-protocol state error for RawValue or Number compounds.
-    fn skip_field(&mut self, _key: &'static str) -> Result<(), Self::Error> {
-        match self {
-            Self::RawValue { state, .. } => {
-                state.fail();
-                Err(private_invalid_state(JsonPrivateProtocolKind::RawValue))
-            }
-            Self::Number { state, .. } => {
-                state.fail();
-                Err(private_invalid_state(JsonPrivateProtocolKind::Number))
-            }
+    fn skip_field(&mut self, _: &'static str) -> Result<(), Self::Error> {
+        match &self.state {
+            CompoundState::RawValue { .. } => Err(self.fail(private_invalid_state(JsonPrivateProtocolKind::RawValue))),
+            CompoundState::Number { .. } => Err(self.fail(private_invalid_state(JsonPrivateProtocolKind::Number))),
             _ => Ok(()),
         }
     }
-
-    /// Serializes one unique named struct field.
-    ///
-    /// # Parameters
-    ///
-    /// * `key` - Static struct field name.
-    /// * `value` - Field value to serialize.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Struct field type accepted by Serde.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error for an invalid compound state, duplicate field, invalid
-    /// private protocol field, or nested serialization failure.
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        match self {
-            Self::Map { values, next_key, .. } => {
-                if next_key.is_some() {
-                    return Err(invalid_state(JsonSerializerStateError::MapKeyAlreadyPending));
+        self.check_failure()?;
+        match &self.state {
+            CompoundState::Map {
+                values, depth, count, ..
+            } => {
+                let (depth, count, duplicate) = (*depth, *count, values.iter().any(|(existing, _)| existing == key));
+                if duplicate {
+                    return Err(self.fail(JsonSerializationError::new(
+                        JsonSerializationErrorKind::DuplicateObjectKey,
+                    )));
                 }
-                Self::insert(values, key.to_owned(), value).map_err(|error| self.retain_error(error))
+                let next = count.checked_add(1).ok_or_else(|| {
+                    self.fail(JsonSerializationError::new(
+                        JsonSerializationErrorKind::CollectionLengthOverflow {
+                            kind: crate::encode::JsonCollectionKind::Object,
+                        },
+                    ))
+                })?;
+                self.check_count(JsonContainerKind::Map, next)?;
+                self.admit(JsonMeasurement::Key { bytes: key.len() })?;
+                let child_depth = depth
+                    .checked_add(1)
+                    .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
+                let child = self.serialize_child(value, child_depth)?;
+                let CompoundState::Map { values, count, .. } = &mut self.state else {
+                    unreachable!()
+                };
+                values.push((key.to_owned(), child));
+                *count = next;
+                Ok(())
             }
-            Self::RawValue { text, state, .. } => {
-                Self::set_private_payload(text, state, JsonPrivateProtocolKind::RawValue, key, value)
-                    .map_err(|error| self.retain_error(error))
-            }
-            Self::Number { text, state, .. } => {
-                Self::set_private_payload(text, state, JsonPrivateProtocolKind::Number, key, value)
-                    .map_err(|error| self.retain_error(error))
-            }
-            _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
+            CompoundState::RawValue { .. } => self.set_private_field(JsonPrivateProtocolKind::RawValue, key, value),
+            CompoundState::Number { .. } => self.set_private_field(JsonPrivateProtocolKind::Number, key, value),
+            _ => Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         }
     }
-
-    /// Returns the completed struct as a JSON object.
-    ///
-    /// # Returns
-    ///
-    /// The accumulated struct fields as a JSON object.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error for an invalid compound state, pending map key,
-    /// incomplete private protocol, or invalid raw/number payload.
-    #[inline(always)]
-    fn end(self) -> Result<Value, Self::Error> {
-        if let Some(error) = self.retained_error() {
-            return Err(error);
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        self.check_failure()?;
+        if matches!(
+            &self.state,
+            CompoundState::RawValue { .. } | CompoundState::Number { .. }
+        ) {
+            return self.finish_private();
         }
-        match self {
-            Self::Map { values, next_key, .. } => {
-                if next_key.is_some() {
-                    return Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey));
-                }
-                Ok(Value::Object(values))
+        let context = self.context;
+        let result = match self.state {
+            CompoundState::Map {
+                values, next_key: None, ..
+            } => Ok(Self::finish_object(values)),
+            CompoundState::Map { next_key: Some(_), .. } => {
+                Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey))
             }
-            Self::RawValue {
-                text: Some(text),
-                state,
-                ..
-            } => {
-                state
-                    .finish()
-                    .map_err(|_| private_invalid_state(JsonPrivateProtocolKind::RawValue))?;
-                decode_raw_value(&text)
-            }
-            Self::RawValue { state, .. } => Err(state.finish().err().map_or_else(
-                || private_invalid_state(JsonPrivateProtocolKind::RawValue),
-                |_| private_invalid_state(JsonPrivateProtocolKind::RawValue),
-            )),
-            Self::Number {
-                text: Some(text),
-                state,
-                ..
-            } => {
-                state
-                    .finish()
-                    .map_err(|_| private_invalid_state(JsonPrivateProtocolKind::Number))?;
-                crate::internal::StrictJsonNumber::parse(&text).map(Value::Number)
-            }
-            Self::Number { state, .. } => Err(state.finish().err().map_or_else(
-                || private_invalid_state(JsonPrivateProtocolKind::Number),
-                |_| private_invalid_state(JsonPrivateProtocolKind::Number),
-            )),
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
-        }
+        };
+        Self::keep_end_error(context, result)
     }
 }
 
-impl SerializeStructVariant for JsonValueCompound {
-    type Ok = Value;
+impl<R, Q> SerializeStructVariant for JsonValueCompound<'_, '_, '_, R, Q>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    type Ok = SafeJsonValue;
     type Error = JsonSerializationError;
-
-    /// Serializes one unique named struct-variant field.
-    ///
-    /// # Parameters
-    ///
-    /// * `key` - Static struct-variant field name.
-    /// * `value` - Field value to serialize.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Struct-variant field type accepted by Serde.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if this is not a struct variant, the field is
-    /// duplicated, or nested serialization fails.
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        if !matches!(self, Self::StructVariant { .. }) {
-            return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
-        }
-        let result = match self {
-            Self::StructVariant { values, .. } => Self::insert(values, key.to_owned(), value),
-            _ => unreachable!(),
+        self.check_failure()?;
+        let (depth, count, duplicate) = match &self.state {
+            CompoundState::StructVariant {
+                values, depth, count, ..
+            } => (*depth, *count, values.iter().any(|(existing, _)| existing == key)),
+            _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
-        result.map_err(|error| self.retain_error(error))
+        if duplicate {
+            return Err(self.fail(JsonSerializationError::new(
+                JsonSerializationErrorKind::DuplicateObjectKey,
+            )));
+        }
+        let next = count.checked_add(1).ok_or_else(|| {
+            self.fail(JsonSerializationError::new(
+                JsonSerializationErrorKind::CollectionLengthOverflow {
+                    kind: crate::encode::JsonCollectionKind::Object,
+                },
+            ))
+        })?;
+        self.check_count(JsonContainerKind::Map, next)?;
+        self.admit(JsonMeasurement::Key { bytes: key.len() })?;
+        let child_depth = depth
+            .checked_add(2)
+            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
+        let child = self.serialize_child(value, child_depth)?;
+        let CompoundState::StructVariant { values, count, .. } = &mut self.state else {
+            unreachable!()
+        };
+        values.push((key.to_owned(), child));
+        *count = next;
+        Ok(())
     }
-
-    /// Returns the struct variant as a nested single-key object.
-    ///
-    /// # Returns
-    ///
-    /// An object mapping the variant name to its struct fields.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-state error if this is not a struct variant.
-    fn end(self) -> Result<Value, Self::Error> {
-        if let Some(error) = self.retained_error() {
-            return Err(error);
-        }
-        let Self::StructVariant { variant, values, .. } = self else {
-            return Err(invalid_state(JsonSerializerStateError::UnexpectedCompound));
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        self.check_failure()?;
+        let context = self.context;
+        let result = match self.state {
+            CompoundState::StructVariant { variant, values, .. } => {
+                let inner = Self::finish_object(values);
+                let mut outer = SafeValueBuilder::object();
+                outer.insert(variant, inner);
+                Ok(SafeJsonValue::new(outer.finish()))
+            }
+            _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         };
-        let mut object = Map::new();
-        object.insert(variant, Value::Object(values));
-        Ok(Value::Object(object))
+        Self::keep_end_error(context, result)
     }
 }
 
-/// Creates one privacy-safe compound-state failure.
-///
-/// # Parameters
-///
-/// * `reason` - Stable serializer-state violation to retain.
-///
-/// # Returns
-///
-/// A privacy-safe serialization error with the specified state reason.
-#[inline(always)]
 fn invalid_state(reason: JsonSerializerStateError) -> JsonSerializationError {
     JsonSerializationError::new(JsonSerializationErrorKind::InvalidSerializerState { reason })
 }
 
-/// Creates the stable error for one private serde_json protocol.
-///
-/// # Parameters
-///
-/// * `kind` - Private protocol whose invalid state is reported.
-///
-/// # Returns
-///
-/// A stable serialization error describing that protocol's invalid state.
 pub(super) fn private_invalid_state(kind: JsonPrivateProtocolKind) -> JsonSerializationError {
     invalid_state(kind.invalid_state())
 }
 
-#[cfg(test)]
-mod tests {
-    use serde::ser::SerializeMap;
-    use serde::ser::SerializeSeq;
-    use serde::ser::SerializeStruct;
-    use serde::ser::SerializeStructVariant;
-    use serde::ser::SerializeTuple;
-    use serde::ser::SerializeTupleStruct;
-    use serde::ser::SerializeTupleVariant;
-    use serde_json::Map;
-    use serde_json::Value;
+struct RawValueConsumer<'builder> {
+    builder: &'builder mut crate::value::internal::LexicalJsonValueBuilder,
+}
 
-    use super::JsonValueCompound;
-    use crate::encode::JsonSerializationError;
-    use crate::encode::JsonSerializationErrorKind;
-    use crate::encode::JsonSerializerStateError;
-    use crate::internal::JsonPrivateProtocolKind;
-    use crate::internal::JsonPrivateProtocolState;
-
-    fn assert_unexpected_compound(error: JsonSerializationError) {
-        assert_eq!(
-            error.kind(),
-            JsonSerializationErrorKind::InvalidSerializerState {
-                reason: JsonSerializerStateError::UnexpectedCompound,
-            },
-        );
+impl<'input> crate::lexical::JsonLexicalConsumer<'input> for RawValueConsumer<'_> {
+    type Error = crate::value::internal::JsonValueMaterializationError;
+    fn before_value(&mut self, _: usize, _: usize) -> Result<(), Self::Error> {
+        Ok(())
     }
-
-    #[test]
-    fn test_sequence_rejects_other_compound_state() {
-        assert_unexpected_compound(
-            SerializeSeq::serialize_element(&mut JsonValueCompound::map(0), &1_u8)
-                .expect_err("a map cannot accept a sequence element"),
-        );
-        assert_unexpected_compound(
-            SerializeSeq::end(JsonValueCompound::map(0)).expect_err("a map cannot end as a sequence"),
-        );
-
-        let mut tuple = JsonValueCompound::sequence(1);
-        SerializeTuple::serialize_element(&mut tuple, &1_u8).expect("a tuple accepts an element");
-        assert_eq!(
-            SerializeTuple::end(tuple).expect("a tuple ends as an array"),
-            Value::Array(vec![Value::from(1_u8)]),
-        );
-
-        let mut tuple_struct = JsonValueCompound::sequence(1);
-        SerializeTupleStruct::serialize_field(&mut tuple_struct, &2_u8).expect("a tuple struct accepts a field");
-        assert_eq!(
-            SerializeTupleStruct::end(tuple_struct).expect("a tuple struct ends as an array"),
-            Value::Array(vec![Value::from(2_u8)]),
-        );
+    fn before_key(&mut self, _: usize) -> Result<(), Self::Error> {
+        Ok(())
     }
+    fn before_number(&mut self, _: &'input str, _: usize) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    fn event(&mut self, event: crate::lexical::JsonLexicalEvent<'input>) -> Result<(), Self::Error> {
+        self.builder.try_accept(event)
+    }
+}
 
-    #[test]
-    fn test_map_rejects_other_compound_state() {
-        assert_unexpected_compound(
-            SerializeMap::serialize_key(&mut JsonValueCompound::sequence(0), &"key")
-                .expect_err("a sequence cannot accept a map key"),
-        );
-        assert_unexpected_compound(
-            SerializeMap::serialize_value(&mut JsonValueCompound::sequence(0), &1_u8)
-                .expect_err("a sequence cannot accept a map value"),
-        );
-
-        for error in [
-            SerializeMap::serialize_value(&mut JsonValueCompound::map(0), &1_u8)
-                .expect_err("a map value requires a pending key"),
-            SerializeMap::serialize_value(&mut JsonValueCompound::map(0), &Value::from(2_i32))
-                .expect_err("a map value requires a pending key"),
-            SerializeMap::serialize_value(&mut JsonValueCompound::map(0), &&3_i32)
-                .expect_err("a map value requires a pending key"),
-            SerializeMap::serialize_value(&mut JsonValueCompound::map(0), &1_i32)
-                .expect_err("a map value requires a pending key"),
-        ] {
-            assert_eq!(
-                error.kind(),
-                JsonSerializationErrorKind::InvalidSerializerState {
-                    reason: JsonSerializerStateError::MapValueWithoutKey,
-                },
-            );
+fn decode_raw_value<R, Q>(
+    text: &str,
+    context: ContextCell<'_, '_, '_, R, Q>,
+    depth: usize,
+) -> Result<SafeJsonValue, JsonSerializationError>
+where
+    R: Clone,
+    Q: ResourceQuantity,
+{
+    let mut builder = crate::value::internal::LexicalJsonValueBuilder::new(crate::lexical::JsonNumberModel::Integer64);
+    let has_limits = context.borrow().has_limits();
+    let scan = {
+        let mut ctx = context.borrow_mut();
+        let transaction = ctx.transaction();
+        crate::lexical::JsonLexicalScanner::at_depth(transaction, depth, has_limits)
+            .with_number_model(crate::lexical::JsonNumberModel::Integer64)
+            .scan_with_consumer(text.as_bytes(), &mut RawValueConsumer { builder: &mut builder })
+    };
+    match scan {
+        Ok(()) => match builder.finish_guarded() {
+            Ok(value) => Ok(value),
+            Err(_) => Err(context
+                .borrow_mut()
+                .record_serialization_error(JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue))),
+        },
+        Err(crate::lexical::JsonLexicalScanError::Lexical(crate::lexical::JsonLexicalError::Budget(error))) => {
+            Err(context.borrow_mut().record_budget_failure(error))
         }
-
-        let mut pending_map = JsonValueCompound::map(1);
-        SerializeMap::serialize_key(&mut pending_map, &"key").expect("a map accepts a key before its value");
-        assert_eq!(
-            SerializeMap::end(pending_map)
-                .expect_err("a map cannot end with a pending key")
-                .kind(),
-            JsonSerializationErrorKind::InvalidSerializerState {
-                reason: JsonSerializerStateError::MapEndedWithPendingKey,
-            },
-        );
-    }
-
-    #[test]
-    fn test_tuple_variant_rejects_other_compound_state() {
-        assert_unexpected_compound(
-            SerializeTupleVariant::serialize_field(&mut JsonValueCompound::sequence(0), &1_u8)
-                .expect_err("a sequence cannot accept a tuple-variant field"),
-        );
-        assert_unexpected_compound(
-            SerializeTupleVariant::end(JsonValueCompound::sequence(0))
-                .expect_err("a sequence cannot end as a tuple variant"),
-        );
-
-        let mut tuple_variant = JsonValueCompound::tuple_variant("Variant", 1);
-        SerializeTupleVariant::serialize_field(&mut tuple_variant, &3_u8).expect("a tuple variant accepts a field");
-        assert_eq!(
-            SerializeTupleVariant::end(tuple_variant).expect("a tuple variant ends as an object"),
-            Value::Object(Map::from_iter([(
-                String::from("Variant"),
-                Value::Array(vec![Value::from(3_u8)]),
-            )])),
-        );
-    }
-
-    #[test]
-    fn test_struct_variant_rejects_other_compound_state() {
-        assert_unexpected_compound(
-            SerializeStructVariant::serialize_field(&mut JsonValueCompound::sequence(0), "field", &1_u8)
-                .expect_err("a sequence cannot accept a struct-variant field"),
-        );
-        assert_unexpected_compound(
-            SerializeStructVariant::end(JsonValueCompound::sequence(0))
-                .expect_err("a sequence cannot end as a struct variant"),
-        );
-
-        let mut struct_variant = JsonValueCompound::struct_variant("Variant", 1);
-        SerializeStructVariant::serialize_field(&mut struct_variant, "field", &4_u8)
-            .expect("a struct variant accepts a field");
-        assert_eq!(
-            SerializeStructVariant::end(struct_variant).expect("a struct variant ends as an object"),
-            Value::Object(Map::from_iter([(
-                String::from("Variant"),
-                Value::Object(Map::from_iter([(String::from("field"), Value::from(4_u8))])),
-            )])),
-        );
-    }
-
-    #[test]
-    fn test_struct_rejects_other_compound_state() {
-        assert_unexpected_compound(
-            SerializeStruct::serialize_field(&mut JsonValueCompound::sequence(0), "field", &1_u8)
-                .expect_err("a sequence cannot accept a struct field"),
-        );
-        assert_unexpected_compound(
-            SerializeStruct::end(JsonValueCompound::sequence(0)).expect_err("a sequence cannot end as a struct"),
-        );
-
-        let mut pending_map = JsonValueCompound::map(1);
-        SerializeMap::serialize_key(&mut pending_map, &"key").expect("a map accepts a key before its value");
-        assert_eq!(
-            SerializeStruct::serialize_field(&mut pending_map, "field", &1_u8)
-                .expect_err("a struct field cannot be added while a map key is pending")
-                .kind(),
-            JsonSerializationErrorKind::InvalidSerializerState {
-                reason: JsonSerializerStateError::MapKeyAlreadyPending,
-            },
-        );
-
-        let mut pending_map = JsonValueCompound::map(1);
-        SerializeMap::serialize_key(&mut pending_map, &"key").expect("a map accepts a key before its value");
-        assert_eq!(
-            SerializeStruct::end(pending_map)
-                .expect_err("a struct cannot end while a map key is pending")
-                .kind(),
-            JsonSerializationErrorKind::InvalidSerializerState {
-                reason: JsonSerializerStateError::MapEndedWithPendingKey,
-            },
-        );
-    }
-
-    #[test]
-    fn test_private_protocol_skip_field_fails_closed() {
-        macro_rules! private_payload_error {
-            ($kind:expr, $value:expr) => {{
-                let state =
-                    JsonPrivateProtocolState::new($kind, 1).expect("one-field private protocol should start pending");
-                SerializeStruct::serialize_field(
-                    &mut JsonValueCompound::private($kind, state),
-                    $kind.field_name(),
-                    $value,
-                )
-                .expect_err("non-text payloads are invalid for private protocols")
-            }};
-        }
-
-        for kind in [JsonPrivateProtocolKind::RawValue, JsonPrivateProtocolKind::Number] {
-            let state =
-                JsonPrivateProtocolState::new(kind, 1).expect("one-field private protocol should start pending");
-            let error = SerializeStruct::skip_field(&mut JsonValueCompound::private(kind, state), "payload")
-                .expect_err("private protocol fields cannot be skipped");
-            assert_eq!(
-                error.kind(),
-                JsonSerializationErrorKind::InvalidSerializerState {
-                    reason: kind.invalid_state(),
-                },
-            );
-
-            let state =
-                JsonPrivateProtocolState::new(kind, 1).expect("one-field private protocol should start pending");
-            assert_eq!(
-                SerializeStruct::end(JsonValueCompound::private(kind, state))
-                    .expect_err("a private protocol cannot end before its payload")
-                    .kind(),
-                JsonSerializationErrorKind::InvalidSerializerState {
-                    reason: kind.invalid_state(),
-                },
-            );
-
-            let state =
-                JsonPrivateProtocolState::new(kind, 1).expect("one-field private protocol should start pending");
-            assert_eq!(
-                SerializeStruct::serialize_field(
-                    &mut JsonValueCompound::private(kind, state),
-                    kind.field_name(),
-                    &1_u8,
-                )
-                .expect_err("private protocol payload must serialize as text")
-                .kind(),
-                JsonSerializationErrorKind::InvalidSerializerState {
-                    reason: kind.invalid_state(),
-                },
-            );
-
-            let state =
-                JsonPrivateProtocolState::new(kind, 1).expect("one-field private protocol should start pending");
-            let mut compound = JsonValueCompound::private(kind, state);
-            SerializeStruct::serialize_field(&mut compound, kind.field_name(), &"17")
-                .expect("a string is a valid private protocol payload");
-            assert_eq!(
-                SerializeStruct::end(compound).expect("the numeric text is valid for both protocols"),
-                Value::from(17_u8),
-            );
-
-            for error in [
-                private_payload_error!(kind, &true),
-                private_payload_error!(kind, &-17_i32),
-                private_payload_error!(kind, &17_u32),
-            ] {
-                assert_eq!(
-                    error.kind(),
-                    JsonSerializationErrorKind::InvalidSerializerState {
-                        reason: kind.invalid_state(),
-                    },
-                );
-            }
-        }
+        Err(_) => Err(context
+            .borrow_mut()
+            .record_serialization_error(JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue))),
     }
 }

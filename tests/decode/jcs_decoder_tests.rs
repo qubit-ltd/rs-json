@@ -23,6 +23,7 @@ use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonSyntaxErrorReason;
 use qubit_json::encode::JcsEncoder;
+use qubit_json::value::SafeJsonValue;
 use serde_json::Value;
 
 struct ScriptedJcsInput {
@@ -118,21 +119,26 @@ fn test_jcs_decoder_preserves_number_and_real_marker_object() {
 }
 
 #[test]
-fn test_jcs_decoder_reports_structured_materialization_depth_limit() {
+fn test_jcs_decoder_accepts_deep_values_with_shared_builder() {
     let nested = |depth: usize| format!("{}0{}", "[".repeat(depth), "]".repeat(depth));
-    let mut decoder = JcsDecoder::unlimited();
-    assert!(decoder.decode_str(&nested(127)).is_ok());
-    let error = decoder.decode_str(&nested(128)).unwrap_err();
-    assert!(matches!(
-        error,
-        JcsDecodeError::MaterializationDepthLimit {
-            limit: 127,
-            line: 1,
-            column: 128
-        }
-    ));
-    assert!(!error.to_string().contains("["));
-    assert!(!format!("{error:?}").contains("["));
+    for depth in [128, 129] {
+        let value = JcsDecoder::unlimited().decode_str(&nested(depth)).unwrap();
+        let protected = SafeJsonValue::new(value);
+        assert!(protected.as_value().is_array());
+    }
+}
+
+#[test]
+fn test_jcs_decoder_legacy_depth_variant_remains_displayable() {
+    let error: JcsDecodeError = JcsDecodeError::MaterializationDepthLimit {
+        limit: 127,
+        line: 1,
+        column: 128,
+    };
+    assert_eq!(
+        error.to_string(),
+        "JCS value construction depth exceeds 127 at line 1, column 128"
+    );
     assert!(Error::source(&error).is_none());
 }
 

@@ -50,7 +50,7 @@ where
 /// The session is temporarily moved into the encoder. If writing panics, the
 /// updated session is restored before the panic is resumed.
 pub(crate) fn write_buffered<W, T, R, Q>(
-    writer: W,
+    mut writer: W,
     value: &T,
     session: &mut JsonEncodeSession<'_, R, Q>,
 ) -> Result<(), JsonEncodeError<R, Q>>
@@ -63,7 +63,7 @@ where
     let placeholder = JsonEncodeSession::from_limits(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
-    let result = catch_unwind(AssertUnwindSafe(|| encoder.write_buffered(writer, value)));
+    let result = catch_unwind(AssertUnwindSafe(|| encoder.write_buffered(&mut writer, value)));
     *session = encoder.into_session();
     match result {
         Ok(result) => result,
@@ -76,7 +76,7 @@ where
 /// The session is temporarily moved into the encoder. If writing panics, the
 /// updated session is restored before the panic is resumed.
 pub(crate) fn write_incremental<W, T, R, Q>(
-    writer: W,
+    mut writer: W,
     value: &T,
     session: &mut JsonEncodeSession<'_, R, Q>,
 ) -> Result<(), JsonEncodeError<R, Q>>
@@ -89,7 +89,7 @@ where
     let placeholder = JsonEncodeSession::from_limits(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
-    let result = catch_unwind(AssertUnwindSafe(|| encoder.write_incremental(writer, value)));
+    let result = catch_unwind(AssertUnwindSafe(|| encoder.write_incremental(&mut writer, value)));
     *session = encoder.into_session();
     match result {
         Ok(result) => result,

@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! A JSON value whose owned-tree operations use explicit work stacks.
 
@@ -12,7 +14,8 @@ use std::mem::ManuallyDrop;
 
 use serde_json::Value;
 
-/// An owned JSON value with protected cloning, comparison, formatting, and drop.
+/// An owned JSON value with protected cloning, comparison, formatting, and
+/// drop.
 pub struct SafeJsonValue {
     root: Option<Value>,
 }
@@ -38,7 +41,8 @@ impl SafeValueBuilder {
         let Value::Array(values) = self.value.as_mut().expect("builder is active") else {
             unreachable!()
         };
-        values.push(child.into_value());
+        values.push(Value::Null);
+        *values.last_mut().expect("just inserted a slot") = child.into_value();
         maybe_panic_after_guarded_insert();
     }
 
@@ -46,7 +50,8 @@ impl SafeValueBuilder {
         let Value::Object(values) = self.value.as_mut().expect("builder is active") else {
             unreachable!()
         };
-        values.insert(key, child.into_value());
+        let slot = values.entry(key).or_insert(Value::Null);
+        *slot = child.into_value();
         maybe_panic_after_guarded_insert();
     }
 
@@ -142,7 +147,7 @@ impl PartialEq for SafeJsonValue {
                 (Value::Number(a), Value::Number(b)) if a == b => {}
                 (Value::String(a), Value::String(b)) if a == b => {}
                 (Value::Array(a), Value::Array(b)) if a.len() == b.len() => {
-                    pending.extend(a.iter().zip(b).map(|(x, y)| (x, y)));
+                    pending.extend(a.iter().zip(b));
                 }
                 (Value::Object(a), Value::Object(b)) if a.len() == b.len() => {
                     for (key, value) in a {
@@ -253,7 +258,17 @@ fn drop_tree(root: &mut Value) {
 
 fn try_reserve_drop_work(pending: &mut Vec<Value>, additional: usize) -> bool {
     #[cfg(test)]
-    if FAIL_NEXT_DROP_RESERVE.with(|flag| flag.replace(false)) {
+    if FAIL_DROP_RESERVE_AFTER.with(|remaining| match remaining.get() {
+        Some(0) => {
+            remaining.set(None);
+            true
+        }
+        Some(count) => {
+            remaining.set(Some(count - 1));
+            false
+        }
+        None => false,
+    }) {
         return false;
     }
     pending.try_reserve(additional).is_ok()
@@ -261,18 +276,18 @@ fn try_reserve_drop_work(pending: &mut Vec<Value>, additional: usize) -> bool {
 
 #[cfg(test)]
 thread_local! {
-    static FAIL_NEXT_DROP_RESERVE: Cell<bool> = const { Cell::new(false) };
+    static FAIL_DROP_RESERVE_AFTER: Cell<Option<usize>> = const { Cell::new(None) };
     static PANIC_AFTER_INSERT: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
 #[cfg(test)]
 impl SafeJsonValue {
-    pub(crate) fn fail_next_drop_reserve_for_test() {
-        FAIL_NEXT_DROP_RESERVE.with(|flag| flag.set(true));
+    pub(crate) fn fail_drop_reserve_after_for_test(successful_reserves: usize) {
+        FAIL_DROP_RESERVE_AFTER.with(|remaining| remaining.set(Some(successful_reserves)));
     }
 
     pub(crate) fn assert_drop_reserve_failure_consumed_for_test() {
-        assert!(!FAIL_NEXT_DROP_RESERVE.with(Cell::get));
+        assert!(FAIL_DROP_RESERVE_AFTER.with(Cell::get).is_none());
     }
 
     pub(crate) fn panic_after_guarded_inserts_for_test(count: usize) {

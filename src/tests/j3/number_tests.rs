@@ -1,4 +1,13 @@
-use crate::decode::{JsonDecodeNumberModel, JsonNumberToken, JsonNumberTokenError};
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
+use crate::decode::JsonDecodeNumberModel;
+use crate::decode::JsonNumberToken;
+use crate::decode::JsonNumberTokenError;
 use crate::encode::JsonSerializationErrorKind;
 use crate::internal::StrictJsonNumber;
 
@@ -12,9 +21,7 @@ fn test_exact_safe_integer_uses_decimal_arithmetic() {
         ("-9007199254740991", -9_007_199_254_740_991),
     ] {
         assert_eq!(
-            JsonNumberToken::from_validated(text, 7)
-                .exact_safe_integer()
-                .unwrap(),
+            JsonNumberToken::from_validated(text, 7).exact_safe_integer().unwrap(),
             expected
         );
     }
@@ -30,15 +37,18 @@ fn test_exact_safe_integer_uses_decimal_arithmetic() {
             Err(JsonNumberTokenError::OutOfSafeIntegerRange)
         ));
     }
+    assert_eq!(JsonNumberTokenError::Fractional.to_string(), "number is fractional");
+    assert_eq!(
+        JsonNumberTokenError::OutOfSafeIntegerRange.to_string(),
+        "integer is outside the safe range"
+    );
 }
 
 #[test]
 fn test_exact_safe_integer_handles_extreme_exponents_in_constant_space() {
     let zero = format!("0e{}", "9".repeat(100_000));
     assert_eq!(
-        JsonNumberToken::from_validated(&zero, 0)
-            .exact_safe_integer()
-            .unwrap(),
+        JsonNumberToken::from_validated(&zero, 0).exact_safe_integer().unwrap(),
         0
     );
     let tiny = format!("1e-{}", "9".repeat(100_000));
@@ -69,9 +79,7 @@ fn test_number_model_fallback_only_covers_integer_range_overflow() {
             .kind(),
         JsonSerializationErrorKind::IntegerOutOfRange { .. }
     ));
-    let rounded =
-        StrictJsonNumber::from_admitted_lexeme_with_model("18446744073709551616", fallback)
-            .unwrap();
+    let rounded = StrictJsonNumber::from_admitted_lexeme_with_model("18446744073709551616", fallback).unwrap();
     assert!(rounded.is_f64());
     assert!(matches!(
         StrictJsonNumber::from_admitted_lexeme_with_model("1e400", fallback)
