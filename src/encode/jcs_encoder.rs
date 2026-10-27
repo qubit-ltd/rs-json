@@ -16,7 +16,7 @@ use qubit_budget::json::JsonEncodeAttempt;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_io::Output;
+use qubit_io::ByteOutput;
 use serde_json::Value;
 
 use super::JcsEncodeError;
@@ -243,8 +243,8 @@ where
     /// charged, while the value transaction is not committed.
     /// This method does not flush the destination. Success means that the
     /// destination accepted the complete document and the encoding charges
-    /// were committed. Pass a mutable reference to retain the writer, then
-    /// flush it explicitly. A later flush is outside this encoding transaction
+    /// were committed. The writer is borrowed mutably for this call; flush it
+    /// explicitly afterward. A later flush is outside this encoding transaction
     /// and does not roll back committed charges if it fails. Do not rely on
     /// `Drop` to report flush errors. A successful flush does not guarantee
     /// durability or delivery to a remote peer.
@@ -255,9 +255,7 @@ where
     ///
     /// # Parameters
     ///
-    /// * `output` receives the complete buffered document. Pass a mutable
-    ///   reference when you need to flush or otherwise use the writer after
-    ///   this call.
+    /// * `output` is borrowed mutably and receives the complete document.
     /// * `value` is the JSON value to encode.
     ///
     /// # Returns
@@ -295,9 +293,9 @@ where
     /// assert_eq!(bytes, br#"{"a":1,"b":2}"#);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn write_buffered<O: Output<Item = u8>>(
+    pub fn write_buffered<O: ByteOutput + ?Sized>(
         &mut self,
-        output: O,
+        output: &mut O,
         value: &Value,
     ) -> Result<(), JcsEncodeError<R, Q>> {
         let mut attempt = self.session.begin_value();
@@ -316,6 +314,7 @@ where
     /// commit the value budget. On success, this method flushes the destination
     /// before committing value accounting; a flush failure therefore retains
     /// charges for accepted output bytes without committing the value budget.
+    /// The destination is borrowed mutably for this call.
     ///
     /// # Type Parameters
     ///
@@ -323,7 +322,7 @@ where
     ///
     /// # Parameters
     ///
-    /// * `output` receives bytes as they are rendered.
+    /// * `output` is borrowed mutably and receives bytes as they are rendered.
     /// * `value` is the JSON value to encode.
     ///
     /// # Returns
@@ -336,9 +335,9 @@ where
     /// destination I/O, or session accounting fails. Accepted output bytes
     /// remain written and charged, while failed operations do not commit the
     /// value budget.
-    pub fn write_incremental<O: Output<Item = u8>>(
+    pub fn write_incremental<O: ByteOutput + ?Sized>(
         &mut self,
-        output: O,
+        output: &mut O,
         value: &Value,
     ) -> Result<(), JcsEncodeError<R, Q>> {
         let mut attempt = self.session.begin_value();
@@ -427,8 +426,8 @@ where
     /// # Errors
     ///
     /// Returns a JCS error if destination writing or output accounting fails.
-    fn write_buffer<O: Output<Item = u8>>(
-        output: O,
+    fn write_buffer<O: ByteOutput + ?Sized>(
+        output: &mut O,
         bytes: &[u8],
         attempt: &mut JsonEncodeAttempt<'_, R, Q>,
     ) -> Result<(), JcsEncodeError<R, Q>> {

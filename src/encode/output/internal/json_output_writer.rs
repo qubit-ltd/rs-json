@@ -12,7 +12,7 @@ use std::io;
 use std::io::Write;
 
 use qubit_budget::ResourceQuantity;
-use qubit_io::Output;
+use qubit_io::ByteOutput;
 
 use super::json_output_accounting::JsonOutputAccounting;
 use crate::encode::JsonEncodeError;
@@ -28,12 +28,12 @@ use crate::encode::JsonEncodeError;
 /// * `W` - Destination that accepts byte slices.
 /// * `R` - Resource identity used by output accounting.
 /// * `Q` - Quantity representation used by output accounting.
-pub(in crate::encode) struct JsonOutputWriter<'a, W, R, Q>
+pub(in crate::encode) struct JsonOutputWriter<'a, W: ?Sized, R, Q>
 where
     Q: ResourceQuantity,
 {
     /// Destination receiving each accepted byte slice.
-    writer: W,
+    writer: &'a mut W,
 
     /// Shared output budget and first-failure state.
     accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
@@ -46,7 +46,7 @@ where
     io_error: Option<io::Error>,
 }
 
-impl<'a, W, R, Q> JsonOutputWriter<'a, W, R, Q>
+impl<'a, W: ?Sized, R, Q> JsonOutputWriter<'a, W, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -61,7 +61,7 @@ where
     ///
     /// A writer that records the first destination error for later conversion.
     #[inline]
-    pub(in crate::encode) fn new(writer: W, accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>) -> Self {
+    pub(in crate::encode) fn new(writer: &'a mut W, accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>) -> Self {
         Self {
             writer,
             accounting,
@@ -124,9 +124,9 @@ where
     }
 }
 
-impl<O, R, Q> Write for JsonOutputWriter<'_, O, R, Q>
+impl<O: ?Sized, R, Q> Write for JsonOutputWriter<'_, O, R, Q>
 where
-    O: Output<Item = u8>,
+    O: ByteOutput,
     R: Clone,
     Q: ResourceQuantity,
 {
@@ -156,7 +156,7 @@ where
             }
         }
 
-        match Output::write(&mut self.writer, input) {
+        match qubit_io::Output::write(&mut *self.writer, input) {
             Ok(written) => {
                 if written == 0 && !input.is_empty() {
                     let error = io::Error::new(io::ErrorKind::WriteZero, "JSON output writer accepted no bytes");
@@ -191,7 +191,7 @@ where
     ///
     /// Returns the destination's flush error.
     fn flush(&mut self) -> io::Result<()> {
-        match Output::flush(&mut self.writer) {
+        match qubit_io::Output::flush(&mut *self.writer) {
             Ok(()) => Ok(()),
             Err(error) => Err(self.record_io_error(error)),
         }

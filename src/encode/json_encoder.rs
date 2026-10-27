@@ -16,7 +16,7 @@ use qubit_budget::json::JsonEncodeAttempt;
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
-use qubit_io::Output;
+use qubit_io::ByteOutput;
 use serde::Serialize;
 use serde_json::Error as JsonError;
 use serde_json::Serializer as JsonSerializer;
@@ -202,9 +202,8 @@ where
     /// Success means `writer` accepted the complete document and output/value
     /// accounting was committed. This method does not flush the writer. If
     /// the writer buffers output, call its [`Write::flush`] method after this
-    /// call succeeds. To retain control of a writer consumed by value here,
-    /// pass a mutable reference such as `&mut writer`. A later flush failure
-    /// is outside this encoding transaction and does not roll back accounting
+    /// call succeeds. The writer is borrowed mutably for this call. A later
+    /// flush failure is outside this encoding transaction and does not roll back accounting
     /// already committed by this method. A successful flush only reports the
     /// writer's result; it does not confirm persistence to disk or receipt by
     /// a remote peer.
@@ -248,9 +247,13 @@ where
     ///
     /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects the value
     /// or output, or a serialization/writer error on failure.
-    pub fn write_buffered<O, T>(&mut self, writer: O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_buffered<O, T>(
+        &mut self,
+        writer: &mut O,
+        value: &T,
+    ) -> Result<(), JsonEncodeError<R, Q>>
     where
-        O: Output<Item = u8>,
+        O: ByteOutput + ?Sized,
         T: Serialize + ?Sized,
     {
         let has_value_limits = self.session.value_budget().limits().has_limits();
@@ -271,9 +274,8 @@ where
     /// writer error, and bytes already accepted remain charged to the output
     /// budget while value-resource accounting is not committed. A successful
     /// flush only reports the writer's result; it does not confirm persistence
-    /// to disk or receipt by a remote peer. The writer is consumed by value,
-    /// so pass a mutable reference such as `&mut writer` when you need to
-    /// retain control of it. Do not rely on `Drop` to flush buffered output.
+    /// to disk or receipt by a remote peer. The writer is borrowed mutably for
+    /// this call. Do not rely on `Drop` to flush buffered output.
     ///
     /// # Type Parameters
     ///
@@ -296,9 +298,13 @@ where
     /// serialization/writer error on failure. Accepted output prefixes remain
     /// written and charged when a later operation fails; value-resource charges
     /// commit only after the complete operation succeeds.
-    pub fn write_incremental<O, T>(&mut self, writer: O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_incremental<O, T>(
+        &mut self,
+        writer: &mut O,
+        value: &T,
+    ) -> Result<(), JsonEncodeError<R, Q>>
     where
-        O: Output<Item = u8>,
+        O: ByteOutput + ?Sized,
         T: Serialize + ?Sized,
     {
         let has_value_limits = self.session.value_budget().limits().has_limits();
@@ -433,12 +439,12 @@ where
     /// Returns a budget error if output accounting rejects a written prefix,
     /// or a writer error if the destination cannot accept the bytes.
     fn write_buffer<O>(
-        writer: O,
+        writer: &mut O,
         bytes: &[u8],
         attempt: &mut JsonEncodeAttempt<'_, R, Q>,
     ) -> Result<(), JsonEncodeError<R, Q>>
     where
-        O: Output<Item = u8>,
+        O: ByteOutput + ?Sized,
     {
         let (output_budget, _) = attempt.split_mut();
         let accounting = RefCell::new(JsonOutputAccounting::new(output_budget));
