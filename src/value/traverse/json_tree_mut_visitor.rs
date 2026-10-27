@@ -25,7 +25,7 @@ use super::JsonTreeControl;
 /// terminates. `SkipSubtree` skips descent from the current node, but does not
 /// exempt the resulting tree from
 /// final output admission. See the
-/// [mutable tree traversal guidance](../../../doc/user_guide.md).
+/// [mutable tree traversal guidance](https://github.com/qubit-ltd/rs-json/blob/main/doc/user_guide.md#read-and-mutate-existing-trees).
 /// [`crate::value::traverse::JsonTreeMutator::process`] supplies the context to
 /// each callback during traversal.
 ///

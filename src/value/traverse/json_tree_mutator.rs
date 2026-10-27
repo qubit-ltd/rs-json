@@ -122,7 +122,7 @@ where
     /// traversal terminates. Returning [`JsonTreeControl::SkipSubtree`] skips
     /// descent from the current node, but the final tree is still subject to
     /// output admission. See the
-    /// [mutable tree traversal guidance](../../../doc/user_guide.md).
+    /// [mutable tree traversal guidance](https://github.com/qubit-ltd/rs-json/blob/main/doc/user_guide.md#read-and-mutate-existing-trees).
     ///
     /// # Type Parameters
     ///
