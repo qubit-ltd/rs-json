@@ -10,9 +10,36 @@
 use super::JsonNumberTokenError;
 
 /// A syntactically validated number token borrowed from the input document.
+///
+/// The token is only valid during the synchronous validated-decoding callback
+/// that supplied it; its source spelling cannot outlive that callback. Offsets
+/// are byte offsets from the beginning of the source document. The exact
+/// safe-integer range is the closed interval
+/// `[-9007199254740991, 9007199254740991]`. Decimal or exponent spellings are
+/// interpreted exactly, without an intermediate floating-point conversion.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::{JsonDecoder, JsonNumberPolicy, JsonValidatedDecodeOptions};
+///
+/// let options = JsonValidatedDecodeOptions::builder().build();
+/// let owner = JsonDecoder::unlimited().decode_unique_validated_str(
+///     "1.00e2", &options, |path, token| {
+///         assert!(path.is_empty());
+///         assert_eq!(token.raw(), "1.00e2");
+///         assert_eq!(token.offset(), 0);
+///         assert_eq!(token.exact_safe_integer(), Ok(100));
+///         Ok::<_, std::convert::Infallible>(JsonNumberPolicy::ExactSafeInteger)
+///     })?;
+/// assert_eq!(owner.as_value().as_i64(), Some(100));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JsonNumberToken<'call> {
+    /// Validated number spelling borrowed for the callback duration.
     raw: &'call str,
+    /// Zero-based source byte offset.
     offset: usize,
 }
 
@@ -22,17 +49,32 @@ impl<'call> JsonNumberToken<'call> {
     }
 
     /// Returns the original number spelling.
+    ///
+    /// # Returns
+    ///
+    /// The validated source spelling, borrowed for the callback duration.
     pub const fn raw(&self) -> &'call str {
         self.raw
     }
 
-    /// Returns the byte offset of the token in its source document.
+    /// Returns the zero-based byte offset of the token in its source document.
     pub const fn offset(&self) -> usize {
         self.offset
     }
 
-    /// Converts the token to an integer in the IEEE-754 safe-integer range
+    /// Converts an exact integral token in the IEEE-754 safe-integer range
     /// without converting through floating point.
+    ///
+    /// # Returns
+    ///
+    /// The represented integer when its exact mathematical value is integral
+    /// and lies in `[-9007199254740991, 9007199254740991]`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JsonNumberTokenError::Fractional`] when the exact value has a
+    /// fractional part, and [`JsonNumberTokenError::OutOfSafeIntegerRange`]
+    /// when the exact integral value lies outside the safe-integer interval.
     pub fn exact_safe_integer(&self) -> Result<i64, JsonNumberTokenError> {
         let bytes = self.raw.as_bytes();
         let negative = bytes.first() == Some(&b'-');
@@ -106,6 +148,7 @@ impl<'call> JsonNumberToken<'call> {
     }
 }
 
+/// Parses validated exponent digits while bounding magnitude to avoid overflow.
 fn parse_saturated_exponent(bytes: &[u8], bound: i64) -> i64 {
     let negative = bytes.first() == Some(&b'-');
     let digits = if matches!(bytes.first(), Some(b'-' | b'+')) {

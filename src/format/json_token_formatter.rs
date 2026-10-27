@@ -23,6 +23,7 @@ use crate::lexical::JsonLexicalScanError;
 use crate::lexical::JsonLexicalScanner;
 use crate::lexical::JsonNumberModel;
 
+/// One prevalidated output operation that references source bytes or literals.
 enum Action {
     Span(usize, usize),
     Byte(u8),
@@ -38,6 +39,7 @@ struct Container {
     count: usize,
     awaiting_value: bool,
 }
+/// Accumulates output operations while the scanner validates the whole input.
 struct Planner<'a> {
     input: &'a [u8],
     options: &'a JsonPrettyOptions,
@@ -187,7 +189,44 @@ impl<'input> JsonLexicalConsumer<'input> for Planner<'_> {
 }
 
 /// Validates and pretty-prints JSON while preserving source token spelling.
-/// Syntax or output-limit errors occur before any output is written.
+///
+/// The complete input is scanned and the output plan is built before rendering.
+/// Syntax, output-limit, and planning-capacity errors therefore produce no
+/// output. Scalar token spellings are preserved verbatim, duplicate object
+/// keys are accepted, numbers are checked for JSON syntax only, and no JCS
+/// canonicalization is applied. Scanning continues through the full input so
+/// syntax errors retain their existing precedence even after the output limit
+/// has been exceeded.
+///
+/// # Parameters
+///
+/// * `input` - Bytes containing exactly one complete JSON value.
+/// * `options` - Indentation and trailing-newline choices.
+/// * `max_output_bytes` - Optional maximum formatted output length. `None`
+///   disables this output limit; it does not limit input size, nesting depth,
+///   or exact heap usage.
+///
+/// # Returns
+///
+/// The complete formatted byte vector.
+///
+/// # Errors
+///
+/// Returns `Syntax` for invalid or incomplete JSON, `OutputLimit` when the
+/// planned bytes exceed the configured maximum, or `Capacity` when checked
+/// length arithmetic or allocation fails. No result bytes are returned on
+/// these errors.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::format::{format_json_tokens, JsonPrettyOptions};
+///
+/// let options = JsonPrettyOptions::builder().indent_width(2).build()?;
+/// let output = format_json_tokens(b"[1]", &options, Some(16))?;
+/// assert_eq!(output, b"[\n  1\n]");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn format_json_tokens(
     input: &[u8],
     options: &JsonPrettyOptions,
@@ -203,6 +242,48 @@ pub fn format_json_tokens(
 }
 
 /// Validates and plans the full document before writing to the supplied output.
+///
+/// The complete input is scanned before the first write. Syntax, output-limit,
+/// and planning-capacity failures therefore leave the output untouched. Once
+/// writing starts, an I/O error may leave a prefix accepted by the output; this
+/// function does not make I/O atomic and does not flush the output. Scalar
+/// token spellings are preserved, duplicate keys are accepted, numbers are
+/// checked for syntax only, and JCS canonicalization is not performed. The
+/// scanner consumes the complete input even after detecting that the planned
+/// output exceeds its limit, preserving syntax-error precedence.
+///
+/// The output limit applies only to formatted byte length. It is not a bound on
+/// input size, nesting depth, or exact heap usage. `None` disables the output
+/// limit.
+///
+/// # Parameters
+///
+/// * `output` - Destination that receives formatted bytes; it is not flushed.
+/// * `input` - Bytes containing exactly one complete JSON value.
+/// * `options` - Indentation and trailing-newline choices.
+/// * `max_output_bytes` - Optional maximum formatted output length.
+///
+/// # Returns
+///
+/// `Ok(())` after all planned bytes have been accepted by `output`.
+///
+/// # Errors
+///
+/// Returns `Syntax`, `OutputLimit`, or `Capacity` before writing begins.
+/// Returns `Io` if a write fails; in that case the destination may already
+/// contain an accepted prefix. No flush is attempted.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::format::{write_json_tokens, JsonPrettyOptions};
+///
+/// let options = JsonPrettyOptions::builder().indent_width(2).build()?;
+/// let mut output = Vec::new();
+/// write_json_tokens(&mut output, b"[1]", &options, Some(16))?;
+/// assert_eq!(output, b"[\n  1\n]");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn write_json_tokens<O: ByteOutput + ?Sized>(
     output: &mut O,
     input: &[u8],
@@ -234,6 +315,7 @@ struct Plan {
     actions: Vec<Action>,
     length: usize,
 }
+/// Scans a complete document and returns its output plan or a pre-write error.
 fn make_plan(input: &[u8], options: &JsonPrettyOptions, maximum: Option<usize>) -> Result<Plan, JsonPrettyError> {
     let mut planner = Planner {
         input,
@@ -269,6 +351,7 @@ fn make_plan(input: &[u8], options: &JsonPrettyOptions, maximum: Option<usize>) 
     })
 }
 
+/// Executes an already validated plan into a vector with reserved capacity.
 fn render_vec(input: &[u8], actions: &[Action], output: &mut Vec<u8>) {
     const SPACES: [u8; 256] = [b' '; 256];
     for action in actions {
