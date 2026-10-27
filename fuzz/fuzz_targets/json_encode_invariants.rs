@@ -11,7 +11,9 @@
 
 use libfuzzer_sys::fuzz_target;
 use qubit_json_fuzz::json_encode_invariants::assert_json_encode_invariants;
+use qubit_json_fuzz::json_serde_protocol_invariants::assert_json_serde_protocol_invariants;
 
 fuzz_target!(|data: &[u8]| {
     assert_json_encode_invariants(data);
+    assert_json_serde_protocol_invariants(data);
 });

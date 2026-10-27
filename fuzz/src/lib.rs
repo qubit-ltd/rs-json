@@ -16,5 +16,6 @@ pub mod json_encode_invariants;
 pub mod json_encode_output;
 pub mod json_number_contract;
 pub mod json_reference;
+pub mod json_serde_protocol_invariants;
 pub mod json_unique_decode_invariants;
 pub mod unique_decode_reference;
