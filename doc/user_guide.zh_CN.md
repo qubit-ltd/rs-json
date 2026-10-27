@@ -12,17 +12,24 @@
 字节时使用本库。数据模式、权限、标识符策略和十进制精度仍应在 JSON 准入之后由应用层独立
 校验。
 
+首次接入可从 [HTTP 场景](#实战场景http-边界上的有界-json)开始，走通解码与编码，再查阅
+[类型与所有权速查](#核心类型与所有权)选择后续接口。需要持有值树或排版时，阅读
+[受保护值专题](#受保护值验证解码与排版)；需要访问器时，阅读[值树处理](#读取与修改已有值树)。
+失败处理可按[错误与诊断](#错误与诊断)、[排障](#排障)查阅。
+
 ## 概念模型
 
-`qubit-budget` 负责资源标识、限制、事务和会话；`qubit-json` 提供四个公开领域：
+`qubit-budget` 负责资源标识、限制、事务和会话；`qubit-json` 提供四个公开顶层模块：
 
 - `decode`：准入严格 JSON 文本，或先按明确策略做文本规范化。
 - `encode`：生成带预算的 JSON 输出。
-- `value`：从 Serde 事件构造或校验已经生成的 `serde_json::Value` 值树。
-- `value::traverse`：不依赖 Rust 递归地读取或修改已有值树。
+- `format`：验证并排版 JSON token，不构造值树，也不改变标量 token 的原始拼写。
+- `value`：从 Serde 事件构造或校验 `serde_json::Value` 值树，提供受保护所有者
+  `SafeJsonValue`；其子模块 `value::traverse` 不依赖 Rust 递归地读取或修改已有值树。
 
-严格解码器和编码器都是有状态对象。使用 `with_limits(limits)` 可以创建新的独立会话；需要跨
-调用累计用量时，则通过 `new(session)` 传入 `JsonDecodeSession` 或 `JsonEncodeSession`。解码
+严格解码器和编码器都是有状态对象。使用 `with_limits(limits)` 可以创建新的独立会话，或通过
+`new(session)` 传入已有的 `JsonDecodeSession`、`JsonEncodeSession`。两种方式创建的编解码器
+都可复用，同一会话的用量会跨调用累计。解码
 结果和缓冲输出的资源用量
 先在事务中暂存，到文档规定的成功边界才提交；解码失败后，输入用量仍会保留在会话中。
 
@@ -46,6 +53,9 @@ serde_json = "1.0"
 `serde = { version = "1.0", features = ["derive"] }`。
 
 ### 核心工作流
+
+本手册及两份 README 的 Rust 示例由 crate 的[文档示例模块](../src/documentation_examples.rs)
+统一收录。在仓库根目录运行 `cargo test --locked --doc --features jcs`，即可执行这些示例。
 
 ```rust
 use qubit_budget::json::JsonDecodeLimits;
@@ -146,12 +156,36 @@ assert_eq!(bytes, br#"{"ok":true}"#);
 ```
 
 `write_incremental` 在序列化完成后、提交值资源计费前执行 flush。若 flush 失败，方法返回 `Write`
-错误：已被写入器接受的字节仍计入输出预算，值资源计费不会提交。两个方法都按值接收写入器；若要继续
-控制写入器，请传入 `&mut writer`。不要依赖 `Drop` 隐式 flush。flush 成功只表示写入器报告成功，不
+错误：已被写入器接受的字节仍计入输出预算，值资源计费不会提交。两个方法都通过 `&mut O` 借用
+写入器，调用结束后所有权仍归调用方。不要依赖 `Drop` 隐式 flush。flush 成功只表示写入器报告成功，不
 代表字节已持久化到磁盘或已被远端接收。
 
 下一步通常是把已准入文档反序列化为应用类型，再执行模式、权限和标识符规则。如果边界还
 需要文本规范化、重复解码、对象键唯一性或值树处理，请继续阅读后续章节。
+
+### 核心类型与所有权
+
+上面的场景用解码器处理输入、编码器生成输出。需要保存中间结果或检查值树时，可按下表选择
+其他类型。`Value` 指 `serde_json::Value`；箭头表示成功结果，可能失败的调用返回 `Result`。
+
+| 任务 | 公开 API 与数据形状 | 所有权和计量方式 |
+| --- | --- | --- |
+| 解码为应用类型 | `JsonDecoder::decode_str::<T>` / `decode_utf8::<T>`：文本 → `T` | 切片结果可借用输入；`decode_input::<T>` 要求 `DeserializeOwned`，并缓冲整份文档。解码器持有累计会话。 |
+| 保存受保护 JSON 树 | `JsonDecoder::decode_value_*`：文本 → `SafeJsonValue` | 拥有解码后的树并拒绝重复键；自身树操作使用显式栈，准入遵循解码器配置的限制。 |
+| 清理获准的展示痕迹后解码 | `NormalizingJsonDecoder`：文本 → 自有 `T`；`prepare_*` → `NormalizedJsonDocument` | 策略决定允许的转换。文档持有 `Cow<'input, str>` 和输入字节数，从文档解码的结果可以借用其文本。 |
+| 输出严格 JSON | `JsonEncoder::to_vec(&T)` → `Vec<u8>`；`write_*(&mut output, &T)` → `()` | 接受 `T: Serialize`，持有累计编码会话。失败时，外部输出仍可能保留已经接受的字节。 |
+| 将 Serde 数据投影为值树 | `JsonValueEncoder::encode(&T)` → `Value`；`encode_in_transaction` → `SafeJsonValue` | 编码器无状态；`encode` 不配置资源限制，事务入口则把值计量暂存在调用方事务中。 |
+| 读取或修改已有树 | `JsonTreeReader::process(&Value, &mut visitor)` / `JsonTreeMutator::process(&mut Value, &mut visitor)` | 借用值事务；修改器分别使用输入、输出事务，丢弃事务不会撤销树上的修改。 |
+| 为签名或哈希生成规范形式 | `JcsDecoder`：文本 → `Value`；`JcsEncoder`：`&Value` → 规范化字节 | 需开启 `jcs`，数字采用 binary64 语义；编码器辅助工作容量与值、输出预算分别配置。 |
+| 保留 token 原文排版 | `format_json_tokens` / `write_json_tokens` + `JsonPrettyOptions` | 处理 JSON 字节，保留标量拼写和重复键；输出上限独立于编解码器会话。 |
+
+值树模型为 `Null | Bool | Number | String | Array(Vec<Value>) | Object(Map<String, Value>)`。
+`SafeJsonValue` 包装的仍是这套模型，没有引入另一组节点类型。通过 `as_value()` 借用底层树供
+读取器或其他库使用，调用 `into_value()` 则把裸树所有权交回调用方。
+
+编解码器泛型通常为 `<'budget, R = JsonResource, Q = usize>`：`'budget` 表示所借用预算的
+生命周期，`R` 标识资源，`Q` 是计量数值类型。本手册示例使用默认类型即可。`session()` 用于
+查看计量，`into_session()` 可取回编解码器持有的会话，再转交给其他编解码器。
 
 ## 为签名和哈希生成规范化字节
 
@@ -320,6 +354,39 @@ Unicode 不做 NFC/NFD 归一化，因而不同码点序列仍是不同键。合
 
 ## 受保护值、验证解码与排版
 
+### 持有与借用受保护值树
+
+HTTP 场景需要拥有结果、拒绝重复键并保护深树操作时，可以把泛型 `Value` 目标换成
+`decode_value_utf8`。下面是独立示例，分别检查正常结果和重复键拒绝：
+
+```rust
+use qubit_budget::json::{JsonDecodeLimits, JsonResource};
+use qubit_json::decode::JsonDecoder;
+
+let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    .max_input_bytes(256)
+    .max_depth(8)
+    .max_nodes(16)
+    .max_payload_bytes(128)
+    .build();
+let mut decoder = JsonDecoder::with_limits(limits);
+let owner = decoder.decode_value_utf8(br#"{"id":42,"ok":true}"#)?;
+assert_eq!(owner.as_value()["id"], 42);
+assert_eq!(owner.clone(), owner);
+
+let error = decoder.decode_value_str(r#"{"id":42,"id":43}"#).unwrap_err();
+assert_eq!(
+    error.materialization_error_reason(),
+    Some(qubit_json::decode::JsonMaterializationErrorReason::DuplicateKey),
+);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+保留 owner，将 `owner.as_value()` 交给读取器即可。对于其他地方已经构造的树，
+`SafeJsonValue::new(value)` 只接管所有权，不执行预算准入；`copy_from(&value)` 使用显式栈复制。
+调用 `into_value()` 后，裸树不再由 owner 负责清理；深树需要迭代析构时应继续保留 owner。
+对借出的裸 `Value` 调用递归操作，也不在 owner 的保护范围内。
+
 应用需要拥有一棵可安全复制、比较和清理的 JSON 树时，使用 `decode_value_*`，它返回 `SafeJsonValue`。
 树操作保护与 Serde 输入语义是两件事：直接反序列化 `SafeJsonValue` 时，桥接无法区分真实对象与上游
 反序列化器提供的私有数字 map。启用 `arbitrary_precision` 后，这类 map 可能作为普通对象保留，
@@ -332,6 +399,8 @@ let value = JsonDecoder::unlimited().decode_value_str("1.25")?;
 assert_eq!(value.as_value().as_f64(), Some(1.25));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+### 检查原始数字 token
 
 若还需要按 JSON 路径检查原始数字词法，则使用 `decode_unique_validated_*`：回调会收到路径、token 原文和偏移；
 额外策略额度按单份文档计算，`JsonDecodeSession` 中配置的资源用量则跨调用累计。
@@ -365,7 +434,11 @@ assert!(owner.as_value().is_object());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-若之后发生语法错误，策略回调已产生的应用副作用不会回滚。`JsonValueEncoder` 的事务入口可以把多个值的
+若之后发生语法错误，策略回调已产生的应用副作用不会回滚。
+
+### 投影值树并排版输出
+
+`JsonValueEncoder` 的事务入口可以把多个值的
 计量结果暂存起来，整批成功后再提交：
 
 ```rust
@@ -396,6 +469,12 @@ assert!(std::str::from_utf8(&pretty)?.contains("\"ok\": true"));
 任一投影失败或 panic 后都应丢弃整笔事务，不能提交失败批次中暂存的用量。成功得到的 owner 可以继续交给
 `JsonEncoder` 编码，再交给 `format_json_tokens` 排版。排版器会先验证整份 JSON，保留数字与字符串 token 的原始写法，
 也允许重复键，因为它不构造 `Value`。目标 I/O 失败时，已经接受的输出前缀仍可能保留。
+
+`JsonPrettyOptions::builder()` 默认每层缩进两个空格、不限制显示缩进层数、不追加末尾换行。
+`max_indent_levels` 只限制显示缩进，不限制实际接受的嵌套深度。`format_json_tokens` 的第三个
+参数是可选的排版输出字节上限，不约束输入、深度或堆内存。`write_json_tokens` 在写入前验证并
+规划整份文档，语法或输出上限失败不会改动输出，也不会 flush 目标。写入开始后若发生 I/O
+故障，目标仍可能保留部分前缀；应用应按失败处理，不能把该前缀当作完整文档。
 
 ```rust
 use qubit_json::format::{JsonPrettyOptions, format_json_tokens};
@@ -497,6 +576,8 @@ fn main() -> Result<(), JsonDecodeError> {
 预算类型兼容的另一个解码器。规范化无需改写时，文档文本可以借用原始输入；需要改写时，文档会持有新分配的文本。
 借用结果受准备文档的生命周期约束。借用规则遵循 Serde 的表示方式：未转义的 JSON 字符串可以借用文档内容，包含转义的字符串则必须构造
 自有数据。
+
+### 接入调用方持有的 Serde 反序列化器
 
 当输入由另一个 Serde 反序列化器持有时，可以使用 `AccountingJsonValueSeed`。它会核算解码事件，并按构造后
 `Number` 的紧凑显示字节数执行 `NumberBytes` 限制，但无法测量原始数字 token，也无法执行文本级整数范围检查。
@@ -628,6 +709,50 @@ assert_eq!(literal["$serde_json::private::RawValue"], "[1,2,3]");
 完整且拥有结果所有权的 JSON 文档应使用 `decode_unique_*` 方法。通用 Serde 入口继续保持原有事件语义。详见
 [JSON 数字契约](number_contract.zh_CN.md)。JCS 使用 binary64，超出其精确范围的整数会舍入，
 不能作为精确整数表示的通用替代方案。
+
+### 读取与修改已有值树
+
+HTTP 文档通过准入后，若只需检查内容而不修改，可以使用 `JsonTreeReader`。下面的独立访问器
+在单独的值预算下统计根节点及其后代，只有遍历成功后才提交计量：
+
+```rust
+use std::convert::Infallible;
+use qubit_budget::json::{JsonResource, JsonValueLimits};
+use qubit_json::value::traverse::{JsonTreeContext, JsonTreeReader, JsonTreeVisitor};
+use serde_json::{Value, json};
+
+struct CountNodes(usize);
+
+impl JsonTreeVisitor for CountNodes {
+    type Error = Infallible;
+
+    fn enter(&mut self, _: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+        assert!(context.depth >= 1);
+        self.0 += 1;
+        Ok(())
+    }
+}
+
+let limits = JsonValueLimits::<JsonResource, usize>::builder()
+    .max_depth(8)
+    .max_nodes(16)
+    .max_payload_bytes(128)
+    .build();
+let mut budget = limits.budget();
+let mut transaction = budget.transaction();
+let mut visitor = CountNodes(0);
+let value = json!({"id": 42, "ok": true});
+JsonTreeReader::new(&mut transaction).process(&value, &mut visitor)?;
+transaction.commit()?;
+assert_eq!(visitor.0, 3);
+assert_eq!(budget.used_nodes(), Some(3));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`enter` 在访问后代前调用，可选的 `leave` 在后代访问完后调用。回调收到
+`JsonTreeContext { depth, location }`：根节点深度为 1，位置是 `JsonTreeLocation::Root`；
+后代的位置为 `ArrayElement { index }` 或 `ObjectValue { key }`，描述直接父容器中的位置，
+不是完整路径。处理已经解码的受保护树时，将示例中的 `&value` 换成 `owner.as_value()` 即可。
 
 对于已有值，`JsonTreeReader::account` 会在调用方事务中暂存整棵树的资源用量，但不会调用
 访问器。`JsonTreeMutator` 先准入原始值树，再执行原地访问器回调，最后准入修改后的值树：

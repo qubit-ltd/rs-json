@@ -14,21 +14,32 @@ number-token size, decoded values, or output bytes need explicit limits. Keep
 schema validation, authorization, identifier policy, and decimal precision in
 the application layer after JSON admission.
 
+Start with the [HTTP boundary scenario](#scenario-bounded-json-at-an-http-boundary)
+for the basic decode/encode path. Then use the [type and ownership reference](#core-types-and-ownership)
+to choose an API, [protected values](#protected-values-validated-decoding-and-formatting)
+for owned trees and token formatting, or [tree processing](#read-and-mutate-existing-trees)
+for visitors. The [errors](#errors-and-diagnostics) and [troubleshooting](#troubleshooting)
+sections cover failure handling.
+
 ## Conceptual model
 
 `qubit-budget` owns resource identities, limits, transactions, and sessions.
-`qubit-json` supplies four public areas:
+`qubit-json` exposes four top-level modules:
 
 - `decode` admits strict JSON text or performs explicitly configured text
   normalization before strict admission.
 - `encode` serializes values to budgeted JSON output.
+- `format` validates and reformats JSON tokens without constructing a value
+  tree or changing scalar token spellings.
 - `value` builds or validates materialized `serde_json::Value` trees from Serde
-  events.
-- `value::traverse` reads or mutates an existing tree without Rust recursion.
+  events and supplies the protected `SafeJsonValue` owner. Its `value::traverse`
+  submodule reads or mutates an existing tree without Rust recursion.
 
 Strict decoders and encoders are stateful objects. Use `with_limits(limits)`
-with a fresh owned session, or pass a `JsonDecodeSession`/`JsonEncodeSession` to
-`new(session)` when charges must accumulate across calls. Value-resource charges
+to create a fresh owned session, or pass an existing
+`JsonDecodeSession`/`JsonEncodeSession` to `new(session)`. Both constructors
+produce reusable codecs: usage accumulates across calls on the same session.
+Value-resource charges
 commit only after the complete operation succeeds. Serialization into a
 temporary buffer does not publish output charges on failure. Once an external
 destination accepts bytes, those bytes remain written and charged even if a
@@ -58,6 +69,10 @@ Add `serde = { version = "1.0", features = ["derive"] }` when the application
 decodes into derived types.
 
 ### Core workflow
+
+The Rust examples in this guide and both READMEs are included by the crate's
+[documentation example module](../src/documentation_examples.rs). Run them with
+`cargo test --locked --doc --features jcs` from the repository root.
 
 ```rust
 use qubit_budget::json::JsonDecodeLimits;
@@ -168,8 +183,8 @@ assert_eq!(bytes, br#"{"ok":true}"#);
 `write_incremental` flushes after serialization and before committing
 value-resource accounting. If that flush fails, the method returns a `Write`
 error: bytes already accepted remain charged to the output budget, and value
-resources are not committed. Both methods take the writer by value, so pass
-`&mut writer` when you need to keep using it. Do not rely on `Drop` for an
+resources are not committed. Both methods borrow the writer through
+`&mut O`; the caller retains ownership after the call. Do not rely on `Drop` for an
 implicit flush. A successful flush reports only the writer's result; it does
 not confirm that bytes reached disk or a remote peer.
 
@@ -177,6 +192,35 @@ The next step is to deserialize the admitted document into an application type
 and apply schema, authorization, and identifier rules. Continue below when the
 boundary also needs normalization, repeated decoding, unique object keys, or
 tree processing.
+
+### Core types and ownership
+
+The scenario above uses a decoder for input and an encoder for output. Choose
+additional types according to what the application needs to retain or inspect.
+Here, `Value` means `serde_json::Value`; arrows describe successful results,
+and fallible calls return `Result`.
+
+| Task | Public API and data shape | Ownership and accounting |
+| --- | --- | --- |
+| Decode into an application type | `JsonDecoder::decode_str::<T>` / `decode_utf8::<T>`: text → `T` | Slice results may borrow input; `decode_input::<T>` requires `DeserializeOwned` and buffers the document. The decoder owns its cumulative session. |
+| Retain a protected JSON tree | `JsonDecoder::decode_value_*`: text → `SafeJsonValue` | Owns the decoded tree and rejects duplicate keys. Own-tree operations use explicit stacks; admission uses the decoder's configured limits. |
+| Decode after permitted text cleanup | `NormalizingJsonDecoder`: text → owned `T`; `prepare_*` → `NormalizedJsonDocument` | Policy controls transformations. The document retains `Cow<'input, str>` and input byte lengths; document-based results can borrow its text. |
+| Emit strict JSON | `JsonEncoder::to_vec(&T)` → `Vec<u8>`; `write_*(&mut output, &T)` → `()` | Accepts `T: Serialize` and retains a cumulative encode session. External output can retain accepted bytes after failure. |
+| Project Serde data into a tree | `JsonValueEncoder::encode(&T)` → `Value`; `encode_in_transaction` → `SafeJsonValue` | The encoder is stateless. `encode` has no configured resource limits; the transaction-aware method stages caller-owned value accounting. |
+| Read or modify an existing tree | `JsonTreeReader::process(&Value, &mut visitor)` / `JsonTreeMutator::process(&mut Value, &mut visitor)` | Borrows value transactions. Mutators use separate input and output transactions; dropping them does not undo tree mutations. |
+| Sign or hash a canonical representation | `JcsDecoder`: text → `Value`; `JcsEncoder`: `&Value` → canonical bytes | Requires `jcs`. Numbers use binary64 semantics; encoder working capacity is configured separately from value/output budgets. |
+| Pretty-print without changing tokens | `format_json_tokens` / `write_json_tokens` + `JsonPrettyOptions` | Operates on JSON bytes, preserving scalar spellings and duplicate keys. Its output limit is separate from codec sessions. |
+
+The tree model is `Null | Bool | Number | String | Array(Vec<Value>) | Object(Map<String, Value>)`.
+`SafeJsonValue` wraps that model rather than introducing another set of node
+types. `as_value()` borrows it for tree readers and interoperability;
+`into_value()` transfers the bare tree to the caller.
+
+Codec generics have the shape `<'budget, R = JsonResource, Q = usize>`:
+`'budget` is the lifetime of any borrowed budget, `R` identifies resources,
+and `Q` is the quantity type. The defaults are sufficient for the examples in
+this guide. Use `session()` to inspect accounting or `into_session()` to
+recover a codec's session when transferring it to another codec.
 
 ## Canonical bytes for signatures and hashes
 
@@ -393,9 +437,46 @@ retaining or dropping it.
 
 ## Protected values, validated decoding, and formatting
 
-Use `decode_value_*` when the application needs an owned JSON tree whose own
-clone, comparison, formatting, and cleanup use explicit stacks. Use
-`decode_unique_validated_*` when policy must inspect original number tokens
+### Retain and borrow a protected tree
+
+For the HTTP scenario, use `decode_value_utf8` instead of a generic `Value`
+target when the application needs an owned tree with duplicate-key rejection
+and protected tree operations. The following standalone example verifies both
+successful ownership and duplicate-key rejection:
+
+```rust
+use qubit_budget::json::{JsonDecodeLimits, JsonResource};
+use qubit_json::decode::JsonDecoder;
+
+let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+    .max_input_bytes(256)
+    .max_depth(8)
+    .max_nodes(16)
+    .max_payload_bytes(128)
+    .build();
+let mut decoder = JsonDecoder::with_limits(limits);
+let owner = decoder.decode_value_utf8(br#"{"id":42,"ok":true}"#)?;
+assert_eq!(owner.as_value()["id"], 42);
+assert_eq!(owner.clone(), owner);
+
+let error = decoder.decode_value_str(r#"{"id":42,"id":43}"#).unwrap_err();
+assert_eq!(
+    error.materialization_error_reason(),
+    Some(qubit_json::decode::JsonMaterializationErrorReason::DuplicateKey),
+);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Pass `owner.as_value()` to readers while keeping the owner alive. For a tree
+already constructed elsewhere, `SafeJsonValue::new(value)` takes ownership
+without budget admission; `copy_from(&value)` copies it with an explicit stack.
+`into_value()` gives up the owner's cleanup protection, so retain the owner
+when deep-tree destruction must stay iterative. Calling recursive operations
+on a borrowed bare `Value` is outside that protection.
+
+### Inspect original number tokens
+
+Use `decode_unique_validated_*` when policy must inspect original number tokens
 with their source paths. The following path applies per-document strategy
 limits and records token metadata during one scan:
 
@@ -434,6 +515,8 @@ encoded bytes in each string token for that document. The decoder's
 calls. Policy callback effects are application effects: a later syntax error
 does not undo them.
 
+### Project values and format their output
+
 Projection can add a separate value-budget transaction. A successful batch is
 committed only after every projection succeeds:
 
@@ -469,6 +552,16 @@ layout. Pretty formatting validates the full JSON syntax before output, keeps
 the original number and string token spellings, and permits duplicate object
 keys because it does not construct a `Value`. I/O failures can still leave an
 accepted prefix in the destination.
+
+`JsonPrettyOptions::builder()` defaults to two spaces per level, no displayed
+depth cap, and no trailing newline. `max_indent_levels` changes indentation
+only; it does not restrict accepted nesting. The third argument to
+`format_json_tokens` is an optional formatted-output byte limit, not an input,
+depth, or heap-memory limit. `write_json_tokens` validates and plans the full
+document before writing, leaves output untouched on syntax or output-limit
+failure, and does not flush the destination. A later I/O failure can leave an
+accepted prefix; reject the operation rather than treating that prefix as a
+complete document.
 
 ```rust
 use qubit_json::format::{JsonPrettyOptions, format_json_tokens};
@@ -605,6 +698,8 @@ text when rewriting requires allocation. Borrowed decode results are tied to
 the prepared document and cannot outlive it. Borrowing follows Serde's
 representation rules: unescaped JSON strings can
 borrow from the document, while escaped strings require owned targets.
+
+### Integrate a caller-owned Serde deserializer
 
 Use `AccountingJsonValueSeed` when another Serde deserializer owns the input. It charges
 decoded events and enforces `NumberBytes` using the compact display length of each
@@ -765,6 +860,52 @@ because it cannot determine their provenance. Ordinary `decode_str` and
 entry points keep their existing event semantics. See the [JSON number contract](number_contract.md).
 JCS uses binary64 and rounds integers beyond its exact range, so it is not a
 general replacement when exact integer representation is required.
+
+### Read and mutate existing trees
+
+Use `JsonTreeReader` when the admitted HTTP document must be inspected without
+changing it. This standalone visitor counts the root and its descendants under
+a separate value budget, then publishes accounting only after traversal succeeds:
+
+```rust
+use std::convert::Infallible;
+use qubit_budget::json::{JsonResource, JsonValueLimits};
+use qubit_json::value::traverse::{JsonTreeContext, JsonTreeReader, JsonTreeVisitor};
+use serde_json::{Value, json};
+
+struct CountNodes(usize);
+
+impl JsonTreeVisitor for CountNodes {
+    type Error = Infallible;
+
+    fn enter(&mut self, _: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
+        assert!(context.depth >= 1);
+        self.0 += 1;
+        Ok(())
+    }
+}
+
+let limits = JsonValueLimits::<JsonResource, usize>::builder()
+    .max_depth(8)
+    .max_nodes(16)
+    .max_payload_bytes(128)
+    .build();
+let mut budget = limits.budget();
+let mut transaction = budget.transaction();
+let mut visitor = CountNodes(0);
+let value = json!({"id": 42, "ok": true});
+JsonTreeReader::new(&mut transaction).process(&value, &mut visitor)?;
+transaction.commit()?;
+assert_eq!(visitor.0, 3);
+assert_eq!(budget.used_nodes(), Some(3));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`enter` runs before descendants; optional `leave` runs after them. Callbacks
+receive `JsonTreeContext { depth, location }`: the root has depth one and
+`JsonTreeLocation::Root`, while descendants have `ArrayElement { index }` or `ObjectValue { key }`
+locations in their immediate parent, not a complete path. For a protected
+decoded document, replace `&value` with `owner.as_value()`.
 
 For an existing value, `JsonTreeReader::account` stages complete-tree charges
 in the caller's transaction without invoking a visitor. `JsonTreeMutator`
