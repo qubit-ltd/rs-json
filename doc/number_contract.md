@@ -26,6 +26,72 @@ is accepted only if it fits `i64`, or is non-negative and fits `u64`; `u128`
 must fit `u64`. Values outside the range fail instead of being truncated or
 implicitly converted to strings. Non-finite floats are rejected.
 
+## Select a text-decoding number model
+
+Ordinary decoding defaults to `JsonDecodeNumberModel::Integer64`. The optional
+`Integer64WithFiniteFallback` model only changes out-of-range integer tokens:
+it admits one when conversion to a finite `f64` succeeds. Ordinary decimal and
+exponent tokens must be finite in either model. `JcsDecoder` is a separate
+contract: it converts every number, including values inside the integer range,
+to finite binary64, as required by JCS.
+
+| Entry point | In-range integers | Out-of-range integer token | Decimal/exponent token |
+| --- | --- | --- | --- |
+| Default `Integer64` | `i64`/`u64` | Rejected | Finite `f64` |
+| `Integer64WithFiniteFallback` | `i64`/`u64` | Accepted as finite `f64`, with possible rounding | Finite `f64` |
+| `JcsDecoder` | Converted to `f64` | Converted to finite `f64`, with possible rounding | Finite `f64` |
+
+For example, `18446744073709551617` is outside `u64`: the default model
+rejects it, while the fallback model can represent it as the rounded finite
+binary64 value `18446744073709551616`. `1e400` remains rejected because it is
+not finite. Model selection admits a number token; it does not guarantee that
+every target type or application schema accepts the resulting value.
+
+Validated owned-value decoding selects the model in its options:
+
+```rust
+use qubit_json::decode::{
+    JsonDecodeNumberModel, JsonDecoder, JsonNumberPolicy,
+    JsonValidatedDecodeOptions,
+};
+
+let options = JsonValidatedDecodeOptions::builder()
+    .number_model(JsonDecodeNumberModel::Integer64WithFiniteFallback)
+    .build();
+let mut decoder = JsonDecoder::unlimited();
+let value = decoder
+    .decode_unique_validated_str("18446744073709551617", &options,
+        |_, _| Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve))
+    .unwrap();
+assert_eq!(value.as_value().as_f64().unwrap(), 18446744073709551616_f64);
+```
+
+The input-stream typed entry point also accepts an explicit model:
+
+```rust
+use qubit_json::decode::{JsonDecodeNumberModel, JsonDecoder};
+use serde_json::Value;
+use std::io::Cursor;
+
+let mut decoder = JsonDecoder::unlimited();
+let mut input = Cursor::new(b"18446744073709551617".to_vec());
+let value: Value = decoder
+    .decode_input_with_number_model(
+        &mut input,
+        JsonDecodeNumberModel::Integer64WithFiniteFallback,
+    )
+    .unwrap();
+assert_eq!(value.as_f64().unwrap(), 18446744073709551616_f64);
+
+let mut input = Cursor::new(b"1e400".to_vec());
+assert!(decoder
+    .decode_input_with_number_model::<Value, _>(
+        &mut input,
+        JsonDecodeNumberModel::Integer64WithFiniteFallback,
+    )
+    .is_err());
+```
+
 ## Resource budgets are separate
 
 `NumberBytes` limits the lexical byte length of the original number token. It
@@ -59,10 +125,13 @@ the JCS binary64 model. JCS decoding still measures
 range check. These budgets measure resources; they are not exact heap-memory
 limits.
 
-JCS `Value` construction has a fixed limit of 127 nested containers. The same
-materialization limit applies when `JsonValueEncoder` projects a genuine
-`serde_json::value::RawValue`; ordinary JSON encoding and decoding do not use
-this as a general depth limit. A `JsonValueEncoder` `InvalidRawValue` error
+JCS and unique-key `Value` construction use the shared builder and have no
+separate fixed container cap. The root-inclusive configured `max_depth` is the
+depth admission limit. Legacy `DepthLimit` and
+`JcsDecodeError::MaterializationDepthLimit` reasons/variants remain for source
+compatibility; the current shared builder reports configured depth rejection
+as a budget error. `JsonValueEncoder` uses the same configured builder contract
+when projecting a genuine `serde_json::value::RawValue`. A `JsonValueEncoder` `InvalidRawValue` error
 denotes rejection by the strict materialization contract, which can include
 duplicate keys, numeric constraints, or depth as well as invalid syntax.
 
@@ -77,7 +146,7 @@ binary64 semantics and is not an exact decimal wire format.
 
 The numeric rule depends on the entry point:
 
-- `JsonDecoder::decode_unique_str`, `decode_unique_utf8`, and `decode_unique_seed_utf8` first admit the source document and construct a unique-key tree using the strict integer/finite-f64 contract, then deserialize canonical `Number` values as native Serde numeric events. This preserves numeric types under `arbitrary_precision` without assigning special meaning to object keys. Results are owned; construction has a fixed limit of 127 nested containers. Source value usage commits only after the target succeeds. The intermediate tree adds memory overhead, and target-deserialization errors have no original source coordinates. The target's own Serde semantics still apply; choose `DuplicateKeyRejectingJsonValue` when literal private-field objects must be preserved.
+- `JsonDecoder::decode_unique_str`, `decode_unique_utf8`, and `decode_unique_seed_utf8` first admit the source document and construct a unique-key tree using the strict integer/finite-f64 contract, then deserialize canonical `Number` values as native Serde numeric events. This preserves numeric types under `arbitrary_precision` without assigning special meaning to object keys. Results are owned; configured root-inclusive `max_depth` controls construction, with no separate fixed container cap. Source value usage commits only after the target succeeds. The intermediate tree adds memory overhead, and target-deserialization errors have no original source coordinates. The target's own Serde semantics still apply; choose `DuplicateKeyRejectingJsonValue` when literal private-field objects must be preserved.
 - Text decoding, normalizing decoding, ordinary serialization, and native integer Serde events use the ordinary contract above. `i128`/`u128` events are explicitly rejected unless representable as `i64` or `u64` as appropriate.
 - `AccountingJsonValueSeed` and `DuplicateKeyRejectingJsonValueSeed` see decoded Serde events, not source text, so neither can inspect the original number lexeme. `AccountingJsonValueSeed` enforces the native 64-bit integer range and applies its `NumberBytes` budget to the compact display length of the constructed `Number`; that length may differ from the source token length. `DuplicateKeyRejectingJsonValueSeed` checks duplicate keys and does not itself apply resource budgets. If `arbitrary_precision` presents a number as a map, either seed cannot distinguish that from a real object with the same shape; it keeps the event as an object. Use a controlled text/RawValue/JCS entry point when provenance matters.
 - `JsonTreeReader` operates on an existing `serde_json::Value`. It measures an existing Number by the byte length of its current compact display representation. It does not convert the number to `f64` or impose the ordinary text encoder range. With `arbitrary_precision`, a stored `1e400` can be accounted without panic, and a 39-digit integer counts as 39 bytes. Ordinary `JsonEncoder` and `JcsEncoder` still reject numbers outside their own contracts.

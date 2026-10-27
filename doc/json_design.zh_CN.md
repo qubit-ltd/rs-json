@@ -89,18 +89,20 @@ seed）。该路径先执行普通严格词法准入，并暂存源文档的 val
 
 中间树使用严格的 `Integer64` 数字模型：负整数构造为 `i64`，非负整数为 `u64`，小数或指数数字为有限
 `f64`。从该树反序列化会发出原生整数和浮点 Serde 事件，即使启用了 `arbitrary_precision` 也是如此。
-对象键按 JSON 反转义后的字符串查重，不做 Unicode 规范化。构造最多接受 127 层嵌套容器；第 128 层会独立于
-配置的深度预算而失败。临时树与最终目标可能同时驻留内存，词法资源预算不是精确的堆内存上限。对象按
+对象键按 JSON 反转义后的字符串查重，不做 Unicode 规范化。共享 builder 没有独立固定容器上限；包含根值的
+配置项 `max_depth` 控制深度准入。历史 `DepthLimit { limit }` 原因因源码兼容而保留；当前配置深度超限会作为预算错误返回。
+临时树与最终目标可能同时驻留内存，词法资源预算不是精确的堆内存上限。对象按
 `serde_json::Map` 的迭代顺序处理。
 
 `RawValue` 目标接收从中间树重新序列化的 JSON，而非原文切片。`serde_json::Value` 仍会按自身语义解释私有键
 `$serde_json::private::RawValue`；若要求私有标记键保留为普通数据，应使用
-`DuplicateKeyRejectingJsonValue`。重复键与构造深度失败会作为反序列化错误返回，并附带第二个重复键起始引号
-或被拒绝容器处的一基源坐标。目标 seed 自身的失败没有原文坐标。只有目标构造成功后才提交 value 计量；失败时
+`DuplicateKeyRejectingJsonValue`。重复键物化失败会作为反序列化错误返回，并附带第二个重复键起始引号处的一基源坐标；
+配置深度超限则作为准入预算错误返回。目标 seed 自身的失败没有原文坐标。只有目标构造成功后才提交 value 计量；失败时
 已接受的输入计量仍保留。详见[重复对象键指南](user_guide.zh_CN.md#重复对象键)。
 
 `JsonDecodeError::materialization_error_reason()` 为唯一键构造失败提供可复制的旁路原因：
-`DuplicateKey`、`DepthLimit { limit }` 或防御性的 `InvalidNumber`。其他解码失败返回 `None`。
+`DuplicateKey` 或防御性的 `InvalidNumber`。历史 `DepthLimit { limit }` 原因因源码兼容而保留，
+但共享 builder 当前不会产生它。其他解码失败返回 `None`。
 原因不受 `DiagnosticPolicy` 影响、不含输入文本，并会由 `Clone` 保留。调用 `into_source()` 前应先读取原因；
 `JsonDecodeErrorSource` 及其公开变体保持不变，因此现有粗粒度错误映射无需迁移。构造错误坐标仍按
 UTF-8 字节计列，列号从 1 开始，只有 LF 会开始新行。
@@ -121,26 +123,28 @@ UTF-8 字节计列，列号从 1 开始，只有 LF 会开始新行。
 `JcsDecoder` 返回 `JcsDecodeError<R, Q>`，其中 `Decode` 包装既有解码错误，
 `DuplicateKey { line, column }` 与 `MaterializationDepthLimit { limit, line, column }` 是结构化物化错误，
 且不保存键名或 backend source。完整词法准入后，scanner 会再次运行并同步向迭代式 Value builder 发送事件；
-builder 在插入值之前检查重复键。JCS 构造固定拒绝超过 127 层的嵌套容器，该上限独立于可配置的 value-depth 预算。
+builder 在插入值之前检查重复键。共享 builder 没有独立固定容器上限；包含根值的配置项 `max_depth` 控制准入，
+超限作为预算错误返回。历史 `MaterializationDepthLimit` 变体因源码兼容而保留，但当前 builder 不会产生该变体。
 其他语法和预算失败仍保留普通解码错误分类。完整文档成功后才提交值资源；失败时已接受的输入字节仍计入 session。
 
 ### 数字表示
 
-strict 与 normalizing 文本路径共享同一数字契约：负整数装入 `i64`，非负整数装入 `u64`，
-小数或指数装入有限 `f64`。feature-gated 的 `JcsDecoder` 单独采用 binary64 模型，将所有数字
-（含整数词法）舍入为 `f64`，并在物化时拒绝对象内重复键。两种模型都先准入原始 `NumberBytes`，
-再校验范围，因此预算错误优先。crate 自身不启用 serde_json `arbitrary_precision`；但若其他依赖启用该 feature，仍会处理精确的私有 `Number` struct 协议。普通 map 即使有同名键也仍是对象。
-完整规则见 [JSON 数字契约](number_contract.zh_CN.md)。
+strict 与 normalizing 文本路径默认采用 `Integer64`：负整数装入 `i64`，非负整数装入 `u64`，
+小数或指数装入有限 `f64`。可选的 `Integer64WithFiniteFallback` 允许超出整数范围、但可转换为有限 `f64` 的
+整数 token，因此可能舍入；它不会放宽小数或指数 token 的有限值要求。feature-gated 的 `JcsDecoder` 单独采用
+binary64 模型，将所有数字（包括整数范围内的值）转为 `f64`，并在物化时拒绝对象内重复键。普通两种模型都先准入
+原始 `NumberBytes`，再校验范围，因此预算错误优先。crate 自身不启用 serde_json `arbitrary_precision`；但若其他依赖启用该 feature，仍会处理精确的私有 `Number` struct 协议。普通 map 即使有同名键也仍是对象。
+模型对照和配置示例见 [JSON 数字契约](number_contract.zh_CN.md)。
 
 `JcsDecoder` 复用词法准入、session 与事务：第一遍完整扫描并计量，第二遍通过词法事件同步构造 Value，
 不收集整份事件数组。事件 builder 在插入前按反转义后的键字符串检查重复项，不执行 Unicode 规范化。
-JCS Value 构造最多接受 127 层容器（根容器计第 1 层，标量不计层）；准备进入第 128 层时返回
-`JcsDecodeError::MaterializationDepthLimit { limit, line, column }`。该保护即使在 unlimited 配置下也生效，
-与第一遍包含根值的 `max_depth` 预算分别计算；低于 127 的用户深度限制先返回 Budget。`decode_input` 沿用读取到 EOF 并缓冲完整文档的流程，有限输入上限允许一个不计费的探测字节。
+JCS Value 构造复用共享 builder，没有独立固定容器上限；包含根值的配置项 `max_depth` 控制准入，深度超限作为
+`Decode` 中的预算错误返回。历史 `JcsDecodeError::MaterializationDepthLimit { limit, line, column }` 变体因源码兼容而保留，
+当前 builder 不会产生该变体。`decode_input` 沿用读取到 EOF 并缓冲完整文档的流程，有限输入上限允许一个不计费的探测字节。
 预算描述被计量资源，不构成精确 malloc 上限。JCS 解码只检查并构造值，已规范字节验证须由调用方将编码结果与输入比较。
 
-`JsonValueEncoder` 使用同一个 RawValue 物化器，因此真正的 `serde_json::value::RawValue` payload 也受
-127 层限制。`InvalidRawValue` 表示严格物化契约拒绝输入，可能涉及重复键、数字约束或深度，并非仅用于语法错误。
+`JsonValueEncoder` 使用同一个 RawValue 物化器，因此真正的 `serde_json::value::RawValue` payload 也遵循同一配置深度契约。
+`InvalidRawValue` 表示严格物化契约拒绝输入，可能涉及重复键、数字约束或深度，并非仅用于语法错误。
 
 私有 Number 协议只有在 Serde struct 名称和 payload 形状完全匹配时才会识别；真实对象中名为 `$serde_json::private::Number` 的键仍是普通键。`RawValue` 私有协议也会识别并严格验证。
 有限浮点的紧凑 JSON 文本长度通过公开的 `serde_json::ser::CompactFormatter` 接口计算，
@@ -239,7 +243,7 @@ renderer 前先暂存值资源用量，完整编码成功后才提交。`Budget`
 - 默认诊断不保留输入内容，自定义序列化错误不泄露任意来源文本。
 - 基准的成功路径必须确认 fixture 准入成功，避免累计预算耗尽后测到错误路径。
 - 差分 fuzz 区分词法验证与目标类型构造。普通 typed decode 可能触发 Serde 构造递归保护；
-  JCS Value 使用迭代式构造，并以固定的 127 层上限拒绝更深的容器。因此只有保守的浅层文档才直接比较物化值。
+  JCS Value 使用迭代式构造，并受包含根值的配置深度限制，不另设固定容器上限。因此只有保守的浅层文档才直接比较物化值。
   超长 fuzz 输入整体拒绝，不截断后比较。
 
 ## 相关文档

@@ -170,7 +170,7 @@ commit boundaries explicit through `qubit-budget` sessions and transactions.
 
 | Domain | Use it for | Boundary |
 | --- | --- | --- |
-| `decode` | Strict JSON admission, explicitly configured normalization, or JCS text decoding with `JcsDecoder` | Ordinary decoding keeps its integer range; JCS decoding uses binary64 and rejects duplicate keys |
+| `decode` | Strict JSON admission, explicitly configured normalization, or JCS text decoding with `JcsDecoder` | Ordinary decoding defaults to `Integer64`; JCS decoding uses binary64 and rejects duplicate keys |
 | `encode` | Budgeted strict JSON output and token-preserving pretty formatting | Value accounting commits after complete serialization; an I/O failure can still leave bytes in an external writer |
 | `value` | Protected `SafeJsonValue` trees and measured projection from Serde events | A Serde seed cannot inspect original number text or enforce text-level range rules |
 | `value::traverse` | Iterative reads or in-place mutations of materialized values | Mutation is incremental; visitors adding descendants must bound their own work, and visitor/output-budget failures retain prior changes |
@@ -178,6 +178,10 @@ commit boundaries explicit through `qubit-budget` sessions and transactions.
 `qubit-budget` owns limits, resource identities, budgets, and sessions.
 `qubit-json` owns JSON normalization, lexical validation, text codecs, value
 construction, and traversal.
+
+Ordinary decoding defaults to `JsonDecodeNumberModel::Integer64`; the optional
+finite fallback and JCS binary64 contracts are described in the
+[JSON number contract](doc/number_contract.md).
 
 For JCS, `Budget` identifies value or output limits, while `WorkingMemory`
 identifies the separate auxiliary-capacity limit configured with

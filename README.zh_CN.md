@@ -150,13 +150,16 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 
 | 领域 | 适用场景 | 明确边界 |
 | --- | --- | --- |
-| `decode` | 严格准入 JSON、按策略规范化文本，或用 `JcsDecoder` 解码 JCS 数字 | 普通解码保留整数范围；JCS 解码采用 binary64 并拒绝重复键 |
+| `decode` | 严格准入 JSON、按策略规范化文本，或用 `JcsDecoder` 解码 JCS 数字 | 普通解码默认采用 `Integer64`；JCS 解码采用 binary64 并拒绝重复键 |
 | `encode` | 生成受预算约束的严格 JSON，并按原 token 排版 | 完整序列化成功后才提交值资源用量，但 I/O 失败仍可能在外部写入器中留下部分字节 |
 | `value` | 使用 `SafeJsonValue` 保护值树，并从 Serde 事件执行计量投影 | Serde seed 看不到数字的原始文本，也不能执行文本级数值范围检查 |
 | `value::traverse` | 迭代读取或原地修改已构造的值树 | 修改按步骤生效；新增后代的访问器要自行限制工作量，访问器或输出预算失败会保留此前的改动 |
 
 `qubit-budget` 负责限制、资源标识、预算和会话；`qubit-json` 负责 JSON 规范化、词法校验、
 文本编解码、值构造和遍历。
+
+普通解码默认使用 `JsonDecodeNumberModel::Integer64`；有限 fallback 与 JCS binary64 契约见
+[JSON 数字契约](doc/number_contract.zh_CN.md)。
 
 JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemory` 表示单独配置的辅助容量上限不足，
 该上限通过 `JcsEncoder::with_limits(limits, max_working_bytes)` 设置。

@@ -55,8 +55,11 @@ integers become `i64`, non-negative integers become `u64`, and fractional or
 exponential numbers become finite `f64`. Deserializing that tree exposes
 native integer and floating-point Serde events, including when
 `arbitrary_precision` is enabled. Object keys are compared after JSON
-unescaping, without Unicode normalization. Construction accepts at most 127
-nested containers; the 128th fails independently of configured depth limits.
+unescaping, without Unicode normalization. The shared builder has no separate
+fixed container cap: configured root-inclusive `max_depth` controls depth
+admission. The legacy `DepthLimit { limit }` reason remains for source
+compatibility; configured depth rejection is currently reported as a budget
+error.
 The temporary tree and final target can coexist, and the lexical resource
 budgets do not represent a precise heap-memory ceiling. Objects use
 `serde_json::Map` iteration order.
@@ -65,17 +68,18 @@ budgets do not represent a precise heap-memory ceiling. Objects use
 tree, rather than a slice of the original text. `serde_json::Value` retains
 its own interpretation of the private `$serde_json::private::RawValue` marker;
 use `DuplicateKeyRejectingJsonValue` when literal private marker keys must
-remain ordinary data. Duplicate-key and construction-depth failures are
-reported as deserialization errors with one-based source coordinates at the
-second key's opening quote or the rejected container. Target seed failures do
-not have original source coordinates. Value accounting commits only after
+remain ordinary data. Duplicate-key construction failures are reported as
+deserialization errors with one-based source coordinates at the second key's
+opening quote. Configured depth failures are budget errors from admission.
+Target seed failures do not have original source coordinates. Value accounting commits only after
 target construction succeeds; accepted input charges remain consumed on
 failure. See the [duplicate object keys guide](user_guide.md#duplicate-object-keys).
 
 `JsonDecodeError::materialization_error_reason()` adds a copyable side-channel
-reason for unique-key construction failures: `DuplicateKey`,
-`DepthLimit { limit }`, or defensive `InvalidNumber`. Other decode failures
-return `None`. The reason is independent of `DiagnosticPolicy`, contains no
+reason for unique-key construction failures: `DuplicateKey` or defensive
+`InvalidNumber`. The legacy `DepthLimit { limit }` reason remains for source
+compatibility but the shared builder does not currently produce it. Other
+decode failures return `None`. The reason is independent of `DiagnosticPolicy`, contains no
 input text, and is preserved by `Clone`. Read it before `into_source()`;
 `JsonDecodeErrorSource` and its public variants remain unchanged, so existing
 coarse error mappings remain compatible. Materialization coordinates retain
@@ -166,38 +170,46 @@ existing decode error, a structured `DuplicateKey { line, column }` case, and
 `MaterializationDepthLimit { limit, line, column }`. The materialization errors
 store no key text or backend source. After complete lexical admission, the
 scanner runs again and synchronously sends events to an iterative Value builder;
-duplicate keys are detected before inserting their values. JCS construction
-rejects more than 127 nested containers, independently of the configurable
-value-depth budget. Unrelated syntax and budget errors keep their ordinary
+duplicate keys are detected before inserting their values. The shared builder
+has no separate fixed container cap; root-inclusive configured `max_depth`
+controls admission and depth rejection is reported as a budget error. The
+historical `MaterializationDepthLimit` variant remains for source compatibility
+but is not produced by the current builder. Unrelated syntax and budget errors keep their ordinary
 decode classification. Value accounting commits only after the complete
 document succeeds, while accepted input bytes remain charged after failure.
-The shared RawValue materializer used by `JsonValueEncoder` applies that same
-127-container guard to genuine `serde_json::value::RawValue` payloads. Its
+The shared RawValue materializer used by `JsonValueEncoder` applies the same
+configured depth contract to genuine `serde_json::value::RawValue` payloads. Its
 `InvalidRawValue` error identifies rejection by the strict materialization
 contract, including duplicate keys, numeric constraints, or depth; it is not
 a syntax-only classification.
 
 ### Numeric representation
 
-Strict and normalizing text paths share one numeric contract: negative
-integers fit `i64`, non-negative integers fit `u64`, and fractional or
-exponential values must be finite `f64`. The feature-gated `JcsDecoder` uses a
-separate binary64 model, rounding every number (including integer lexemes) to
-`f64` and rejecting duplicate object keys during materialization. Both models
-admit the original `NumberBytes` before range validation, so budget failures
-have priority. The crate does not enable serde_json `arbitrary_precision` itself, but it handles the exact private `Number` struct protocol when another dependency enables it. A normal map with a matching key remains an object. See [the number contract](number_contract.md).
+Strict and normalizing text paths default to `Integer64`: negative integers
+fit `i64`, non-negative integers fit `u64`, and fractional or exponential
+values must be finite `f64`. The opt-in `Integer64WithFiniteFallback` model
+allows an out-of-range integer token when it converts to finite `f64`, which
+can round its value; it does not relax the finite rule for decimal or exponent
+tokens. The feature-gated `JcsDecoder` uses a separate binary64 model,
+converting every number (including in-range integers) to `f64` and rejecting
+duplicate object keys during materialization. Both ordinary models admit the
+original `NumberBytes` before range validation, so budget failures have
+priority. The crate does not enable serde_json `arbitrary_precision` itself,
+but it handles the exact private `Number` struct protocol when another
+dependency enables it. A normal map with a matching key remains an object. See
+[the number contract](number_contract.md) for the model comparison and
+configuration examples.
 
 `JcsDecoder` reuses lexical admission, sessions, and transactions. It performs a
 complete first scan for admission and accounting, then scans again and builds
 the Value synchronously from lexical events without collecting a document-sized
 event array. The builder checks decoded key strings before insertion and does
-not normalize Unicode. JCS Value construction accepts at most 127 nested
-containers (the root container is level one and scalars add no container
-level); attempting the 128th returns
-`JcsDecodeError::MaterializationDepthLimit { limit, line, column }`. This guard
-also applies to unlimited configurations and is distinct from the first pass's
-root-inclusive `max_depth`; a lower configured depth limit fails earlier as
-Budget. `decode_input` keeps the
+not normalize Unicode. JCS Value construction uses the shared builder and has
+no independent fixed container cap. Root-inclusive configured `max_depth`
+controls admission; depth rejection is returned as a budget error wrapped in
+`Decode`. The legacy `JcsDecodeError::MaterializationDepthLimit { limit, line,
+column }` variant remains for source compatibility but is not produced by
+this builder. `decode_input` keeps the
 read-through-EOF, full-buffering behavior and may consume one uncharged probe
 byte with a finite input limit. Budgets describe measured resources, not an
 exact malloc ceiling. JCS decoding parses and constructs a value; verifying
@@ -340,8 +352,8 @@ cover numbers, strings, objects, `RawValue`, and different tree shapes. See the
   exhaustion cannot silently turn them into failure-path measurements.
 - Differential fuzzing separates lexical validation from target construction.
   Ordinary typed decoding may encounter Serde's construction recursion guard;
-  JCS Value construction is iterative and rejects containers beyond its fixed
-  127-level limit. Direct materialized-value comparison is limited to
+  JCS Value construction is iterative and uses the configured root-inclusive
+  depth limit, with no separate fixed container cap. Direct materialized-value comparison is limited to
   conservatively shallow input. Oversized fuzz inputs are rejected in full
   rather than truncated for comparison.
 

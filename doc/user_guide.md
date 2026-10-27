@@ -823,6 +823,21 @@ visitor state separately.
 
 ## Numeric paths, private protocols, and Display
 
+### Text number models
+
+Ordinary text decoding defaults to `JsonDecodeNumberModel::Integer64`: integer
+tokens must fit `i64` or `u64`, while decimal and exponent tokens must produce
+finite `f64` values. `Integer64WithFiniteFallback`, selected through
+`JsonValidatedDecodeOptions::builder().number_model(...)` or
+`JsonDecoder::decode_input_with_number_model`, changes only out-of-range
+integer tokens. A token such as `18446744073709551617` may then be rounded to
+the finite `f64` value `18446744073709551616`; the default model rejects it.
+Both ordinary models still reject `1e400`. `JcsDecoder` uses binary64 for every
+number, including in-range integers, and also rejects non-finite results.
+Admitting a token does not guarantee that a particular target type or
+application schema accepts the resulting value. See the [number
+contract](number_contract.md) for runnable examples.
+
 Choose one of three numeric boundaries deliberately:
 
 - **Ordinary text and Serde events:** strict text requires negative integers in `i64`, non-negative integers in `u64`, and fractional or exponent values that convert to finite `f64`. `i128` and `u128` serializer/seed events are explicitly range-checked. Text decoding checks the original-token `NumberBytes` before numeric range. `AccountingJsonValueSeed` cannot measure that token, but enforces `NumberBytes` using the compact display length of the constructed `Number`; by default, `1e2` (3 source bytes) displays as `100.0` (5 bytes). See the [number contract](number_contract.md). `DuplicateKeyRejectingJsonValueSeed` does not apply a resource budget. For map-shaped Serde events, a seed also cannot tell a real object from an upstream imitation of serde_json's private Number map.

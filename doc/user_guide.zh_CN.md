@@ -678,6 +678,15 @@ assert_eq!(value, json!({"name": "qubit"}));
 
 ## 数字入口、私有协议与 Display
 
+### 文本数字模型
+
+普通文本解码默认采用 `JsonDecodeNumberModel::Integer64`：整数 token 必须装入 `i64` 或 `u64`，小数与指数
+token 必须产生有限 `f64`。通过 `JsonValidatedDecodeOptions::builder().number_model(...)` 或
+`JsonDecoder::decode_input_with_number_model` 可选择 `Integer64WithFiniteFallback`，它只改变超出整数范围的
+整数 token。例如 `18446744073709551617` 可能舍入为有限 `f64` 值 `18446744073709551616`；默认模型会拒绝它。
+两种普通模型仍拒绝 `1e400`。`JcsDecoder` 对所有数字（包括整数范围内的值）使用 binary64，也会拒绝非有限结果。
+token 准入不保证具体目标类型或应用 schema 一定接受生成的值。可运行示例见[数字契约](number_contract.zh_CN.md)。
+
 三种数字边界要分开判断：
 
 - **普通文本与 Serde 事件：** strict 文本要求负整数在 `i64` 范围、非负整数在 `u64` 范围，小数或指数可转换为有限 `f64`。序列化器和 seed 收到 `i128`、`u128` 事件时会显式检查范围。文本解码先准入原始 token 的 `NumberBytes`，再检查数值范围。`AccountingJsonValueSeed` 无法测量原始 token，但会按构造后 `Number` 的紧凑显示字节数执行 `NumberBytes` 限制；默认情况下，3 字节的 `1e2` 会显示为 5 字节的 `100.0`。详见[数字契约](number_contract.zh_CN.md)。`DuplicateKeyRejectingJsonValueSeed` 不施加资源预算。遇到 map 形状事件时，seed 也无法判断它是真对象还是上游模拟的 serde_json 私有 Number map。

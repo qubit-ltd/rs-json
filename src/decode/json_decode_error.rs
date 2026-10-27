@@ -322,9 +322,12 @@ where
 
     /// Returns the safe reason for a unique-key intermediate-tree failure.
     ///
-    /// Returns `Some(reason)` when construction failed because of a duplicate
-    /// key, the fixed container limit, or an unrepresentable admitted number.
-    /// Returns `None` for lexical, input, budget, and target-deserialization
+    /// Returns `Some(reason)` when unique-key tree construction failed because
+    /// of a duplicate key or a defensive unrepresentable admitted number.
+    /// The legacy depth-limit reason remains for source compatibility, but the
+    /// shared builder has no fixed container cap and configured depth failures
+    /// are reported as budget errors. Returns `None` for lexical, input,
+    /// budget, and target-deserialization
     /// failures. The reason remains available under redacted diagnostics and
     /// contains no input-derived text. Read it before consuming the error with
     /// [`Self::into_source`].
