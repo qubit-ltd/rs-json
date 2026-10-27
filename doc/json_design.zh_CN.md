@@ -14,6 +14,7 @@
 src/
 ├── decode/             # 规范化、严格解码和错误模型
 ├── encode/             # 严格、有状态的文本 encoder
+├── format/             # 校验语法并保留 token 的排版
 ├── lexical/            # crate-private scanner 与共享实现
 └── value/
     └── traverse/       # 非递归 reader、mutator 与 tracker
@@ -150,11 +151,27 @@ JCS Value 构造复用共享 builder，没有独立固定容器上限；包含�
 有限浮点的紧凑 JSON 文本长度通过公开的 `serde_json::ser::CompactFormatter` 接口计算，
 不直接依赖其底层浮点格式化库。
 
+## 受保护值与 Serde 桥接
+
+`SafeJsonValue` 拥有一个 `serde_json::Value`，并通过受保护的迭代式操作执行复制、相等比较和清理，避免这些 owner 操作受树深度的递归调用影响。它不设置精确堆内存上限，也不改变调用方 Serde 目标自身的递归行为。
+
+其通用 `Deserialize` 实现消费 Serde 事件并保护部分构造的值，但没有源 token 来源信息。特别是，map 事件无法区分字面对象和 `serde_json` 的私有任意精度数字协议，因此都作为普通对象处理。依赖启用 `arbitrary_precision` 时，直接桥接 JSON 数字得到的形态可能与未启用时不同。若从 JSON 文本解码并需要文本 decoder 的数字模型，请用 `JsonDecoder::decode_value_str` 或对应的 UTF-8/reader 入口；该路径能识别私有 struct 协议，同时保留使用同名键的字面对象。
+
+直接桥接会在键解码后拒绝重复键，不执行 Unicode 归一化。重复键索引使用额外的 `BTreeSet<String>`，并与已收集成员同时存在；键比较次数为 O(n log n)，每次 `String` 比较的字节成本取决于共同前缀长度。辅助键存储不包含在值预算中。对象仍通过 `SafeValueBuilder` 构造，并遵从当前 `serde_json::Map` 的顺序策略。
+
+## 保留 token 的排版
+
+公开的 `format` 领域提供 `format_json_tokens` 和 `write_json_tokens`。它校验输入恰好是一个完整 JSON 文档，只调整空白；原字符串和数字 token（包括重复键）保持逐字节不变。它不物化 `Value`、不应用数字模型，也不执行规范化键排序。`JsonPrettyOptions` 配置缩进和末尾换行；`JsonPrettyError` 通过 `JsonPrettyErrorKind` 区分语法、输出限额、容量和 writer 错误。
+
+排版计划完成前不会开始输出，因此语法错误和输出限额错误不会写入目标。即使排版后的长度已超过限额，有限计划仍继续扫描和校验完整输入，从而保持后续语法错误优先；此后不再保存新的排版动作，但会保留已保存前缀，所以动作数组不会随剩余宽输入继续增长。扫描耗时仍随输入长度增长，容器栈随嵌套深度增长。格式化输出字节上限不是辅助内存或进程 RSS 上限。真实 writer 故障可能留下已接受的输出前缀。
+
 ## Value
 
 `AccountingJsonValueSeed` 是从 Serde 解码事件构造 `serde_json::Value` 的公开 seed。调用方将其绑定到
 `JsonValueTransaction`；它适用于原始 JSON 字节不可用而仍需对物化 value 记账的场景。词法
 准入与该 seed 的职责不同：前者验证 JSON 文本，后者观察已解码值。seed 看不到原始数字 lexeme，文本级 `NumberBytes` 保证须由 `JsonDecoder` 或采用 JCS 契约的 `JcsDecoder` 提供。seed 收到的原生整数事件仍会按有符号/无符号 64 位并集检查；缺少 token 来源时，map 事件按对象处理，不猜测它是否模拟 Number 协议。
+
+`JsonValidatedDecodeError` 区分普通解码失败、调用方数字策略拒绝、精确安全整数转换失败和附加 validated 限额失败。策略诊断保留源字节偏移，但不会格式化调用方提供的不透明错误内容。`JsonValueEncodeError` 则在把 Serde 值投影到调用方 transaction 时，区分预算拒绝与严格 JSON 序列化失败。
 
 ## Tree
 
@@ -179,12 +196,15 @@ visitor 若创建新后代，需要自行限制回调工作量并确保遍历终
 公开错误和诊断类型按领域划分：
 
 1. `decode::JsonDecodeError` 及其 owned `JsonDecodeErrorSource`：普通与规范化 decoder 共用；JCS 专属错误为 `JcsDecodeError`。
-2. `encode::JsonEncodeError`
-3. `decode::JsonSyntaxError`
-4. `value::traverse::JsonTreeProcessError`
-5. `value::traverse::JsonTreeMutateError`
-6. feature-gated 的 `decode::JcsDecodeError` 与 `encode::JcsEncodeError`
-7. JSON encoder 共用的 `encode::JsonSerializationError`
+2. `decode::JsonValidatedDecodeError`：承载解码、策略、精确整数与附加限额失败及源偏移。
+3. `encode::JsonEncodeError`
+4. `decode::JsonSyntaxError`
+5. `value::traverse::JsonTreeProcessError`
+6. `value::traverse::JsonTreeMutateError`
+7. `value::JsonValueEncodeError`：区分投影的预算拒绝与严格 JSON 序列化失败。
+8. `format::JsonPrettyError`：其 kind 区分语法、输出限额、容量和 I/O 失败。
+9. feature-gated 的 `decode::JcsDecodeError` 与 `encode::JcsEncodeError`
+10. JSON encoder 共用的 `encode::JsonSerializationError`
 
 每种错误只暴露其领域能稳定提供的上下文；没有根级错误聚合或兼容别名。
 

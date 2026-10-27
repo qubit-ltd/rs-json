@@ -237,6 +237,74 @@ output buffers; they are total requested allocation traffic, not auxiliary
 working bytes, peak live memory, or process RSS. The prebuilt input `Value` and
 diagnostic formatting are outside the measured operation.
 
+### Safe JSON bridge duplicate-key index (2026-10-27)
+
+The `safe_value_bridge` group compares direct `serde_json` deserialization into
+`SafeJsonValue` before and after replacing repeated object scans with a
+`BTreeSet` membership check. The comparable commands were:
+
+```bash
+cargo bench --locked --bench decoder_bench -- safe_value_bridge --save-baseline rj001-before --noplot
+cargo bench --locked --bench decoder_bench -- safe_value_bridge --baseline rj001-before --noplot
+```
+
+Both runs used Rust 1.94.0, Criterion 0.8.2, default features, and 100 samples
+per case on the shared Intel Core i5-9600K / Ubuntu 24.04.4 host described
+above. The fixture construction and semantic checks are outside the timed
+closure; the timed operation includes decoder creation and dropping its result.
+The rows below are representative 4096-member direct-Serde cases. Values are
+Criterion central estimates; the original runs also emitted confidence
+intervals, but the complete saved Criterion data was removed when the
+repository CI script cleaned `target/`. A later rerun overlapped unrelated
+compilation on the shared host and showed substantial outliers, so it is not
+used to replace these observations.
+
+| Key style | Case | Items | Input bytes | Before (95% CI) | After estimate |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Short | Unique | 4096 | 52,139 | 85.253 ms (78.471–92.320) | 12.838 ms |
+| Short | Duplicate at tail | 4096 | 52,152 | 28.743 ms (27.711–29.995) | 2.951 ms |
+| Long shared prefix | Unique | 4096 | 121,771 | 48.878 ms (44.369–53.792) | 6.534 ms |
+| Long shared prefix | Duplicate at tail | 4096 | 121,801 | 35.167 ms (32.867–37.696) | 4.433 ms |
+
+The first post-change run also showed a small-object cost: at 32 members, direct
+Serde unique cases were roughly 77–82% slower than the recorded pre-change
+sample. The later noisy rerun varied widely, including apparent improvements
+and regressions in 4096-item control paths. These measurements support the
+wide-object trend for this host, not a universal latency guarantee. The
+`JsonDecoder` cases are controls and do not exercise the changed bridge path.
+The index stores each decoded key once and compares ordered strings; lookup
+cost depends on shared prefixes, and auxiliary memory grows with total key
+bytes plus tree-node overhead.
+
+### Token formatter output-limit action storage (2026-10-27)
+
+The `token_format_limit` group measures successful unlimited formatting and
+`OutputLimit` at an output limit of 8 bytes for arrays of 32, 512, and 4096
+items (65, 1,025, and 8,193 input bytes). Before/after commands:
+
+```bash
+cargo bench --locked --bench budgeted_serde_json -- token_format_limit --save-baseline rj002-before --noplot
+cargo bench --locked --bench budgeted_serde_json -- token_format_limit --baseline rj002-before --noplot
+```
+
+Criterion used 100 samples per case on the same shared host, Rust 1.94.0,
+Criterion 0.8.2, and default features. The representative central estimates
+reported by Criterion were:
+
+| Items | Input bytes | Unlimited before → after mean (µs; 95% CI; change, 95% CI) | Limit 8 before → after mean (µs; 95% CI; change, 95% CI) |
+| ---: | ---: | ---: | ---: |
+| 32 | 65 | 2.6466 (2.6431–2.6504) → 6.1948 µs (5.7068–6.6971; +134.07%, +116.23% to +154.33%) | 2.4360 (2.4094–2.4660) → 4.2857 µs (3.9061–4.6961; +75.93%, +60.22% to +92.13%) |
+| 512 | 1,025 | 37.3556 (36.7373–38.0618) → 50.8842 µs (47.6950–54.2535; +36.22%, +27.06% to +45.00%) | 44.8948 (41.9409–48.0430) → 27.3277 µs (27.0175–27.6681; −39.13%, −43.20% to −34.75%) |
+| 4096 | 8,193 | 523.0789 (484.2250–563.7111) → 294.0991 µs (290.3670–298.2947; −43.78%, −47.92% to −39.19%) | 441.2246 (413.5106–470.0707) → 358.1130 µs (330.5324–387.6673; −18.84%, −26.23% to −9.28%) |
+
+The change trades a measured small-input regression for lower measured cost on
+wide inputs. The private capacity regression verifies that `Some(0)` retains no
+actions and that retained action length/capacity do not grow with tokens after
+the output limit is exceeded. This bounds the planner's saved action storage;
+it is not an RSS or total-memory bound. The complete input is still scanned to
+validate syntax and preserve later syntax-error precedence, so scan time and
+input storage remain proportional to input size.
+
 ### Bounded JCS stack-growth observation (2026-10-26)
 
 The existing single-child-array depth fixture was sampled at revision

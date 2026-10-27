@@ -11,6 +11,8 @@
 //! * [`decode`] validates strict JSON and normalizes explicitly configured
 //!   non-standard text.
 //! * [`encode`] serializes values with explicit output and value budgets.
+//! * [`mod@format`] validates and reformats JSON token streams while preserving
+//!   their scalar token spellings.
 //! * [`value`] constructs and traverses materialized JSON values.
 //!
 //! `qubit-budget` owns limits, resource identities, and sessions. This crate

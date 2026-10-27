@@ -16,6 +16,7 @@ The public source layout is:
 src/
 ├── decode/             # normalization, strict decoding, and errors
 ├── encode/             # strict stateful text encoder
+├── format/             # syntax-checked token-preserving formatting
 ├── lexical/            # crate-private scanner and shared implementation
 └── value/
     └── traverse/       # non-recursive reader, mutator, and tracker
@@ -219,6 +220,51 @@ The private Number protocol is recognized only by its exact Serde struct name an
 `serde_json::ser::CompactFormatter` interface, without a direct dependency on
 its underlying float-formatting library.
 
+## Protected values and Serde bridges
+
+`SafeJsonValue` owns a `serde_json::Value` and performs its own copy, equality,
+and cleanup through guarded iterative operations. This protects those owner
+operations from recursive tree depth; it does not impose an exact heap limit
+or change the recursion behavior of a caller's Serde target.
+
+Its generic `Deserialize` implementation consumes Serde events and protects
+partially built values, but it has no source-token provenance. In particular,
+a map-shaped event cannot be identified as either a literal object or
+`serde_json`'s private arbitrary-precision number protocol. Such events remain
+ordinary objects, so direct bridge results for numeric text may differ when a
+dependency enables `arbitrary_precision`. Use
+`JsonDecoder::decode_value_str` or its UTF-8/reader counterparts when decoding
+JSON text with the text decoder's numeric model. That path recognizes the
+private struct protocol while retaining literal objects with the same key.
+
+The direct bridge rejects duplicate object keys after decoding escapes and
+does not normalize Unicode. Its duplicate-key index is an auxiliary
+`BTreeSet<String>` alongside the collected members. The number of key
+comparisons is O(n log n), while each `String` comparison's byte cost depends
+on its shared prefix. The temporary key storage is additional to value
+accounting. Object assembly continues through `SafeValueBuilder` and follows
+the active `serde_json::Map` ordering policy.
+
+## Token-preserving formatting
+
+The public `format` domain exposes `format_json_tokens` and
+`write_json_tokens`. It validates one complete JSON document and plans only
+whitespace edits; original strings and number tokens, including duplicate
+keys, remain byte-for-byte intact. It does not materialize a `Value`, apply a
+numeric model, or canonicalize keys. `JsonPrettyOptions` configures indentation
+and final newline behavior. `JsonPrettyError` classifies syntax, output-limit,
+capacity, and writer failures through `JsonPrettyErrorKind`.
+
+Planning must finish before rendering begins, so syntax and output-limit
+failures leave a writer untouched. A bounded planner continues scanning and
+checking the complete input after the formatted length exceeds the limit, which
+preserves a later syntax error's precedence. It stops saving additional
+rendering actions after that point but retains the already collected prefix;
+the action array therefore does not grow with the remaining wide input. Input
+scan time still scales with input size, and the container stack scales with
+nesting depth. The formatted-output maximum is not an auxiliary-memory or
+process-RSS limit. A real writer failure can leave an accepted output prefix.
+
 ## Value
 
 `AccountingJsonValueSeed` is the public seed for constructing
@@ -231,6 +277,13 @@ come from `JsonDecoder`, or from `JcsDecoder` when its JCS number contract is
 required. Native integer events are still checked against the signed/unsigned
 64-bit union. A map event cannot be distinguished from a private Number payload
 without token provenance, so it remains an ordinary object.
+
+`JsonValidatedDecodeError` distinguishes decode failures, caller number-policy
+rejections, exact-safe-integer conversion failures, and additional validated
+limits. Policy diagnostics retain the source byte offset without formatting
+the opaque caller error payload. `JsonValueEncodeError` separates budget
+rejection from strict JSON serialization failure when projecting a Serde value
+into a caller-owned transaction.
 
 ## Tree
 
@@ -263,12 +316,18 @@ Public errors are divided by domain:
 
 1. `decode::JsonDecodeError` and its owned `JsonDecodeErrorSource`, shared by
    the ordinary and normalizing decoders; JCS decoding uses `JcsDecodeError`.
-2. `encode::JsonEncodeError`.
-3. `decode::JsonSyntaxError`.
-4. `value::traverse::JsonTreeProcessError`.
-5. `value::traverse::JsonTreeMutateError`.
-6. Feature-gated `decode::JcsDecodeError` and `encode::JcsEncodeError`.
-7. `encode::JsonSerializationError`, shared by JSON encoders.
+2. `decode::JsonValidatedDecodeError`, for decode, policy, exact-integer, and
+   additional-limit failures with source offsets.
+3. `encode::JsonEncodeError`.
+4. `decode::JsonSyntaxError`.
+5. `value::traverse::JsonTreeProcessError`.
+6. `value::traverse::JsonTreeMutateError`.
+7. `value::JsonValueEncodeError`, which separates projection budget rejection
+   from strict JSON serialization failure.
+8. `format::JsonPrettyError`, whose kind distinguishes syntax, output limit,
+   capacity, and I/O failures.
+9. Feature-gated `decode::JcsDecodeError` and `encode::JcsEncodeError`.
+10. `encode::JsonSerializationError`, shared by JSON encoders.
 
 Each error exposes only context that its domain can provide stably. There is
 no root-level error aggregate or compatibility alias.
