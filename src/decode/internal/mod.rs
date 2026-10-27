@@ -14,6 +14,9 @@ mod json_document_decoder;
 pub(super) mod json_normalizer;
 mod markdown_fence;
 mod typed_seed;
+mod validated_consumer_error;
+mod validated_container;
+mod validated_value_consumer;
 
 pub(in crate::decode) use decode_metadata::DecodeMetadata;
 pub(in crate::decode) use json_decode_engine::JsonDecodeEngine;

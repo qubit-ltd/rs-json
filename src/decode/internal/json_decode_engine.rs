@@ -25,6 +25,8 @@ use super::JsonNormalizer;
 use super::admit_json_document;
 use super::deserialize_json_document;
 use super::json_document_decoder::admit_json_document_with_number_model;
+use super::validated_consumer_error::ValidatedConsumerError;
+use super::validated_value_consumer::ValidatedValueConsumer;
 use crate::decode::DiagnosticPolicy;
 #[cfg(feature = "jcs")]
 use crate::decode::JcsDecodeError;
@@ -35,17 +37,14 @@ use crate::decode::JsonDecodeStage;
 use crate::decode::JsonMaterializationErrorReason;
 use crate::decode::JsonNumberPolicy;
 use crate::decode::JsonNumberToken;
-use crate::decode::JsonNumberTokenError;
 use crate::decode::JsonPathSegment;
 use crate::decode::JsonRootKind;
 use crate::decode::JsonValidatedDecodeError;
 use crate::decode::JsonValidatedDecodeOptions;
 use crate::decode::JsonValidatedLimit;
 use crate::decode::NormalizedJsonDocument;
-use crate::lexical::JsonLexicalConsumer;
 use crate::lexical::JsonLexicalError;
 use crate::lexical::JsonLexicalErrorReason;
-use crate::lexical::JsonLexicalEvent;
 use crate::lexical::JsonLexicalScanError;
 use crate::lexical::JsonLexicalScanner;
 use crate::lexical::JsonNumberModel;
@@ -54,211 +53,6 @@ use crate::lexical::line_column_at;
 use crate::value::SafeJsonValue;
 use crate::value::internal::JsonValueMaterializationError;
 use crate::value::internal::LexicalJsonValueBuilder;
-
-enum ValidatedConsumerError<E> {
-    Policy {
-        source: E,
-        offset: usize,
-    },
-    Exact {
-        source: JsonNumberTokenError,
-        offset: usize,
-    },
-    Limit {
-        limit: JsonValidatedLimit,
-        maximum: usize,
-        observed: usize,
-        offset: usize,
-    },
-    Materialization {
-        source: JsonValueMaterializationError,
-        context: JsonDecodeContext,
-    },
-}
-
-enum ValidatedContainer {
-    Array { next_index: usize },
-    Object,
-}
-
-struct ValidatedValueConsumer<F, E> {
-    builder: LexicalJsonValueBuilder,
-    policy: F,
-    options: JsonValidatedDecodeOptions,
-    path: Vec<JsonPathSegment>,
-    track_path: bool,
-    containers: Vec<ValidatedContainer>,
-    nodes: usize,
-    next_number_policy: JsonNumberPolicy,
-    marker: std::marker::PhantomData<E>,
-}
-
-impl<F, E> ValidatedValueConsumer<F, E> {
-    fn check_encoded_limit(&self, token_len: usize, offset: usize) -> Result<(), ValidatedConsumerError<E>> {
-        let Some(maximum) = self.options.max_encoded_string_bytes() else {
-            return Ok(());
-        };
-        let observed = token_len.saturating_sub(2);
-        if observed > maximum {
-            return Err(ValidatedConsumerError::Limit {
-                limit: JsonValidatedLimit::EncodedStringBytes,
-                maximum,
-                observed,
-                offset,
-            });
-        }
-        Ok(())
-    }
-
-    fn complete_value(&mut self) {
-        if let Some(parent) = self.containers.last_mut() {
-            match parent {
-                ValidatedContainer::Array { next_index } => {
-                    if self.track_path {
-                        self.path.pop();
-                    }
-                    *next_index = next_index.saturating_add(1);
-                }
-                ValidatedContainer::Object => {
-                    if self.track_path {
-                        self.path.pop();
-                    }
-                }
-            }
-        }
-    }
-}
-
-impl<'input, F, E> JsonLexicalConsumer<'input> for ValidatedValueConsumer<F, E>
-where
-    F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
-{
-    type Error = ValidatedConsumerError<E>;
-
-    fn before_value(&mut self, _depth: usize, offset: usize) -> Result<(), Self::Error> {
-        if self.track_path
-            && let Some(ValidatedContainer::Array { next_index }) = self.containers.last()
-        {
-            self.path.push(JsonPathSegment::Index(*next_index));
-        }
-        self.nodes = self.nodes.saturating_add(1);
-        if let Some(maximum) = self.options.max_value_and_key_nodes()
-            && self.nodes > maximum
-        {
-            return Err(ValidatedConsumerError::Limit {
-                limit: JsonValidatedLimit::ValueAndKeyNodes,
-                maximum,
-                observed: self.nodes,
-                offset,
-            });
-        }
-        Ok(())
-    }
-
-    fn before_key(&mut self, offset: usize) -> Result<(), Self::Error> {
-        self.nodes = self.nodes.saturating_add(1);
-        if let Some(maximum) = self.options.max_value_and_key_nodes()
-            && self.nodes > maximum
-        {
-            return Err(ValidatedConsumerError::Limit {
-                limit: JsonValidatedLimit::ValueAndKeyNodes,
-                maximum,
-                observed: self.nodes,
-                offset,
-            });
-        }
-        Ok(())
-    }
-
-    fn before_number(&mut self, token: &'input str, offset: usize) -> Result<(), Self::Error> {
-        self.next_number_policy = (self.policy)(&self.path, JsonNumberToken::from_validated(token, offset))
-            .map_err(|source| ValidatedConsumerError::Policy { source, offset })?;
-        Ok(())
-    }
-
-    fn event(&mut self, event: crate::lexical::JsonLexicalEvent<'input>) -> Result<(), Self::Error> {
-        match event {
-            crate::lexical::JsonLexicalEvent::Number { token, offset }
-                if self.next_number_policy == JsonNumberPolicy::ExactSafeInteger =>
-            {
-                let text = std::str::from_utf8(token).expect("scanner number token is UTF-8");
-                let value = JsonNumberToken::from_validated(text, offset)
-                    .exact_safe_integer()
-                    .map_err(|source| ValidatedConsumerError::Exact { source, offset })?;
-                self.builder.try_accept_number(value.into(), offset).map_err(|source| {
-                    ValidatedConsumerError::Materialization {
-                        source,
-                        context: JsonDecodeContext::Number,
-                    }
-                })?;
-                self.next_number_policy = JsonNumberPolicy::Preserve;
-                self.complete_value();
-            }
-            JsonLexicalEvent::Key { token, offset } => {
-                self.check_encoded_limit(token.len(), offset)?;
-                let key = serde_json::from_slice::<String>(token).expect("scanner admitted valid key token");
-                let path_key = self.track_path.then(|| key.clone());
-                self.builder.try_accept_decoded_key(key, offset).map_err(|source| {
-                    ValidatedConsumerError::Materialization {
-                        source,
-                        context: JsonDecodeContext::ObjectKey,
-                    }
-                })?;
-                if let Some(key) = path_key {
-                    self.path.push(JsonPathSegment::Key(key));
-                }
-            }
-            JsonLexicalEvent::String { token, offset } => {
-                self.check_encoded_limit(token.len(), offset)?;
-                self.builder
-                    .try_accept(JsonLexicalEvent::String { token, offset })
-                    .map_err(|source| ValidatedConsumerError::Materialization {
-                        source,
-                        context: JsonDecodeContext::String,
-                    })?;
-                self.complete_value();
-            }
-            JsonLexicalEvent::BeginArray { .. } => {
-                self.builder
-                    .try_accept(event)
-                    .map_err(|source| ValidatedConsumerError::Materialization {
-                        source,
-                        context: JsonDecodeContext::Value,
-                    })?;
-                self.containers.push(ValidatedContainer::Array { next_index: 0 });
-            }
-            JsonLexicalEvent::BeginObject { .. } => {
-                self.builder
-                    .try_accept(event)
-                    .map_err(|source| ValidatedConsumerError::Materialization {
-                        source,
-                        context: JsonDecodeContext::Value,
-                    })?;
-                self.containers.push(ValidatedContainer::Object);
-            }
-            JsonLexicalEvent::EndArray { .. } | JsonLexicalEvent::EndObject { .. } => {
-                self.builder
-                    .try_accept(event)
-                    .map_err(|source| ValidatedConsumerError::Materialization {
-                        source,
-                        context: JsonDecodeContext::Value,
-                    })?;
-                self.containers.pop();
-                self.complete_value();
-            }
-            other => {
-                self.builder
-                    .try_accept(other)
-                    .map_err(|source| ValidatedConsumerError::Materialization {
-                        source,
-                        context: JsonDecodeContext::Value,
-                    })?;
-                self.complete_value();
-            }
-        }
-        Ok(())
-    }
-}
 
 /// Shared generic execution core used by both public decoder facades.
 ///
@@ -490,17 +284,7 @@ where
             JsonDecodeNumberModel::Integer64 => JsonNumberModel::Integer64,
             JsonDecodeNumberModel::Integer64WithFiniteFallback => JsonNumberModel::Integer64WithFiniteFallback,
         };
-        let mut consumer = ValidatedValueConsumer {
-            builder: LexicalJsonValueBuilder::new(model),
-            policy,
-            options: options.clone(),
-            path: Vec::new(),
-            track_path,
-            containers: Vec::new(),
-            nodes: 0,
-            next_number_policy: JsonNumberPolicy::Preserve,
-            marker: std::marker::PhantomData,
-        };
+        let mut consumer = ValidatedValueConsumer::new(options.clone(), policy, model, track_path);
         let result = JsonLexicalScanner::new(attempt.value_transaction_mut(), has_value_limits)
             .with_number_model(model)
             .with_depth_limit(depth_limit)
@@ -584,7 +368,7 @@ where
                 });
             }
         }
-        let value = consumer.builder.finish_guarded().map_err(|source| {
+        let value = consumer.finish().map_err(|source| {
             let reason = match source {
                 JsonValueMaterializationError::DuplicateKey { .. } => JsonMaterializationErrorReason::DuplicateKey,
                 JsonValueMaterializationError::InvalidNumber { .. } => JsonMaterializationErrorReason::InvalidNumber,
