@@ -1022,7 +1022,7 @@ contract](number_contract.md) for runnable examples.
 
 Choose one of three numeric boundaries deliberately:
 
-- **Ordinary text and Serde events:** strict text requires negative integers in `i64`, non-negative integers in `u64`, and fractional or exponent values that convert to finite `f64`. `i128` and `u128` serializer/seed events are explicitly range-checked. Text decoding checks the original-token `NumberBytes` before numeric range. `AccountingJsonValueSeed` cannot measure that token, but enforces `NumberBytes` using the compact display length of the constructed `Number`; by default, `1e2` (3 source bytes) displays as `100.0` (5 bytes). See the [number contract](number_contract.md). `DuplicateKeyRejectingJsonValueSeed` does not apply a resource budget. For map-shaped Serde events, a seed also cannot tell a real object from an upstream imitation of serde_json's private Number map.
+- **Ordinary text and Serde events:** the default `Integer64` strict text model requires negative integers in `i64`, non-negative integers in `u64`, and fractional or exponent values that convert to finite `f64`. Explicit finite fallback can admit wider integer tokens when they convert to finite `f64`, with possible rounding, through entry points that expose number-model selection. `i128` and `u128` serializer/seed events remain explicitly range-checked. Text decoding checks the original-token `NumberBytes` before numeric range. `AccountingJsonValueSeed` cannot measure that token, but enforces `NumberBytes` using the compact display length of the constructed `Number`; by default, `1e2` (3 source bytes) displays as `100.0` (5 bytes). See the [number contract](number_contract.md). `DuplicateKeyRejectingJsonValueSeed` does not apply a resource budget. For map-shaped Serde events, a seed also cannot tell a real object from an upstream imitation of serde_json's private Number map.
 - **An already materialized `Value` tree:** `JsonTreeReader` counts each existing Number's actual compact display representation without converting it to `f64` or normalizing it. With `arbitrary_precision`, it can count a stored `1e400` or a 39-digit integer at its actual representation length. This accounting rule does not make the number acceptable to an ordinary or JCS encoder.
 - **JCS text:** `JcsDecoder` uses finite IEEE-754 binary64 for every token, including integer lexemes. For example, `9007199254740993` rounds to `9007199254740992`; overflow such as `1e400` is rejected. It also rejects keys duplicated after JSON unescaping and uses the shared builder with configured `max_depth`.
 
@@ -1112,11 +1112,13 @@ never retains arbitrary third-party `Serialize::custom` text. The other
 domains expose `JsonEncodeError`, `JsonSyntaxError`, `JsonTreeProcessError`,
 and `JsonTreeMutateError`.
 
-The numeric contract is independent from resource limits: negative integers fit
-`i64`, non-negative integers fit `u64`, and fractional/exponential values must
-be finite `f64`. Values outside those ranges or exact decimals that must avoid
-binary rounding should use a string or explicit domain representation. See the
-[number contract](number_contract.md).
+The default `Integer64` numeric contract is independent from resource limits:
+negative integers fit `i64`, non-negative integers fit `u64`, and
+fractional/exponential values must be finite `f64`. Under this default model,
+values outside those ranges or exact decimals that must avoid binary rounding
+should use a string or explicit domain representation. Explicit finite
+fallback can admit wider integer tokens when they convert to finite `f64`, with
+possible rounding. See the [number contract](number_contract.md).
 
 ## Troubleshooting
 

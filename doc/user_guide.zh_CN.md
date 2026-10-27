@@ -848,7 +848,7 @@ token 准入不保证具体目标类型或应用 schema 一定接受生成的值
 
 三种数字边界要分开判断：
 
-- **普通文本与 Serde 事件：** strict 文本要求负整数在 `i64` 范围、非负整数在 `u64` 范围，小数或指数可转换为有限 `f64`。序列化器和 seed 收到 `i128`、`u128` 事件时会显式检查范围。文本解码先准入原始 token 的 `NumberBytes`，再检查数值范围。`AccountingJsonValueSeed` 无法测量原始 token，但会按构造后 `Number` 的紧凑显示字节数执行 `NumberBytes` 限制；默认情况下，3 字节的 `1e2` 会显示为 5 字节的 `100.0`。详见[数字契约](number_contract.zh_CN.md)。`DuplicateKeyRejectingJsonValueSeed` 不施加资源预算。遇到 map 形状事件时，seed 也无法判断它是真对象还是上游模拟的 serde_json 私有 Number map。
+- **普通文本与 Serde 事件：** 默认 `Integer64` strict 文本模型要求负整数在 `i64` 范围、非负整数在 `u64` 范围，小数或指数可转换为有限 `f64`。明确选择有限 fallback 的入口可以接受可转换为有限 `f64` 的范围外整数，并可能舍入。序列化器和 seed 收到 `i128`、`u128` 事件时仍按各自契约显式检查范围。文本解码先准入原始 token 的 `NumberBytes`，再检查数值范围。`AccountingJsonValueSeed` 无法测量原始 token，但会按构造后 `Number` 的紧凑显示字节数执行 `NumberBytes` 限制；默认情况下，3 字节的 `1e2` 会显示为 5 字节的 `100.0`。详见[数字契约](number_contract.zh_CN.md)。`DuplicateKeyRejectingJsonValueSeed` 不施加资源预算。遇到 map 形状事件时，seed 也无法判断它是真对象还是上游模拟的 serde_json 私有 Number map。
 - **已经物化的 `Value` 树：** `JsonTreeReader` 按现有 Number 的紧凑显示内容长度计量，不先转 `f64`，也不改写数字。启用 `arbitrary_precision` 后，树读取器能按实际表示计量 `1e400` 或 39 位整数。这条计量规则不代表普通或 JCS encoder 会接受该数字。
 - **JCS 文本：** `JcsDecoder` 对所有 token（包括整数词法）使用有限 IEEE-754 binary64。例如 `9007199254740993` 会舍入为 `9007199254740992`；`1e400` 这类溢出会被拒绝。解码还会拒绝反转义后重复的键，并使用受配置 `max_depth` 控制的共享 builder。
 
@@ -924,8 +924,9 @@ CR 都会开始新行；CRLF 只算一个换行。对于 `Deserialize`，坐标�
 `JsonTreeMutateError`。JCS 解码另返回 `JcsDecodeError`：普通输入、预算和深度限制在 `Decode` 中，重复键由
 `DuplicateKey` 标识并带有源坐标；`MaterializationDepthLimit` 仅作为历史兼容变体保留。
 
-数字契约独立于资源限制：负整数装入 `i64`，非负整数装入 `u64`，小数/指数必须是有限 `f64`。
-超出范围或必须避免二进制浮点舍入的精确十进制，应使用字符串或显式领域表示。详见
+默认 `Integer64` 数字契约独立于资源限制：负整数装入 `i64`，非负整数装入 `u64`，小数/指数必须是有限 `f64`。
+在此默认模型下，超出范围的值或必须避免二进制浮点舍入的精确十进制应使用字符串或显式领域表示。
+明确选择有限 fallback 的入口可以接受转换为有限 `f64` 的范围外整数，并可能舍入。详见
 [JSON 数字契约](number_contract.zh_CN.md)。
 
 ## 排障
