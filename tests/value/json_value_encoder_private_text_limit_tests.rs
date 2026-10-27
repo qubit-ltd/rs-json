@@ -313,12 +313,15 @@ fn test_private_text_limit_failure_does_not_replace_first_budget_failure() {
 fn test_private_text_limit_failure_can_be_dropped_before_next_transaction() {
     let raw = RawValue::from_string("\"too long\"".to_owned()).unwrap();
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .max_nodes(2)
+        .max_nodes(3)
         .max_payload_bytes(16)
         .build();
     let mut budget = JsonValueBudget::new(limits);
     {
         let mut transaction = budget.transaction();
+        JsonValueEncoder::new()
+            .encode_in_transaction_with_private_text_limit(&true, &mut transaction, 1)
+            .unwrap();
         assert!(matches!(
             JsonValueEncoder::new().encode_in_transaction_with_private_text_limit(
                 &raw,
@@ -330,9 +333,10 @@ fn test_private_text_limit_failure_can_be_dropped_before_next_transaction() {
     }
     let mut transaction = budget.transaction();
     JsonValueEncoder::new()
-        .encode_in_transaction_with_private_text_limit(&true, &mut transaction, 1)
+        .encode_in_transaction_with_private_text_limit(&[true, true], &mut transaction, 1)
         .unwrap();
     transaction.commit().unwrap();
+    assert_eq!(budget.used_nodes(), Some(3));
 }
 
 #[test]
