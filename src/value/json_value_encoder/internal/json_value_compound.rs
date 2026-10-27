@@ -9,6 +9,7 @@
 
 use std::cell::Cell;
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonContainerKind;
@@ -47,6 +48,7 @@ enum CompoundState {
     },
     Map {
         values: Vec<(String, SafeJsonValue)>,
+        keys: BTreeSet<String>,
         next_key: Option<String>,
         depth: usize,
         count: usize,
@@ -60,6 +62,7 @@ enum CompoundState {
     StructVariant {
         variant: String,
         values: Vec<(String, SafeJsonValue)>,
+        keys: BTreeSet<String>,
         depth: usize,
         count: usize,
     },
@@ -117,6 +120,7 @@ where
             context,
             state: CompoundState::Map {
                 values: Vec::with_capacity(capacity),
+                keys: BTreeSet::new(),
                 next_key: None,
                 depth,
                 count: 0,
@@ -154,6 +158,7 @@ where
             state: CompoundState::StructVariant {
                 variant: variant.to_owned(),
                 values: Vec::with_capacity(capacity),
+                keys: BTreeSet::new(),
                 depth,
                 count: 0,
             },
@@ -532,7 +537,7 @@ where
         self.check_failure()?;
         let (key, depth) = match &self.state {
             CompoundState::Map {
-                values,
+                keys,
                 next_key,
                 depth,
                 ..
@@ -540,7 +545,7 @@ where
                 let Some(key) = next_key.as_ref() else {
                     return Err(self.fail(invalid_state(JsonSerializerStateError::MapValueWithoutKey)));
                 };
-                if values.iter().any(|(existing, _)| existing == key) {
+                if keys.contains(key.as_str()) {
                     return Err(self.fail(JsonSerializationError::new(
                         JsonSerializationErrorKind::DuplicateObjectKey,
                     )));
@@ -549,6 +554,9 @@ where
             }
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
+        if let CompoundState::Map { keys, .. } = &mut self.state {
+            keys.insert(key.clone());
+        }
         let child_depth = depth
             .checked_add(1)
             .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
@@ -599,9 +607,9 @@ where
         self.check_failure()?;
         match &self.state {
             CompoundState::Map {
-                values, depth, count, ..
+                keys, depth, count, ..
             } => {
-                let (depth, count, duplicate) = (*depth, *count, values.iter().any(|(existing, _)| existing == key));
+                let (depth, count, duplicate) = (*depth, *count, keys.contains(key));
                 if duplicate {
                     return Err(self.fail(JsonSerializationError::new(
                         JsonSerializationErrorKind::DuplicateObjectKey,
@@ -616,6 +624,9 @@ where
                 })?;
                 self.check_count(JsonContainerKind::Map, next)?;
                 self.admit(JsonMeasurement::Key { bytes: key.len() })?;
+                if let CompoundState::Map { keys, .. } = &mut self.state {
+                    keys.insert(key.to_owned());
+                }
                 let child_depth = depth
                     .checked_add(1)
                     .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
@@ -668,8 +679,8 @@ where
         self.check_failure()?;
         let (depth, count, duplicate) = match &self.state {
             CompoundState::StructVariant {
-                values, depth, count, ..
-            } => (*depth, *count, values.iter().any(|(existing, _)| existing == key)),
+                keys, depth, count, ..
+            } => (*depth, *count, keys.contains(key)),
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
         if duplicate {
@@ -686,6 +697,9 @@ where
         })?;
         self.check_count(JsonContainerKind::Map, next)?;
         self.admit(JsonMeasurement::Key { bytes: key.len() })?;
+        if let CompoundState::StructVariant { keys, .. } = &mut self.state {
+            keys.insert(key.to_owned());
+        }
         let child_depth = depth
             .checked_add(2)
             .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;

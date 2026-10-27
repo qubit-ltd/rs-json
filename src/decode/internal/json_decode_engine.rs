@@ -86,6 +86,7 @@ struct ValidatedValueConsumer<F, E> {
     policy: F,
     options: JsonValidatedDecodeOptions,
     path: Vec<JsonPathSegment>,
+    track_path: bool,
     containers: Vec<ValidatedContainer>,
     nodes: usize,
     next_number_policy: JsonNumberPolicy,
@@ -113,11 +114,15 @@ impl<F, E> ValidatedValueConsumer<F, E> {
         if let Some(parent) = self.containers.last_mut() {
             match parent {
                 ValidatedContainer::Array { next_index } => {
-                    self.path.pop();
+                    if self.track_path {
+                        self.path.pop();
+                    }
                     *next_index = next_index.saturating_add(1);
                 }
                 ValidatedContainer::Object => {
-                    self.path.pop();
+                    if self.track_path {
+                        self.path.pop();
+                    }
                 }
             }
         }
@@ -131,7 +136,7 @@ where
     type Error = ValidatedConsumerError<E>;
 
     fn before_value(&mut self, _depth: usize, offset: usize) -> Result<(), Self::Error> {
-        if let Some(ValidatedContainer::Array { next_index }) = self.containers.last() {
+        if self.track_path && let Some(ValidatedContainer::Array { next_index }) = self.containers.last() {
             self.path.push(JsonPathSegment::Index(*next_index));
         }
         self.nodes = self.nodes.saturating_add(1);
@@ -189,14 +194,16 @@ where
             }
             JsonLexicalEvent::Key { token, offset } => {
                 self.check_encoded_limit(token.len(), offset)?;
+                let key = serde_json::from_slice::<String>(token).expect("scanner admitted valid key token");
                 self.builder
-                    .try_accept(JsonLexicalEvent::Key { token, offset })
+                    .try_accept_decoded_key(key.clone(), offset)
                     .map_err(|source| ValidatedConsumerError::Materialization {
                         source,
                         context: JsonDecodeContext::ObjectKey,
                     })?;
-                let key = serde_json::from_slice::<String>(token).expect("scanner admitted valid key token");
-                self.path.push(JsonPathSegment::Key(key));
+                if self.track_path {
+                    self.path.push(JsonPathSegment::Key(key));
+                }
             }
             JsonLexicalEvent::String { token, offset } => {
                 self.check_encoded_limit(token.len(), offset)?;
@@ -439,6 +446,21 @@ where
     where
         F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
     {
+        self.decode_unique_value_buffer(input, options, policy, diagnostic_policy, charge_input, true)
+    }
+
+    fn decode_unique_value_buffer<E, F>(
+        &mut self,
+        input: &[u8],
+        options: &JsonValidatedDecodeOptions,
+        policy: F,
+        diagnostic_policy: DiagnosticPolicy,
+        charge_input: bool,
+        track_path: bool,
+    ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
+    where
+        F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
+    {
         let raw_input_bytes = input.len();
         let depth_limit = self.session.value_budget().limits().max_depth();
         let has_value_limits = self.session.value_budget().limits().has_limits();
@@ -470,6 +492,7 @@ where
             policy,
             options: options.clone(),
             path: Vec::new(),
+            track_path,
             containers: Vec::new(),
             nodes: 0,
             next_number_policy: JsonNumberPolicy::Preserve,
@@ -599,6 +622,38 @@ where
         Ok(value)
     }
 
+    pub(in crate::decode) fn decode_value_utf8(
+        &mut self,
+        input: &[u8],
+        diagnostic_policy: DiagnosticPolicy,
+    ) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
+        self.decode_owned_value_buffer(input, diagnostic_policy, true)
+    }
+
+    fn decode_owned_value_buffer(
+        &mut self,
+        input: &[u8],
+        diagnostic_policy: DiagnosticPolicy,
+        charge_input: bool,
+    ) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
+        let options = JsonValidatedDecodeOptions::builder().build();
+        self.decode_unique_value_buffer(
+            input,
+            &options,
+            |_, _| Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve),
+            diagnostic_policy,
+            charge_input,
+            false,
+        )
+        .map_err(|error| match error {
+            JsonValidatedDecodeError::Decode { error, .. } => error,
+            JsonValidatedDecodeError::Policy { source, .. } => match source {},
+            JsonValidatedDecodeError::ExactSafeInteger { .. } | JsonValidatedDecodeError::Limit { .. } => {
+                unreachable!("owned value decoding has no policy or additional limits")
+            }
+        })
+    }
+
     pub(in crate::decode) fn decode_unique_validated_utf8<E, F>(
         &mut self,
         input: &[u8],
@@ -629,6 +684,21 @@ where
                 .map_err(|error| JsonValidatedDecodeError::Decode { error, context: None })?
         };
         self.decode_unique_validated_buffer(&bytes, options, policy, diagnostic_policy, false)
+    }
+
+    pub(in crate::decode) fn decode_value_input<I>(
+        &mut self,
+        input: &mut I,
+        diagnostic_policy: DiagnosticPolicy,
+    ) -> Result<SafeJsonValue, JsonDecodeError<R, Q>>
+    where
+        I: qubit_io::ByteInput + ?Sized,
+    {
+        let bytes = {
+            let mut attempt = self.session.begin_value();
+            Self::read_input_bytes(&mut attempt, input, diagnostic_policy)?
+        };
+        self.decode_owned_value_buffer(&bytes, diagnostic_policy, false)
     }
 
     /// Admits a unique-key document and deserializes native events atomically.

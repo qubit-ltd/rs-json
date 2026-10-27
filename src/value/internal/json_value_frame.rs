@@ -7,6 +7,8 @@
 // =============================================================================
 //! One guarded open array or object in a lexical JSON value builder.
 
+use std::collections::BTreeSet;
+
 use crate::value::SafeJsonValue;
 
 /// The container currently being materialized.
@@ -17,6 +19,8 @@ pub(crate) enum JsonValueFrame {
     Object {
         /// Values accumulated for this object.
         values: Vec<(String, SafeJsonValue)>,
+        /// Decoded keys accepted for this object.
+        keys: BTreeSet<String>,
         /// Key emitted immediately before the next value.
         pending_key: Option<String>,
     },

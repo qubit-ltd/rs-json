@@ -24,7 +24,10 @@ use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecodeErrorSource;
 use qubit_json::decode::JsonDecodeStage;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::JsonNumberPolicy;
+use qubit_json::decode::JsonPathSegment;
 use qubit_json::decode::JsonSyntaxErrorReason;
+use qubit_json::decode::JsonValidatedDecodeOptions;
 use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use serde::Deserializer;
 use serde::de::DeserializeSeed;
@@ -32,6 +35,94 @@ use serde::de::Error as DeError;
 use serde_json::Error as SerdeJsonError;
 use serde_json::Value;
 use serde_json::json;
+
+#[test]
+fn test_indexed_object_keys_preserve_decoded_identity() {
+    let duplicate = r#"{"a":1,"\u0061":2}"#;
+    let error = JsonDecoder::unlimited().decode_value_str(duplicate).unwrap_err();
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.line(), Some(1));
+    assert_eq!(error.column(), Some(8));
+
+    let error = JsonDecoder::unlimited()
+        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(duplicate)
+        .unwrap_err();
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.column(), Some(8));
+
+    let nested = JsonDecoder::unlimited()
+        .decode_value_str(r#"{"a":1,"child":{"a":2}}"#)
+        .expect("equal keys in separate objects are valid");
+    assert_eq!(nested.as_value(), &json!({"a": 1, "child": {"a": 2}}));
+    let options = JsonValidatedDecodeOptions::builder().build();
+    let validated = JsonDecoder::unlimited()
+        .decode_unique_validated_str(r#"{"a":1,"child":{"a":2}}"#, &options, |_, _| {
+            Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+        })
+        .expect("validated preserve must accept the same document");
+    assert_eq!(nested.as_value(), validated.as_value());
+
+    let limits = JsonDecodeLimits::builder()
+        .input_bytes_limit(ResourceLimit::new(qubit_budget::json::JsonResource::InputBytes, 4_usize))
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let mut input = Cursor::new(b"true".to_vec());
+    assert_eq!(
+        decoder
+            .decode_value_input(&mut input)
+            .expect("owned input path must not charge bytes twice")
+            .as_value(),
+        &Value::Bool(true)
+    );
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 4);
+
+    let mut many = String::from("{");
+    for index in 0..4096 {
+        if index != 0 {
+            many.push(',');
+        }
+        many.push_str(&format!("\"key-{index}\":{index}"));
+    }
+    many.push('}');
+    let value = JsonDecoder::unlimited()
+        .decode_value_str(&many)
+        .expect("4096 distinct keys must be preserved");
+    assert_eq!(value.as_value().as_object().unwrap().len(), 4096);
+    many.pop();
+    many.push_str(",\"key-0\":0}");
+    let error = JsonDecoder::unlimited().decode_value_str(&many).unwrap_err();
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+
+    let limits = JsonDecodeLimits::builder().max_nodes(2_usize).build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let error = decoder.decode_value_str(r#"{"a":1,"b":2}"#).unwrap_err();
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+}
+
+#[test]
+fn test_validated_decode_keeps_nested_path_and_token_metadata() {
+    let options = JsonValidatedDecodeOptions::builder().build();
+    let mut seen = None;
+    JsonDecoder::unlimited()
+        .decode_unique_validated_str(r#"{"items":[{"n":7}]}"#, &options, |path, token| {
+            seen = Some((path.to_vec(), token.raw().to_owned(), token.offset()));
+            Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+        })
+        .expect("validated preserve policy must decode");
+    assert_eq!(
+        seen,
+        Some((
+            vec![
+                JsonPathSegment::Key("items".to_owned()),
+                JsonPathSegment::Index(0),
+                JsonPathSegment::Key("n".to_owned()),
+            ],
+            "7".to_owned(),
+            15,
+        ))
+    );
+}
 
 #[derive(Debug, serde::Deserialize, PartialEq)]
 #[serde(untagged)]

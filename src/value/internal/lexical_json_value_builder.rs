@@ -10,6 +10,7 @@
 #[cfg(feature = "jcs")]
 use serde_json::Number;
 use serde_json::Value;
+use std::collections::BTreeSet;
 
 use super::JsonValueFrame;
 use super::JsonValueMaterializationError;
@@ -62,6 +63,23 @@ impl LexicalJsonValueBuilder {
         self.try_push_value(Value::Number(number))
     }
 
+    /// Accepts a key that a caller has already decoded from its source token.
+    pub(crate) fn try_accept_decoded_key(
+        &mut self,
+        key: String,
+        offset: usize,
+    ) -> Result<(), JsonValueMaterializationError> {
+        if let Some(error) = self.error.as_ref() {
+            return Err(error.clone());
+        }
+        let result = self.accept_decoded_key_inner(key, offset);
+        if let Err(error) = result {
+            self.error = Some(error.clone());
+            return Err(error);
+        }
+        Ok(())
+    }
+
     /// Returns the guarded complete value.
     pub(crate) fn finish_guarded(mut self) -> Result<SafeJsonValue, JsonValueMaterializationError> {
         if let Some(error) = self.error.take() {
@@ -106,14 +124,7 @@ impl LexicalJsonValueBuilder {
             }
             JsonLexicalEvent::Key { token, offset } => {
                 let key = serde_json::from_slice::<String>(token).expect("scanner admitted valid JSON key");
-                let Some(JsonValueFrame::Object { values, pending_key }) = self.frames.last_mut() else {
-                    unreachable!("scanner emits keys within objects")
-                };
-                if values.iter().any(|(existing, _)| existing == &key) {
-                    return Err(JsonValueMaterializationError::DuplicateKey { offset });
-                }
-                *pending_key = Some(key);
-                Ok(())
+                self.accept_decoded_key_inner(key, offset)
             }
             JsonLexicalEvent::BeginArray { .. } => {
                 self.frames.push(JsonValueFrame::Array(Vec::new()));
@@ -122,6 +133,7 @@ impl LexicalJsonValueBuilder {
             JsonLexicalEvent::BeginObject { .. } => {
                 self.frames.push(JsonValueFrame::Object {
                     values: Vec::new(),
+                    keys: BTreeSet::new(),
                     pending_key: None,
                 });
                 Ok(())
@@ -137,7 +149,7 @@ impl LexicalJsonValueBuilder {
                 self.try_push_value(builder.finish())
             }
             JsonLexicalEvent::EndObject { .. } => {
-                let Some(JsonValueFrame::Object { values, pending_key }) = self.frames.pop() else {
+                let Some(JsonValueFrame::Object { values, pending_key, .. }) = self.frames.pop() else {
                     unreachable!("scanner emits matched object events")
                 };
                 debug_assert!(pending_key.is_none());
@@ -150,11 +162,27 @@ impl LexicalJsonValueBuilder {
         }
     }
 
+    fn accept_decoded_key_inner(
+        &mut self,
+        key: String,
+        offset: usize,
+    ) -> Result<(), JsonValueMaterializationError> {
+        let Some(JsonValueFrame::Object { keys, pending_key, .. }) = self.frames.last_mut() else {
+            unreachable!("scanner emits keys within objects")
+        };
+        if keys.contains(key.as_str()) {
+            return Err(JsonValueMaterializationError::DuplicateKey { offset });
+        }
+        keys.insert(key.clone());
+        *pending_key = Some(key);
+        Ok(())
+    }
+
     fn try_push_value(&mut self, value: Value) -> Result<(), JsonValueMaterializationError> {
         let guarded = SafeJsonValue::new(value);
         match self.frames.last_mut() {
             Some(JsonValueFrame::Array(values)) => values.push(guarded),
-            Some(JsonValueFrame::Object { values, pending_key }) => {
+            Some(JsonValueFrame::Object { values, pending_key, .. }) => {
                 let key = pending_key.take().expect("object value follows key event");
                 values.push((key, guarded));
             }

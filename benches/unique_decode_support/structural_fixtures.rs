@@ -76,7 +76,13 @@ pub(crate) struct StructuralFixture {
 }
 
 fn object_values(count: usize) -> BTreeMap<String, String> {
-    (0..count).map(|i| (format!("k{i:06}"), format!("v{i:06}"))).collect()
+    object_values_with_prefix(count, "k")
+}
+
+fn object_values_with_prefix(count: usize, prefix: &str) -> BTreeMap<String, String> {
+    (0..count)
+        .map(|i| (format!("{prefix}{i:06}"), format!("v{i:06}")))
+        .collect()
 }
 
 fn record_values(count: usize) -> Vec<StructuralRecord> {
@@ -93,23 +99,32 @@ fn assert_count(count: usize) {
 }
 
 pub(crate) fn success_fixture(shape: StructuralShape, count: usize) -> StructuralFixture {
+    success_fixture_with_prefix(shape, count, "k")
+}
+
+pub(crate) fn long_prefix_success_fixture(count: usize) -> StructuralFixture {
+    success_fixture_with_prefix(StructuralShape::WideObject, count, "shared-public-prefix-")
+}
+
+fn success_fixture_with_prefix(shape: StructuralShape, count: usize, key_prefix: &str) -> StructuralFixture {
     assert_count(count);
     let (text, expected, node_count, payload_bytes, max_depth, max_sequence_items, max_map_entries, max_number_bytes) =
         match shape {
             StructuralShape::WideObject => {
-                let values = object_values(count);
+                let values = object_values_with_prefix(count, key_prefix);
                 let text = serde_json::to_string(&values).expect("object fixture must serialize");
                 let parsed: serde_json::Value = serde_json::from_str(&text).expect("object fixture must parse");
                 assert_eq!(parsed.as_object().expect("object fixture is object").len(), count);
                 for (index, (key, value)) in values.iter().enumerate() {
                     assert_eq!(parsed[key], *value);
-                    assert_eq!(key, &format!("k{index:06}"));
+                    assert_eq!(key, &format!("{key_prefix}{index:06}"));
                 }
+                let payload_bytes = values.iter().map(|(key, value)| key.len() + value.len()).sum();
                 (
                     text,
                     Some(StructuralExpected::Object(values)),
                     count + 1,
-                    14 * count,
+                    payload_bytes,
                     2,
                     0,
                     count,
@@ -148,12 +163,16 @@ pub(crate) fn success_fixture(shape: StructuralShape, count: usize) -> Structura
         max_depth,
         max_sequence_items,
         max_map_entries,
-        max_key_bytes: 7,
+        max_key_bytes: if shape == StructuralShape::WideObject {
+            key_prefix.len() + 6
+        } else {
+            7
+        },
         max_string_bytes: 7,
         max_number_bytes,
     };
     let expected_bytes = match shape {
-        StructuralShape::WideObject => 20 * count + 1,
+        StructuralShape::WideObject => count * (key_prefix.len() + 19) + 1,
         StructuralShape::RecordArray => 29 * count + 1,
     };
     assert_eq!(fixture.text.len(), expected_bytes, "fixture byte budget formula");

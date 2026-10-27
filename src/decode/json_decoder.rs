@@ -7,8 +7,6 @@
 // =============================================================================
 //! Stateful strict JSON decoding with caller-owned resource accounting.
 
-use std::convert::Infallible;
-
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
@@ -124,20 +122,7 @@ where
     /// Returns a structured error for invalid UTF-8, syntax, numeric range,
     /// duplicate keys, or configured resource limits.
     pub fn decode_value_utf8(&mut self, input: &[u8]) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
-        let options = JsonValidatedDecodeOptions::builder().build();
-        match self.engine.decode_unique_validated_utf8(
-            input,
-            &options,
-            |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve),
-            self.diagnostic_policy,
-        ) {
-            Ok(value) => Ok(value),
-            Err(JsonValidatedDecodeError::Decode { error, .. }) => Err(error),
-            Err(JsonValidatedDecodeError::Policy { source, .. }) => match source {},
-            Err(JsonValidatedDecodeError::ExactSafeInteger { .. } | JsonValidatedDecodeError::Limit { .. }) => {
-                unreachable!("default value decode uses no failing policy or extra limits")
-            }
-        }
+        self.engine.decode_value_utf8(input, self.diagnostic_policy)
     }
 
     /// UTF-8 string form of [`Self::decode_value_utf8`].
@@ -180,20 +165,7 @@ where
         &mut self,
         input: &mut I,
     ) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
-        let options = JsonValidatedDecodeOptions::builder().build();
-        match self.engine.decode_unique_validated_input(
-            input,
-            &options,
-            |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve),
-            self.diagnostic_policy,
-        ) {
-            Ok(value) => Ok(value),
-            Err(JsonValidatedDecodeError::Decode { error, .. }) => Err(error),
-            Err(JsonValidatedDecodeError::Policy { source, .. }) => match source {},
-            Err(JsonValidatedDecodeError::ExactSafeInteger { .. } | JsonValidatedDecodeError::Limit { .. }) => {
-                unreachable!("default value decode uses no failing policy or extra limits")
-            }
-        }
+        self.engine.decode_value_input(input, self.diagnostic_policy)
     }
 
     /// Decodes one document while applying a caller policy to each source

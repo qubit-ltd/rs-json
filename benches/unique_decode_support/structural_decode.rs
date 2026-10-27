@@ -14,7 +14,10 @@ use qubit_budget::ResourceLimit;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonResource;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::JsonNumberPolicy;
+use qubit_json::decode::JsonValidatedDecodeOptions;
 use qubit_json::value::DuplicateKeyRejectingJsonValue;
+use qubit_json::value::JsonValueEncoder;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde::de::DeserializeSeed;
@@ -214,4 +217,27 @@ pub(crate) fn decode_reject_once(
         JsonDecoder::unlimited()
     };
     decoder.decode_unique_str::<DuplicateKeyRejectingJsonValue>(&fixture.text)
+}
+
+pub(crate) fn decode_owned_value(fixture: &StructuralFixture) -> StructuralDecoded {
+    let value = JsonDecoder::unlimited()
+        .decode_value_str(&fixture.text)
+        .expect("owned value fixture must decode");
+    StructuralDecoded::Value(value.into_value())
+}
+
+pub(crate) fn decode_validated_preserve(fixture: &StructuralFixture) -> StructuralDecoded {
+    let options = JsonValidatedDecodeOptions::builder().build();
+    let value = JsonDecoder::unlimited()
+        .decode_unique_validated_str(&fixture.text, &options, |_, _| {
+            Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+        })
+        .expect("validated preserve fixture must decode");
+    StructuralDecoded::Value(value.into_value())
+}
+
+pub(crate) fn project_value(source: &serde_json::Value) -> serde_json::Value {
+    JsonValueEncoder::new()
+        .encode(source)
+        .expect("structural value projection must succeed")
 }

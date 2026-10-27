@@ -195,6 +195,61 @@ fn unique_decode_structural(c: &mut Criterion) {
         }
     }
 
+    for (key_style, fixture) in COUNTS
+        .into_iter()
+        .map(|count| (
+            "short_key",
+            unique_decode_support::structural_fixtures::success_fixture(StructuralShape::WideObject, count),
+        ))
+        .chain(COUNTS.into_iter().map(|count| {
+            (
+                "long_prefix",
+                unique_decode_support::structural_fixtures::long_prefix_success_fixture(count),
+            )
+        }))
+    {
+        for path in ["owned_value", "validated_preserve"] {
+            let decoded = match path {
+                "owned_value" => structural_decode::decode_owned_value(&fixture),
+                "validated_preserve" => structural_decode::decode_validated_preserve(&fixture),
+                _ => unreachable!(),
+            };
+            structural_decode::assert_decoded(&decoded, &fixture);
+            black_box(decoded);
+            let name = format!(
+                "unique_decode_structural/wide_object/{}items/{key_style}/{path}/unlimited/fresh",
+                fixture.count
+            );
+            let mut group = c.benchmark_group(name);
+            group.throughput(Throughput::Bytes(fixture.text.len() as u64));
+            group.bench_function("decode", |bencher| {
+                bencher.iter(|| {
+                    let decoded = match path {
+                        "owned_value" => structural_decode::decode_owned_value(black_box(&fixture)),
+                        "validated_preserve" => structural_decode::decode_validated_preserve(black_box(&fixture)),
+                        _ => unreachable!(),
+                    };
+                    black_box(decoded)
+                });
+            });
+            group.finish();
+        }
+
+        let source: serde_json::Value =
+            serde_json::from_str(&fixture.text).expect("projection source fixture must parse");
+        assert_eq!(structural_decode::project_value(&source), source);
+        let name = format!(
+            "unique_decode_structural/wide_object/{}items/{key_style}/value_projection/unlimited/fresh",
+            fixture.count
+        );
+        let mut group = c.benchmark_group(name);
+        group.throughput(Throughput::Bytes(fixture.text.len() as u64));
+        group.bench_function("project", |bencher| {
+            bencher.iter(|| black_box(structural_decode::project_value(black_box(&source))));
+        });
+        group.finish();
+    }
+
     for count in COUNTS {
         for position in [DuplicatePosition::Early, DuplicatePosition::Late] {
             let fixture = unique_decode_support::structural_fixtures::reject_fixture(count, position);
