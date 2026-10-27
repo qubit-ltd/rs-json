@@ -17,8 +17,9 @@ feature_sets=(
 )
 for json_features in "${feature_sets[@]}"; do
     if [[ -z "$json_features" ]]; then
-        cargo test --locked --lib
+        cargo test --locked --lib --test tests
     else
-        cargo test --locked --lib --features "$json_features"
+        cargo test --locked --lib --test tests --features "$json_features"
     fi
 done
+cargo test --locked --doc --features jcs

@@ -28,6 +28,10 @@
 
 #![deny(missing_docs)]
 
+#[cfg(doctest)]
+#[doc(hidden)]
+mod documentation_examples;
+
 #[cfg(test)]
 mod tests;
 
