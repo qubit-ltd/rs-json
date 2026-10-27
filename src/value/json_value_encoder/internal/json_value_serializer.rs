@@ -425,7 +425,7 @@ mod tests {
         for path in ["bytes", "newtype", "tuple", "struct"] {
             let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
             let mut transaction = budget.transaction();
-            let context = RefCell::new(JsonValueEncodeContext::new(&mut transaction));
+            let context = RefCell::new(JsonValueEncodeContext::new(&mut transaction, None));
             let serializer = JsonValueSerializer::new(&context, usize::MAX);
             let result = match path {
                 "bytes" => serializer.serialize_bytes(&[1]).map(|_| ()),
