@@ -111,14 +111,12 @@ fn unique_decode(c: &mut Criterion) {
                     reject.bytes(),
                     budget
                 );
+                let _ = black_box(assert_duplicate_rejected(decode_reject_once(&reject, finite)));
                 let mut group = c.benchmark_group(name);
                 group.throughput(Throughput::Bytes(reject.bytes() as u64));
                 group.bench_function("duplicate_key", |bencher| {
                     bencher.iter(|| {
-                        let _ = black_box(assert_duplicate_rejected(decode_reject_once(
-                            black_box(&reject),
-                            finite,
-                        )));
+                        black_box(decode_reject_once(black_box(&reject), finite));
                     });
                 });
                 group.finish();
@@ -257,6 +255,12 @@ fn unique_decode_structural(c: &mut Criterion) {
             let fixture = unique_decode_support::structural_fixtures::reject_fixture(count, position);
             for finite in [false, true] {
                 let budget = if finite { "finite" } else { "unlimited" };
+                assert_eq!(fixture.shape, StructuralShape::WideObject);
+                assert!(fixture.expected.is_none());
+                assert!(matches!(
+                    fixture.reject_position,
+                    Some(DuplicatePosition::Early | DuplicatePosition::Late)
+                ));
                 let error = unique_decode_support::decode_path::assert_duplicate_rejected(
                     structural_decode::decode_reject_once(&fixture, finite),
                 );
@@ -270,10 +274,7 @@ fn unique_decode_structural(c: &mut Criterion) {
                 group.throughput(Throughput::Bytes(fixture.text.len() as u64));
                 group.bench_function("duplicate_key", |bencher| {
                     bencher.iter(|| {
-                        let error = unique_decode_support::decode_path::assert_duplicate_rejected(
-                            structural_decode::decode_reject_once(black_box(&fixture), finite),
-                        );
-                        let _ = black_box(error);
+                        black_box(structural_decode::decode_reject_once(black_box(&fixture), finite));
                     });
                 });
                 group.finish();

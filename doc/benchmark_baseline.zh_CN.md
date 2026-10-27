@@ -59,7 +59,8 @@ tree 基准区分纯 visitor 遍历、无限制与有限制的 reader，以及 m
 四种组合。
 
 `decoder_bench` 中的 `jcs_decode` 组覆盖 1 KiB 和 64 KiB 数字数组、64 层对象、普通/转义键写法以及重复键拒绝。
-计时前会断言成功 fixture 确实解码成功。有限和无限配置都分别测量 fresh decoder；reused session 场景在同一 decoder 中连续成功解码
+计时前会断言成功 fixture 确实解码成功，并在同一个 decoder 上完成全部八次 reused-session 预检；重复键预检会检查具体拒绝原因。
+计时闭包只执行解码并消费结果，不检查成功状态。有限和无限配置都分别测量 fresh decoder；reused session 场景在同一 decoder 中连续解码
 8 次，每个 Criterion batch 都重新创建 session。因此用量会在一个 batch 内累计，但不会跨 Criterion 样本耗尽。
 
 唯一键目标使用三种自有 fixture：配置对象、字符串元数据 map，以及包含版本和记录列表的 wire envelope。
@@ -67,6 +68,10 @@ tree 基准区分纯 visitor 遍历、无限制与有限制的 reader，以及 m
 Criterion 会比较唯一键动态包装器、类型化 decode、typed seed、普通 `JsonDecoder` 和直接 `serde_json`。
 直接对照不提供全局重复键拒绝契约。有限预算覆盖输入与值资源；复用场景每个 batch 都新建 decoder，再连续成功解码
 8 份文档，并为整批累计用量预留足够额度。
+
+唯一键延迟目标会在注册测量前预检单次成功结果和完整 batch8 结果。重复键拒绝结果也会在计时前检查是否为 `DuplicateKey`，
+计时闭包只执行解码并消费结果。本次测量边界调整不改变 fixture、预算、decoder 生命周期、结果析构位置或 throughput，也不改写历史样本。
+新旧计时样本包含的校验工作不同，不能据此声称加速；本次没有重新采集性能基线。
 
 延迟目标使用系统默认分配器。独立分配目标输出 `UNIQUE_DECODE_ALLOC` 记录，包含形态、字节数、路径、预算、模式、
 分配次数、请求字节总量和 realloc 次数。realloc 请求计入请求字节总量并单独计数，不代表新增存活字节。

@@ -62,11 +62,14 @@ readers, and all four input/output limit combinations for mutators.
 
 The `jcs_decode` group in `decoder_bench` covers 1 KiB and 64 KiB numeric
 arrays, a 64-container object, plain and escaped key spellings, and duplicate
-key rejection. Successful fixtures are asserted before timing. Unlimited and
-finite configurations each measure fresh decoder construction; reused-session
-cases run a bounded batch of eight successful decodes in one decoder. Every
-batch starts with a new session, so usage can accumulate within that batch but
-cannot exhaust one session across Criterion samples.
+key rejection. Successful fixtures are asserted before timing, including all
+eight decodes on one decoder for reused-session preflight; duplicate-key
+preflight checks the specific rejection reason. Timed closures decode and
+consume each result without checking its success. Unlimited and finite
+configurations each measure fresh decoder construction; reused-session cases
+run a bounded batch of eight decodes in one decoder. Every batch starts with a
+new session, so usage can accumulate within that batch but cannot exhaust one
+session across Criterion samples.
 
 The unique-key targets use three owned fixture shapes: a configuration object,
 a string metadata map, and a versioned wire envelope with records. Fixture
@@ -77,6 +80,15 @@ seed, ordinary `JsonDecoder`, and direct `serde_json`. Direct controls do not
 enforce global duplicate-key rejection. Finite cases cap input and value
 resources; reused samples create a fresh decoder per batch and decode eight
 documents with cumulative limits sized for the whole batch.
+
+The unique-key latency targets preflight successful single and batch8 results
+before registering measurements. Duplicate-rejection results are checked for
+`DuplicateKey` before timing, while timed closures only perform and consume the
+decode result. This measurement-boundary change does not alter the fixtures,
+budgets, decoder lifecycle, result destruction, throughput, or historical
+samples. Old and new timing samples use different validation overhead and must
+not be compared as evidence of a speedup; no new performance baseline was
+collected for this change.
 
 The latency target uses the system allocator. The separate allocation target
 prints `UNIQUE_DECODE_ALLOC` records with shape, bytes, path, budget, mode,

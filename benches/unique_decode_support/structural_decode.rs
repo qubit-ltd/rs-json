@@ -23,7 +23,6 @@ use serde::de::DeserializeOwned;
 use serde::de::DeserializeSeed;
 
 use super::decode_path::DecodePath;
-use super::structural_fixtures::DuplicatePosition;
 use super::structural_fixtures::StructuralExpected;
 use super::structural_fixtures::StructuralFixture;
 use super::structural_fixtures::StructuralRecord;
@@ -205,12 +204,6 @@ pub(crate) fn decode_reject_once(
     fixture: &StructuralFixture,
     finite: bool,
 ) -> Result<DuplicateKeyRejectingJsonValue, qubit_json::decode::JsonDecodeError> {
-    assert_eq!(fixture.shape, StructuralShape::WideObject);
-    assert!(fixture.expected.is_none());
-    assert!(matches!(
-        fixture.reject_position,
-        Some(DuplicatePosition::Early | DuplicatePosition::Late)
-    ));
     let mut decoder = if finite {
         finite_decoder(fixture, 1)
     } else {
