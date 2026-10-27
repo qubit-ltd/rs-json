@@ -695,8 +695,8 @@ CR 都会开始新行；CRLF 只算一个换行。对于 `Deserialize`，坐标�
 - `UnexpectedTopLevel`：比较 `expected_top_level()` 与 `actual_top_level()`，修正请求体，或改用
   根类型约束与输入一致的解码方法。
 - `Deserialize`：先读取 `materialization_error_reason()`。`DuplicateKey` 表示对象键重复
-  （见[重复对象键](#重复对象键)）；`DepthLimit { limit }` 表示 serde_json 固定的构造上限，
-  独立于配置的 `max_depth`；`InvalidNumber` 表示防御性数字物化失败。调用 `into_source()` 前
+  （见[重复对象键](#重复对象键)）；`DepthLimit { limit }` 表示 qubit-json 唯一键物化时固定的
+  127 层容器上限，独立于配置的 `max_depth`；`InvalidNumber` 表示防御性数字物化失败。调用 `into_source()` 前
   先保存该原因。若结果为 `None`，再检查目标类型/模式、自定义 seed 或 Serde 构造保护。
   词法校验使用显式栈，因此可能准入目标类型无法继续构造的文档。
 - 值树修改后出现部分结果：`JsonTreeMutator` 是增量式的，访问器或输出预算失败不会回滚已有

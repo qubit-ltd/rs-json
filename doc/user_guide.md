@@ -844,9 +844,10 @@ binary rounding should use a string or explicit domain representation. See the
 - A `Deserialize` error: first inspect
   `materialization_error_reason()`. `DuplicateKey` identifies repeated object
   keys (see [Duplicate object keys](#duplicate-object-keys)); `DepthLimit { limit }`
-  identifies serde_json's fixed construction limit, independent of configured
-  `max_depth`; `InvalidNumber` identifies a defensive number-materialization
-  failure. Save this reason before calling `into_source()`. If it is `None`,
+  identifies qubit-json's fixed limit of 127 nested containers when
+  materializing unique-key values, independent of configured `max_depth`;
+  `InvalidNumber` identifies a defensive number-materialization failure. Save
+  this reason before calling `into_source()`. If it is `None`,
   then investigate the target schema, custom seed, or Serde construction
   protection. Typed-deserialization behavior is separate from JCS Value
   construction, which returns `JcsDecodeError::MaterializationDepthLimit` at the fixed 127-container
