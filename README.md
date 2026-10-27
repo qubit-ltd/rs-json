@@ -171,8 +171,8 @@ commit boundaries explicit through `qubit-budget` sessions and transactions.
 | Domain | Use it for | Boundary |
 | --- | --- | --- |
 | `decode` | Strict JSON admission, explicitly configured normalization, or JCS text decoding with `JcsDecoder` | Ordinary decoding keeps its integer range; JCS decoding uses binary64 and rejects duplicate keys |
-| `encode` | Budgeted strict JSON output | Value accounting commits after complete serialization; an I/O failure can still leave bytes in an external writer |
-| `value` | Building budgeted `serde_json::Value` trees from Serde events | A seed cannot inspect original number text or enforce text-level range rules |
+| `encode` | Budgeted strict JSON output and token-preserving pretty formatting | Value accounting commits after complete serialization; an I/O failure can still leave bytes in an external writer |
+| `value` | Protected `SafeJsonValue` trees and measured projection from Serde events | A Serde seed cannot inspect original number text or enforce text-level range rules |
 | `value::traverse` | Iterative reads or in-place mutations of materialized values | Mutation is incremental; visitors adding descendants must bound their own work, and visitor/output-budget failures retain prior changes |
 
 `qubit-budget` owns limits, resource identities, budgets, and sessions.
@@ -194,7 +194,10 @@ identifies the separate auxiliary-capacity limit configured with
   finite `f64`. Thus `9007199254740993` becomes `9007199254740992`. Use strings
   or domain types when every decimal digit must be preserved.
 - `JsonValueEncoder` recognizes only the exact private `Number` Serde struct protocol; an ordinary map with the same field name remains an object. Malformed `RawValue` and `Number` protocols return `JsonSerializationErrorKind::InvalidSerializerState`, with `JsonSerializerStateError::InvalidRawValueProtocol` or `InvalidNumberProtocol` respectively. Seed-based value construction only sees native numeric events and cannot infer private map provenance.
-- The fixed 127-container guard applies to JCS decoding and genuine `RawValue` projection by `JsonValueEncoder`; it is separate from configurable root-inclusive `max_depth`. `InvalidRawValue` reports rejection by the strict materialization contract, which includes more than syntax errors. Ordinary newtype structs remain transparent; use `serde_json::value::RawValue` when raw JSON materialization is intended.
+- `JsonDecoder::decode_value_*` returns a `SafeJsonValue` whose own tree operations and cleanup use an explicit stack. The configured, root-inclusive `max_depth` is the depth limit; ordinary `decode_*<T>` still relies on the target type and does not promise arbitrary-depth construction or destruction. `JcsDecoder` retains its historical depth-error variant, but has no separate fixed 127-container limit; it returns a bare `serde_json::Value`, so wrap deep results immediately with `SafeJsonValue::new` before retaining or dropping them.
+- `decode_unique_validated_*` applies `JsonValidatedDecodeOptions` and calls the supplied number policy with each original number token and its path. The extra node/string limits apply per document; `JsonDecodeSession` resource usage accumulates across calls. Policy callback side effects are not rolled back if a later syntax error occurs.
+- `JsonValueEncoder::encode_in_transaction` stages measurements in a caller-owned value transaction and returns a protected owner. Commit only after every projection succeeds; after an error or panic, drop the entire transaction. Passing that owner to `JsonEncoder` and then `format_json_tokens` composes value projection, strict JSON output, and token formatting without changing the numeric model. `format_json_tokens` validates JSON syntax and preserves number/string token spellings and duplicate keys; it does not materialize a `Value` or canonicalize the document.
+- `JsonSerializationErrorKind::InvalidRawValue` reports rejection by the strict raw-value materialization contract, which includes more than syntax errors. Ordinary newtype structs remain transparent; use `serde_json::value::RawValue` when raw JSON materialization is intended.
 - Tree traversal counts an existing `serde_json::Number` using the length of its current compact display. Under `arbitrary_precision`, this permits accounting for a stored wide number such as `1e400`; ordinary and JCS encoders still reject numbers outside their own finite range.
 - Set finite limits at every untrusted boundary. `unlimited()` disables value,
   output, and working-memory limits; use it only for trusted input or data
@@ -217,10 +220,12 @@ identifies the separate auxiliary-capacity limit configured with
   finite input limit, it may consume one uncharged probe byte that cannot be
   returned to the source. Lexical budgets are not exact heap-memory bounds:
   result-container and input-buffer capacities and allocator metadata are not
-  measured precisely. JCS Value construction separately caps nested
-  containers at 127, including with unlimited budgets; the 128th container
-  returns `MaterializationDepthLimit`. This differs from root-inclusive
-  `max_depth`. Duplicate keys are compared after JSON unescaping, without
+  measured precisely. JCS Value construction uses the shared builder and the
+  configured root-inclusive `max_depth`; there is no separate fixed container
+  cap. The legacy `MaterializationDepthLimit` variant remains for source
+  compatibility, while configured depth rejection is reported as `Decode`
+  with a budget error. A `JcsDecoder` result is a bare `Value`; use
+  `SafeJsonValue::new` immediately when retaining a deep result. Duplicate keys are compared after JSON unescaping, without
   Unicode normalization; canonical-byte verification is outside this API.
 - `JcsEncoder::write_buffered` and `write_incremental` can leave and charge
   bytes accepted by an external destination before a later write or flush
@@ -255,31 +260,15 @@ renderer collection capacity, not an exact heap ceiling.
 ## Testing
 
 ```bash
-# Run tests with the default feature set
-cargo test
+# Run this crate's unit tests with the default features
+cargo test --locked --lib
 
-# Run tests with all declared features
-cargo test --all-features
-
-# Run the standalone Markdown documentation examples
-cargo test --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc --locked
-
-# Check the standalone JSON fixture at serde_json 1.0.151 and latest compatible
-python3 .infra/ci/check-json-feature-matrix.py
-
-# Project CI checks
+# Run the project checks for this crate
 ./.infra/bin/ci-check.sh
 
 # Check code coverage
 ./.infra/bin/coverage.sh
 ```
-
-The feature matrix runs the fixture's number and JCS contract tests for eight
-feature combinations at the existing `serde_json` 1.0.151 test baseline and
-the latest compatible version resolved by Cargo. The 1.0.151 baseline is not
-a claim about the earliest version allowed by the `^1.0` dependency range. The
-runner changes lockfiles only in temporary copies and leaves repository
-lockfiles unchanged.
 
 ## License
 

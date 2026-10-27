@@ -281,32 +281,29 @@ assert_eq!(value.as_object().unwrap().len(), 2);
 
 
 
-即使使用无限 decoder，包含 128 层容器的文档也会触发固定构造上限：
+JCS 解码只按调用方配置的 `max_depth`（包含根值）准入，不再另设 127 层构造上限。
+`JcsDecoder` 返回裸 `serde_json::Value`；若要保留深树，应在返回后立即用 `SafeJsonValue` 接管：
 
 ```rust
-use qubit_json::decode::{JcsDecodeError, JcsDecoder};
+use qubit_json::decode::JcsDecoder;
+use qubit_json::value::SafeJsonValue;
 
-let nested = (0..128).fold(String::from("null"), |value, _| format!("[{value}]"));
-let error = JcsDecoder::unlimited().decode_str(&nested).unwrap_err();
-assert!(matches!(
-    error,
-    JcsDecodeError::MaterializationDepthLimit {
-        limit: 127,
-        line: 1,
-        column: 128,
-    }
-));
+for depth in [128, 129] {
+    let nested = (0..depth).fold(String::from("null"), |value, _| format!("[{value}]"));
+    let value = JcsDecoder::unlimited().decode_str(&nested).unwrap();
+    let protected = SafeJsonValue::new(value);
+    assert!(protected.as_value().is_array());
+}
 ```
 
 按变体处理 JCS 错误：`Decode(source)` 包含普通输入、语法和预算错误；`DuplicateKey { line, column }`
-指向第二个键的开引号；`MaterializationDepthLimit { limit, line, column }` 表示触发固定构造保护。
-该上限为 127 层容器，与包含根值的 `max_depth` 不同。公开错误族还包括 `JcsEncodeError`、
+指向第二个键的开引号。`MaterializationDepthLimit { limit, line, column }` 是保留的历史兼容变体，当前共享 builder
+不会产生它；配置的深度超限会包装在 `Decode` 中。公开错误族还包括 `JcsEncodeError`、
 `JsonSerializationError` 以及普通的 `JsonDecodeError` / `JsonEncodeError` 领域错误。
 
-`JsonValueEncoder` 物化真正的 `serde_json::value::RawValue` 时也受固定 127 层容器限制。这是
-RawValue/JCS 物化保护，不是普通 JSON 编解码入口的通用深度限制。
-`JsonSerializationErrorKind::InvalidRawValue` 表示严格物化契约拒绝了输入，重复键或深度超限等情况也会
-触发它，并非只表示字节不符合 JSON 语法。
+`JsonValueEncoder` 使用相同的 builder 物化真正的 `serde_json::value::RawValue`；事务入口返回受保护 owner。
+`JsonSerializationErrorKind::InvalidRawValue` 表示原始值未通过严格物化契约（例如语法错误或重复键），
+不再表示固定层数上限。
 
 同一对象中的键按 JSON 反转义后的字符串查重，因此 `"x"` 与 `"\u0078"` 重复；嵌套对象也执行同样检查。
 Unicode 不做 NFC/NFD 归一化，因而不同码点序列仍是不同键。合法 JSON 的空白和成员顺序不要求规范；
@@ -317,10 +314,92 @@ Unicode 不做 NFC/NFD 归一化，因而不同码点序列仍是不同键。合
 已经接受的输入字节即使后续解码失败仍计入 session，值资源则只在完整成功后提交。
 
 资源预算限制被计量的 JSON 资源，不是精确的 malloc 上限：输入缓冲区、`Vec`/`Map` 容量和分配器元数据
-不会被精确计入。词法深度按包含根值的 `max_depth` 计量。JCS Value 构造另有固定的 127 层容器上限：
-根容器算第 1 层，标量不增加容器层数。即使使用 `JcsDecoder::unlimited()`，第 128 个容器仍会返回
-`JcsDecodeError::MaterializationDepthLimit { limit, line, column }`。若配置的 `max_depth` 更低，则会先以
-`JcsDecodeError::Decode(JsonDecodeErrorKind::Budget)` 拒绝。
+不会被精确计入。词法深度按包含根值的 `max_depth` 计量。JCS Value 构造使用共享 builder，没有额外固定
+层数上限；历史 `MaterializationDepthLimit` 变体仍保留以兼容旧调用方，当前配置深度超限会作为 `Decode` 中的
+预算错误返回。`JcsDecoder` 的结果仍是裸 `Value`；保留深结果前应立即交给 `SafeJsonValue::new`。
+
+## 受保护值、验证解码与排版
+
+应用需要拥有一棵可安全复制、比较和清理的 JSON 树时，使用 `decode_value_*`，它返回 `SafeJsonValue`。
+若还需要按 JSON 路径检查原始数字词法，则使用 `decode_unique_validated_*`：回调会收到路径、token 原文和偏移；
+额外策略额度按单份文档计算，`JsonDecodeSession` 中配置的资源用量则跨调用累计。
+
+```rust
+use qubit_json::decode::{
+    JsonDecoder, JsonNumberPolicy, JsonPathSegment, JsonValidatedDecodeOptions,
+};
+
+let options = JsonValidatedDecodeOptions::builder()
+    .max_value_and_key_nodes(32)
+    .max_encoded_string_bytes(128)
+    .build();
+let mut decoder = JsonDecoder::unlimited();
+let mut numbers = Vec::new();
+let owner = decoder.decode_unique_validated_str(
+    r#"{"id":42,"ratio":1.25}"#,
+    &options,
+    |path, token| {
+        numbers.push((path.to_vec(), token.raw().to_owned(), token.offset()));
+        let policy = if matches!(path.last(), Some(JsonPathSegment::Key(key)) if key == "id") {
+            JsonNumberPolicy::ExactSafeInteger
+        } else {
+            JsonNumberPolicy::Preserve
+        };
+        Ok::<_, std::convert::Infallible>(policy)
+    },
+)?;
+assert_eq!(numbers.len(), 2);
+assert!(owner.as_value().is_object());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+若之后发生语法错误，策略回调已产生的应用副作用不会回滚。`JsonValueEncoder` 的事务入口可以把多个值的
+计量结果暂存起来，整批成功后再提交：
+
+```rust
+use qubit_budget::json::{JsonResource, JsonValueBudget, JsonValueLimits};
+use qubit_json::encode::JsonEncoder;
+use qubit_json::format::{JsonPrettyOptions, format_json_tokens};
+use qubit_json::value::JsonValueEncoder;
+use serde_json::json;
+
+let limits = JsonValueLimits::<JsonResource, usize>::builder()
+    .max_nodes(16)
+    .build();
+let mut budget = JsonValueBudget::new(limits);
+let mut transaction = budget.transaction();
+let encoder = JsonValueEncoder::new();
+let first = encoder.encode_in_transaction(&json!({"ok": true}), &mut transaction)?;
+let second = encoder.encode_in_transaction(&json!([1, 2]), &mut transaction)?;
+transaction.commit()?;
+assert!(first.as_value().is_object());
+assert!(second.as_value().is_array());
+let encoded = JsonEncoder::unlimited().to_vec(&first)?;
+let pretty_options = JsonPrettyOptions::builder().build()?;
+let pretty = format_json_tokens(&encoded, &pretty_options, None)?;
+assert!(std::str::from_utf8(&pretty)?.contains("\"ok\": true"));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+任一投影失败或 panic 后都应丢弃整笔事务，不能提交失败批次中暂存的用量。成功得到的 owner 可以继续交给
+`JsonEncoder` 编码，再交给 `format_json_tokens` 排版。排版器会先验证整份 JSON，保留数字与字符串 token 的原始写法，
+也允许重复键，因为它不构造 `Value`。目标 I/O 失败时，已经接受的输出前缀仍可能保留。
+
+```rust
+use qubit_json::format::{JsonPrettyOptions, format_json_tokens};
+
+let options = JsonPrettyOptions::builder().build()?;
+let formatted = format_json_tokens(
+    br#"{"x":1e400,"x":1.00,"s":"\u0061"}"#,
+    &options,
+    None,
+)?;
+assert!(std::str::from_utf8(&formatted)?.contains("1e400"));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+旧 typed `decode_*<T>` 仍按 Serde 目标类型构造，不保证任意深度的目标都能安全构造或析构。处理不可信输入时，
+应配置有限 `max_depth`；`None` 只表示没有设置深度上限，不代表内存用量无限。
 
 ## 进阶用法
 
@@ -481,8 +560,9 @@ fn main() -> Result<(), JsonDecodeError> {
 }
 ```
 
-重复键、固定的 127 层构造上限，以及防御性的无效数字物化失败会返回 `Some`；准入、输入、配置预算和目标类型
-反序列化失败返回 `None`。原因不含键名或后端文本，脱敏诊断下也能读取。`into_source()` 仍返回原有的
+重复键和防御性的无效数字物化失败会返回 `Some`。历史 `DepthLimit { limit }` 原因仍保留以兼容旧调用方，
+但共享 builder 当前不再产生它；准入、输入、配置预算和目标类型反序列化失败返回 `None`。原因不含键名或后端文本，
+脱敏诊断下也能读取。`into_source()` 仍返回原有的
 `JsonDecodeErrorSource`；适配层若还需要原因，应先保存它。物化错误坐标继续使用从 1 开始的 UTF-8 字节列，
 只有 LF 会开始新行。
 
@@ -517,10 +597,11 @@ assert_eq!(literal["$serde_json::private::RawValue"], "[1,2,3]");
 # Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
 ```
 
-唯一键入口先构造严格值树，再调用目标反序列化；规范构造的数字即使在 `arbitrary_precision` 下也会作为原生事件提供。
-这些入口要求目标拥有数据所有权，最多接受 127 层容器；中间树和目标可能同时占用内存，对象迭代顺序遵循
-`serde_json::Map`。RawValue 目标得到重建后的 JSON，而非原始词法表示。重复键和深度错误保留源坐标，
-目标反序列化错误没有原始源码位置。失败时已接受的输入计费保留，源值预算仅在整个操作成功后提交。
+旧 unique typed 入口先构造严格值树，再调用目标反序列化；规范构造的数字即使在 `arbitrary_precision` 下也会作为原生事件提供。
+源树使用共享 builder，不再受固定层数限制，但目标类型可能有自己的递归构造或析构边界；中间树和目标可能同时占用内存，
+对象迭代顺序遵循 `serde_json::Map`。RawValue 目标得到重建后的 JSON，而非原始词法表示。重复键错误保留源坐标，
+配置深度超限表现为预算错误，目标反序列化错误没有原始源码位置。失败时已接受的输入计费保留，源值预算仅在整个操作成功后提交。
+处理深 JSON 所有权结果时优先使用 `decode_value_*`。
 
 `DuplicateKeyRejectingJsonValue` 会按字面保留标记键对象。裸 `serde_json::Value` 目标仍遵循其自身的私有键投影规则，
 即使用于唯一键入口也如此。
@@ -601,7 +682,7 @@ assert_eq!(value, json!({"name": "qubit"}));
 
 - **普通文本与 Serde 事件：** strict 文本要求负整数在 `i64` 范围、非负整数在 `u64` 范围，小数或指数可转换为有限 `f64`。序列化器和 seed 收到 `i128`、`u128` 事件时会显式检查范围。文本解码先准入原始 token 的 `NumberBytes`，再检查数值范围。`AccountingJsonValueSeed` 无法测量原始 token，但会按构造后 `Number` 的紧凑显示字节数执行 `NumberBytes` 限制；默认情况下，3 字节的 `1e2` 会显示为 5 字节的 `100.0`。详见[数字契约](number_contract.zh_CN.md)。`DuplicateKeyRejectingJsonValueSeed` 不施加资源预算。遇到 map 形状事件时，seed 也无法判断它是真对象还是上游模拟的 serde_json 私有 Number map。
 - **已经物化的 `Value` 树：** `JsonTreeReader` 按现有 Number 的紧凑显示内容长度计量，不先转 `f64`，也不改写数字。启用 `arbitrary_precision` 后，树读取器能按实际表示计量 `1e400` 或 39 位整数。这条计量规则不代表普通或 JCS encoder 会接受该数字。
-- **JCS 文本：** `JcsDecoder` 对所有 token（包括整数词法）使用有限 IEEE-754 binary64。例如 `9007199254740993` 会舍入为 `9007199254740992`；`1e400` 这类溢出会被拒绝。解码还会拒绝反转义后重复的键，并保留 127 层容器物化保护。
+- **JCS 文本：** `JcsDecoder` 对所有 token（包括整数词法）使用有限 IEEE-754 binary64。例如 `9007199254740993` 会舍入为 `9007199254740992`；`1e400` 这类溢出会被拒绝。解码还会拒绝反转义后重复的键，并使用受配置 `max_depth` 控制的共享 builder。
 
 encoder 识别 serde_json 的两种精确私有 struct 协议：`RawValue` 与 `Number`。真实 Number 协议只有一个字符串 payload，通过 `serialize_str` 或一次 `collect_str` 提交；文本在输出或 Value 构造前会完成验证。普通 map 即使含有 `$serde_json::private::Number` 键，仍按对象处理。手写协议结构不合法时返回 `JsonSerializationErrorKind::InvalidSerializerState`，其状态原因是 `JsonSerializerStateError::InvalidRawValueProtocol` 或 `InvalidNumberProtocol`。诊断不会保留私有 payload 文本。
 
@@ -672,8 +753,8 @@ CR 都会开始新行；CRLF 只算一个换行。对于 `Deserialize`，坐标�
 默认脱敏。可信调用方如需精确字节，应通过稳定 offset 检查自己保有的原始输入，错误对象本身
 不会保留该字节。编码错误不会保留第三方 `Serialize::custom` 提供的任意文本。其他领域还
 提供 `JsonEncodeError`、`JsonSyntaxError`、`JsonTreeProcessError` 和
-`JsonTreeMutateError`。JCS 解码另返回 `JcsDecodeError`：普通输入和预算问题在 `Decode` 中，重复键及 127 层构造上限分别由
-`DuplicateKey` 和 `MaterializationDepthLimit` 标识，并带有源坐标。
+`JsonTreeMutateError`。JCS 解码另返回 `JcsDecodeError`：普通输入、预算和深度限制在 `Decode` 中，重复键由
+`DuplicateKey` 标识并带有源坐标；`MaterializationDepthLimit` 仅作为历史兼容变体保留。
 
 数字契约独立于资源限制：负整数装入 `i64`，非负整数装入 `u64`，小数/指数必须是有限 `f64`。
 超出范围或必须避免二进制浮点舍入的精确十进制，应使用字符串或显式领域表示。详见
@@ -695,8 +776,8 @@ CR 都会开始新行；CRLF 只算一个换行。对于 `Deserialize`，坐标�
 - `UnexpectedTopLevel`：比较 `expected_top_level()` 与 `actual_top_level()`，修正请求体，或改用
   根类型约束与输入一致的解码方法。
 - `Deserialize`：先读取 `materialization_error_reason()`。`DuplicateKey` 表示对象键重复
-  （见[重复对象键](#重复对象键)）；`DepthLimit { limit }` 表示 qubit-json 唯一键物化时固定的
-  127 层容器上限，独立于配置的 `max_depth`；`InvalidNumber` 表示防御性数字物化失败。调用 `into_source()` 前
+  （见[重复对象键](#重复对象键)）；`DepthLimit { limit }` 是兼容旧调用方的历史原因，共享 builder 不再生成它；
+  配置的 `max_depth` 以 `Budget` 报告；`InvalidNumber` 表示防御性数字物化失败。调用 `into_source()` 前
   先保存该原因。若结果为 `None`，再检查目标类型/模式、自定义 seed 或 Serde 构造保护。
   词法校验使用显式栈，因此可能准入目标类型无法继续构造的文档。
 - 值树修改后出现部分结果：`JsonTreeMutator` 是增量式的，访问器或输出预算失败不会回滚已有

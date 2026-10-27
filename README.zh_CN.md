@@ -151,8 +151,8 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 | 领域 | 适用场景 | 明确边界 |
 | --- | --- | --- |
 | `decode` | 严格准入 JSON、按策略规范化文本，或用 `JcsDecoder` 解码 JCS 数字 | 普通解码保留整数范围；JCS 解码采用 binary64 并拒绝重复键 |
-| `encode` | 生成受预算约束的严格 JSON | 完整序列化成功后才提交值资源用量，但 I/O 失败仍可能在外部写入器中留下部分字节 |
-| `value` | 从 Serde 事件构造受预算约束的 `serde_json::Value` | Serde seed 看不到数字的原始文本，也不能执行文本级数值范围检查 |
+| `encode` | 生成受预算约束的严格 JSON，并按原 token 排版 | 完整序列化成功后才提交值资源用量，但 I/O 失败仍可能在外部写入器中留下部分字节 |
+| `value` | 使用 `SafeJsonValue` 保护值树，并从 Serde 事件执行计量投影 | Serde seed 看不到数字的原始文本，也不能执行文本级数值范围检查 |
 | `value::traverse` | 迭代读取或原地修改已构造的值树 | 修改按步骤生效；新增后代的访问器要自行限制工作量，访问器或输出预算失败会保留此前的改动 |
 
 `qubit-budget` 负责限制、资源标识、预算和会话；`qubit-json` 负责 JSON 规范化、词法校验、
@@ -170,7 +170,10 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 - 普通文本解码和编码要求负整数装入 `i64`、非负整数装入 `u64`；`JcsDecoder` 则将所有数字舍入为
   有限 `f64`。例如 `9007199254740993` 会变成 `9007199254740992`。要求精确保留各位数字时，使用字符串或领域类型。
 - `JsonValueEncoder` 只识别 `serde_json::Number` 对应的精确私有 Serde struct 协议；普通 map 即使字段同名也仍是对象。格式错误的 `RawValue` 与 `Number` 协议分别返回 `JsonSerializerStateError::InvalidRawValueProtocol` 和 `InvalidNumberProtocol`。seed 只看到原生数字事件，无法从普通 map 猜出私有协议来源。
-- 固定的 127 层容器保护同时适用于 JCS 解码和 `JsonValueEncoder` 对真实 `RawValue` 的投影；它独立于可配置、包含根值的 `max_depth`。`InvalidRawValue` 表示严格物化契约拒绝输入，原因不只限于语法错误。普通 newtype 保持透明；需要按原始 JSON 物化时应使用 `serde_json::value::RawValue`。
+- `JsonDecoder::decode_value_*` 返回 `SafeJsonValue`，其自有树操作和清理使用显式栈。唯一的深度限制是调用方配置的 `max_depth`（包含根值）；旧 `decode_*<T>` 仍依赖目标类型自身的构造能力，不保证任意深度都能构造或析构。`JcsDecoder` 保留历史深度错误变体，但不再另设固定的 127 层上限；它返回裸 `serde_json::Value`，处理深结果时应立即用 `SafeJsonValue::new` 接管。
+- `decode_unique_validated_*` 使用 `JsonValidatedDecodeOptions`，并为每个原始数字 token 调用带路径的策略回调。额外的节点数和字符串长度限制按文档计算；`JsonDecodeSession` 的资源用量跨调用累计。若之后遇到语法错误，先前回调产生的副作用不会回滚。
+- `JsonValueEncoder::encode_in_transaction` 会把测量结果暂存在调用方的值事务中，并返回受保护的 owner。只有全部投影成功后才提交；遇到错误或 panic 时应丢弃整笔事务。可以继续把 owner 交给 `JsonEncoder` 生成严格 JSON，再交给 `format_json_tokens` 排版；后者验证 JSON 语法并保留数字、字符串 token 原文及重复键，不构造 `Value`，也不执行规范化。
+- `JsonSerializationErrorKind::InvalidRawValue` 表示原始值未通过严格物化契约，失败原因可能不只是语法错误。普通 newtype 仍保持透明；需要按原始 JSON 物化时应使用 `serde_json::value::RawValue`。
 - 树遍历按现有 `serde_json::Number` 的紧凑显示长度计量。启用 `arbitrary_precision` 时，树读取器可计量已保存的宽数字（例如 `1e400`）；普通和 JCS 编码器仍按各自规则拒绝超出有限范围的数字。
 - 所有不可信边界都应设置有限资源上限。`unlimited()` 会同时取消值、输出和工作内存限制，
   只应用于可信输入或已由其他层完成准入的数据；外层输出上限不能替代解析前的输入与结构准入。
@@ -182,8 +185,9 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
   它会暂存整份文档，未设置 `max_input_bytes` 时这部分临时内存没有配置上限。解码前仍应在传输层限制读取或
   body 聚合大小。这个严格 JSON 入口不能用于原始文本的 JCS 规范化。
 - `JcsDecoder::decode_input` 也会读取并缓冲完整输入；有限输入预算下可能多读取一个不计费且无法放回输入源的探测字节。
-  词法预算不是堆内存上限，结果容器容量、分配器元数据和输入缓冲区容量不受精确约束。JCS Value 构造另有 127 层容器上限，
-  即使无限预算也生效；第 128 层返回 `MaterializationDepthLimit`。它与包含根值的 `max_depth` 不同。重复键按反转义后的字符串比较，
+  词法预算不是堆内存上限，结果容器容量、分配器元数据和输入缓冲区容量不受精确约束。JCS Value 构造复用共享 builder，
+  只受调用方配置的、包含根值的 `max_depth` 限制，没有额外固定层数上限。历史变体 `MaterializationDepthLimit` 仍保留，
+  当前配置深度超限会作为 `Decode` 中的预算错误返回。`JcsDecoder` 返回裸 `Value`；保留深结果前应立即用 `SafeJsonValue::new` 接管。重复键按反转义后的字符串比较，
   不做 Unicode 规范化；该 API 不验证规范字节。
 - `JcsEncoder::write_buffered` 和 `write_incremental` 在后续写入或 flush 失败时，可能在外部目标留下已经接受的字节，
   这些字节会计入输出预算。增量模式直接写入，并在成功时 flush；值预算只在完整操作成功后提交。
@@ -209,28 +213,15 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 ## 测试
 
 ```bash
-# 使用默认 feature 集运行测试
-cargo test
+# 运行本 crate 默认 feature 下的单元测试
+cargo test --locked --lib
 
-# 使用项目声明的全部 feature 运行测试
-cargo test --all-features
-
-# 运行独立 fixture 中的 Markdown 文档示例
-cargo test --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc --locked
-
-# 使用 serde_json 1.0.151 和 Cargo 解析到的最新兼容版本检查独立 JSON fixture
-python3 .infra/ci/check-json-feature-matrix.py
-
-# 运行项目 CI 检查
+# 运行本 crate 的项目检查
 ./.infra/bin/ci-check.sh
 
 # 检查代码覆盖率
 ./.infra/bin/coverage.sh
 ```
-
-该矩阵会对 fixture 的 number 和 JCS 契约测试运行八种 feature 组合，分别使用现有
-`serde_json` 1.0.151 测试基线和 Cargo 解析到的最新兼容版本。1.0.151 是测试基线，
-不代表 `^1.0` 依赖范围允许的最早版本。runner 只在临时副本中修改锁文件，不会改动仓库锁文件。
 
 ## 许可证
 

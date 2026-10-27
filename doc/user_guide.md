@@ -335,37 +335,35 @@ assert_eq!(value.as_object().unwrap().len(), 2);
 
 
 
-A 128-container document reaches the fixed construction guard even with an
-unlimited decoder:
+The decoder uses the configured, root-inclusive `max_depth` for admission;
+there is no separate 127-container construction guard. `JcsDecoder` returns a
+bare `serde_json::Value`, so callers that accept deep documents should protect
+the result immediately before retaining or dropping it:
 
 ```rust
-use qubit_json::decode::{JcsDecodeError, JcsDecoder};
+use qubit_json::decode::JcsDecoder;
+use qubit_json::value::SafeJsonValue;
 
-let nested = (0..128).fold(String::from("null"), |value, _| format!("[{value}]"));
-let error = JcsDecoder::unlimited().decode_str(&nested).unwrap_err();
-assert!(matches!(
-    error,
-    JcsDecodeError::MaterializationDepthLimit {
-        limit: 127,
-        line: 1,
-        column: 128,
-    }
-));
+for depth in [128, 129] {
+    let nested = (0..depth).fold(String::from("null"), |value, _| format!("[{value}]"));
+    let value = JcsDecoder::unlimited().decode_str(&nested).unwrap();
+    let protected = SafeJsonValue::new(value);
+    assert!(protected.as_value().is_array());
+}
 ```
 
 Handle JCS errors by variant: `Decode(source)` carries ordinary input,
 syntax, and budget failures; `DuplicateKey { line, column }` identifies the
-second key's opening quote; `MaterializationDepthLimit { limit, line, column }`
-reports the fixed construction guard. The limit is 127 containers, distinct
-from root-inclusive `max_depth`. Public error families also include
-`JcsEncodeError`, `JsonSerializationError`, and the ordinary
+second key's opening quote. `MaterializationDepthLimit { limit, line, column }`
+remains as a historical compatibility variant; current depth rejection comes
+from the configured budget and is wrapped in `Decode`. Public error families
+also include `JcsEncodeError`, `JsonSerializationError`, and the ordinary
 `JsonDecodeError` / `JsonEncodeError` domain errors.
 
-The same fixed limit applies when `JsonValueEncoder` materializes a genuine
-`serde_json::value::RawValue`. It is a RawValue/JCS materialization guard, not
-a general depth limit for ordinary JSON encoding or decoding.
-`JsonSerializationErrorKind::InvalidRawValue` identifies rejection by that
-strict materialization contract, including duplicate keys or depth, and does
+`JsonValueEncoder` uses the shared builder when materializing a genuine
+`serde_json::value::RawValue`; its transaction-aware entry point returns a
+protected owner. `JsonSerializationErrorKind::InvalidRawValue` identifies
+rejection by the strict RawValue contract, including duplicate keys, and does
 not mean only that the bytes are syntactically invalid.
 
 Keys are compared after JSON unescaping, so `"x"` and `"\u0078"` are
@@ -385,13 +383,111 @@ the full operation succeeds.
 
 Resource budgets limit measured JSON resources; they are not exact malloc
 ceilings. Input buffers, `Vec`/`Map` capacities, and allocator metadata are not
-measured precisely. Lexical depth is root-inclusive and follows the configured `max_depth`.
-JCS Value construction has a separate fixed limit of 127 nested containers:
-the root container counts as level one, while scalars add no container level.
-The 128th container returns
-`JcsDecodeError::MaterializationDepthLimit { limit, line, column }`, even
-with `JcsDecoder::unlimited()`. A lower configured `max_depth` is rejected
-earlier as `JcsDecodeError::Decode(JsonDecodeErrorKind::Budget)`.
+measured precisely. Lexical depth is root-inclusive and follows the configured
+`max_depth`. JCS Value construction uses the shared builder and has no separate
+fixed container cap. The legacy `MaterializationDepthLimit` variant remains
+for source compatibility; configured depth rejection is reported as
+`JcsDecodeError::Decode` with a budget error. A `JcsDecoder` result is a bare
+`Value`; wrap a deep result immediately with `SafeJsonValue::new` before
+retaining or dropping it.
+
+## Protected values, validated decoding, and formatting
+
+Use `decode_value_*` when the application needs an owned JSON tree whose own
+clone, comparison, formatting, and cleanup use explicit stacks. Use
+`decode_unique_validated_*` when policy must inspect original number tokens
+with their source paths. The following path applies per-document strategy
+limits and records token metadata during one scan:
+
+```rust
+use qubit_json::decode::{
+    JsonDecoder, JsonNumberPolicy, JsonPathSegment, JsonValidatedDecodeOptions,
+};
+
+let options = JsonValidatedDecodeOptions::builder()
+    .max_value_and_key_nodes(32)
+    .max_encoded_string_bytes(128)
+    .build();
+let mut decoder = JsonDecoder::unlimited();
+let mut numbers = Vec::new();
+let owner = decoder.decode_unique_validated_str(
+    r#"{"id":42,"ratio":1.25}"#,
+    &options,
+    |path, token| {
+        numbers.push((path.to_vec(), token.raw().to_owned(), token.offset()));
+        let policy = if matches!(path.last(), Some(JsonPathSegment::Key(key)) if key == "id") {
+            JsonNumberPolicy::ExactSafeInteger
+        } else {
+            JsonNumberPolicy::Preserve
+        };
+        Ok::<_, std::convert::Infallible>(policy)
+    },
+)?;
+assert_eq!(numbers.len(), 2);
+assert!(owner.as_value().is_object());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`JsonValidatedDecodeOptions` limits the number of value-and-key nodes and the
+encoded bytes in each string token for that document. The decoder's
+`JsonDecodeSession` still accumulates its configured resource usage across
+calls. Policy callback effects are application effects: a later syntax error
+does not undo them.
+
+Projection can add a separate value-budget transaction. A successful batch is
+committed only after every projection succeeds:
+
+```rust
+use qubit_budget::json::{JsonResource, JsonValueBudget, JsonValueLimits};
+use qubit_json::encode::JsonEncoder;
+use qubit_json::format::{JsonPrettyOptions, format_json_tokens};
+use qubit_json::value::JsonValueEncoder;
+use serde_json::json;
+
+let limits = JsonValueLimits::<JsonResource, usize>::builder()
+    .max_nodes(16)
+    .build();
+let mut budget = JsonValueBudget::new(limits);
+let mut transaction = budget.transaction();
+let encoder = JsonValueEncoder::new();
+let first = encoder.encode_in_transaction(&json!({"ok": true}), &mut transaction)?;
+let second = encoder.encode_in_transaction(&json!([1, 2]), &mut transaction)?;
+transaction.commit()?;
+assert!(first.as_value().is_object());
+assert!(second.as_value().is_array());
+let encoded = JsonEncoder::unlimited().to_vec(&first)?;
+let pretty_options = JsonPrettyOptions::builder().build()?;
+let pretty = format_json_tokens(&encoded, &pretty_options, None)?;
+assert!(std::str::from_utf8(&pretty)?.contains("\"ok\": true"));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+If any projection returns an error or unwinds, drop the entire transaction;
+do not commit staged usage from a failed batch. The returned owners can then be
+passed to `JsonEncoder`, followed by `format_json_tokens` for whitespace-only
+layout. Pretty formatting validates the full JSON syntax before output, keeps
+the original number and string token spellings, and permits duplicate object
+keys because it does not construct a `Value`. I/O failures can still leave an
+accepted prefix in the destination.
+
+```rust
+use qubit_json::format::{JsonPrettyOptions, format_json_tokens};
+
+let options = JsonPrettyOptions::builder().build()?;
+let formatted = format_json_tokens(
+    br#"{"x":1e400,"x":1.00,"s":"\u0061"}"#,
+    &options,
+    None,
+)?;
+assert!(std::str::from_utf8(&formatted)?.contains("1e400"));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`JsonDecoder::decode_value_*` returns `SafeJsonValue` with protected owned-tree
+operations. The older typed `decode_*<T>` methods retain their Serde target
+semantics and do not promise arbitrary-depth construction or destruction.
+Choose a finite `max_depth` for untrusted data; `None` means no configured
+depth ceiling, not unlimited memory use.
 
 ## Advanced usage
 
@@ -577,8 +673,9 @@ fn main() -> Result<(), JsonDecodeError> {
 }
 ```
 
-The accessor returns `Some` for duplicate keys, the fixed 127-container
-construction limit, or a defensive invalid-number materialization failure.
+The accessor returns `Some` for duplicate keys or a defensive invalid-number
+materialization failure. The legacy `DepthLimit { limit }` reason remains for
+source compatibility but is no longer produced by the shared builder.
 Admission, input, configured-budget, and target-deserialization failures
 return `None`. Reasons contain no key or backend text and remain available
 under redacted diagnostics. `into_source()` still returns the existing
@@ -622,13 +719,16 @@ assert_eq!(literal["$serde_json::private::RawValue"], "[1,2,3]");
 # Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
 ```
 
-The unique-key entry points materialize a strict tree before invoking the
+The unique-key typed entry points materialize a strict tree before invoking the
 target, so canonical numeric values become native events even with
-`arbitrary_precision`. They accept owned targets and at most 127 nested
-containers. The intermediate tree and target may coexist, and iteration order
-follows `serde_json::Map`. RawValue targets receive reconstructed JSON rather
-than the original spelling. Duplicate-key and depth errors retain source
-coordinates; target-deserialization errors have no original source position.
+`arbitrary_precision`. Their source tree uses the shared builder without a
+second fixed depth cap, but the requested target may still impose its own
+recursive construction or destruction limits. The intermediate tree and
+target may coexist, and iteration order follows `serde_json::Map`. RawValue
+targets receive reconstructed JSON rather than the original spelling.
+Duplicate-key errors retain source coordinates; configured depth failures are
+budget errors, while target-deserialization errors have no original source
+position. For deep owned JSON, prefer the protected `decode_value_*` API.
 Input charges remain consumed on failure, while value charges commit only when
 the entire operation succeeds.
 
@@ -727,7 +827,7 @@ Choose one of three numeric boundaries deliberately:
 
 - **Ordinary text and Serde events:** strict text requires negative integers in `i64`, non-negative integers in `u64`, and fractional or exponent values that convert to finite `f64`. `i128` and `u128` serializer/seed events are explicitly range-checked. Text decoding checks the original-token `NumberBytes` before numeric range. `AccountingJsonValueSeed` cannot measure that token, but enforces `NumberBytes` using the compact display length of the constructed `Number`; by default, `1e2` (3 source bytes) displays as `100.0` (5 bytes). See the [number contract](number_contract.md). `DuplicateKeyRejectingJsonValueSeed` does not apply a resource budget. For map-shaped Serde events, a seed also cannot tell a real object from an upstream imitation of serde_json's private Number map.
 - **An already materialized `Value` tree:** `JsonTreeReader` counts each existing Number's actual compact display representation without converting it to `f64` or normalizing it. With `arbitrary_precision`, it can count a stored `1e400` or a 39-digit integer at its actual representation length. This accounting rule does not make the number acceptable to an ordinary or JCS encoder.
-- **JCS text:** `JcsDecoder` uses finite IEEE-754 binary64 for every token, including integer lexemes. For example, `9007199254740993` rounds to `9007199254740992`; overflow such as `1e400` is rejected. It also rejects keys duplicated after JSON unescaping and keeps the 127-container materialization guard.
+- **JCS text:** `JcsDecoder` uses finite IEEE-754 binary64 for every token, including integer lexemes. For example, `9007199254740993` rounds to `9007199254740992`; overflow such as `1e400` is rejected. It also rejects keys duplicated after JSON unescaping and uses the shared builder with configured `max_depth`.
 
 The encoder recognizes two exact serde_json private struct protocols: `RawValue` and `Number`. A genuine Number protocol contains one string payload, accepted through `serialize_str` or one `collect_str`; the text is validated before emission or Value construction. A normal map containing a key named `$serde_json::private::Number` remains an object. Invalid hand-written protocol shapes produce `JsonSerializationErrorKind::InvalidSerializerState` with `JsonSerializerStateError::InvalidRawValueProtocol` or `InvalidNumberProtocol`. Diagnostics do not retain the private payload text.
 
@@ -843,17 +943,17 @@ binary rounding should use a string or explicit domain representation. See the
   whose root contract matches it.
 - A `Deserialize` error: first inspect
   `materialization_error_reason()`. `DuplicateKey` identifies repeated object
-  keys (see [Duplicate object keys](#duplicate-object-keys)); `DepthLimit { limit }`
-  identifies qubit-json's fixed limit of 127 nested containers when
-  materializing unique-key values, independent of configured `max_depth`;
+  keys (see [Duplicate object keys](#duplicate-object-keys)); the legacy
+  `DepthLimit { limit }` reason remains for source compatibility but is not
+  produced by the shared builder; configured `max_depth` failures use `Budget`;
   `InvalidNumber` identifies a defensive number-materialization failure. Save
   this reason before calling `into_source()`. If it is `None`,
   then investigate the target schema, custom seed, or Serde construction
   protection. Typed-deserialization behavior is separate from JCS Value
-  construction, which returns `JcsDecodeError::MaterializationDepthLimit` at the fixed 127-container
-  boundary. For JCS, handle `Decode`, `DuplicateKey`, and
-  `MaterializationDepthLimit` explicitly; the latter two include the relevant
-  source line and column.
+  construction. `JcsDecodeError::MaterializationDepthLimit` remains a
+  compatibility variant but is not produced by the shared builder; JCS depth
+  budget failures are wrapped in `Decode`. Handle `Decode` and `DuplicateKey`
+  explicitly; duplicate keys include the relevant source line and column.
 - An unexpected tree mutation after an error: `JsonTreeMutator` is incremental;
   visitor and output-budget failures do not roll back prior mutations.
 
