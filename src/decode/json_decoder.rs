@@ -197,7 +197,6 @@ where
         number_policy: F,
     ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
     where
-        R: std::fmt::Debug,
         F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
     {
         self.engine
@@ -226,7 +225,6 @@ where
         number_policy: F,
     ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
     where
-        R: std::fmt::Debug,
         F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
     {
         self.decode_unique_validated_utf8(input.as_bytes(), options, number_policy)
@@ -259,7 +257,6 @@ where
         number_policy: F,
     ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
     where
-        R: std::fmt::Debug,
         I: ByteInput + ?Sized,
         F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
     {
