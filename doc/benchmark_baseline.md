@@ -164,6 +164,57 @@ more than its 5-second target to collect 100 samples, then completed those
 samples. Treat these results as a descriptive first baseline for this shared
 host, not as an idle-machine result or a performance comparison.
 
+### Indexed-path follow-up sample (2026-10-27)
+
+The pre-change path sample was collected at the T1 checkpoint (`7dacc96`) in
+the detached baseline worktree. The post-change sample used the indexed key
+lookup and path changes in this worktree. Both used Rust 1.94.0, Criterion
+0.8.2, the same fixture definitions, 10 samples, and 0.1-second warm-up and
+measurement settings. The command for the post-change latency sample was:
+
+```bash
+cargo bench --locked --bench unique_decode_bench -- unique_decode_structural --sample-size 10 --warm-up-time 0.1 --measurement-time 0.1
+```
+
+The table reports the Criterion central estimate for each `wide_object` fresh,
+unlimited path. Long-prefix keys use the same counts and values as the matching
+pre-change sample. Times are in microseconds except where shown in milliseconds.
+
+| Key style | Items | Path | Before | After |
+| --- | ---: | --- | ---: | ---: |
+| Short | 32 | `owned_value` | 11.54 µs | 19.27 µs |
+| Short | 512 | `owned_value` | 576.93 µs | 1.146 ms |
+| Short | 4096 | `owned_value` | 23.533 ms | 13.159 ms |
+| Short | 32 | `validated_preserve` | 12.07 µs | 34.47 µs |
+| Short | 512 | `validated_preserve` | 553.17 µs | 708.31 µs |
+| Short | 4096 | `validated_preserve` | 24.625 ms | 27.072 ms |
+| Short | 32 | `value_projection` | 8.10 µs | 14.69 µs |
+| Short | 512 | `value_projection` | 628.08 µs | 608.39 µs |
+| Short | 4096 | `value_projection` | 25.098 ms | 17.034 ms |
+| Long prefix | 32 | `owned_value` | 12.20 µs | 107.24 µs |
+| Long prefix | 512 | `owned_value` | 597.74 µs | 739.96 µs |
+| Long prefix | 4096 | `owned_value` | 26.273 ms | 13.131 ms |
+| Long prefix | 32 | `validated_preserve` | 12.24 µs | 105.42 µs |
+| Long prefix | 512 | `validated_preserve` | 587.80 µs | 379.51 µs |
+| Long prefix | 4096 | `validated_preserve` | 26.925 ms | 11.158 ms |
+| Long prefix | 32 | `value_projection` | 7.13 µs | 58.94 µs |
+| Long prefix | 512 | `value_projection` | 508.93 µs | 649.78 µs |
+| Long prefix | 4096 | `value_projection` | 26.510 ms | 6.339 ms |
+
+The 10-sample follow-up was noisy: several 4096-item measurements warned that
+the requested 0.1-second target was too short, and the 32-item long-prefix
+intervals were especially wide. Treat the table as exploratory; it does not
+establish a stable speedup or regression. The matching allocation command was
+`cargo bench --locked --bench unique_decode_allocations`. For `unique_value`,
+the short-key `wide_object` fresh cases reported 184 allocations / 14,120
+requested bytes at 32 items, 2,825 / 224,896 at 512, and 22,539 / 1,812,680 at
+4096. These are allocation request totals, not live index size. The `BTreeSet`
+lookup adds O(total decoded key bytes) auxiliary storage and tree-node overhead;
+that storage is not included in the exact JSON value budget. The host remained
+the shared Intel Core i5-9600K / Ubuntu 24.04.4 system described above; the
+post-change `Cargo.lock` SHA-256 was
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`.
+
 The JCS target exercises three materially different `Value` shapes: objects
 with many members (sorting-table cost), deeply nested objects (traversal
 stack cost), and large arrays (many values with little sorting state). It

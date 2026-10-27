@@ -124,6 +124,40 @@ Criterion 使用默认的 100 个样本、预热和测量设置。代表性的�
 测量主机为 Intel Core i5-9600K、Ubuntu 24.04.4（Linux 7.0.0-38-generic）、Rust 1.94.0、Criterion 0.8.2、`serde_json` 1.0.154 和 `qubit-budget` 0.10.0。`Cargo.lock` SHA-256 为
 `ae1dfa7427aef55f7c6cd96ea3661d274070d1c6a8de2051e84a4a369cb78a52`。使用系统分配器；CPU governor 为 `powersave`，可用 CPU 为 0–5，未设置 CPU 亲和性。采样期间主机上还有其他编译和审查任务。Criterion 提示部分场景采集 100 个样本需要超过 5 秒目标时间，随后仍完成了全部样本。该结果是共享主机上的描述性首次基线，不代表空闲机器结果，也不用于性能对比。
 
+### 索引路径后续采样（2026-10-27）
+
+修改前的路径样本采自 T1 检查点（`7dacc96`）的独立基线 worktree；修改后样本使用本 worktree 中已集成的对象键索引和路径调整。两次均使用 Rust 1.94.0、Criterion 0.8.2、相同 fixture、10 个样本，以及 0.1 秒预热和测量时间。修改后的延迟命令为：
+
+```bash
+cargo bench --locked --bench unique_decode_bench -- unique_decode_structural --sample-size 10 --warm-up-time 0.1 --measurement-time 0.1
+```
+
+下表列出 `wide_object` fresh、unlimited 路径的 Criterion 中心估计。长前缀键使用与修改前样本相同的条目数和数据。除特别标为 ms 外，单位均为微秒。
+
+| 键样式 | 条目数 | 路径 | 修改前 | 修改后 |
+| --- | ---: | --- | ---: | ---: |
+| 短键 | 32 | `owned_value` | 11.54 µs | 19.27 µs |
+| 短键 | 512 | `owned_value` | 576.93 µs | 1.146 ms |
+| 短键 | 4096 | `owned_value` | 23.533 ms | 13.159 ms |
+| 短键 | 32 | `validated_preserve` | 12.07 µs | 34.47 µs |
+| 短键 | 512 | `validated_preserve` | 553.17 µs | 708.31 µs |
+| 短键 | 4096 | `validated_preserve` | 24.625 ms | 27.072 ms |
+| 短键 | 32 | `value_projection` | 8.10 µs | 14.69 µs |
+| 短键 | 512 | `value_projection` | 628.08 µs | 608.39 µs |
+| 短键 | 4096 | `value_projection` | 25.098 ms | 17.034 ms |
+| 长公共前缀 | 32 | `owned_value` | 12.20 µs | 107.24 µs |
+| 长公共前缀 | 512 | `owned_value` | 597.74 µs | 739.96 µs |
+| 长公共前缀 | 4096 | `owned_value` | 26.273 ms | 13.131 ms |
+| 长公共前缀 | 32 | `validated_preserve` | 12.24 µs | 105.42 µs |
+| 长公共前缀 | 512 | `validated_preserve` | 587.80 µs | 379.51 µs |
+| 长公共前缀 | 4096 | `validated_preserve` | 26.925 ms | 11.158 ms |
+| 长公共前缀 | 32 | `value_projection` | 7.13 µs | 58.94 µs |
+| 长公共前缀 | 512 | `value_projection` | 508.93 µs | 649.78 µs |
+| 长公共前缀 | 4096 | `value_projection` | 26.510 ms | 6.339 ms |
+
+这组 10 样本数据波动较大：多个 4096 项测量提示 0.1 秒目标时间不足，32 项长前缀区间尤其宽。因此表格仅供探索，不足以确认稳定的加速或退化。对应的分配命令为 `cargo bench --locked --bench unique_decode_allocations`。短键 `wide_object` 的 `unique_value` fresh 场景在 32 项报告 184 次分配 / 14,120 请求字节，512 项为 2,825 / 224,896，4096 项为 22,539 / 1,812,680。这些数据是分配请求总量，不是索引存活大小。`BTreeSet` 查重会增加 O(键总字节数) 的辅助存储及树节点开销；该存储不计入 JSON 值精确预算。主机仍为上文所述共享 Intel Core i5-9600K / Ubuntu 24.04.4 系统；修改后的 `Cargo.lock` SHA-256 为
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`。
+
 JCS 编码目标覆盖三种 `Value` 形态：成员很多的对象（排序表开销）、深层对象（遍历栈开销）
 以及大数组（值节点多但排序状态少）。它在相同 fixture 上比较有限的值、输出和工作内存限制，
 `JcsEncoder::unlimited`，以及直接使用 `serde_json_canonicalizer` 的对照路径。canonicalizer 对照测量其完整输出路径，
