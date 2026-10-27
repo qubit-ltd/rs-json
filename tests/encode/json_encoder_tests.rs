@@ -1175,3 +1175,13 @@ fn test_encode_unknown_map_limit_stops_before_source_tail() {
         0,
     );
 }
+
+use qubit_io::ByteOutput;
+
+#[test]
+fn test_encoder_accepts_dyn_byte_output() {
+    let mut bytes = Vec::new();
+    let output: &mut dyn ByteOutput = &mut bytes;
+    JsonEncoder::unlimited().write_buffered(output, &true).unwrap();
+    assert_eq!(bytes, b"true");
+}

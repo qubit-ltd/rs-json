@@ -579,3 +579,16 @@ fn test_jcs_encoder_incremental_flush_failure_keeps_output_and_rolls_back_value(
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
     assert_eq!(encoder.session().output_budget().unwrap().used(), 7);
 }
+
+use qubit_io::ByteOutput;
+
+#[cfg(feature = "jcs")]
+#[test]
+fn test_jcs_encoder_accepts_dyn_byte_output() {
+    let mut bytes = Vec::new();
+    let output: &mut dyn ByteOutput = &mut bytes;
+    qubit_json::encode::JcsEncoder::unlimited()
+        .write_buffered(output, &serde_json::json!(true))
+        .unwrap();
+    assert_eq!(bytes, b"true");
+}

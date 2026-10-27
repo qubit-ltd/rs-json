@@ -994,3 +994,316 @@ fn test_jcs_decoder_depth_admission_precedes_backend_materialization() {
     };
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
 }
+
+mod migrated_ordinary {
+    use qubit_budget::json::JsonDecodeLimits;
+    use qubit_budget::json::JsonResource;
+    use qubit_json::decode::JsonDecodeNumberModel;
+    use qubit_json::decode::JsonDecoder;
+    use qubit_json::decode::JsonNumberPolicy;
+    use qubit_json::decode::JsonValidatedDecodeError;
+    use qubit_json::decode::JsonValidatedDecodeOptions;
+    use serde::Deserialize;
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct DecodeRecord {
+        name: String,
+        flags: Vec<bool>,
+    }
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct DecodeNewtype(u64);
+    #[derive(Debug, Deserialize, PartialEq)]
+    enum DecodeEnum {
+        Unit,
+        Tuple(u64, bool),
+        Struct { value: String },
+    }
+    #[test]
+    fn test_depth_budget_is_root_inclusive_and_has_no_implicit_cap() {
+        for (limit, text, expected) in [
+            (0_usize, "0", false),
+            (1, "0", true),
+            (1, "{}", true),
+            (1, "[0]", false),
+            (2, "[0]", true),
+            (2, "[[0]]", false),
+            (3, "[[0]]", true),
+            (3, "{}", true),
+        ] {
+            let limits = JsonDecodeLimits::builder().max_depth(limit).build();
+            let result = JsonDecoder::with_limits(limits).decode_value_str(text);
+            assert_eq!(result.is_ok(), expected, "limit={limit}, text={text}");
+        }
+        for depth in [127_usize, 128, 129, 32_768] {
+            let text = format!("{}0{}", "[".repeat(depth), "]".repeat(depth));
+            let value = JsonDecoder::unlimited().decode_value_str(&text).unwrap();
+            assert!(value.as_value().is_array());
+            drop(value);
+        }
+    }
+
+    #[test]
+    fn test_deep_scanner_failures_drop_guarded_partial_values() {
+        let truncated = format!("{}0", "[".repeat(512));
+        assert!(JsonDecoder::unlimited().decode_value_str(&truncated).is_err());
+        let deeply_truncated = format!("{}0", "[".repeat(32_768));
+        assert!(JsonDecoder::unlimited().decode_value_str(&deeply_truncated).is_err());
+        let duplicate = format!("{}{{\"x\":0,\"x\":1}}{}", "[".repeat(128), "]".repeat(128));
+        assert!(JsonDecoder::unlimited().decode_value_str(&duplicate).is_err());
+    }
+
+    #[test]
+    fn test_duplicate_key_precedes_colon_and_trailing_key_context_is_object_key() {
+        let options = JsonValidatedDecodeOptions::builder().build();
+        let duplicate = JsonDecoder::unlimited()
+            .decode_unique_validated_str(r#"{"a":0,"a" 1}"#, &options, |_, _| {
+                Ok::<_, ()>(JsonNumberPolicy::Preserve)
+            })
+            .unwrap_err();
+        assert!(matches!(
+            duplicate,
+            JsonValidatedDecodeError::Decode {
+                context: Some(qubit_json::decode::JsonDecodeContext::ObjectKey),
+                ..
+            }
+        ));
+        let trailing = JsonDecoder::unlimited()
+            .decode_unique_validated_str(r#"{"a":true,}"#, &options, |_, _| {
+                Ok::<_, ()>(JsonNumberPolicy::Preserve)
+            })
+            .unwrap_err();
+        assert!(matches!(
+            trailing,
+            JsonValidatedDecodeError::Decode {
+                context: Some(qubit_json::decode::JsonDecodeContext::ObjectKey),
+                ..
+            }
+        ));
+        let no_key_budget = JsonValidatedDecodeOptions::builder().max_value_and_key_nodes(1).build();
+        let budget_first = JsonDecoder::unlimited()
+            .decode_unique_validated_str(r#"{"a":true,}"#, &no_key_budget, |_, _| {
+                Ok::<_, ()>(JsonNumberPolicy::Preserve)
+            })
+            .unwrap_err();
+        assert!(matches!(
+            budget_first,
+            JsonValidatedDecodeError::Limit {
+                limit: qubit_json::decode::JsonValidatedLimit::ValueAndKeyNodes,
+                maximum: 1,
+                observed: 2,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_dyn_and_chunked_byte_input_decode_once() {
+        struct OneByteReader {
+            bytes: &'static [u8],
+            offset: usize,
+        }
+        impl std::io::Read for OneByteReader {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                if self.offset == self.bytes.len() {
+                    return Ok(0);
+                }
+                buffer[0] = self.bytes[self.offset];
+                self.offset += 1;
+                Ok(1)
+            }
+        }
+        let options = JsonValidatedDecodeOptions::builder().build();
+        let mut reader = OneByteReader {
+            bytes: b"[true,1]",
+            offset: 0,
+        };
+        let input: &mut dyn qubit_io::ByteInput = &mut reader;
+        let owner = JsonDecoder::unlimited()
+            .decode_unique_validated_input(input, &options, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
+            .unwrap();
+        assert!(owner.as_value().is_array());
+        assert_eq!(reader.offset, 8);
+    }
+
+    #[test]
+    fn test_input_utf8_io_and_one_byte_limit_probe() {
+        let limits = JsonDecodeLimits::builder().max_input_bytes(16_usize).build();
+        let mut decoder = JsonDecoder::with_limits(limits);
+        let mut invalid = std::io::Cursor::new(vec![0xff]);
+        let error = decoder.decode_value_input(&mut invalid).unwrap_err();
+        assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::InvalidUtf8);
+        assert_eq!(decoder.session().input_budget().unwrap().used(), 1);
+
+        let limits = JsonDecodeLimits::builder().max_input_bytes(2_usize).build();
+        let mut decoder = JsonDecoder::with_limits(limits);
+        let mut oversized = std::io::Cursor::new(b"true".to_vec());
+        let error = decoder.decode_value_input(&mut oversized).unwrap_err();
+        assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::Budget);
+        assert_eq!(decoder.session().input_budget().unwrap().used(), 2);
+        assert_eq!(oversized.position(), 3);
+
+        struct FailsAfterTwo {
+            offset: usize,
+        }
+        impl std::io::Read for FailsAfterTwo {
+            fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+                if self.offset >= 2 {
+                    return Err(std::io::Error::other("input failure"));
+                }
+                output[0] = b'[';
+                self.offset += 1;
+                Ok(1)
+            }
+        }
+        let limits = JsonDecodeLimits::builder().max_input_bytes(16_usize).build();
+        let mut decoder = JsonDecoder::with_limits(limits);
+        let error = decoder
+            .decode_value_input(&mut FailsAfterTwo { offset: 0 })
+            .unwrap_err();
+        assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::Read);
+        assert_eq!(decoder.session().input_budget().unwrap().used(), 2);
+    }
+
+    #[test]
+    fn test_old_typed_and_unique_decode_keep_distinct_duplicate_semantics() {
+        let mut decoder = JsonDecoder::unlimited();
+        let value: serde_json::Value = decoder.decode_str(r#"{"x":1,"x":2}"#).unwrap();
+        assert_eq!(value["x"], 2);
+        let error = decoder
+            .decode_unique_str::<serde_json::Value>(r#"{"x":1,"x":2}"#)
+            .unwrap_err();
+        assert_eq!(
+            error.materialization_error_reason(),
+            Some(qubit_json::decode::JsonMaterializationErrorReason::DuplicateKey)
+        );
+
+        let raw: Box<serde_json::value::RawValue> = decoder.decode_unique_str(r#"{"x":1}"#).unwrap();
+        assert_eq!(raw.get(), r#"{"x":1}"#);
+    }
+
+    #[test]
+    fn test_old_unique_targets_and_error_precedence_are_preserved() {
+        let mut decoder = JsonDecoder::unlimited();
+        let unit: () = decoder.decode_unique_str("null").unwrap();
+        assert_eq!(unit, ());
+        let newtype: DecodeNewtype = decoder.decode_unique_str("7").unwrap();
+        assert_eq!(newtype, DecodeNewtype(7));
+        let tuple: (u64, bool) = decoder.decode_unique_str("[7,true]").unwrap();
+        assert_eq!(tuple, (7, true));
+        let record: DecodeRecord = decoder
+            .decode_unique_str(r#"{"name":"item","flags":[true,false]}"#)
+            .unwrap();
+        assert_eq!(
+            record,
+            DecodeRecord {
+                name: "item".to_owned(),
+                flags: vec![true, false]
+            }
+        );
+        let unit_variant: DecodeEnum = decoder.decode_unique_str(r#""Unit""#).unwrap();
+        let tuple_variant: DecodeEnum = decoder.decode_unique_str(r#"{"Tuple":[7,true]}"#).unwrap();
+        let struct_variant: DecodeEnum = decoder.decode_unique_str(r#"{"Struct":{"value":"x"}}"#).unwrap();
+        assert_eq!(unit_variant, DecodeEnum::Unit);
+        assert_eq!(tuple_variant, DecodeEnum::Tuple(7, true));
+        assert_eq!(struct_variant, DecodeEnum::Struct { value: "x".to_owned() });
+
+        let type_error = decoder.decode_unique_str::<u64>(r#""wrong""#).unwrap_err();
+        assert_eq!(type_error.kind(), qubit_json::decode::JsonDecodeErrorKind::Deserialize);
+
+        let syntax_first = decoder
+            .decode_unique_str::<serde_json::Value>(r#"{"x":0,"x":1} trailing"#)
+            .unwrap_err();
+        assert_eq!(
+            syntax_first.kind(),
+            qubit_json::decode::JsonDecodeErrorKind::InvalidJson
+        );
+        assert_eq!(syntax_first.materialization_error_reason(), None);
+
+        let duplicate_with_location = JsonDecoder::unlimited()
+            .with_diagnostic_policy(qubit_json::decode::DiagnosticPolicy::Detailed)
+            .decode_unique_str::<serde_json::Value>("{\n\"x\":0,\"x\":1}")
+            .unwrap_err();
+        assert_eq!(
+            duplicate_with_location.materialization_error_reason(),
+            Some(qubit_json::decode::JsonMaterializationErrorReason::DuplicateKey),
+            "{duplicate_with_location}"
+        );
+        assert!(duplicate_with_location.to_string().contains("line 2 column 7"));
+    }
+
+    #[test]
+    fn test_decode_error_source_obeys_diagnostic_policy() {
+        struct ReadFailure;
+        impl std::io::Read for ReadFailure {
+            fn read(&mut self, _output: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("secret read detail"))
+            }
+        }
+
+        let mut input = ReadFailure;
+        let error = JsonDecoder::unlimited()
+            .with_diagnostic_policy(qubit_json::decode::DiagnosticPolicy::Detailed)
+            .decode_value_input(&mut input)
+            .unwrap_err();
+        assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::Read);
+        assert!(std::error::Error::source(&error).is_some());
+        assert!(!error.to_string().contains("secret read detail"));
+
+        let mut input = ReadFailure;
+        let error = JsonDecoder::unlimited().decode_value_input(&mut input).unwrap_err();
+        assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::Read);
+        assert!(std::error::Error::source(&error).is_none());
+        assert!(!error.to_string().contains("secret read detail"));
+    }
+
+    #[test]
+    fn test_decoder_uses_custom_quantity_for_typed_input_and_validated_paths() {
+        let mut decoder = JsonDecoder::with_limits(JsonDecodeLimits::<JsonResource, u8>::new());
+
+        let mut typed_input = std::io::Cursor::new(br#"{"n":7}"#.to_vec());
+        let typed: serde_json::Value = decoder
+            .decode_input_with_number_model(&mut typed_input, JsonDecodeNumberModel::Integer64)
+            .unwrap();
+        assert_eq!(typed, serde_json::json!({"n": 7}));
+
+        let guarded = decoder.decode_value_utf8(br#"[true,null]"#).unwrap();
+        assert_eq!(guarded.as_value(), &serde_json::json!([true, null]));
+
+        let options = JsonValidatedDecodeOptions::builder().build();
+        let validated = decoder
+            .decode_unique_validated_utf8(b"[1,2]", &options, |_, _| {
+                Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+            })
+            .unwrap();
+        assert_eq!(validated.as_value(), &serde_json::json!([1, 2]));
+    }
+
+    #[test]
+    fn test_legacy_typed_decoder_facades_share_the_document_contract() {
+        let mut decoder = JsonDecoder::unlimited();
+
+        let text: serde_json::Value = decoder.decode_str(r#"{"n":1}"#).unwrap();
+        assert_eq!(text, serde_json::json!({"n": 1}));
+
+        let utf8: serde_json::Value = decoder.decode_utf8(br#"{"n":2}"#).unwrap();
+        assert_eq!(utf8, serde_json::json!({"n": 2}));
+
+        let mut input = std::io::Cursor::new(br#"{"n":3}"#.to_vec());
+        let streamed: serde_json::Value = decoder.decode_input(&mut input).unwrap();
+        assert_eq!(streamed, serde_json::json!({"n": 3}));
+
+        let object: serde_json::Map<String, serde_json::Value> = decoder.decode_object_str(r#"{"n":4}"#).unwrap();
+        assert_eq!(object.get("n"), Some(&serde_json::json!(4)));
+
+        let object: serde_json::Map<String, serde_json::Value> = decoder.decode_object_utf8(br#"{"n":5}"#).unwrap();
+        assert_eq!(object.get("n"), Some(&serde_json::json!(5)));
+
+        let array: Vec<serde_json::Value> = decoder.decode_array_str("[6]").unwrap();
+        assert_eq!(array, [serde_json::json!(6)]);
+
+        let array: Vec<serde_json::Value> = decoder.decode_array_utf8(b"[7]").unwrap();
+        assert_eq!(array, [serde_json::json!(7)]);
+
+        decoder.validate_str(r#"{"ok":true}"#).unwrap();
+        decoder.validate_utf8(br#"{"ok":false}"#).unwrap();
+    }
+}

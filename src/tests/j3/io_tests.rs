@@ -15,25 +15,6 @@ use qubit_io::ByteOutput;
 use crate::encode::JsonEncodeErrorKind;
 use crate::encode::JsonEncoder;
 
-#[test]
-fn test_encoder_accepts_dyn_byte_output() {
-    let mut bytes = Vec::new();
-    let output: &mut dyn ByteOutput = &mut bytes;
-    JsonEncoder::unlimited().write_buffered(output, &true).unwrap();
-    assert_eq!(bytes, b"true");
-}
-
-#[cfg(feature = "jcs")]
-#[test]
-fn test_jcs_encoder_accepts_dyn_byte_output() {
-    let mut bytes = Vec::new();
-    let output: &mut dyn ByteOutput = &mut bytes;
-    crate::encode::JcsEncoder::unlimited()
-        .write_buffered(output, &serde_json::json!(true))
-        .unwrap();
-    assert_eq!(bytes, b"true");
-}
-
 #[derive(Clone, Copy)]
 enum WriterMode {
     FailAfterThree,

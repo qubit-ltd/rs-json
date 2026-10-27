@@ -419,3 +419,33 @@ fn test_jcs_decoder_nested_duplicate_key_failure_recovers_and_preserves_source_p
     };
     assert!(Error::source(&inner).is_none());
 }
+
+#[cfg(feature = "jcs")]
+#[test]
+fn test_jcs_decoder_keeps_binary64_and_accepts_deep_tree() {
+    let text = format!("{}1.0{}", "[".repeat(129), "]".repeat(129));
+    let value = qubit_json::decode::JcsDecoder::unlimited().decode_str(&text).unwrap();
+    assert!(value.is_array());
+
+    let error = qubit_json::decode::JcsDecoder::unlimited()
+        .decode_str("1e400")
+        .unwrap_err();
+    let qubit_json::decode::JcsDecodeError::Decode(error) = error else {
+        panic!("non-finite JCS number must be reported as a decode error");
+    };
+    assert_eq!(
+        error.syntax_error().map(qubit_json::decode::JsonSyntaxError::reason),
+        Some(qubit_json::decode::JsonSyntaxErrorReason::FloatOutOfRange)
+    );
+}
+
+#[cfg(feature = "jcs")]
+#[test]
+fn test_jcs_binary64_isolated_from_ordinary_decode_model() {
+    let jcs = qubit_json::decode::JcsDecoder::unlimited()
+        .decode_str("9007199254740993")
+        .unwrap();
+    assert!(jcs.as_number().unwrap().is_f64());
+    let ordinary: serde_json::Value = JsonDecoder::unlimited().decode_str("9007199254740993").unwrap();
+    assert_eq!(ordinary.as_u64(), Some(9_007_199_254_740_993));
+}

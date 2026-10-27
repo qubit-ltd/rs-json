@@ -13,6 +13,7 @@ mod internal;
 mod jcs_decoder_budget_tests;
 #[cfg(feature = "jcs")]
 mod jcs_decoder_tests;
+mod json_decode_composition_tests;
 mod json_decode_error_model_tests;
 mod json_decode_error_tests;
 mod json_decode_session_tests;
@@ -21,6 +22,7 @@ mod json_decoder_tests;
 mod json_root_kind_tests;
 mod json_syntax_error_reason_tests;
 mod json_syntax_error_tests;
+mod json_validated_decode_tests;
 mod markdown_fence_closing_tests;
 mod markdown_fence_policy_tests;
 mod normalized_json_document_tests;
