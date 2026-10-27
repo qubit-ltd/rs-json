@@ -79,6 +79,12 @@ enum CompoundState {
 }
 
 /// Accumulates one Serde compound with guarded children and sticky failures.
+///
+/// Children remain wrapped in `SafeJsonValue` until the compound ends
+/// successfully; a failed child or measurement prevents the partial tree from
+/// being returned. Private raw-value and number payloads use dedicated protocol
+/// states. A generic map event sequence is treated as a map and cannot reveal
+/// that it originated from serde_json's private `Number` representation.
 pub(in crate::value::json_value_encoder) struct JsonValueCompound<'context, 'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
@@ -191,6 +197,7 @@ where
         }
     }
 
+    /// Retains this compound's first serialization failure and records it in the shared context.
     fn fail(&self, error: JsonSerializationError) -> JsonSerializationError {
         if self.failure.get().is_none() {
             self.failure.set(Some(error));
@@ -206,6 +213,7 @@ where
         result.map_err(|error| context.borrow_mut().record_serialization_error(error))
     }
 
+    /// Stops this compound when either its local or shared context has failed.
     fn check_failure(&self) -> Result<(), JsonSerializationError> {
         if let Some(error) = self.failure.get() {
             return Err(error);
@@ -241,6 +249,11 @@ where
         result.map_err(|error| self.fail(error))
     }
 
+    /// Validates and stores one field of the recognized private protocol.
+    ///
+    /// Private text is checked against the configured per-payload byte limit
+    /// before the payload string is appended to its buffer. Protocol shape or
+    /// payload errors become sticky.
     fn set_private_field<T>(
         &mut self,
         kind: JsonPrivateProtocolKind,
@@ -284,6 +297,7 @@ where
             .map_err(|error| context.borrow_mut().record_serialization_error(error))
     }
 
+    /// Validates the complete private protocol before parsing/admitting its payload.
     fn finish_private_inner(self) -> Result<SafeJsonValue, JsonSerializationError> {
         match &self.state {
             CompoundState::RawValue {
@@ -400,6 +414,7 @@ where
         Ok(())
     }
 
+    /// Completes the compound only when no earlier failure or incomplete protocol remains.
     fn end(self) -> Result<Self::Ok, Self::Error> {
         self.check_failure()?;
         let context = self.context;
@@ -505,6 +520,7 @@ where
 {
     type Ok = SafeJsonValue;
     type Error = JsonSerializationError;
+    /// Serializes and checks the prospective key before the corresponding value is admitted.
     fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
@@ -537,6 +553,7 @@ where
         *count = next;
         Ok(())
     }
+    /// Adds a value only after its pending key and guarded child succeed.
     fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,

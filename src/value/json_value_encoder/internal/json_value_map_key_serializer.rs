@@ -82,7 +82,8 @@ macro_rules! serialize_key_integer {
             #[doc = ""]
             #[doc = "# Errors"]
             #[doc = ""]
-            #[doc = "This conversion is infallible."]
+            #[doc = "Returns an error if the prospective key measurement is rejected or"]
+            #[doc = "an earlier projection failure is retained."]
             #[inline]
             fn $method(self, value: $type) -> Result<String, Self::Error> {
                 self.finish_key(value.to_string())
@@ -119,7 +120,8 @@ where
     ///
     /// # Errors
     ///
-    /// This conversion is infallible.
+    /// Returns an error if the prospective key measurement is rejected or an
+    /// earlier projection failure is retained.
     #[inline]
     fn serialize_bool(self, value: bool) -> Result<String, Self::Error> {
         self.finish_key(value.to_string())
@@ -149,7 +151,8 @@ where
     ///
     /// # Errors
     ///
-    /// This conversion is infallible.
+    /// Returns an error if the prospective key measurement is rejected or an
+    /// earlier projection failure is retained.
     #[inline]
     fn serialize_i128(self, value: i128) -> Result<String, Self::Error> {
         self.finish_key(JsonMapKey::signed_wide(value))
@@ -168,7 +171,8 @@ where
     ///
     /// # Errors
     ///
-    /// This conversion is infallible.
+    /// Returns an error if the prospective key measurement is rejected or an
+    /// earlier projection failure is retained.
     #[inline]
     fn serialize_u128(self, value: u128) -> Result<String, Self::Error> {
         self.finish_key(JsonMapKey::unsigned_wide(value))
@@ -187,8 +191,10 @@ where
     ///
     /// # Errors
     ///
-    /// Returns `NonFiniteFloat` for a non-finite input or
-    /// `InvalidNumberRepresentation` when serde_json cannot format the value.
+    /// Returns `NonFiniteFloat` for a non-finite input,
+    /// `InvalidNumberRepresentation` when serde_json cannot format the value, or
+    /// an error if the key measurement is rejected or an earlier projection
+    /// failure is retained.
     fn serialize_f32(self, value: f32) -> Result<String, Self::Error> {
         if !value.is_finite() {
             return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
@@ -212,7 +218,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns `NonFiniteFloat` when the input is non-finite.
+    /// Returns `NonFiniteFloat` when the input is non-finite, or an error if
+    /// the key measurement is rejected or an earlier projection failure is
+    /// retained.
     fn serialize_f64(self, value: f64) -> Result<String, Self::Error> {
         self.finish_key(
             Number::from_f64(value)
@@ -234,7 +242,8 @@ where
     ///
     /// # Errors
     ///
-    /// This conversion is infallible.
+    /// Returns an error if the prospective key measurement is rejected or an
+    /// earlier projection failure is retained.
     #[inline]
     fn serialize_char(self, value: char) -> Result<String, Self::Error> {
         self.finish_key(value.to_string())
@@ -253,7 +262,8 @@ where
     ///
     /// # Errors
     ///
-    /// This conversion is infallible.
+    /// Returns an error if the prospective key measurement is rejected or an
+    /// earlier projection failure is retained.
     #[inline]
     fn serialize_str(self, value: &str) -> Result<String, Self::Error> {
         self.finish_key_str(value)
@@ -374,7 +384,8 @@ where
     ///
     /// # Errors
     ///
-    /// This conversion is infallible.
+    /// Returns an error if the prospective key measurement is rejected or an
+    /// earlier projection failure is retained.
     fn serialize_unit_variant(
         self,
         _name: &'static str,
@@ -620,7 +631,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns `DisplayFormattingFailed` when the formatter rejects a write.
+    /// Returns `DisplayFormattingFailed` when the formatter rejects a write,
+    /// or an error if the key measurement is rejected or an earlier projection
+    /// failure is retained.
     fn collect_str<T>(self, value: &T) -> Result<String, Self::Error>
     where
         T: Display + ?Sized,

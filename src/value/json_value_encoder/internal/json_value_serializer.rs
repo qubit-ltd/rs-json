@@ -37,6 +37,12 @@ type ContextCell<'context, 'transaction, 'budget, R, Q> =
     &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
 
 /// Serializer facade for one node at its root-inclusive depth.
+///
+/// The root is serialized at depth one and child serializers share the same
+/// context, which carries the transaction, sticky first failure, and private
+/// payload limit configured by the owning encoder. The private raw-value and
+/// number protocols are recognized only through their reserved struct names;
+/// a generic map event sequence does not identify a private `Number`.
 #[derive(Clone, Copy)]
 pub(in crate::value::json_value_encoder) struct JsonValueSerializer<'context, 'transaction, 'budget, R, Q>
 where
@@ -51,6 +57,10 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Creates a serializer for a node at its root-inclusive depth.
+    ///
+    /// Callers pass depth one for the root and increment it for each child;
+    /// all descendants share `context` so configuration and failures propagate.
     pub(in crate::value::json_value_encoder) fn new(
         context: ContextCell<'context, 'transaction, 'budget, R, Q>,
         depth: usize,
@@ -340,6 +350,11 @@ where
         ))
     }
 
+    /// Starts an ordinary map compound.
+    ///
+    /// Map events are treated as user map entries and do not identify
+    /// serde_json's private `Number` protocol; reserved private struct names are
+    /// recognized by `serialize_struct` instead.
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.enter(JsonContainerKind::Map)?;
         Ok(JsonValueCompound::map(
@@ -349,6 +364,11 @@ where
         ))
     }
 
+    /// Starts a struct compound or a recognized private serde_json protocol.
+    ///
+    /// Private raw-value and number payloads are selected by their reserved
+    /// struct names. Other structs use ordinary map accounting at this node's
+    /// root-inclusive depth.
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         if let Some(kind) = JsonPrivateProtocolKind::from_struct_name(name) {
             let state = JsonPrivateProtocolState::new(kind, len).map_err(|reason| {

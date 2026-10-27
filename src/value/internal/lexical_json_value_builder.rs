@@ -22,6 +22,10 @@ use crate::value::SafeJsonValue;
 use crate::value::internal::SafeValueBuilder;
 
 /// Constructs one owned value from a scanner event sequence.
+///
+/// The builder keeps materialization failures sticky and exposes a value only
+/// after the full event sequence succeeds, so callers cannot receive a partial
+/// tree.
 pub(crate) struct LexicalJsonValueBuilder {
     model: JsonNumberModel,
     frames: Vec<JsonValueFrame>,
@@ -41,8 +45,9 @@ impl LexicalJsonValueBuilder {
         }
     }
 
-    /// Consumes one event and returns the first materialization failure
-    /// immediately.
+    /// Consumes one scanner event and returns the first materialization failure
+    /// immediately. After a failure, later calls return that retained failure;
+    /// the incomplete tree remains private and cannot be finished as a value.
     pub(crate) fn try_accept(&mut self, event: JsonLexicalEvent<'_>) -> Result<(), JsonValueMaterializationError> {
         if let Some(error) = self.error.as_ref() {
             return Err(error.clone());
@@ -56,6 +61,9 @@ impl LexicalJsonValueBuilder {
     }
 
     /// Accepts a number already materialized by a policy-aware caller.
+    ///
+    /// The caller is responsible for validating the source token and applying
+    /// any number policy before this method is called.
     pub(crate) fn try_accept_number(
         &mut self,
         number: serde_json::Number,
@@ -64,7 +72,10 @@ impl LexicalJsonValueBuilder {
         self.try_push_value(Value::Number(number))
     }
 
-    /// Accepts a key that a caller has already decoded from its source token.
+    /// Accepts a key already decoded from its scanner-validated source token.
+    ///
+    /// `offset` is the token's zero-based source byte offset. A materialization
+    /// failure is retained, and no partial tree is exposed.
     pub(crate) fn try_accept_decoded_key(
         &mut self,
         key: String,
@@ -81,7 +92,12 @@ impl LexicalJsonValueBuilder {
         Ok(())
     }
 
-    /// Returns the guarded complete value.
+    /// Returns the guarded complete value only if no earlier event failed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first retained materialization failure; in that case the
+    /// partially built tree is dropped.
     pub(crate) fn finish_guarded(mut self) -> Result<SafeJsonValue, JsonValueMaterializationError> {
         if let Some(error) = self.error.take() {
             return Err(error);

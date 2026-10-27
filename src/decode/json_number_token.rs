@@ -44,6 +44,11 @@ pub struct JsonNumberToken<'call> {
 }
 
 impl<'call> JsonNumberToken<'call> {
+    /// Constructs a token view for a number whose JSON syntax the scanner has validated.
+    ///
+    /// `raw` must be the exact source spelling of that validated token, and
+    /// `offset` its zero-based byte offset in the same input. The borrow must
+    /// remain limited to the synchronous policy callback.
     pub(crate) const fn from_validated(raw: &'call str, offset: usize) -> Self {
         Self { raw, offset }
     }

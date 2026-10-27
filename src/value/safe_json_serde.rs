@@ -6,6 +6,11 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Protected Serde interoperability for [`super::SafeJsonValue`].
+//!
+//! Deserialization rejects duplicate object keys and non-finite numbers. Values
+//! are assembled through the guarded builder, so an error cannot expose a
+//! partially built `SafeJsonValue`. Serialization delegates recursively to the
+//! caller's Serde serializer and therefore preserves that serializer's errors.
 
 use std::collections::BTreeSet;
 use std::fmt;

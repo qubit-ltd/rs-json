@@ -232,6 +232,20 @@ where
         (line, column)
     }
 
+    /// Decodes a validated-policy document from an in-memory byte slice.
+    ///
+    /// `charge_input` must be false when these bytes were already charged while
+    /// reading an input stream. The policy receives syntactically validated
+    /// number tokens and their tracked paths; the selected numeric range is
+    /// checked afterward. This method commits value measurements only after
+    /// scanning, materialization, and the optional root
+    /// check all succeed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input-budget, UTF-8, lexical/value-limit, policy, exact-safe-
+    /// integer, materialization, root-kind, or commit error. A failed attempt
+    /// does not commit its staged value measurements.
     pub(in crate::decode) fn decode_unique_validated_buffer<E, F>(
         &mut self,
         input: &[u8],
@@ -246,6 +260,20 @@ where
         self.decode_unique_value_buffer(input, options, policy, diagnostic_policy, charge_input, true)
     }
 
+    /// Shared transactional scanner and materialization path for owned values.
+    ///
+    /// `charge_input` controls whether this call charges the original input
+    /// bytes; stream readers pass false after charging during the read.
+    /// `track_path` controls whether the consumer maintains path segments for
+    /// policy callbacks. Policy callbacks receive number tokens whose JSON
+    /// syntax has been validated; the selected numeric range is checked after
+    /// the callback returns.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input-budget, UTF-8, lexical/value-limit, policy,
+    /// materialization, root-kind, or commit error. The value transaction is
+    /// committed only after all checks succeed.
     fn decode_unique_value_buffer<E, F>(
         &mut self,
         input: &[u8],
@@ -409,6 +437,15 @@ where
         Ok(value)
     }
 
+    /// Decodes one complete input slice into a protected owned JSON value.
+    ///
+    /// Input bytes are charged by this call. The private buffer helper can skip
+    /// that charge only when an input-reading path has already charged them.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input-budget, UTF-8, lexical, value-budget, materialization,
+    /// or commit error. Value measurements are committed only on success.
     pub(in crate::decode) fn decode_value_utf8(
         &mut self,
         input: &[u8],
@@ -417,6 +454,11 @@ where
         self.decode_owned_value_buffer(input, diagnostic_policy, true)
     }
 
+    /// Decodes an already-buffered owned value, optionally charging its input.
+    ///
+    /// This path disables path tracking because it does not invoke an external
+    /// number policy. Callers reading a stream pass `charge_input = false`
+    /// after the read path has charged those bytes.
     fn decode_owned_value_buffer(
         &mut self,
         input: &[u8],
@@ -441,6 +483,16 @@ where
         })
     }
 
+    /// Decodes a validated-policy document from a byte slice and charges its
+    /// input bytes once.
+    ///
+    /// The policy receives syntactically validated number tokens and their JSON
+    /// paths; the selected numeric range is checked afterward.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same admission, policy, materialization, root-kind, and
+    /// commit errors as the buffer helper.
     pub(in crate::decode) fn decode_unique_validated_utf8<E, F>(
         &mut self,
         input: &[u8],
@@ -454,6 +506,15 @@ where
         self.decode_unique_validated_buffer(input, options, policy, diagnostic_policy, true)
     }
 
+    /// Reads, charges, then decodes one validated-policy input document.
+    ///
+    /// The buffer decoder is told not to charge the bytes again. The policy
+    /// receives syntactically validated number tokens and their JSON paths;
+    /// the selected numeric range is checked afterward.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input read/budget error or any validated decoding error.
     pub(in crate::decode) fn decode_unique_validated_input<E, F, I>(
         &mut self,
         input: &mut I,
@@ -473,6 +534,12 @@ where
         self.decode_unique_validated_buffer(&bytes, options, policy, diagnostic_policy, false)
     }
 
+    /// Reads and charges one input document before decoding it as an owned
+    /// protected value; the buffered decode does not charge those bytes again.
+    ///
+    /// # Errors
+    ///
+    /// Returns an input read/budget error or any owned-value decoding error.
     pub(in crate::decode) fn decode_value_input<I>(
         &mut self,
         input: &mut I,
