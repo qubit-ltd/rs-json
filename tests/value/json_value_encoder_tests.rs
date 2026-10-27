@@ -10,6 +10,9 @@
 use std::cell::Cell;
 use std::fmt;
 
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueBudget;
+use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
@@ -18,6 +21,7 @@ use qubit_json::encode::JsonMapKeyKind;
 use qubit_json::encode::JsonSerializationErrorCategory;
 use qubit_json::encode::JsonSerializationErrorKind;
 use qubit_json::encode::JsonSerializerStateError;
+use qubit_json::value::JsonValueEncodeError;
 use qubit_json::value::JsonValueEncoder;
 use qubit_json::value::SafeJsonValue;
 use serde::Serialize;
@@ -1064,4 +1068,53 @@ fn test_zero_declared_sequence_contract_differs_between_encoders() {
             reason: JsonSerializerStateError::UnexpectedCompound,
         },
     );
+}
+
+#[test]
+fn test_projection_budget_failures_preserve_resource_and_roll_back() {
+    let cases = [
+        (
+            15,
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_sequence_items(0)
+                .build(),
+            JsonResource::SequenceItems,
+        ),
+        (
+            23,
+            JsonValueLimits::builder().max_sequence_items(0).build(),
+            JsonResource::SequenceItems,
+        ),
+        (27, JsonValueLimits::builder().max_nodes(1).build(), JsonResource::Nodes),
+        (
+            28,
+            JsonValueLimits::builder().max_map_entries(0).build(),
+            JsonResource::MapEntries,
+        ),
+        (26, JsonValueLimits::builder().max_depth(1).build(), JsonResource::Depth),
+        (29, JsonValueLimits::builder().max_depth(1).build(), JsonResource::Depth),
+    ];
+    for (probe, limits, resource) in cases {
+        let mut budget = JsonValueBudget::new(limits);
+        {
+            let mut transaction = budget.transaction();
+            let error = JsonValueEncoder::new()
+                .encode_in_transaction(&SerializerProbe(probe), &mut transaction)
+                .expect_err("the configured resource must reject projection");
+            match error {
+                JsonValueEncodeError::Budget(source) => assert_eq!(source.resource(), &resource, "probe {probe}"),
+                other => panic!("expected original budget failure for probe {probe}, got {other:?}"),
+            }
+        }
+        // A failed projection must leave the committed budget reusable.
+        let mut transaction = budget.transaction();
+        assert_eq!(
+            JsonValueEncoder::new()
+                .encode_in_transaction(&true, &mut transaction)
+                .expect("failed value did not consume committed resources")
+                .as_value(),
+            &json!(true)
+        );
+        transaction.commit().expect("replacement value commits");
+    }
 }

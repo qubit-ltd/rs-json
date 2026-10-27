@@ -299,6 +299,41 @@ mod tests {
     use super::JcsWorkingMemory;
 
     #[test]
+    fn test_reserve_rejects_accounting_overflow_without_allocating() {
+        for path in ["live-total", "untracked-capacity", "element-bytes", "requested-total"] {
+            let mut memory = JcsWorkingMemory::new(usize::MAX);
+            let mut values = Vec::<u64>::new();
+            let additional = match path {
+                "live-total" => {
+                    memory.stack_bytes = usize::MAX;
+                    memory.object_bytes = 1;
+                    1
+                }
+                "untracked-capacity" => {
+                    values = vec![0];
+                    values.capacity() + 1
+                }
+                "element-bytes" => usize::MAX / std::mem::size_of::<u64>() + 1,
+                _ => {
+                    memory.stack_bytes = usize::MAX - 1;
+                    1
+                }
+            };
+            let capacity = values.capacity();
+            let tracked = (memory.stack_bytes, memory.object_bytes, memory.peak_bytes());
+            match memory.reserve_object_entries(&mut values, additional) {
+                Err(JcsReserveError::Limit(error)) => {
+                    assert_eq!(error.limit(), usize::MAX);
+                    assert_eq!(error.requested(), usize::MAX);
+                }
+                other => panic!("expected arithmetic rejection for {path}, got {other:?}"),
+            }
+            assert_eq!(values.capacity(), capacity, "{path} allocated before checking");
+            assert_eq!((memory.stack_bytes, memory.object_bytes, memory.peak_bytes()), tracked);
+        }
+    }
+
+    #[test]
     fn test_tracks_exact_capacity_boundary_and_rejects_one_byte_less() {
         let requested = std::mem::size_of::<u64>() * 2;
         let mut exact = JcsWorkingMemory::new(requested);

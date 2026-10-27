@@ -401,3 +401,48 @@ where
         self.string(text)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use qubit_budget::json::JsonResource;
+    use qubit_budget::json::JsonValueBudget;
+    use qubit_budget::json::JsonValueLimits;
+    use serde::Serializer;
+
+    use super::JsonValueEncodeContext;
+    use super::JsonValueSerializer;
+    use crate::encode::JsonCollectionKind;
+    use crate::encode::JsonSerializationErrorKind;
+
+    #[test]
+    fn test_serializer_depth_overflow_preserves_collection_kind() {
+        for path in ["bytes", "newtype", "tuple", "struct"] {
+            let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
+            let mut transaction = budget.transaction();
+            let context = RefCell::new(JsonValueEncodeContext::new(&mut transaction));
+            let serializer = JsonValueSerializer::new(&context, usize::MAX);
+            let result = match path {
+                "bytes" => serializer.serialize_bytes(&[1]).map(|_| ()),
+                "newtype" => serializer
+                    .serialize_newtype_variant("Enum", 0, "New", &true)
+                    .map(|_| ()),
+                "tuple" => serializer.serialize_tuple_variant("Enum", 0, "Tuple", 1).map(|_| ()),
+                _ => serializer.serialize_struct_variant("Enum", 0, "Struct", 1).map(|_| ()),
+            };
+            let error = result.expect_err("child depth must not wrap");
+            assert_eq!(
+                error.kind(),
+                JsonSerializationErrorKind::CollectionLengthOverflow {
+                    kind: if path == "bytes" {
+                        JsonCollectionKind::Array
+                    } else {
+                        JsonCollectionKind::Object
+                    },
+                }
+            );
+            assert_eq!(context.borrow().ser_error(), error);
+        }
+    }
+}

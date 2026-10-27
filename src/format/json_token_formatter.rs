@@ -302,3 +302,64 @@ fn capacity_error(source: Option<Box<dyn Error + Send + Sync>>) -> JsonPrettyErr
 fn io_error(error: std::io::Error) -> JsonPrettyError {
     JsonPrettyError::new(JsonPrettyErrorKind::Io, None, Some(Box::new(error)))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Container;
+    use super::ContainerKind;
+    use super::Planner;
+    use crate::format::JsonPrettyErrorKind;
+    use crate::format::JsonPrettyOptions;
+
+    #[test]
+    fn test_planner_rejects_invalid_spans_and_unmatched_end() {
+        let options = JsonPrettyOptions::builder().build().expect("valid defaults");
+        let mut planner = Planner {
+            input: b"[]",
+            options: &options,
+            actions: Vec::new(),
+            stack: Vec::new(),
+            length: 0,
+        };
+        for (offset, length) in [(usize::MAX, 2), (1, 2)] {
+            assert_eq!(
+                planner.span(offset, length).expect_err("invalid span").kind(),
+                JsonPrettyErrorKind::Capacity
+            );
+            assert!(planner.actions.is_empty());
+            assert_eq!(planner.length, 0);
+        }
+        assert_eq!(
+            planner.end(1, ContainerKind::Array).expect_err("missing frame").kind(),
+            JsonPrettyErrorKind::Capacity
+        );
+    }
+
+    #[test]
+    fn test_planner_container_counts_do_not_wrap() {
+        let options = JsonPrettyOptions::builder().build().expect("valid defaults");
+        for kind in [ContainerKind::Array, ContainerKind::Object] {
+            let mut planner = Planner {
+                input: b"[]",
+                options: &options,
+                actions: Vec::new(),
+                length: 0,
+                stack: vec![Container {
+                    kind,
+                    count: usize::MAX,
+                    awaiting_value: false,
+                }],
+            };
+            let result = match kind {
+                ContainerKind::Array => planner.prepare_value(),
+                ContainerKind::Object => planner.key(0, 1),
+            };
+            assert_eq!(
+                result.expect_err("item count must not wrap").kind(),
+                JsonPrettyErrorKind::Capacity
+            );
+            assert_eq!(planner.stack[0].count, usize::MAX);
+            assert!(planner.actions.is_empty());
+        }
+    }
+}

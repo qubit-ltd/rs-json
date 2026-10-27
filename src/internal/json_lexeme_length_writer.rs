@@ -57,3 +57,25 @@ impl Write for JsonLexemeLengthWriter {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io::ErrorKind;
+    use std::io::Write;
+
+    use super::JsonLexemeLengthWriter;
+
+    #[test]
+    fn test_overflow_preserves_count_and_flush_is_a_noop() {
+        let mut writer = JsonLexemeLengthWriter { len: usize::MAX - 1 };
+        assert_eq!(writer.write(b"a").expect("last byte fits"), 1);
+        assert_eq!(
+            writer.write(b"b").expect_err("count must not wrap").kind(),
+            ErrorKind::FileTooLarge
+        );
+        assert_eq!(writer.len(), usize::MAX);
+        assert_eq!(writer.write(b"").expect("empty write still fits"), 0);
+        writer.flush().expect("counter has no buffered output");
+        assert_eq!(writer.len(), usize::MAX);
+    }
+}

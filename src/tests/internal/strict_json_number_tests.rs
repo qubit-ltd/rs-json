@@ -105,3 +105,22 @@ fn test_parse_rejects_non_single_number_tokens() {
         );
     }
 }
+
+#[test]
+fn test_admitted_number_conversion_rejects_unrepresentable_values() {
+    for (text, expected) in [
+        ("1e", JsonSerializationErrorKind::InvalidNumberRepresentation),
+        (
+            "-9223372036854775809",
+            JsonSerializationErrorKind::IntegerOutOfRange {
+                signedness: JsonIntegerSignedness::Signed,
+            },
+        ),
+        ("1e400", JsonSerializationErrorKind::NonFiniteFloat),
+    ] {
+        assert_eq!(
+            StrictJsonNumber::from_admitted_lexeme(text).expect_err(text).kind(),
+            expected
+        );
+    }
+}

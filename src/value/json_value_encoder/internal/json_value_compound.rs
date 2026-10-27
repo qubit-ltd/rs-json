@@ -774,3 +774,85 @@ where
             .record_serialization_error(JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue))),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use qubit_budget::json::JsonContainerKind;
+    use qubit_budget::json::JsonResource;
+    use qubit_budget::json::JsonValueBudget;
+    use qubit_budget::json::JsonValueLimits;
+    use serde::ser::SerializeMap;
+    use serde::ser::SerializeSeq;
+    use serde::ser::SerializeStruct;
+    use serde::ser::SerializeStructVariant;
+    use serde::ser::SerializeTupleVariant;
+
+    use super::CompoundState;
+    use super::JsonValueCompound;
+    use super::JsonValueEncodeContext;
+    use crate::encode::JsonCollectionKind;
+    use crate::encode::JsonSerializationErrorKind;
+    use crate::encode::JsonSerializerStateError;
+
+    #[test]
+    fn test_compound_count_and_depth_overflow_are_sticky() {
+        // Seed only the counters: reaching these guards must not require an
+        // allocation or traversal proportional to usize::MAX.
+        for path in ["sequence", "tuple-variant", "map", "struct", "struct-variant"] {
+            for overflow_count in [true, false] {
+                let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
+                let mut transaction = budget.transaction();
+                let context = RefCell::new(JsonValueEncodeContext::new(&mut transaction));
+                let mut compound = match path {
+                    "sequence" => JsonValueCompound::sequence(&context, 1, JsonContainerKind::Sequence, 0),
+                    "tuple-variant" => JsonValueCompound::tuple_variant(&context, "Tuple", 1, 0),
+                    "struct-variant" => JsonValueCompound::struct_variant(&context, "Struct", 1, 0),
+                    _ => JsonValueCompound::map(&context, 1, 0),
+                };
+                match &mut compound.state {
+                    CompoundState::Sequence { count, depth, .. }
+                    | CompoundState::TupleVariant { count, depth, .. }
+                    | CompoundState::Map { count, depth, .. }
+                    | CompoundState::StructVariant { count, depth, .. } => {
+                        if overflow_count {
+                            *count = usize::MAX;
+                        } else {
+                            *depth = usize::MAX;
+                        }
+                    }
+                    _ => unreachable!("fixture is an ordinary compound"),
+                }
+                let result = match path {
+                    "sequence" => SerializeSeq::serialize_element(&mut compound, &true),
+                    "tuple-variant" => SerializeTupleVariant::serialize_field(&mut compound, &true),
+                    "struct" => SerializeStruct::serialize_field(&mut compound, "key", &true),
+                    "struct-variant" => SerializeStructVariant::serialize_field(&mut compound, "key", &true),
+                    _ if overflow_count => SerializeMap::serialize_key(&mut compound, "key"),
+                    _ => {
+                        SerializeMap::serialize_key(&mut compound, "key").expect("key does not increase depth");
+                        SerializeMap::serialize_value(&mut compound, &true)
+                    }
+                };
+                let error = result.expect_err("overflow must be rejected before adding a child");
+                let expected = if overflow_count {
+                    JsonSerializationErrorKind::CollectionLengthOverflow {
+                        kind: if matches!(path, "sequence" | "tuple-variant") {
+                            JsonCollectionKind::Array
+                        } else {
+                            JsonCollectionKind::Object
+                        },
+                    }
+                } else {
+                    JsonSerializationErrorKind::InvalidSerializerState {
+                        reason: JsonSerializerStateError::UnexpectedCompound,
+                    }
+                };
+                assert_eq!(error.kind(), expected, "{path}, count overflow: {overflow_count}");
+                assert_eq!(compound.check_failure().expect_err("failure is sticky"), error);
+                assert_eq!(context.borrow().ser_error(), error);
+            }
+        }
+    }
+}
