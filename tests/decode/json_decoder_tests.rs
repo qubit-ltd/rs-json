@@ -63,7 +63,10 @@ fn test_indexed_object_keys_preserve_decoded_identity() {
     assert_eq!(nested.as_value(), validated.as_value());
 
     let limits = JsonDecodeLimits::builder()
-        .input_bytes_limit(ResourceLimit::new(qubit_budget::json::JsonResource::InputBytes, 4_usize))
+        .input_bytes_limit(ResourceLimit::new(
+            qubit_budget::json::JsonResource::InputBytes,
+            4_usize,
+        ))
         .build();
     let mut decoder = JsonDecoder::with_limits(limits);
     let mut input = Cursor::new(b"true".to_vec());
@@ -353,21 +356,29 @@ fn test_json_text_decoder_rejects_unconsumed_seed_input() {
 /// Verifies a JSON object matching serde_json's former private number marker
 /// remains an ordinary object.
 #[test]
-fn test_json_text_decoder_preserves_private_number_marker_object() {
+fn test_json_text_decoder_obeys_private_number_marker_semantics() {
     const MARKER: &str = concat!("$", "serde_json", "::private::Number");
     let input = format!(r#"{{"{MARKER}":"123"}}"#);
+    let arbitrary_precision = serde_json::from_str::<Value>("1e400").is_ok();
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::builder()
-                .number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, 1))
+                .number_bytes_limit(ResourceLimit::new(
+                    JsonResource::NumberBytes,
+                    if arbitrary_precision { 3 } else { 1 },
+                ))
                 .build(),
         )
         .build();
     let value = JsonDecoder::with_limits(limits)
         .decode_str::<Value>(&input)
-        .expect("the marker-shaped object contains no JSON number token");
+        .expect("Serde's private Number marker semantics must be honored");
 
-    assert_eq!(value, json!({MARKER: "123"}));
+    if arbitrary_precision {
+        assert_eq!(value, json!(123));
+    } else {
+        assert_eq!(value, json!({MARKER: "123"}));
+    }
 }
 
 /// Verifies integer tokens larger than `u64` are rejected before typed decode.

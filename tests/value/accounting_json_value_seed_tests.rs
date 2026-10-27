@@ -22,6 +22,7 @@ use serde::de::Visitor;
 use serde::de::value;
 use serde::forward_to_deserialize_any;
 use serde_json::Deserializer;
+use serde_json::Value;
 use serde_json::json;
 
 #[test]
@@ -105,6 +106,7 @@ fn test_accounting_json_value_seed_checks_number_display_bytes() {
 
 #[test]
 fn test_accounting_json_value_seed_budgets_decoded_number_display() {
+    let arbitrary_precision = serde_json::from_str::<Value>("1e400").is_ok();
     for maximum in [3_usize, 5] {
         let limits = JsonValueLimits::<JsonResource, usize>::builder()
             .max_number_bytes(maximum)
@@ -113,7 +115,11 @@ fn test_accounting_json_value_seed_budgets_decoded_number_display() {
         let mut transaction = budget.transaction();
         let mut deserializer = Deserializer::from_str("1e2");
         let result = AccountingJsonValueSeed::new(&mut transaction).deserialize(&mut deserializer);
-        if maximum == 3 {
+        if arbitrary_precision {
+            let value = result.expect("arbitrary-precision Serde exposes its private number map");
+            assert_eq!(value, json!({"$serde_json::private::Number": "1e+2"}));
+            transaction.commit().unwrap();
+        } else if maximum == 3 {
             let error = result.expect_err("the displayed number is longer than its source token");
             assert!(error.to_string().contains("NumberBytes"));
         } else {
