@@ -20,9 +20,7 @@ pub(super) struct PrivateTextCollector<'a> {
 }
 
 impl<'a> PrivateTextCollector<'a> {
-    pub(super) fn new(
-        check_text_bytes: &'a mut dyn FnMut(usize) -> Result<(), JsonSerializationError>,
-    ) -> Self {
+    pub(super) fn new(check_text_bytes: &'a mut dyn FnMut(usize) -> Result<(), JsonSerializationError>) -> Self {
         Self {
             text: String::new(),
             check_text_bytes,

@@ -197,7 +197,8 @@ where
         }
     }
 
-    /// Retains this compound's first serialization failure and records it in the shared context.
+    /// Retains this compound's first serialization failure and records it in
+    /// the shared context.
     fn fail(&self, error: JsonSerializationError) -> JsonSerializationError {
         if self.failure.get().is_none() {
             self.failure.set(Some(error));
@@ -266,8 +267,7 @@ where
         let context = self.context;
         let mut check_text_bytes = |length| context.borrow_mut().check_private_text_bytes(length);
         let result = match &mut self.state {
-            CompoundState::RawValue { text, state, .. }
-            | CompoundState::Number { text, state, .. } => {
+            CompoundState::RawValue { text, state, .. } | CompoundState::Number { text, state, .. } => {
                 set_private_payload(text, state, kind, key, value, &mut check_text_bytes)
             }
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
@@ -297,7 +297,8 @@ where
             .map_err(|error| context.borrow_mut().record_serialization_error(error))
     }
 
-    /// Validates the complete private protocol before parsing/admitting its payload.
+    /// Validates the complete private protocol before parsing/admitting its
+    /// payload.
     fn finish_private_inner(self) -> Result<SafeJsonValue, JsonSerializationError> {
         match &self.state {
             CompoundState::RawValue {
@@ -356,10 +357,7 @@ where
     if state.begin(key).is_err() {
         return Err(private_invalid_state(kind));
     }
-    let value = match value.serialize(PrivateTextSerializer {
-        kind,
-        check_text_bytes,
-    }) {
+    let value = match value.serialize(PrivateTextSerializer { kind, check_text_bytes }) {
         Ok(Value::String(value)) => value,
         Ok(_) => {
             state.fail();
@@ -414,7 +412,8 @@ where
         Ok(())
     }
 
-    /// Completes the compound only when no earlier failure or incomplete protocol remains.
+    /// Completes the compound only when no earlier failure or incomplete
+    /// protocol remains.
     fn end(self) -> Result<Self::Ok, Self::Error> {
         self.check_failure()?;
         let context = self.context;
@@ -520,7 +519,8 @@ where
 {
     type Ok = SafeJsonValue;
     type Error = JsonSerializationError;
-    /// Serializes and checks the prospective key before the corresponding value is admitted.
+    /// Serializes and checks the prospective key before the corresponding value
+    /// is admitted.
     fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,

@@ -353,8 +353,8 @@ where
     /// Starts an ordinary map compound.
     ///
     /// Map events are treated as user map entries and do not identify
-    /// serde_json's private `Number` protocol; reserved private struct names are
-    /// recognized by `serialize_struct` instead.
+    /// serde_json's private `Number` protocol; reserved private struct names
+    /// are recognized by `serialize_struct` instead.
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.enter(JsonContainerKind::Map)?;
         Ok(JsonValueCompound::map(

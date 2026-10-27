@@ -192,9 +192,9 @@ where
     /// # Errors
     ///
     /// Returns `NonFiniteFloat` for a non-finite input,
-    /// `InvalidNumberRepresentation` when serde_json cannot format the value, or
-    /// an error if the key measurement is rejected or an earlier projection
-    /// failure is retained.
+    /// `InvalidNumberRepresentation` when serde_json cannot format the value,
+    /// or an error if the key measurement is rejected or an earlier
+    /// projection failure is retained.
     fn serialize_f32(self, value: f32) -> Result<String, Self::Error> {
         if !value.is_finite() {
             return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));

@@ -24,7 +24,8 @@ use crate::internal::JsonPrivateProtocolKind;
 pub(super) struct PrivateTextSerializer<'a> {
     /// Selects which serde_json private protocol the text belongs to.
     pub(super) kind: JsonPrivateProtocolKind,
-    /// Checks prospective private payload lengths against the projection context.
+    /// Checks prospective private payload lengths against the projection
+    /// context.
     pub(super) check_text_bytes: &'a mut dyn FnMut(usize) -> Result<(), JsonSerializationError>,
 }
 

@@ -21,9 +21,9 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonDecodeSession;
 use qubit_budget::json::JsonResource;
 #[cfg(feature = "jcs")]
-use qubit_json::decode::JcsDecoder;
-#[cfg(feature = "jcs")]
 use qubit_json::decode::JcsDecodeError;
+#[cfg(feature = "jcs")]
+use qubit_json::decode::JcsDecoder;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::NormalizingJsonDecodePolicy;
 use qubit_json::decode::NormalizingJsonDecoder;

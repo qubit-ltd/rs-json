@@ -5,7 +5,8 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Public contracts for bounded private-text collection during value projection.
+//! Public contracts for bounded private-text collection during value
+//! projection.
 
 use std::cell::Cell;
 use std::collections::BTreeMap;
@@ -127,11 +128,7 @@ fn test_private_number_collect_stops_at_rejected_chunk() {
     let error = {
         let mut transaction = budget.transaction();
         JsonValueEncoder::new()
-            .encode_in_transaction_with_private_text_limit(
-                &PrivateNumber(&calls),
-                &mut transaction,
-                6,
-            )
+            .encode_in_transaction_with_private_text_limit(&PrivateNumber(&calls), &mut transaction, 6)
             .unwrap_err()
     };
     assert!(matches!(
@@ -147,11 +144,8 @@ fn test_private_text_limit_counts_utf8_bytes_and_zero_rejects_raw_null() {
         let raw = RawValue::from_string("\"é\"".to_owned()).unwrap();
         let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
         let mut transaction = budget.transaction();
-        let result = JsonValueEncoder::new().encode_in_transaction_with_private_text_limit(
-            &raw,
-            &mut transaction,
-            maximum,
-        );
+        let result =
+            JsonValueEncoder::new().encode_in_transaction_with_private_text_limit(&raw, &mut transaction, maximum);
         assert_eq!(result.is_ok(), expected_success);
         if !expected_success {
             assert_eq!(JsonValueEncoder::new().encode(&raw), Ok(json!("é")));
@@ -165,11 +159,7 @@ fn test_private_text_limit_counts_utf8_bytes_and_zero_rejects_raw_null() {
     let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
     let mut transaction = budget.transaction();
     assert!(matches!(
-        JsonValueEncoder::new().encode_in_transaction_with_private_text_limit(
-            &raw,
-            &mut transaction,
-            0
-        ),
+        JsonValueEncoder::new().encode_in_transaction_with_private_text_limit(&raw, &mut transaction, 0),
         Err(JsonValueEncodeError::PrivateTextLimitExceeded { maximum: 0 })
     ));
 }
@@ -234,9 +224,7 @@ fn test_private_number_keeps_native_number_measurement_and_old_entry_unbounded()
 
     let calls = Cell::new(0);
     assert_eq!(
-        JsonValueEncoder::new()
-            .encode(&PrivateNumber(&calls))
-            .unwrap(),
+        JsonValueEncoder::new().encode(&PrivateNumber(&calls)).unwrap(),
         json!(1.0)
     );
     assert_eq!(calls.get(), 4);
@@ -247,11 +235,7 @@ fn test_private_text_limit_stays_sticky_when_display_or_serde_swallows_failure()
     let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
     let mut transaction = budget.transaction();
     let error = JsonValueEncoder::new()
-        .encode_in_transaction_with_private_text_limit(
-            &SwallowedPrivateNumberError,
-            &mut transaction,
-            6,
-        )
+        .encode_in_transaction_with_private_text_limit(&SwallowedPrivateNumberError, &mut transaction, 6)
         .unwrap_err();
     assert!(matches!(
         error,
@@ -278,11 +262,7 @@ fn test_private_display_formatting_error_keeps_existing_classification() {
     let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
     let mut transaction = budget.transaction();
     let error = JsonValueEncoder::new()
-        .encode_in_transaction_with_private_text_limit(
-            &PrivateNumberWith(&FailingDisplay),
-            &mut transaction,
-            100,
-        )
+        .encode_in_transaction_with_private_text_limit(&PrivateNumberWith(&FailingDisplay), &mut transaction, 100)
         .unwrap_err();
     assert!(matches!(
         error,
@@ -294,9 +274,7 @@ fn test_private_display_formatting_error_keeps_existing_classification() {
 #[test]
 fn test_private_text_limit_failure_does_not_replace_first_budget_failure() {
     let raw = RawValue::from_string("null".to_owned()).unwrap();
-    let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .max_nodes(1)
-        .build();
+    let limits = JsonValueLimits::<JsonResource, usize>::builder().max_nodes(1).build();
     let mut budget = JsonValueBudget::new(limits);
     let mut transaction = budget.transaction();
     assert!(matches!(
@@ -323,11 +301,7 @@ fn test_private_text_limit_failure_can_be_dropped_before_next_transaction() {
             .encode_in_transaction_with_private_text_limit(&true, &mut transaction, 1)
             .unwrap();
         assert!(matches!(
-            JsonValueEncoder::new().encode_in_transaction_with_private_text_limit(
-                &raw,
-                &mut transaction,
-                1
-            ),
+            JsonValueEncoder::new().encode_in_transaction_with_private_text_limit(&raw, &mut transaction, 1),
             Err(JsonValueEncodeError::PrivateTextLimitExceeded { maximum: 1 })
         ));
     }
