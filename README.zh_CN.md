@@ -153,12 +153,67 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 | 领域 | 适用场景 | 明确边界 |
 | --- | --- | --- |
 | `decode` | 严格准入 JSON、按策略规范化文本，或用 `JcsDecoder` 解码 JCS 数字 | 普通解码默认采用 `Integer64`；JCS 解码采用 binary64 并拒绝重复键 |
-| `encode` | 生成受预算约束的严格 JSON，并按原 token 排版 | 完整序列化成功后才提交值资源用量，但 I/O 失败仍可能在外部写入器中留下部分字节 |
+| `encode` | 生成受预算约束的严格 JSON 或 JCS 规范化字节 | 整个操作成功后才提交值资源用量，但 I/O 失败仍可能在外部写入器中留下部分字节 |
+| `format` | 验证 JSON 并按原 token 排版 | 只调整空白，保留数字、字符串的原始拼写和重复键，不构造值树 |
 | `value` | 使用 `SafeJsonValue` 保护值树，并从 Serde 事件执行计量投影 | Serde seed 看不到数字的原始文本，也不能执行文本级数值范围检查 |
 | `value::traverse` | 迭代读取或原地修改已构造的值树 | 修改按步骤生效；新增后代的访问器要自行限制工作量，访问器或输出预算失败会保留此前的改动 |
 
 `qubit-budget` 负责限制、资源标识、预算和会话；`qubit-json` 负责 JSON 规范化、词法校验、
 文本编解码、值构造和遍历。
+
+### 核心类型与接口形状
+
+公开 API 围绕编解码器、文档对象和值树访问器组织。下表中的 `Value` 指
+`serde_json::Value`，`T` 指应用类型；箭头表示成功时的输入输出，可能失败的操作通过
+`Result` 返回结果。
+
+| 公开 API | 输入 → 输出 | 状态与选用方式 |
+| --- | --- | --- |
+| `decode::JsonDecoder` | `&str` / `&[u8]` → `T` 或 `SafeJsonValue`；字节输入源 → 自有结果 | 持有累计计量的解码会话和诊断策略。`decode_str` / `decode_utf8` 用于 Serde 目标类型，`decode_value_*` 生成拒绝重复键的受保护值树，`validate_*` 只做验证。 |
+| `decode::NormalizingJsonDecoder` | 外部文本 → `T`，或通过 `prepare_*` → `NormalizedJsonDocument` | 按显式的 `NormalizingJsonDecodePolicy` 清理文本，再严格解码，资源用量计入累计会话。一次性解码要求目标实现 `DeserializeOwned`。 |
+| `decode::NormalizedJsonDocument<'input>` | 准备好的文档 → 规范化 `&str` 或后续解码得到的 `T` | 通过 `Cow<'input, str>` 借用或持有文本，并记录原始、规范化字节数。结果需要借用规范化文本时，先准备文档，再从文档解码。 |
+| `encode::JsonEncoder` | `&T: Serialize` → `Vec<u8>` 或字节输出源 | 持有累计计量的编码会话，通过 `to_vec`、`write_buffered`、`write_incremental` 输出严格 JSON。 |
+| `value::JsonValueEncoder` | `&T: Serialize` → `Value`；事务投影 → `SafeJsonValue` | 无状态地将 Serde 数据投影为严格 JSON 树。`encode_in_transaction` 把计量暂存在调用方事务中，由调用方稍后提交。 |
+| `value::SafeJsonValue` | `Value` → 受保护所有者；`as_value` → `&Value`；`into_value` → `Value` | 持有值树，复制、比较和清理等操作使用显式栈。`new` 只接管所有权，不执行预算准入。 |
+| `value::traverse::JsonTreeReader` | `&Value` + `JsonTreeVisitor` → 进入、离开节点的回调 | 借用值事务，在遍历中对节点进行准入计量；只需计量整棵树时使用 `account`。 |
+| `value::traverse::JsonTreeMutator` | `&mut Value` + `JsonTreeMutVisitor` → 修改后的树 | 分别借用输入、输出值事务，先检查输入，再执行修改，最后检查输出；后续失败会保留此前的修改。 |
+| `decode::JcsDecoder` / `encode::JcsEncoder`（`jcs`） | 文本 → `Value` / `&Value` → 规范化字节 | 解码采用有限 binary64 数字并拒绝重复键；编码遵循 RFC 8785，另设辅助工作容量上限。 |
+| `format::JsonPrettyOptions` + `format_json_tokens` / `write_json_tokens` | JSON 字节 → 排版字节或字节输出源 | 可设置缩进宽度、显示缩进深度和末尾换行。排版保留标量 token 原文，不生成 JCS 规范形式。 |
+
+底层值树沿用 Serde 的数据模型：
+
+```text
+Value = Null | Bool | Number | String | Array(Vec<Value>) | Object(Map<String, Value>)
+```
+
+应用可以围绕同一种值树组合这些 API：
+
+```text
+严格 JSON ── JsonDecoder::decode_value_* ──> SafeJsonValue
+                                                │ as_value()
+                                                v
+                                           &Value ── JsonTreeReader ──> 访问器回调
+
+&T: Serialize ── JsonValueEncoder::encode_in_transaction ──> SafeJsonValue
+                                                               │
+                                                               v
+                                                          JsonEncoder ──> JSON 字节
+                                                                              │
+                                                                              v
+                                                                  format_json_tokens
+```
+
+编解码器通常带有 `<'budget, R = JsonResource, Q = usize>` 参数：`'budget` 表示借用预算的
+生命周期，`R` 标识资源，`Q` 表示计量数值。使用 `with_limits` 从限制创建自有会话，或使用
+`new` 传入已有会话；同一会话的资源用量会跨调用累计。值事务中的计量则在调用方提交后生效。
+
+可变访问器通过 `JsonTreeControl::Descend` 或 `SkipSubtree` 决定是否继续访问后代。
+回调收到的 `JsonTreeContext` 包含从根节点算起的深度，以及当前节点在直接父容器中的位置。
+编解码失败分别通过 `JsonDecodeError`、`JsonEncodeError` 等结构化类型返回，调用方可读取
+`kind()` 判断稳定的错误类别。
+
+受保护值树的组合方式见[用户手册](doc/user_guide.zh_CN.md#受保护值验证解码与排版)；
+规范化文档、事务和访问器的详细用法见[进阶用法](doc/user_guide.zh_CN.md#进阶用法)。
 
 普通解码默认使用 `JsonDecodeNumberModel::Integer64`；有限 fallback 与 JCS binary64 契约见
 [JSON 数字契约](doc/number_contract.zh_CN.md)。

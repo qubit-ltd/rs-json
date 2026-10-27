@@ -174,13 +174,73 @@ commit boundaries explicit through `qubit-budget` sessions and transactions.
 | Domain | Use it for | Boundary |
 | --- | --- | --- |
 | `decode` | Strict JSON admission, explicitly configured normalization, or JCS text decoding with `JcsDecoder` | Ordinary decoding defaults to `Integer64`; JCS decoding uses binary64 and rejects duplicate keys |
-| `encode` | Budgeted strict JSON output and token-preserving pretty formatting | Value accounting commits after complete serialization; an I/O failure can still leave bytes in an external writer |
+| `encode` | Budgeted strict JSON output or JCS canonical bytes | Value accounting commits after a complete successful operation; an I/O failure can still leave bytes in an external writer |
+| `format` | Validate and pretty-print JSON while preserving source tokens | Only whitespace changes; number/string spellings and duplicate keys are preserved without constructing a value tree |
 | `value` | Protected `SafeJsonValue` trees and measured projection from Serde events | A Serde seed cannot inspect original number text or enforce text-level range rules |
 | `value::traverse` | Iterative reads or in-place mutations of materialized values | Mutation is incremental; visitors adding descendants must bound their own work, and visitor/output-budget failures retain prior changes |
 
 `qubit-budget` owns limits, resource identities, budgets, and sessions.
 `qubit-json` owns JSON normalization, lexical validation, text codecs, value
 construction, and traversal.
+
+### Core types and API shapes
+
+The public API centers on codecs, owned documents, and tree visitors. In the
+table below, `Value` means `serde_json::Value`, `T` is an application type, and
+the arrows show successful input/output shapes; fallible operations return
+`Result`.
+
+| Public API | Input → output | State and intended use |
+| --- | --- | --- |
+| `decode::JsonDecoder` | `&str` / `&[u8]` → `T` or `SafeJsonValue`; byte input → owned result | Retains a cumulative decode session and diagnostic policy. Use `decode_str` / `decode_utf8` for Serde targets, `decode_value_*` for a protected tree that rejects duplicate keys, or `validate_*` for validation only. |
+| `decode::NormalizingJsonDecoder` | External text → `T`, or `prepare_*` → `NormalizedJsonDocument` | Applies an explicit `NormalizingJsonDecodePolicy` before strict decoding and retains a cumulative session. One-shot decoding requires `DeserializeOwned`. |
+| `decode::NormalizedJsonDocument<'input>` | Prepared document → normalized `&str` or later decoded `T` | Retains borrowed or owned text via `Cow<'input, str>`, plus original and normalized byte lengths. Use document-based decoding when results must borrow normalized text. |
+| `encode::JsonEncoder` | `&T: Serialize` → `Vec<u8>` or a byte output | Retains a cumulative encode session. Provides `to_vec`, `write_buffered`, and `write_incremental` for strict JSON output. |
+| `value::JsonValueEncoder` | `&T: Serialize` → `Value`; transaction-aware projection → `SafeJsonValue` | Stateless projection into a strict JSON tree. `encode_in_transaction` stages measurements in a caller-owned transaction for later commit. |
+| `value::SafeJsonValue` | `Value` → protected owner; `as_value` → `&Value`; `into_value` → `Value` | Owns a tree and uses explicit stacks for its copy, comparison, and cleanup operations. `new` takes ownership without performing budget admission. |
+| `value::traverse::JsonTreeReader` | `&Value` + `JsonTreeVisitor` → enter/leave callbacks | Borrows a value transaction and measures admitted nodes during traversal. `account` measures a tree without callbacks. |
+| `value::traverse::JsonTreeMutator` | `&mut Value` + `JsonTreeMutVisitor` → modified tree | Borrows separate input/output value transactions. Checks input, runs mutations, then checks output; a later failure retains earlier mutations. |
+| `decode::JcsDecoder` / `encode::JcsEncoder` (`jcs`) | Text → `Value` / `&Value` → canonical bytes | Decode with finite binary64 numbers and duplicate-key rejection; encode under RFC 8785 with a separate auxiliary working-capacity limit. |
+| `format::JsonPrettyOptions` + `format_json_tokens` / `write_json_tokens` | JSON bytes → formatted bytes or a byte output | Configure indentation, displayed indentation depth, and the final newline. Formatting preserves scalar tokens and does not canonicalize them. |
+
+The underlying tree remains Serde's familiar data model:
+
+```text
+Value = Null | Bool | Number | String | Array(Vec<Value>) | Object(Map<String, Value>)
+```
+
+For example, an application can compose these APIs without changing tree models:
+
+```text
+Strict JSON ── JsonDecoder::decode_value_* ──> SafeJsonValue
+                                                  │ as_value()
+                                                  v
+                                             &Value ── JsonTreeReader ──> visitor callbacks
+
+&T: Serialize ── JsonValueEncoder::encode_in_transaction ──> SafeJsonValue
+                                                               │
+                                                               v
+                                                          JsonEncoder ──> JSON bytes
+                                                                              │
+                                                                              v
+                                                                  format_json_tokens
+```
+
+Codec type parameters follow the shape `<'budget, R = JsonResource, Q = usize>`:
+`'budget` describes a borrowed budget's lifetime, `R` identifies resources, and
+`Q` represents quantities. Construct codecs with `with_limits` for an owned
+session or `new` for a supplied session; usage accumulates across calls on the
+same session. Value transactions stage accounting until the caller commits.
+
+Mutable visitors return `JsonTreeControl::Descend` or `SkipSubtree` and receive
+a `JsonTreeContext` containing root-inclusive depth and the node's location in
+its immediate parent. Error handling uses structured types such as
+`JsonDecodeError` and `JsonEncodeError`, with stable categories exposed by
+`kind()`.
+
+See the [user guide](doc/user_guide.md#protected-values-validated-decoding-and-formatting)
+for protected-tree composition and the [advanced usage section](doc/user_guide.md#advanced-usage)
+for normalization, transactions, and visitors.
 
 Ordinary decoding defaults to `JsonDecodeNumberModel::Integer64`; the optional
 finite fallback and JCS binary64 contracts are described in the
