@@ -17,6 +17,7 @@ mod json_value_materialization_error;
 mod json_value_measurement;
 mod json_value_visitor;
 mod lexical_json_value_builder;
+mod safe_value_builder;
 
 pub(super) use json_key_seed::JsonKeySeed;
 pub(crate) use json_number_length_writer::JsonNumberLengthWriter;
@@ -27,3 +28,4 @@ pub(crate) use json_value_materialization_error::JsonValueMaterializationError;
 pub(crate) use json_value_measurement::json_value_measurement;
 pub(super) use json_value_visitor::JsonValueVisitor;
 pub(crate) use lexical_json_value_builder::LexicalJsonValueBuilder;
+pub(crate) use safe_value_builder::SafeValueBuilder;

@@ -21,7 +21,7 @@ use serde::ser::SerializeSeq;
 use serde_json::Value;
 
 use super::SafeJsonValue;
-use super::safe_json_value::SafeValueBuilder;
+use super::internal::SafeValueBuilder;
 
 impl Serialize for SafeJsonValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

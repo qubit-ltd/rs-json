@@ -33,7 +33,7 @@ use crate::encode::JsonSerializerStateError;
 use crate::internal::JsonPrivateProtocolKind;
 use crate::internal::JsonPrivateProtocolState;
 use crate::value::SafeJsonValue;
-use crate::value::safe_json_value::SafeValueBuilder;
+use crate::value::internal::SafeValueBuilder;
 
 type ContextCell<'context, 'transaction, 'budget, R, Q> =
     &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;

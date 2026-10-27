@@ -17,7 +17,7 @@ use crate::internal::StrictJsonNumber;
 use crate::lexical::JsonLexicalEvent;
 use crate::lexical::JsonNumberModel;
 use crate::value::SafeJsonValue;
-use crate::value::safe_json_value::SafeValueBuilder;
+use crate::value::internal::SafeValueBuilder;
 
 /// Constructs one owned value from a scanner event sequence.
 pub(crate) struct LexicalJsonValueBuilder {

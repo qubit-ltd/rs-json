@@ -12,60 +12,39 @@ use std::cell::Cell;
 use std::fmt;
 use std::mem::ManuallyDrop;
 
+use super::internal::SafeValueBuilder;
 use serde_json::Value;
 
-/// An owned JSON value with protected cloning, comparison, formatting, and
-/// drop.
+/// An owned JSON value whose clone, equality, debug formatting, and drop use
+/// protected tree operations.
+///
+/// This protection does not extend to arbitrary recursive operations on a
+/// borrowed or extracted [`serde_json::Value`]. [`as_value`](Self::as_value)
+/// returns a shared borrow tied to this owner; callers remain responsible for
+/// the stack behavior of recursive operations they invoke through that borrow.
+/// [`into_value`](Self::into_value) gives up the protected owner and transfers
+/// responsibility for the resulting tree's lifetime to the caller.
+///
+/// Serde interoperability uses `stacker` and still depends on the concrete
+/// serializer or deserializer, which may impose its own recursion limits. The
+/// owner does not enforce an exact heap-memory limit.
+///
+/// # Example
+///
+/// ```
+/// use qubit_json::value::SafeJsonValue;
+/// use serde_json::json;
+///
+/// let owner = SafeJsonValue::new(json!({"items": [1, 2]}));
+/// let copy = owner.clone();
+/// assert_eq!(owner, copy);
+/// assert_eq!(owner.as_value()["items"][0], 1);
+/// let shallow_raw = copy.into_value();
+/// assert!(shallow_raw.is_object());
+/// ```
 pub struct SafeJsonValue {
+    /// The root is optional so protected operations can take it before cleanup.
     root: Option<Value>,
-}
-
-pub(super) struct SafeValueBuilder {
-    value: Option<Value>,
-}
-
-impl SafeValueBuilder {
-    pub(super) fn array() -> Self {
-        Self {
-            value: Some(Value::Array(Vec::new())),
-        }
-    }
-
-    pub(super) fn object() -> Self {
-        Self {
-            value: Some(Value::Object(serde_json::Map::new())),
-        }
-    }
-
-    pub(super) fn push(&mut self, child: SafeJsonValue) {
-        let Value::Array(values) = self.value.as_mut().expect("builder is active") else {
-            unreachable!()
-        };
-        values.push(Value::Null);
-        *values.last_mut().expect("just inserted a slot") = child.into_value();
-        maybe_panic_after_guarded_insert();
-    }
-
-    pub(super) fn insert(&mut self, key: String, child: SafeJsonValue) {
-        let Value::Object(values) = self.value.as_mut().expect("builder is active") else {
-            unreachable!()
-        };
-        let slot = values.entry(key).or_insert(Value::Null);
-        *slot = child.into_value();
-        maybe_panic_after_guarded_insert();
-    }
-
-    pub(super) fn finish(mut self) -> Value {
-        self.value.take().expect("builder is active")
-    }
-}
-
-impl Drop for SafeValueBuilder {
-    fn drop(&mut self) {
-        if let Some(mut value) = self.value.take() {
-            drop_tree(&mut value);
-        }
-    }
 }
 
 impl SafeJsonValue {
@@ -218,7 +197,8 @@ impl Drop for SafeJsonValue {
     }
 }
 
-fn drop_tree(root: &mut Value) {
+/// Drops a value tree iteratively, falling back to allocation-free traversal.
+pub(super) fn drop_tree(root: &mut Value) {
     let mut pending = Vec::new();
     if !try_reserve_drop_work(&mut pending, 1) {
         drop_tree_slow(root);
@@ -256,6 +236,7 @@ fn drop_tree(root: &mut Value) {
     }
 }
 
+/// Attempts to grow the explicit cleanup stack without panicking on allocation failure.
 fn try_reserve_drop_work(pending: &mut Vec<Value>, additional: usize) -> bool {
     #[cfg(test)]
     if FAIL_DROP_RESERVE_AFTER.with(|remaining| match remaining.get() {
@@ -299,7 +280,8 @@ impl SafeJsonValue {
     }
 }
 
-fn maybe_panic_after_guarded_insert() {
+/// Injects an unwind after guarded inserts in tests; this is a no-op in builds.
+pub(super) fn maybe_panic_after_guarded_insert() {
     #[cfg(test)]
     PANIC_AFTER_INSERT.with(|remaining| {
         if let Some(count) = remaining.get() {
@@ -312,6 +294,7 @@ fn maybe_panic_after_guarded_insert() {
     });
 }
 
+/// Cleans a tree without allocating by repeatedly removing leaves in place.
 fn drop_tree_slow(root: &mut Value) {
     loop {
         let mut current = std::ptr::from_mut(root);
