@@ -1,1 +1,5 @@
-{}
+{
+  "thresholds": {
+    "functions": 92.5
+  }
+}
