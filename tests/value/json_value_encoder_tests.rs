@@ -1462,12 +1462,13 @@ fn test_budgeted_empty_collect_still_checks_nodes_and_depth() {
         ),
     ] {
         let mut budget = JsonValueBudget::new(limits);
-        let mut transaction = budget.transaction();
-        let error = JsonValueEncoder::new()
-            .encode_in_transaction(&StaticCollectedText(""), &mut transaction)
-            .expect_err("empty Display output still admits a string node");
+        let error = {
+            let mut transaction = budget.transaction();
+            JsonValueEncoder::new()
+                .encode_in_transaction(&StaticCollectedText(""), &mut transaction)
+                .expect_err("empty Display output still admits a string node")
+        };
         assert!(matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &resource));
-        drop(transaction);
         assert_eq!(budget.used_nodes(), Some(0));
     }
 }

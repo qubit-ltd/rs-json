@@ -102,6 +102,7 @@ pub(crate) fn success_fixture(shape: StructuralShape, count: usize) -> Structura
     success_fixture_with_prefix(shape, count, "k")
 }
 
+#[allow(dead_code)]
 pub(crate) fn long_prefix_success_fixture(count: usize) -> StructuralFixture {
     success_fixture_with_prefix(StructuralShape::WideObject, count, "shared-public-prefix-")
 }

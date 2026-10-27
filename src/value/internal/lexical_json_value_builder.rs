@@ -7,10 +7,11 @@
 // =============================================================================
 //! Builds a guarded owned JSON value from lexical events.
 
+use std::collections::BTreeSet;
+
 #[cfg(feature = "jcs")]
 use serde_json::Number;
 use serde_json::Value;
-use std::collections::BTreeSet;
 
 use super::JsonValueFrame;
 use super::JsonValueMaterializationError;
@@ -149,7 +150,10 @@ impl LexicalJsonValueBuilder {
                 self.try_push_value(builder.finish())
             }
             JsonLexicalEvent::EndObject { .. } => {
-                let Some(JsonValueFrame::Object { values, pending_key, .. }) = self.frames.pop() else {
+                let Some(JsonValueFrame::Object {
+                    values, pending_key, ..
+                }) = self.frames.pop()
+                else {
                     unreachable!("scanner emits matched object events")
                 };
                 debug_assert!(pending_key.is_none());
@@ -162,11 +166,7 @@ impl LexicalJsonValueBuilder {
         }
     }
 
-    fn accept_decoded_key_inner(
-        &mut self,
-        key: String,
-        offset: usize,
-    ) -> Result<(), JsonValueMaterializationError> {
+    fn accept_decoded_key_inner(&mut self, key: String, offset: usize) -> Result<(), JsonValueMaterializationError> {
         let Some(JsonValueFrame::Object { keys, pending_key, .. }) = self.frames.last_mut() else {
             unreachable!("scanner emits keys within objects")
         };
@@ -182,7 +182,9 @@ impl LexicalJsonValueBuilder {
         let guarded = SafeJsonValue::new(value);
         match self.frames.last_mut() {
             Some(JsonValueFrame::Array(values)) => values.push(guarded),
-            Some(JsonValueFrame::Object { values, pending_key, .. }) => {
+            Some(JsonValueFrame::Object {
+                values, pending_key, ..
+            }) => {
                 let key = pending_key.take().expect("object value follows key event");
                 values.push((key, guarded));
             }

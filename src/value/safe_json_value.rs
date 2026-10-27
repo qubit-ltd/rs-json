@@ -12,8 +12,9 @@ use std::cell::Cell;
 use std::fmt;
 use std::mem::ManuallyDrop;
 
-use super::internal::SafeValueBuilder;
 use serde_json::Value;
+
+use super::internal::SafeValueBuilder;
 
 /// An owned JSON value whose clone, equality, debug formatting, and drop use
 /// protected tree operations.
@@ -236,7 +237,8 @@ pub(super) fn drop_tree(root: &mut Value) {
     }
 }
 
-/// Attempts to grow the explicit cleanup stack without panicking on allocation failure.
+/// Attempts to grow the explicit cleanup stack without panicking on allocation
+/// failure.
 fn try_reserve_drop_work(pending: &mut Vec<Value>, additional: usize) -> bool {
     #[cfg(test)]
     if FAIL_DROP_RESERVE_AFTER.with(|remaining| match remaining.get() {

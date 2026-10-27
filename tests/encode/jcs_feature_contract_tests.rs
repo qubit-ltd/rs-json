@@ -65,10 +65,7 @@ fn test_jcs_numeric_failure_retains_output_boundaries() {
         );
         let expected: &[u8] = if mode == 3 { b"[0," } else { b"" };
         assert_eq!(bytes, expected);
-        assert_eq!(
-            encoder.session().output_budget().unwrap().used(),
-            expected.len()
-        );
+        assert_eq!(encoder.session().output_budget().unwrap().used(), expected.len());
         assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
     }
 }
@@ -81,9 +78,7 @@ fn test_jcs_numeric_failure_respects_value_and_output_budgets() {
     }
     let value: Value = serde_json::from_str("[0,1e400]").unwrap();
 
-    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
-        .max_nodes(1)
-        .build();
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder().max_nodes(1).build();
     let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
     let mut bytes = Vec::new();
     let error = encoder.write_incremental(&mut bytes, &value).unwrap_err();
@@ -128,9 +123,7 @@ fn test_jcs_numeric_failure_does_not_override_writer_failure() {
         .max_output_bytes(64)
         .build();
     let mut encoder = JcsEncoder::with_limits(limits, 16 * 1024);
-    let error = encoder
-        .write_incremental(&mut RejectingWriter, &value)
-        .unwrap_err();
+    let error = encoder.write_incremental(&mut RejectingWriter, &value).unwrap_err();
     assert_eq!(error.kind(), JcsEncodeErrorKind::Write);
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
     assert_eq!(encoder.session().output_budget().unwrap().used(), 0);
@@ -171,9 +164,7 @@ fn test_number_contract_and_all_entry_points_are_stable() {
         "1e-400",
     ] {
         let from_str = JcsDecoder::unlimited().decode_str(input).unwrap();
-        let from_utf8 = JcsDecoder::unlimited()
-            .decode_utf8(input.as_bytes())
-            .unwrap();
+        let from_utf8 = JcsDecoder::unlimited().decode_utf8(input.as_bytes()).unwrap();
         let mut cursor = std::io::Cursor::new(input.as_bytes());
         let from_input = JcsDecoder::unlimited().decode_input(&mut cursor).unwrap();
         assert_eq!(from_str, from_utf8, "{input}");
@@ -193,12 +184,7 @@ fn test_number_contract_and_all_entry_points_are_stable() {
 #[test]
 fn test_object_marker_nesting_duplicate_keys_and_canonical_bytes() {
     let marker = r#"{"$serde_json::private::Number":"12345678901234567890"}"#;
-    assert!(
-        JcsDecoder::unlimited()
-            .decode_str(marker)
-            .unwrap()
-            .is_object()
-    );
+    assert!(JcsDecoder::unlimited().decode_str(marker).unwrap().is_object());
     assert!(
         JcsDecoder::unlimited()
             .decode_str(r#"{"a":{"$serde_json::private::Number":"2"},"s":"ordinary"}"#)
@@ -218,11 +204,7 @@ fn test_object_marker_nesting_duplicate_keys_and_canonical_bytes() {
     );
     assert_eq!(
         JcsEncoder::unlimited()
-            .to_vec(
-                &JcsDecoder::unlimited()
-                    .decode_str(r#"{"b":2,"a":1}"#)
-                    .unwrap()
-            )
+            .to_vec(&JcsDecoder::unlimited().decode_str(r#"{"b":2,"a":1}"#).unwrap())
             .unwrap(),
         br#"{"a":1,"b":2}"#,
     );
@@ -233,22 +215,14 @@ fn test_budget_precedence_rollback_and_decoder_recovery() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(9)
         .max_nodes(8)
-        .value_limits(
-            JsonValueLimits::builder()
-                .max_number_bytes(2)
-                .max_nodes(8)
-                .build(),
-        )
+        .value_limits(JsonValueLimits::builder().max_number_bytes(2).max_nodes(8).build())
         .build();
     let mut decoder = JcsDecoder::with_limits(limits);
     let error = decoder.decode_str("1e400").unwrap_err();
     let JcsDecodeError::Decode(error) = error else {
         panic!("expected budget error")
     };
-    assert_eq!(
-        error.kind(),
-        qubit_json::decode::JsonDecodeErrorKind::Budget
-    );
+    assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::Budget);
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
     assert_eq!(decoder.session().input_budget().unwrap().used(), 5);
     assert_eq!(decoder.decode_str("true").unwrap(), Value::Bool(true));
@@ -256,7 +230,8 @@ fn test_budget_precedence_rollback_and_decoder_recovery() {
     assert_eq!(decoder.session().input_budget().unwrap().used(), 9);
 }
 
-/// Detects the actual serde_json Number model selected by unified dependency features.
+/// Detects the actual serde_json Number model selected by unified dependency
+/// features.
 fn supports_arbitrary_precision() -> bool {
     match serde_json::from_str::<Value>("1e400") {
         Ok(value) => {

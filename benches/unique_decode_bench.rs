@@ -197,10 +197,12 @@ fn unique_decode_structural(c: &mut Criterion) {
 
     for (key_style, fixture) in COUNTS
         .into_iter()
-        .map(|count| (
-            "short_key",
-            unique_decode_support::structural_fixtures::success_fixture(StructuralShape::WideObject, count),
-        ))
+        .map(|count| {
+            (
+                "short_key",
+                unique_decode_support::structural_fixtures::success_fixture(StructuralShape::WideObject, count),
+            )
+        })
         .chain(COUNTS.into_iter().map(|count| {
             (
                 "long_prefix",

@@ -394,10 +394,8 @@ where
     where
         T: Display + ?Sized,
     {
-        let mut collector = JsonValueDisplayCollector::new(
-            self.context,
-            JsonValueDisplayKind::String { depth: self.depth },
-        );
+        let mut collector =
+            JsonValueDisplayCollector::new(self.context, JsonValueDisplayKind::String { depth: self.depth });
         if write!(&mut collector, "{value}").is_err() {
             return Err(self.fail(JsonSerializationError::new(
                 JsonSerializationErrorKind::DisplayFormattingFailed,

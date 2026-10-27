@@ -20,7 +20,6 @@ use serde_json::to_string;
 use super::JsonValueDisplayCollector;
 use super::JsonValueDisplayKind;
 use super::JsonValueEncodeContext;
-
 use crate::encode::JsonMapKeyKind;
 use crate::encode::JsonSerializationError;
 use crate::encode::JsonSerializationErrorKind;
@@ -194,8 +193,10 @@ where
         if !value.is_finite() {
             return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
         }
-        self.finish_key(to_string(&value)
-            .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))?)
+        self.finish_key(
+            to_string(&value)
+                .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))?,
+        )
     }
 
     /// Serializes a finite 64-bit floating-point key.
@@ -213,9 +214,11 @@ where
     ///
     /// Returns `NonFiniteFloat` when the input is non-finite.
     fn serialize_f64(self, value: f64) -> Result<String, Self::Error> {
-        self.finish_key(Number::from_f64(value)
-            .map(|number| number.to_string())
-            .ok_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat))?)
+        self.finish_key(
+            Number::from_f64(value)
+                .map(|number| number.to_string())
+                .ok_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat))?,
+        )
     }
 
     /// Serializes a character key.
@@ -624,7 +627,9 @@ where
     {
         let mut collector = JsonValueDisplayCollector::new(self.context, JsonValueDisplayKind::Key);
         if write!(&mut collector, "{value}").is_err() {
-            return Err(JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed));
+            return Err(JsonSerializationError::new(
+                JsonSerializationErrorKind::DisplayFormattingFailed,
+            ));
         }
         Ok(collector.into_string())
     }

@@ -219,6 +219,7 @@ pub(crate) fn decode_reject_once(
     decoder.decode_unique_str::<DuplicateKeyRejectingJsonValue>(&fixture.text)
 }
 
+#[allow(dead_code)]
 pub(crate) fn decode_owned_value(fixture: &StructuralFixture) -> StructuralDecoded {
     let value = JsonDecoder::unlimited()
         .decode_value_str(&fixture.text)
@@ -226,6 +227,7 @@ pub(crate) fn decode_owned_value(fixture: &StructuralFixture) -> StructuralDecod
     StructuralDecoded::Value(value.into_value())
 }
 
+#[allow(dead_code)]
 pub(crate) fn decode_validated_preserve(fixture: &StructuralFixture) -> StructuralDecoded {
     let options = JsonValidatedDecodeOptions::builder().build();
     let value = JsonDecoder::unlimited()
@@ -236,6 +238,7 @@ pub(crate) fn decode_validated_preserve(fixture: &StructuralFixture) -> Structur
     StructuralDecoded::Value(value.into_value())
 }
 
+#[allow(dead_code)]
 pub(crate) fn project_value(source: &serde_json::Value) -> serde_json::Value {
     JsonValueEncoder::new()
         .encode(source)

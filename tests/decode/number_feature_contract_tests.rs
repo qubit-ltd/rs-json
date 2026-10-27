@@ -84,10 +84,7 @@ fn test_unique_key_values_preserve_nested_numbers_and_marker_objects() {
         .into_inner();
     assert_eq!(value["amount"].as_f64(), Some(1.5));
     assert_eq!(value["items"][0].as_f64(), Some(100.0));
-    assert_eq!(
-        value["items"][1].as_f64().map(f64::to_bits),
-        Some((-0.0_f64).to_bits())
-    );
+    assert_eq!(value["items"][1].as_f64().map(f64::to_bits), Some((-0.0_f64).to_bits()));
     assert_eq!(value["marker"]["$serde_json::private::Number"], "1.5");
     assert!(
         JsonDecoder::unlimited()
@@ -115,9 +112,7 @@ fn test_unique_key_values_preserve_raw_marker_objects() {
 fn test_unique_key_values_reject_nested_decoded_duplicate_keys() {
     let error = JsonDecoder::unlimited()
         .with_diagnostic_policy(qubit_json::decode::DiagnosticPolicy::Detailed)
-        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(
-            r#"{"items":[{"amount":1.5,"\u0061mount":2.5}]}"#,
-        )
+        .decode_unique_str::<DuplicateKeyRejectingJsonValue>(r#"{"items":[{"amount":1.5,"\u0061mount":2.5}]}"#)
         .expect_err("decoded duplicate keys must still be rejected");
     assert!(error.to_string().contains("duplicate JSON object key"));
     assert_eq!(error.line(), Some(1));
@@ -164,19 +159,11 @@ fn test_real_number_zero_exponents_and_underflow() {
     ] {
         let number: Number = serde_json::from_str(text).expect(text);
         let value = JsonValueEncoder::new().encode(&number).expect(text);
-        assert_eq!(
-            value.as_f64().expect(text).to_bits(),
-            expected.to_bits(),
-            "{text}"
-        );
+        assert_eq!(value.as_f64().expect(text).to_bits(), expected.to_bits(), "{text}");
 
         let bytes = JsonEncoder::unlimited().to_vec(&number).expect(text);
         let decoded: Value = JsonDecoder::unlimited().decode_utf8(&bytes).expect(text);
-        assert_eq!(
-            decoded.as_f64().expect(text).to_bits(),
-            expected.to_bits(),
-            "{text}"
-        );
+        assert_eq!(decoded.as_f64().expect(text).to_bits(), expected.to_bits(), "{text}");
     }
 }
 
@@ -197,12 +184,7 @@ fn test_json_value_encoder_f32_keys_match_direct_encoding() {
         let probe = FloatKeyProbe(key);
         let projected = JsonValueEncoder::new().encode(&probe).unwrap();
         let direct = JsonEncoder::unlimited().to_vec(&probe).unwrap();
-        assert_eq!(
-            to_vec(&projected).unwrap(),
-            direct,
-            "key bits={:08x}",
-            key.to_bits()
-        );
+        assert_eq!(to_vec(&projected).unwrap(), direct, "key bits={:08x}", key.to_bits());
     }
 }
 
@@ -239,9 +221,7 @@ fn test_json_value_encoder_f32_values_remain_strictly_encodable() {
 fn test_tree_number_measurement_uses_the_stored_representation() {
     for text in ["-0", "1.5", "18446744073709551615"] {
         let value: Value = serde_json::from_str(text).unwrap();
-        let expected = serde_json::to_vec(value.as_number().unwrap())
-            .unwrap()
-            .len();
+        let expected = serde_json::to_vec(value.as_number().unwrap()).unwrap().len();
         let limits = JsonValueLimits::<JsonResource, usize>::builder()
             .max_number_bytes(expected)
             .build();
@@ -274,9 +254,7 @@ fn test_private_raw_key_obeys_serde_value_target_semantics() {
 #[test]
 fn test_private_raw_key_preserves_source_accounting_and_root_check() {
     let input = r#"{"$serde_json::private::RawValue":"[1,2,3]"}"#;
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
-        .max_nodes(2)
-        .build();
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder().max_nodes(2).build();
     let mut decoder = JsonDecoder::with_limits(limits);
     let value: Value = decoder.decode_object_str(input).unwrap();
     assert_eq!(value.as_array().unwrap().len(), 3);
@@ -289,9 +267,7 @@ fn test_private_raw_key_can_be_literal_with_unique_key_target() {
         r#"{"$serde_json::private::RawValue":"null"}"#,
         r#"{"$serde_json::private::RawValue":"[1,2,3]"}"#,
     ] {
-        let value: DuplicateKeyRejectingJsonValue = JsonDecoder::unlimited()
-            .decode_utf8(input.as_bytes())
-            .unwrap();
+        let value: DuplicateKeyRejectingJsonValue = JsonDecoder::unlimited().decode_utf8(input.as_bytes()).unwrap();
         let value = value.into_inner();
         assert!(value.is_object());
         assert!(value["$serde_json::private::RawValue"].is_string());
@@ -314,9 +290,7 @@ fn test_seed_entry_points_enforce_the_64_bit_integer_union() {
 
     assert!(
         DuplicateKeyRejectingJsonValueSeed::new()
-            .deserialize(I128Deserializer::<serde_json::Error>::new(
-                i64::MIN as i128 - 1
-            ))
+            .deserialize(I128Deserializer::<serde_json::Error>::new(i64::MIN as i128 - 1))
             .is_err()
     );
 }
@@ -330,9 +304,7 @@ fn test_arbitrary_precision_tree_numbers_are_counted_without_float_conversion() 
     };
     for text in texts {
         let value: Value = serde_json::from_str(text).unwrap();
-        let expected = serde_json::to_vec(value.as_number().unwrap())
-            .unwrap()
-            .len();
+        let expected = serde_json::to_vec(value.as_number().unwrap()).unwrap().len();
         let exact_limits = JsonValueLimits::<JsonResource, usize>::builder()
             .max_number_bytes(expected)
             .max_nodes(4)
@@ -376,8 +348,7 @@ fn test_arbitrary_precision_real_numbers_still_enforce_strict_ranges() {
         return;
     }
     for text in ["1e400", "18446744073709551616"] {
-        let number: Number =
-            serde_json::from_str(text).expect("arbitrary-precision Number must parse");
+        let number: Number = serde_json::from_str(text).expect("arbitrary-precision Number must parse");
         let error = JsonEncoder::unlimited()
             .to_vec(&number)
             .expect_err("ordinary encoding must reject values outside the strict range");
@@ -406,7 +377,8 @@ fn test_arbitrary_precision_real_number_bytes_are_budgeted() {
     assert_eq!(encoder.session().value_budget().used_nodes(), Some(0));
 }
 
-/// Detects the actual serde_json Number model selected by unified dependency features.
+/// Detects the actual serde_json Number model selected by unified dependency
+/// features.
 fn supports_arbitrary_precision() -> bool {
     match serde_json::from_str::<Value>("1e400") {
         Ok(value) => {

@@ -136,7 +136,9 @@ where
     type Error = ValidatedConsumerError<E>;
 
     fn before_value(&mut self, _depth: usize, offset: usize) -> Result<(), Self::Error> {
-        if self.track_path && let Some(ValidatedContainer::Array { next_index }) = self.containers.last() {
+        if self.track_path
+            && let Some(ValidatedContainer::Array { next_index }) = self.containers.last()
+        {
             self.path.push(JsonPathSegment::Index(*next_index));
         }
         self.nodes = self.nodes.saturating_add(1);

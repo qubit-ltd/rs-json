@@ -8,9 +8,9 @@
 
 mod encoder_api_tests;
 #[cfg(feature = "jcs")]
-mod jcs_feature_contract_tests;
-#[cfg(feature = "jcs")]
 mod jcs_encoder_tests;
+#[cfg(feature = "jcs")]
+mod jcs_feature_contract_tests;
 #[cfg(feature = "jcs")]
 mod jcs_roundtrip_tests;
 mod json_encode_error_tests;

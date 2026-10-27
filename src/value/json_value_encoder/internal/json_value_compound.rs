@@ -537,10 +537,7 @@ where
         self.check_failure()?;
         let (key, depth) = match &self.state {
             CompoundState::Map {
-                keys,
-                next_key,
-                depth,
-                ..
+                keys, next_key, depth, ..
             } => {
                 let Some(key) = next_key.as_ref() else {
                     return Err(self.fail(invalid_state(JsonSerializerStateError::MapValueWithoutKey)));
@@ -606,9 +603,7 @@ where
     {
         self.check_failure()?;
         match &self.state {
-            CompoundState::Map {
-                keys, depth, count, ..
-            } => {
+            CompoundState::Map { keys, depth, count, .. } => {
                 let (depth, count, duplicate) = (*depth, *count, keys.contains(key));
                 if duplicate {
                     return Err(self.fail(JsonSerializationError::new(
@@ -678,9 +673,7 @@ where
     {
         self.check_failure()?;
         let (depth, count, duplicate) = match &self.state {
-            CompoundState::StructVariant {
-                keys, depth, count, ..
-            } => (*depth, *count, keys.contains(key)),
+            CompoundState::StructVariant { keys, depth, count, .. } => (*depth, *count, keys.contains(key)),
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
         if duplicate {

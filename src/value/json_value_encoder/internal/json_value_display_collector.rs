@@ -3,8 +3,7 @@
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
-//    Licensed under the Apache License, Version 2.0 (the "License");
-//    you may not use this file except in compliance with the License.
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Display collector that checks value budget before retaining each chunk.
 
@@ -22,13 +21,8 @@ use crate::encode::JsonSerializationErrorKind;
 type ContextCell<'context, 'transaction, 'budget, R, Q> =
     &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
 
-pub(in crate::value::json_value_encoder) struct JsonValueDisplayCollector<
-    'context,
-    'transaction,
-    'budget,
-    R,
-    Q,
-> where
+pub(in crate::value::json_value_encoder) struct JsonValueDisplayCollector<'context, 'transaction, 'budget, R, Q>
+where
     Q: ResourceQuantity,
 {
     context: ContextCell<'context, 'transaction, 'budget, R, Q>,
@@ -36,8 +30,7 @@ pub(in crate::value::json_value_encoder) struct JsonValueDisplayCollector<
     text: String,
 }
 
-impl<'context, 'transaction, 'budget, R, Q>
-    JsonValueDisplayCollector<'context, 'transaction, 'budget, R, Q>
+impl<'context, 'transaction, 'budget, R, Q> JsonValueDisplayCollector<'context, 'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
@@ -72,16 +65,11 @@ where
 {
     fn write_str(&mut self, chunk: &str) -> fmt::Result {
         let Some(next) = self.text.len().checked_add(chunk.len()) else {
-            let error =
-                JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed);
+            let error = JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed);
             let _ = self.context.borrow_mut().record_serialization_error(error);
             return Err(fmt::Error);
         };
-        let result = {
-            self.context
-                .borrow_mut()
-                .check_admit(self.measurement(next))
-        };
+        let result = { self.context.borrow_mut().check_admit(self.measurement(next)) };
         if result.is_err() {
             return Err(fmt::Error);
         }
