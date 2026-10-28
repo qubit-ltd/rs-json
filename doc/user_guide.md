@@ -561,6 +561,14 @@ assert!(owner.as_value().is_object());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+On success, the validated call returns a `SafeJsonValue`. Keep that owner
+alive while borrowing its tree through `as_value()`; calling `into_value()`
+deliberately gives up the owner's protected lifecycle. The path callback sees
+decoded object keys and array indexes, while `token.raw()` retains the source
+spelling of each number. Select `ExactSafeInteger` only for paths whose values
+must fit the exact safe-integer range; return `Preserve` for other numeric
+fields.
+
 `JsonValidatedDecodeOptions` limits the number of value-and-key nodes and the
 encoded bytes in each string token for that document. The decoder's
 `JsonDecodeSession` still accumulates its configured resource usage across
@@ -601,6 +609,13 @@ match error {
 }
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+`TokenFirst` remains strict JSON. It validates a number's complete candidate
+from `[0-9eE+.-]` before a delimiter error: `1-2` is an invalid number, while
+`1x` admits `1` and then fails at root trailing input or the enclosing
+container separator. For strings, it first finds the escape-aware closing
+quote and checks the encoded-byte limit, then validates and decodes the
+contents.
 
 This option is specific to the validated decode APIs. Typed `JsonDecoder`
 decoding, pretty formatting, and JCS decoding keep their existing admission
@@ -1188,7 +1203,14 @@ it, such as `ObjectSeparator` or `Value`. This field participates in derived
 `Eq` and `Debug`, so those structured representations can differ from earlier
 versions; `Display` remains unchanged and does not print the context. The
 context is propagated through validated errors in both redacted and detailed
-diagnostic modes.
+diagnostic modes. `Some(context)` identifies the active grammar position:
+`Value`, `ObjectKey`, `String`, `Number`, `Colon`, `ArraySeparator`,
+`ObjectSeparator`, or `TrailingInput`. `None` means no scanner grammar position
+was recorded; for example, `JsonSyntaxError::new` starts without a context.
+`with_context` returns the same error with a supplied context and preserves its
+reason and source coordinates. When handling a validated `Decode` error, its
+`context` field matches `error.syntax_error().and_then(|syntax| syntax.context())`
+when that syntax error is present.
 
 Adapters that own the error can instead call `into_source()` and exhaustively
 match `JsonDecodeErrorSource` without cloning budget or syntax details.
