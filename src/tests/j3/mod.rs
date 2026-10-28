@@ -12,3 +12,4 @@ mod io_tests;
 mod number_tests;
 mod owner_tests;
 mod projection_tests;
+mod view_allocation_tests;

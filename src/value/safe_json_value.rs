@@ -15,6 +15,8 @@ use std::mem::ManuallyDrop;
 use serde_json::Value;
 
 use super::internal::SafeValueBuilder;
+use super::internal::debug_value;
+use super::internal::values_equal;
 
 /// An owned JSON value whose clone, equality, debug formatting, and drop use
 /// protected tree operations.
@@ -69,6 +71,9 @@ impl SafeJsonValue {
     /// Copies a JSON value using an explicit traversal stack.
     #[must_use]
     pub fn copy_from(value: &Value) -> Self {
+        #[cfg(test)]
+        COPY_FROM_CALLS.with(|calls| calls.set(calls.get() + 1));
+
         enum Task<'a> {
             Visit(&'a Value),
             Array(usize),
@@ -130,74 +135,15 @@ impl Clone for SafeJsonValue {
 
 impl PartialEq for SafeJsonValue {
     fn eq(&self, other: &Self) -> bool {
-        let mut pending = vec![(self.as_value(), other.as_value())];
-        while let Some((left, right)) = pending.pop() {
-            match (left, right) {
-                (Value::Null, Value::Null) => {}
-                (Value::Bool(a), Value::Bool(b)) if a == b => {}
-                (Value::Number(a), Value::Number(b)) if a == b => {}
-                (Value::String(a), Value::String(b)) if a == b => {}
-                (Value::Array(a), Value::Array(b)) if a.len() == b.len() => {
-                    pending.extend(a.iter().zip(b));
-                }
-                (Value::Object(a), Value::Object(b)) if a.len() == b.len() => {
-                    for (key, value) in a {
-                        let Some(other_value) = b.get(key) else {
-                            return false;
-                        };
-                        pending.push((value, other_value));
-                    }
-                }
-                _ => return false,
-            }
-        }
-        true
+        values_equal(self.as_value(), other.as_value())
     }
 }
 
 impl Eq for SafeJsonValue {}
 
 impl fmt::Debug for SafeJsonValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        enum Action<'a> {
-            Value(&'a Value),
-            Text(&'static str),
-            Key(&'a str),
-        }
-        let mut actions = vec![Action::Value(self.as_value())];
-        while let Some(action) = actions.pop() {
-            match action {
-                Action::Text(text) => f.write_str(text)?,
-                Action::Key(key) => fmt::Debug::fmt(key, f)?,
-                Action::Value(Value::Null) => f.write_str("Null")?,
-                Action::Value(Value::Bool(value)) => write!(f, "Bool({value:?})")?,
-                Action::Value(Value::Number(value)) => write!(f, "Number({value:?})")?,
-                Action::Value(Value::String(value)) => write!(f, "String({value:?})")?,
-                Action::Value(Value::Array(values)) => {
-                    f.write_str("Array [")?;
-                    actions.push(Action::Text("]"));
-                    for (index, child) in values.iter().enumerate().rev() {
-                        if index + 1 < values.len() {
-                            actions.push(Action::Text(", "));
-                        }
-                        actions.push(Action::Value(child));
-                    }
-                }
-                Action::Value(Value::Object(values)) => {
-                    f.write_str("Object {")?;
-                    actions.push(Action::Text("}"));
-                    for (index, (key, child)) in values.iter().enumerate().rev() {
-                        if index + 1 < values.len() {
-                            actions.push(Action::Text(", "));
-                        }
-                        actions.push(Action::Value(child));
-                        actions.push(Action::Text(": "));
-                        actions.push(Action::Key(key));
-                    }
-                }
-            }
-        }
-        Ok(())
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        debug_value(self.as_value(), formatter)
     }
 }
 
@@ -270,12 +216,17 @@ fn try_reserve_drop_work(pending: &mut Vec<Value>, additional: usize) -> bool {
 
 #[cfg(test)]
 thread_local! {
+    static COPY_FROM_CALLS: Cell<usize> = const { Cell::new(0) };
     static FAIL_DROP_RESERVE_AFTER: Cell<Option<usize>> = const { Cell::new(None) };
     static PANIC_AFTER_INSERT: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
 #[cfg(test)]
 impl SafeJsonValue {
+    pub(crate) fn take_copy_from_calls_for_test() -> usize {
+        COPY_FROM_CALLS.with(|calls| calls.replace(0))
+    }
+
     pub(crate) fn fail_drop_reserve_after_for_test(successful_reserves: usize) {
         FAIL_DROP_RESERVE_AFTER.with(|remaining| remaining.set(Some(successful_reserves)));
     }

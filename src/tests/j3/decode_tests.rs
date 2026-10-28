@@ -19,6 +19,7 @@ fn test_lexical_scan_error_formats_each_variant() {
         line: 1,
         column: 3,
         reason: JsonLexicalErrorReason::UnexpectedByte,
+        context: None,
     });
     let converted: JsonLexicalScanError<&str, JsonResource, usize> = lexical.into();
     assert!(converted.to_string().contains("UnexpectedByte"));

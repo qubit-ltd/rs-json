@@ -38,7 +38,7 @@ impl Serialize for SafeJsonValue {
     }
 }
 
-fn serialize_value<S>(value: &Value, serializer: S) -> Result<S::Ok, S::Error>
+pub(super) fn serialize_value<S>(value: &Value, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {

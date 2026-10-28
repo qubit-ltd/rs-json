@@ -57,6 +57,221 @@ fn test_safe_value_bridge_preserves_object_entry_order() {
         expected.keys().map(String::as_str).collect::<Vec<_>>(),
     );
 }
+
+mod view_robustness {
+    use std::io;
+    use std::io::Write;
+
+    use qubit_json::value::JsonValueRef;
+    use qubit_json::value::SafeJsonValue;
+    use serde::Serialize;
+    use serde::Serializer;
+    use serde::ser::Impossible;
+    use serde_json::Value;
+
+    fn owner_at_depth(depth: usize, leaf: i64) -> SafeJsonValue {
+        let mut root = Value::from(leaf);
+        for _ in 0..depth {
+            root = Value::Array(vec![root]);
+        }
+        SafeJsonValue::new(root)
+    }
+
+    struct RejectAfter(usize);
+
+    impl Write for RejectAfter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if self.0 == 0 {
+                return Err(io::Error::new(io::ErrorKind::PermissionDenied, "view-test-sink"));
+            }
+            let written = self.0.min(bytes.len());
+            self.0 -= written;
+            Ok(written)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_deep_view_matches_owner_and_survives_write_error() {
+        std::thread::Builder::new()
+            .stack_size(2 * 1024 * 1024)
+            .spawn(|| {
+                let owner = owner_at_depth(4096, 7);
+                let equal = owner_at_depth(4096, 7);
+                let different = owner_at_depth(4096, 8);
+                let view = JsonValueRef::new(owner.as_value());
+                assert_eq!(view, JsonValueRef::new(equal.as_value()));
+                assert_ne!(view, JsonValueRef::new(different.as_value()));
+                assert_eq!(format!("{view:?}"), format!("{owner:?}"));
+                assert_eq!(serde_json::to_vec(&view).unwrap(), serde_json::to_vec(&owner).unwrap());
+                let error = serde_json::to_writer(RejectAfter(2048), &view).unwrap_err();
+                assert_eq!(error.io_error_kind(), Some(io::ErrorKind::PermissionDenied));
+                assert!(owner.as_value().is_array());
+                assert!(!serde_json::to_vec(&view).unwrap().is_empty());
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn test_deep_mixed_view_keeps_owner_alive_after_copy_scope() {
+        std::thread::Builder::new()
+            .stack_size(2 * 1024 * 1024)
+            .spawn(|| {
+                let mut root = Value::from("leaf");
+                for index in 0..2048 {
+                    root = if index % 2 == 0 {
+                        Value::Object(serde_json::Map::from_iter([("child".to_owned(), root)]))
+                    } else {
+                        Value::Array(vec![root])
+                    };
+                }
+                let owner = SafeJsonValue::new(root);
+                let view = JsonValueRef::new(owner.as_value());
+                {
+                    let copied = view;
+                    assert!(std::ptr::eq(view.as_value(), copied.as_value()));
+                    assert_eq!(view, copied);
+                }
+                assert!(!serde_json::to_vec(&view).unwrap().is_empty());
+                assert!(owner.as_value().is_array() || owner.as_value().is_object());
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct SentinelError(u8);
+
+    impl std::fmt::Display for SentinelError {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(formatter, "sentinel:{}", self.0)
+        }
+    }
+
+    impl std::error::Error for SentinelError {}
+
+    impl serde::ser::Error for SentinelError {
+        fn custom<T: std::fmt::Display>(_: T) -> Self {
+            Self(91)
+        }
+    }
+
+    struct RejectSerializer;
+
+    macro_rules! reject_scalar {
+        ($($name:ident($ty:ty)),* $(,)?) => {
+            $(fn $name(self, _: $ty) -> Result<(), SentinelError> {
+                Err(SentinelError(37))
+            })*
+        };
+    }
+
+    impl Serializer for RejectSerializer {
+        type Ok = ();
+        type Error = SentinelError;
+        type SerializeSeq = Impossible<(), SentinelError>;
+        type SerializeTuple = Impossible<(), SentinelError>;
+        type SerializeTupleStruct = Impossible<(), SentinelError>;
+        type SerializeTupleVariant = Impossible<(), SentinelError>;
+        type SerializeMap = Impossible<(), SentinelError>;
+        type SerializeStruct = Impossible<(), SentinelError>;
+        type SerializeStructVariant = Impossible<(), SentinelError>;
+
+        reject_scalar!(
+            serialize_bool(bool),
+            serialize_i8(i8),
+            serialize_i16(i16),
+            serialize_i32(i32),
+            serialize_i64(i64),
+            serialize_u8(u8),
+            serialize_u16(u16),
+            serialize_u32(u32),
+            serialize_u64(u64),
+            serialize_f32(f32),
+            serialize_f64(f64),
+            serialize_char(char),
+            serialize_str(&str),
+            serialize_bytes(&[u8]),
+        );
+
+        fn serialize_none(self) -> Result<(), Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_unit(self) -> Result<(), Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_some<T: ?Sized + Serialize>(self, _: &T) -> Result<(), Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_unit_struct(self, _: &'static str) -> Result<(), Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_unit_variant(self, _: &'static str, _: u32, _: &'static str) -> Result<(), Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_newtype_struct<T: ?Sized + Serialize>(self, _: &'static str, _: &T) -> Result<(), Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_newtype_variant<T: ?Sized + Serialize>(
+            self,
+            _: &'static str,
+            _: u32,
+            _: &'static str,
+            _: &T,
+        ) -> Result<(), Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_tuple_variant(
+            self,
+            _: &'static str,
+            _: u32,
+            _: &'static str,
+            _: usize,
+        ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Self::Error> {
+            Err(SentinelError(37))
+        }
+        fn serialize_struct_variant(
+            self,
+            _: &'static str,
+            _: u32,
+            _: &'static str,
+            _: usize,
+        ) -> Result<Self::SerializeStructVariant, Self::Error> {
+            Err(SentinelError(37))
+        }
+    }
+
+    #[test]
+    fn test_view_preserves_serializer_associated_error() {
+        let owner = SafeJsonValue::new(serde_json::json!({"x": [1]}));
+        let error = JsonValueRef::new(owner.as_value())
+            .serialize(RejectSerializer)
+            .unwrap_err();
+        assert_eq!(error, SentinelError(37));
+        assert!(owner.as_value().is_object());
+    }
+}
 // =============================================================================
 //    Copyright (c) 2026 Haixing Hu.
 //
