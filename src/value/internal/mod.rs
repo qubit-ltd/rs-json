@@ -18,7 +18,9 @@ mod json_value_measurement;
 mod json_value_read_ops;
 mod json_value_visitor;
 mod lexical_json_value_builder;
+mod nested;
 mod safe_value_builder;
+mod value_visitor;
 
 pub(super) use json_key_seed::JsonKeySeed;
 pub(crate) use json_number_length_writer::JsonNumberLengthWriter;
@@ -31,4 +33,6 @@ pub(super) use json_value_read_ops::debug_value;
 pub(super) use json_value_read_ops::values_equal;
 pub(super) use json_value_visitor::JsonValueVisitor;
 pub(crate) use lexical_json_value_builder::LexicalJsonValueBuilder;
+pub(super) use nested::Nested;
 pub(crate) use safe_value_builder::SafeValueBuilder;
+pub(super) use value_visitor::ValueVisitor;

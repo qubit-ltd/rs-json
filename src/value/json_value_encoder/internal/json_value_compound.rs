@@ -24,9 +24,11 @@ use serde::ser::SerializeTupleStruct;
 use serde::ser::SerializeTupleVariant;
 use serde_json::Value;
 
+use super::CompoundState;
 use super::JsonValueEncodeContext;
 use super::JsonValueMapKeySerializer;
 use super::JsonValueSerializer;
+use super::RawValueConsumer;
 use super::private_text_serializer::PrivateTextSerializer;
 use crate::encode::JsonSerializationError;
 use crate::encode::JsonSerializationErrorKind;
@@ -38,45 +40,6 @@ use crate::value::internal::SafeValueBuilder;
 
 type ContextCell<'context, 'transaction, 'budget, R, Q> =
     &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
-
-enum CompoundState {
-    Sequence {
-        values: Vec<SafeJsonValue>,
-        depth: usize,
-        count: usize,
-        kind: JsonContainerKind,
-    },
-    Map {
-        values: Vec<(String, SafeJsonValue)>,
-        keys: BTreeSet<String>,
-        next_key: Option<String>,
-        depth: usize,
-        count: usize,
-    },
-    TupleVariant {
-        variant: String,
-        values: Vec<SafeJsonValue>,
-        depth: usize,
-        count: usize,
-    },
-    StructVariant {
-        variant: String,
-        values: Vec<(String, SafeJsonValue)>,
-        keys: BTreeSet<String>,
-        depth: usize,
-        count: usize,
-    },
-    RawValue {
-        text: Option<String>,
-        state: JsonPrivateProtocolState,
-        depth: usize,
-    },
-    Number {
-        text: Option<String>,
-        state: JsonPrivateProtocolState,
-        depth: usize,
-    },
-}
 
 /// Accumulates one Serde compound with guarded children and sticky failures.
 ///
@@ -90,7 +53,9 @@ where
     Q: ResourceQuantity,
 {
     context: ContextCell<'context, 'transaction, 'budget, R, Q>,
+    /// Active compound shape and its guarded, not-yet-committed children.
     state: CompoundState,
+    /// First failure is retained even if the serializer ignores a child error.
     failure: Cell<Option<JsonSerializationError>>,
 }
 
@@ -752,26 +717,11 @@ pub(super) fn private_invalid_state(kind: JsonPrivateProtocolKind) -> JsonSerial
     invalid_state(kind.invalid_state())
 }
 
-struct RawValueConsumer<'builder> {
-    builder: &'builder mut crate::value::internal::LexicalJsonValueBuilder,
-}
-
-impl<'input> crate::lexical::JsonLexicalConsumer<'input> for RawValueConsumer<'_> {
-    type Error = crate::value::internal::JsonValueMaterializationError;
-    fn before_value(&mut self, _: usize, _: usize) -> Result<(), Self::Error> {
-        Ok(())
-    }
-    fn before_key(&mut self, _: usize) -> Result<(), Self::Error> {
-        Ok(())
-    }
-    fn before_number(&mut self, _: &'input str, _: usize) -> Result<(), Self::Error> {
-        Ok(())
-    }
-    fn event(&mut self, event: crate::lexical::JsonLexicalEvent<'input>) -> Result<(), Self::Error> {
-        self.builder.try_accept(event)
-    }
-}
-
+/// Materializes one RawValue payload through the guarded lexical builder.
+///
+/// Syntax, numeric range, duplicate-key, and budget failures retain their
+/// existing mapping: budget failures preserve their budget error, while other
+/// invalid payloads become `InvalidRawValue`.
 fn decode_raw_value<R, Q>(
     text: &str,
     context: ContextCell<'_, '_, '_, R, Q>,

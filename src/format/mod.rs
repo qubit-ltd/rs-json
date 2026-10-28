@@ -7,6 +7,7 @@
 // =============================================================================
 //! Whitespace-only formatting for strict JSON token streams.
 
+mod internal;
 mod json_pretty_error;
 mod json_pretty_error_kind;
 mod json_pretty_options;
