@@ -483,6 +483,11 @@ assert!(owner.as_value().is_object());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+成功时，validated 解码会返回 `SafeJsonValue`。通过 `as_value()` 借用值树时要让 owner 保持存活；调用
+`into_value()` 则是主动放弃 owner 提供的生命周期保护。路径回调收到的是已解码的对象键和数组下标，
+`token.raw()` 保留数字在输入中的原始写法。只有确实要求数值落在精确安全整数范围内的路径才选择
+`ExactSafeInteger`，其他字段可返回 `Preserve`。
+
 若之后发生语法错误，策略回调已产生的应用副作用不会回滚。
 
 validated 解码默认使用 `JsonValidatedAdmissionPolicy::Immediate`，首错顺序与既有行为一致。只有在希望先准入
@@ -514,6 +519,10 @@ match error {
 }
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+`TokenFirst` 仍然只接受合法 JSON。它会先按 `[0-9eE+.-]` 收集完整数字候选再验证，因此 `1-2` 属于非法数字；
+`1x` 则先准入 `1`，再由根文档的尾随输入检查或外层容器的分隔符检查拒绝 `x`。对于字符串，它先按转义规则
+找到闭合引号并检查编码字节上限，再验证和解码字符串内容。
 
 该选项只影响 validated 解码入口。typed `JsonDecoder` 解码、pretty 排版和 JCS 解码继续使用各自既有的准入顺序；
 内部共用 scanner 不会让它们自动采用 TokenFirst。
@@ -982,6 +991,11 @@ CR 都会开始新行；CRLF 只算一个换行。对于 `Deserialize`，坐标�
 `JsonSyntaxError::context()` 在已知时提供语法位置，例如 `ObjectSeparator` 或 `Value`。该字段属于派生的
 `Eq` 和 `Debug` 比较/输出内容，因此结构化诊断与旧版本相比可能不同；`Display` 文本保持不变，也不会输出 context。
 无论采用 Redacted 还是 Detailed 诊断，validated 错误都会保留该上下文。
+`Some(context)` 表示扫描器记录了当时的语法位置，可为 `Value`、`ObjectKey`、`String`、`Number`、`Colon`、
+`ArraySeparator`、`ObjectSeparator` 或 `TrailingInput`。`None` 表示没有记录语法位置，例如
+`JsonSyntaxError::new` 创建的错误默认没有 context。`with_context` 会返回附带指定 context 的错误，同时保留原有
+reason 和源码坐标。validated 解码返回 `Decode` 错误时，错误中的 `context` 与
+`error.syntax_error().and_then(|syntax| syntax.context())` 一致（存在 syntax error 时）。
 
 适配层取得错误所有权后，也可以调用 `into_source()`，对 `JsonDecodeErrorSource` 做穷举匹配，
 不需要克隆预算或语法错误详情。

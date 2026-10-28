@@ -8,8 +8,10 @@
 //! J3 JSON refactor contract tests.
 
 mod decode_tests;
+mod diagnostic_context_tests;
 mod io_tests;
 mod number_tests;
 mod owner_tests;
 mod projection_tests;
+mod token_first_tests;
 mod view_allocation_tests;
