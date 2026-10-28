@@ -16,6 +16,7 @@ use serde_json::Value;
 use super::JsonValueFrame;
 use super::JsonValueMaterializationError;
 use crate::internal::StrictJsonNumber;
+use crate::lexical::JsonLexicalConsumer;
 use crate::lexical::JsonLexicalEvent;
 use crate::lexical::JsonNumberModel;
 use crate::value::SafeJsonValue;
@@ -27,12 +28,15 @@ use crate::value::internal::SafeValueBuilder;
 /// after the full event sequence succeeds, so callers cannot receive a partial
 /// tree.
 pub(crate) struct LexicalJsonValueBuilder {
+    /// Number representation contract applied to already admitted tokens.
     model: JsonNumberModel,
+    /// Open container frames paired with scanner begin/end events.
     frames: Vec<JsonValueFrame>,
+    /// Completed root, populated only after all its children have been built.
     root: Option<SafeJsonValue>,
+    /// First materialization failure, retained to prevent later state changes.
     error: Option<JsonValueMaterializationError>,
 }
-
 impl LexicalJsonValueBuilder {
     /// Creates an empty value builder.
     #[must_use]
@@ -106,6 +110,12 @@ impl LexicalJsonValueBuilder {
         Ok(self.root.take().expect("scanner-complete event stream has one root"))
     }
 
+    /// Applies one scanner-admitted event to the partial tree.
+    ///
+    /// The scanner guarantees valid JSON token spelling and matched container
+    /// boundaries. A failure is retained by `try_accept`; any partially built
+    /// children remain guarded and `finish_guarded` drops them without
+    /// exposing an incomplete root.
     fn accept_inner(&mut self, event: JsonLexicalEvent<'_>) -> Result<(), JsonValueMaterializationError> {
         match event {
             JsonLexicalEvent::Null { .. } => self.try_push_value(Value::Null),
@@ -182,6 +192,11 @@ impl LexicalJsonValueBuilder {
         }
     }
 
+    /// Records a decoded object key after the scanner has admitted its token.
+    ///
+    /// The current frame must be an object with no pending key. Duplicate
+    /// detection uses decoded key equality and retains the second key's source
+    /// offset; a successful key remains pending until its value is pushed.
     fn accept_decoded_key_inner(&mut self, key: String, offset: usize) -> Result<(), JsonValueMaterializationError> {
         let Some(JsonValueFrame::Object { keys, pending_key, .. }) = self.frames.last_mut() else {
             unreachable!("scanner emits keys within objects")
@@ -194,6 +209,11 @@ impl LexicalJsonValueBuilder {
         Ok(())
     }
 
+    /// Attaches a complete child to its open parent or installs the root.
+    ///
+    /// Object parents must have a pending key from a preceding key event.
+    /// Every child is guarded as it is stored so an error or unwind can drop a
+    /// partial tree safely.
     fn try_push_value(&mut self, value: Value) -> Result<(), JsonValueMaterializationError> {
         let guarded = SafeJsonValue::new(value);
         match self.frames.last_mut() {
@@ -210,5 +230,28 @@ impl LexicalJsonValueBuilder {
             }
         }
         Ok(())
+    }
+}
+impl<'input> JsonLexicalConsumer<'input> for LexicalJsonValueBuilder {
+    type Error = JsonValueMaterializationError;
+
+    /// Performs no additional depth check; lexical admission owns that limit.
+    fn before_value(&mut self, _depth: usize, _offset: usize) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    /// Performs no additional key check before the key event is decoded.
+    fn before_key(&mut self, _offset: usize) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    /// Leaves number-token representation handling to the following event.
+    fn before_number(&mut self, _token: &'input str, _offset: usize) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    /// Materializes one admitted event and stops scanning on its first error.
+    fn event(&mut self, event: JsonLexicalEvent<'input>) -> Result<(), Self::Error> {
+        self.try_accept(event)
     }
 }

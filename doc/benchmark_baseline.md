@@ -402,3 +402,85 @@ value accounting, writer error ordering, and partial-output behavior. Numeric
 checks should cover `i64`/`u64` boundaries, range rejection, and `NumberBytes`
 rejection. Unlimited results apply only to trusted or separately admitted data.
 See the [design](json_design.md) and [number contract](number_contract.md).
+
+## Duplicate-tail decode and iterative value-read frames (2026-10-29)
+
+Measurements used Rust 1.94.0, `serde_json 1.0.154`, Criterion 0.8.2, the
+system allocator, and an Intel Core i5-9600K on Linux 7.0.0-38-generic. The
+host was shared and CPU affinity was not set. The unique-decode runs used
+Criterion's default 100 samples; background crate builds overlapped part of
+the collection, so latency pairs are observations rather than a controlled
+speedup claim. Criterion uses the same benchmark IDs for `unique_seed` with
+and without the JCS feature, so its automatic cross-run comparison can select
+the other feature's latest sample. The table records the raw estimates and
+reported intervals from matching feature runs instead.
+
+Commands for duplicate-key decoding were:
+
+```bash
+cargo bench --locked --bench unique_decode_bench -- early_duplicate_tail
+cargo bench --locked --bench unique_decode_bench --features jcs -- early_duplicate_tail
+```
+
+| Feature | Operation | Tail | Before estimate (reported interval) | After estimate (reported interval) |
+| --- | --- | ---: | ---: | ---: |
+| default | unique seed | 1 KiB | 1.9063 µs (1.8943–1.9187) | 1.5736 µs (1.5269–1.6295) |
+| default | unique seed | 64 KiB | 66.148 µs (65.802–66.563) | 42.870 µs (41.908–43.934) |
+| default | unique seed | 1 MiB | 1.4596 ms (1.4013–1.5223) | 533.18 µs (530.50–536.13) |
+| `jcs` | unique seed | 1 KiB | 2.0086 µs (1.9379–2.0889) | 1.8600 µs (1.8432–1.8774) |
+| `jcs` | unique seed | 64 KiB | 80.856 µs (77.954–83.903) | 72.543 µs (70.221–75.326) |
+| `jcs` | unique seed | 1 MiB | 1.0482 ms (1.0435–1.0531) | 1.0292 ms (1.0234–1.0351) |
+| `jcs` | JCS decode | 1 KiB | 1.7619 µs (1.7091–1.8288) | 1.8726 µs (1.8217–1.9334) |
+| `jcs` | JCS decode | 64 KiB | 77.683 µs (75.496–80.351) | 63.781 µs (63.422–64.200) |
+| `jcs` | JCS decode | 1 MiB | 1.0396 ms (1.0365–1.0428) | 1.0085 ms (1.0043–1.0132) |
+
+The fixture has a duplicate near the start followed by valid string data. The
+first complete admission pass remains in place, preserving syntax and budget
+error precedence. The second construction pass now stops at the builder's
+first materialization error. These samples do not impose a wall-clock
+threshold; the JCS 1 KiB result is slightly slower and the measured samples
+include shared-host noise.
+
+The value-read allocation binary uses fixtures built before each measured
+operation and writes Debug output to a discard sink or a sink that fails after
+64 bytes. Reallocations are included in total requested bytes. Counts and
+bytes measure allocation request traffic, not peak live memory or RSS.
+
+```bash
+cargo bench --locked --bench value_read_allocations
+cargo bench --locked --bench value_read_allocations --features serde_json/preserve_order
+```
+
+For the default feature, owner and view results matched. Before the frame
+change, comparison and Debug request traffic rose with width. After the change,
+all three tested widths (32, 512, and 8192) reported the same requests:
+
+| Shape / operation | Before at width 32 | Before at width 8192 | After, each width |
+| --- | ---: | ---: | ---: |
+| Array comparison (equal or unequal) | 2 / 528 B | 2 / 131,088 B | 1 / 320 B |
+| Object comparison (equal or unequal) | 5 / 976 B | 13 / 262,096 B | 1 / 320 B |
+| Array Debug (success or early writer failure) | 6 / 3,000 B | 14 / 786,360 B | 2 / 400 B |
+| Object Debug (success or early writer failure) | 7 / 6,072 B | 15 / 1,572,792 B | 2 / 400 B |
+
+With `serde_json/preserve_order`, the post-change results were constant across
+the same widths: comparisons reported 1 allocation / 128 requested bytes and
+Debug reported 2 / 120 bytes for both shapes and owner/view. No matching
+pre-change preserve-order allocation sample was collected. At depths 8, 64,
+and 256, default-feature comparison requests were 960, 9,920, and 40,640 B;
+Debug requests were 2,320, 20,240, and 81,680 B. The preserve-order post-change
+requests were respectively 384, 3,968, and 16,256 B for comparison, and 696,
+6,072, and 24,504 B for Debug. This depth growth is consistent with the
+explicit frame/action stacks; it also shows their per-depth allocation cost.
+
+The focused time target was run with a 10-sample, 0.1-second warm-up and
+measurement window:
+
+```bash
+cargo bench --locked --bench tree_bench -- json-value-read --warm-up-time 0.1 --measurement-time 0.1 --sample-size 10
+```
+
+Representative current estimates were 38.0 µs for equal 8192-element arrays,
+676 µs for equal 8192-entry objects, 24–46 ns for a first-child mismatch, and
+3.85 µs for depth-256 Debug to a discard sink. These short samples had outliers
+and are descriptive only; the allocation results provide the width-scaling
+evidence. No timing assertion is used.

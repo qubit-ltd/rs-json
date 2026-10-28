@@ -16,6 +16,8 @@ use criterion::Criterion;
 use criterion::Throughput;
 use criterion::criterion_group;
 use criterion::criterion_main;
+#[cfg(feature = "jcs")]
+use qubit_json::decode::JcsDecoder;
 use qubit_json::decode::JsonDecoder;
 use unique_decode_support::decode_path::DecodePath;
 use unique_decode_support::decode_path::assert_decoded;
@@ -121,6 +123,39 @@ fn unique_decode(c: &mut Criterion) {
                 });
                 group.finish();
             }
+        }
+    }
+}
+
+fn early_duplicate_tail(c: &mut Criterion) {
+    for tail_bytes in SIZES {
+        let input = format!(r#"{{"x":0,"x":1,"tail":"{}"}}"#, "a".repeat(tail_bytes));
+        let bytes = input.as_bytes();
+        let unique_result =
+            JsonDecoder::unlimited().decode_unique_seed_utf8(std::marker::PhantomData::<serde_json::Value>, bytes);
+        assert!(unique_result.is_err());
+        let mut group = c.benchmark_group(format!("early_duplicate_tail/unique_seed/{tail_bytes}B"));
+        group.throughput(Throughput::Bytes(bytes.len() as u64));
+        group.bench_function("decode", |bencher| {
+            bencher.iter(|| {
+                black_box(
+                    JsonDecoder::unlimited()
+                        .decode_unique_seed_utf8(std::marker::PhantomData::<serde_json::Value>, black_box(bytes)),
+                )
+            });
+        });
+        group.finish();
+
+        #[cfg(feature = "jcs")]
+        {
+            let jcs_result = JcsDecoder::unlimited().decode_utf8(bytes);
+            assert!(jcs_result.is_err());
+            let mut group = c.benchmark_group(format!("early_duplicate_tail/jcs/{tail_bytes}B"));
+            group.throughput(Throughput::Bytes(bytes.len() as u64));
+            group.bench_function("decode", |bencher| {
+                bencher.iter(|| black_box(JcsDecoder::unlimited().decode_utf8(black_box(bytes))));
+            });
+            group.finish();
         }
     }
 }
@@ -278,5 +313,5 @@ fn unique_decode_structural(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, unique_decode, unique_decode_structural);
+criterion_group!(benches, unique_decode, unique_decode_structural, early_duplicate_tail);
 criterion_main!(benches);

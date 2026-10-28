@@ -607,3 +607,38 @@ mod migrated_owner {
         assert!(error.is_eof());
     }
 }
+
+#[test]
+fn test_owner_comparison_and_debug_preserve_wide_tree_semantics() {
+    let owner = SafeJsonValue::new(serde_json::json!([null, true, {"a": 7}]));
+    assert_eq!(
+        format!("{owner:?}"),
+        "Array [Null, Bool(true), Object {\"a\": Number(Number(7))}]"
+    );
+
+    let width = 8192;
+    let array = |changed: Option<usize>| {
+        SafeJsonValue::new(serde_json::Value::Array(
+            (0..width)
+                .map(|index| serde_json::Value::from(if changed == Some(index) { -1 } else { index as i64 }))
+                .collect(),
+        ))
+    };
+    let baseline = array(None);
+    assert_eq!(baseline, array(None));
+    assert_ne!(baseline, array(Some(0)));
+    assert_ne!(baseline, array(Some(width - 1)));
+
+    let mut left = serde_json::Map::new();
+    let mut right = serde_json::Map::new();
+    for index in 0..width {
+        left.insert(format!("key-{index:05}"), serde_json::Value::from(index as u64));
+    }
+    for index in (0..width).rev() {
+        right.insert(format!("key-{index:05}"), serde_json::Value::from(index as u64));
+    }
+    let expected_object = SafeJsonValue::new(left.clone().into());
+    assert_eq!(expected_object, SafeJsonValue::new(right.into()));
+    left.remove("key-00000");
+    assert_ne!(expected_object, SafeJsonValue::new(left.into()));
+}

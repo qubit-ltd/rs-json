@@ -573,11 +573,17 @@ where
         let mut attempt = self.session.begin_value();
         Self::prepare_attempt(&mut attempt, input, metadata, true, has_value_limits)?;
         let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Integer64);
-        JsonLexicalScanner::new(attempt.value_transaction_mut(), false)
-            .scan_with_events(input, |event| {
-                let _ = builder.try_accept(event);
-            })
-            .map_err(|error| Self::map_lexical_error(error, input, metadata))?;
+        let scan =
+            JsonLexicalScanner::new(attempt.value_transaction_mut(), false).scan_with_consumer(input, &mut builder);
+        match scan {
+            Ok(()) | Err(JsonLexicalScanError::Consumer(_)) => {}
+            Err(JsonLexicalScanError::Lexical(error)) => {
+                return Err(Self::map_lexical_error(error, input, metadata));
+            }
+            Err(JsonLexicalScanError::EncodedStringLimit { .. }) => {
+                unreachable!("unique seed scanning does not configure an encoded string limit")
+            }
+        }
         let tree = builder.finish_guarded().map_err(|error| {
             let (reason, message, offset) = match error {
                 JsonValueMaterializationError::DuplicateKey { offset } => (
@@ -981,11 +987,15 @@ where
         let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Binary64);
         let scan = JsonLexicalScanner::new(attempt.value_transaction_mut(), false)
             .with_number_model(JsonNumberModel::Binary64)
-            .scan_with_events(input, |event| {
-                let _ = builder.try_accept(event);
-            });
-        if let Err(error) = scan {
-            return Err(JcsDecodeError::Decode(Self::map_lexical_error(error, input, metadata)));
+            .scan_with_consumer(input, &mut builder);
+        match scan {
+            Ok(()) | Err(JsonLexicalScanError::Consumer(_)) => {}
+            Err(JsonLexicalScanError::Lexical(error)) => {
+                return Err(JcsDecodeError::Decode(Self::map_lexical_error(error, input, metadata)));
+            }
+            Err(JsonLexicalScanError::EncodedStringLimit { .. }) => {
+                unreachable!("JCS scanning does not configure an encoded string limit")
+            }
         }
         let value = match builder.finish_guarded() {
             Ok(value) => value,
