@@ -55,10 +55,10 @@ fn main() {
                         JsonDecoder::unlimited()
                     };
                     let warmup = decode_with_decoder(path, &fixture, &mut decoder);
-                    assert_decoded(&warmup, path, shape);
+                    assert_decoded(&warmup, path, &fixture);
                     std::hint::black_box(warmup);
                     let (fresh_result, fresh) = allocation_counter::measure(|| decode_once(path, &fixture, finite));
-                    assert_decoded(&fresh_result, path, shape);
+                    assert_decoded(&fresh_result, path, &fixture);
                     std::hint::black_box(fresh_result);
                     println!(
                         "UNIQUE_DECODE_ALLOC,{},{},{},{},fresh,{},{},{}",
@@ -78,7 +78,7 @@ fn main() {
                     };
                     let warmup = decode_batch_with_decoder(path, &fixture, &mut warmup_decoder, 8);
                     for decoded in warmup {
-                        assert_decoded(&decoded, path, shape);
+                        assert_decoded(&decoded, path, &fixture);
                         std::hint::black_box(decoded);
                     }
                     let mut decoder = if finite {
@@ -89,7 +89,7 @@ fn main() {
                     let (batch_result, batch) =
                         allocation_counter::measure(|| decode_batch_with_decoder(path, &fixture, &mut decoder, 8));
                     for decoded in batch_result {
-                        assert_decoded(&decoded, path, shape);
+                        assert_decoded(&decoded, path, &fixture);
                         std::hint::black_box(decoded);
                     }
                     println!(

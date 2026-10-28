@@ -77,26 +77,26 @@ pub(crate) fn reject_fixture(shape: Shape, target_bytes: usize) -> Fixture {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub(crate) struct Config {
     pub(crate) name: String,
     pub(crate) enabled: bool,
     pub(crate) payload: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub(crate) struct Metadata {
     pub(crate) name: String,
     pub(crate) payload: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub(crate) struct WireEnvelope {
     pub(crate) version: u32,
     pub(crate) records: Vec<WireRecord>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub(crate) struct WireRecord {
     pub(crate) id: u64,
     pub(crate) payload: String,
