@@ -53,10 +53,10 @@ fn unique_decode(c: &mut Criterion) {
                         "unlimited"
                     };
                     let decoded = decode_once(path, &fixture, finite);
-                    assert_decoded(&decoded, path, shape);
+                    assert_decoded(&decoded, path, &fixture);
                     black_box(decoded);
                     for decoded in decode_batch(path, &fixture, finite, 8) {
-                        assert_decoded(&decoded, path, shape);
+                        assert_decoded(&decoded, path, &fixture);
                         black_box(decoded);
                     }
                     let base = format!("unique_decode/{}/{}/{}/{}", shape.name(), size, path.name(), budget);

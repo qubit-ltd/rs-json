@@ -11,7 +11,10 @@ use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonNumberPolicy;
 use qubit_json::decode::JsonValidatedDecodeOptions;
+use qubit_json::format::JsonPrettyOptions;
+use qubit_json::format::format_json_tokens;
 use qubit_json_fuzz::json_encode_invariants::assert_json_encode_invariants;
+use qubit_json_fuzz::json_reference::parse_literal_value;
 use qubit_json_fuzz::json_unique_decode_invariants::assert_protected_decode_invariants;
 use qubit_json_fuzz::json_unique_decode_invariants::assert_token_format_invariants;
 use qubit_json_fuzz::json_unique_decode_invariants::assert_unique_decode_invariants;
@@ -84,4 +87,28 @@ fn test_extended_invariants_cover_encode_transaction_projection_inputs() {
         input.extend_from_slice(json);
         assert_json_encode_invariants(&input);
     }
+}
+
+#[test]
+fn test_formatter_accepts_reference_valid_matrix() {
+    let samples: &[&[u8]] = &[
+        br#"{"s":"a\/b"}"#,
+        br#"{"s":"\u0061"}"#,
+        br#"{"x":1,"x":2}"#,
+        br#"{"$serde_json::private::RawValue":"null"}"#,
+        br#"[{},[],null]"#,
+        br#"{"s":"a b\tc"}"#,
+    ];
+    for sample in samples {
+        assert!(parse_literal_value(sample).is_ok());
+        assert_token_format_invariants(sample);
+    }
+}
+
+#[test]
+fn test_formatter_reference_is_one_way_for_wide_numbers() {
+    let options = JsonPrettyOptions::builder().build().unwrap();
+    let formatted = format_json_tokens(b"1e400", &options, Some(131_072)).unwrap();
+    assert_eq!(formatted, b"1e400");
+    assert_token_format_invariants(b"1e400");
 }

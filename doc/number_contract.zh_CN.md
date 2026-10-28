@@ -37,13 +37,16 @@ RFC 8259 没有规定 number token 的最大长度，但允许实现限制数字
 
 | 入口 | 范围内整数 | 超范围整数 token | 小数/指数 token |
 | --- | --- | --- | --- |
-| 默认 `Integer64` | `i64`/`u64` | 拒绝 | 有限 `f64` |
-| `Integer64WithFiniteFallback` | `i64`/`u64` | 接受为有限 `f64`，可能舍入 | 有限 `f64` |
+| typed `decode_input_with_number_model`，默认 `Integer64` | 按 `i64`/`u64` 准入，再由 Serde 构造 `T` | 拒绝 | 按有限 `f64` 准入，再由 Serde 构造 `T` |
+| typed `decode_input_with_number_model`，有限 fallback | 按 `i64`/`u64` 准入，再由 Serde 构造 `T` | 可转为有限 `f64` 时准入；实际表示由 `T` 和启用的 feature 决定 | 按有限 `f64` 准入，再由 Serde 构造 `T` |
+| validated 拥有型解码，默认 `Integer64` | 物化为 `i64`/`u64` | 拒绝 | 物化为有限 `f64` |
+| validated 拥有型解码，有限 fallback | 物化为 `i64`/`u64` | 物化为有限 `f64`，可能舍入 | 物化为有限 `f64` |
 | `JcsDecoder` | 转为 `f64` | 转为有限 `f64`，可能舍入 | 有限 `f64` |
 
-例如 `18446744073709551617` 超出 `u64`：默认模型拒绝，fallback 模型可将其表示为舍入后的有限
-binary64 值 `18446744073709551616`。`1e400` 仍会被拒绝，因为它不是有限值。选择模型只决定数字 token
-能否准入，不保证目标类型或应用 schema 一定接受生成的值。
+例如 `18446744073709551617` 超出 `u64`：默认模型拒绝，fallback 则允许准入。validated 解码配合
+`Preserve` 会将其物化为舍入后的有限 binary64 值 `18446744073709551616`。typed 输入路径将最终表示交给 Serde；
+启用 `arbitrary_precision` 时可能保留宽整数，之后严格编码会因超出范围而拒绝。`1e400` 仍会被拒绝，因为它不是有限值。
+选择模型只决定数字 token 能否准入，不保证目标类型或应用 schema 一定接受生成的值。
 
 validated 拥有型解码可在 options 中选择模型：
 
@@ -52,6 +55,7 @@ use qubit_json::decode::{
     JsonDecodeNumberModel, JsonDecoder, JsonNumberPolicy,
     JsonValidatedDecodeOptions,
 };
+use serde_json::Value;
 
 let options = JsonValidatedDecodeOptions::builder()
     .number_model(JsonDecodeNumberModel::Integer64WithFiniteFallback)
@@ -61,7 +65,9 @@ let value = decoder
     .decode_unique_validated_str("18446744073709551617", &options,
         |_, _| Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve))
     .unwrap();
-assert_eq!(value.as_value().as_f64().unwrap(), 18446744073709551616_f64);
+assert!(value.as_value().is_f64());
+let expected = Value::Number(serde_json::Number::from_f64(18446744073709551616_f64).unwrap());
+assert_eq!(value.as_value().to_string(), expected.to_string());
 ```
 
 输入流 typed 入口也支持显式选择模型：
@@ -79,7 +85,9 @@ let value: Value = decoder
         JsonDecodeNumberModel::Integer64WithFiniteFallback,
     )
     .unwrap();
-assert_eq!(value.as_f64().unwrap(), 18446744073709551616_f64);
+let expected: Value = serde_json::from_str("18446744073709551617").unwrap();
+assert_eq!(value.to_string(), expected.to_string());
+assert_eq!(value.is_f64(), expected.is_f64());
 
 let mut input = Cursor::new(b"1e400".to_vec());
 assert!(decoder

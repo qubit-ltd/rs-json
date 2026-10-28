@@ -1125,18 +1125,19 @@ Ordinary text decoding defaults to `JsonDecodeNumberModel::Integer64`: integer
 tokens must fit `i64` or `u64`, while decimal and exponent tokens must produce
 finite `f64` values. `Integer64WithFiniteFallback`, selected through
 `JsonValidatedDecodeOptions::builder().number_model(...)` or
-`JsonDecoder::decode_input_with_number_model`, changes only out-of-range
-integer tokens. A token such as `18446744073709551617` may then be rounded to
-the finite `f64` value `18446744073709551616`; the default model rejects it.
-Both ordinary models still reject `1e400`. `JcsDecoder` uses binary64 for every
-number, including in-range integers, and also rejects non-finite results.
-Admitting a token does not guarantee that a particular target type or
-application schema accepts the resulting value. See the [number
+`JsonDecoder::decode_input_with_number_model`, changes admission of only
+out-of-range integer tokens. Validated decoding with `JsonNumberPolicy::Preserve`
+materializes such a token as finite `f64`, possibly rounded. The typed input
+path delegates the result representation to `T` and active `serde_json`
+features; with `arbitrary_precision`, it may preserve the wide integer, which
+strict re-encoding then rejects as out of range. Both ordinary models still
+reject `1e400`. `JcsDecoder` uses binary64 for every number, including in-range
+integers, and also rejects non-finite results. See the [number
 contract](number_contract.md) for runnable examples.
 
 Choose one of three numeric boundaries deliberately:
 
-- **Ordinary text and Serde events:** the default `Integer64` strict text model requires negative integers in `i64`, non-negative integers in `u64`, and fractional or exponent values that convert to finite `f64`. Explicit finite fallback can admit wider integer tokens when they convert to finite `f64`, with possible rounding, through entry points that expose number-model selection. `i128` and `u128` serializer/seed events remain explicitly range-checked. Text decoding checks the original-token `NumberBytes` before numeric range. `AccountingJsonValueSeed` cannot measure that token, but enforces `NumberBytes` using the compact display length of the constructed `Number`; by default, `1e2` (3 source bytes) displays as `100.0` (5 bytes). See the [number contract](number_contract.md). `DuplicateKeyRejectingJsonValueSeed` does not apply a resource budget. For map-shaped Serde events, a seed also cannot tell a real object from an upstream imitation of serde_json's private Number map.
+- **Ordinary text and Serde events:** the default `Integer64` strict text model requires negative integers in `i64`, non-negative integers in `u64`, and fractional or exponent values that convert to finite `f64`. Explicit fallback admits wider integer tokens when they convert to finite `f64`. Validated `Preserve` materializes those tokens as finite `f64`; typed input decoding delegates representation to `T` and active Serde features, so a preserved wide integer may fail strict re-encoding. `i128` and `u128` serializer/seed events remain explicitly range-checked. Text decoding checks the original-token `NumberBytes` before numeric range. `AccountingJsonValueSeed` cannot measure that token, but enforces `NumberBytes` using the compact display length of the constructed `Number`; by default, `1e2` (3 source bytes) displays as `100.0` (5 bytes). See the [number contract](number_contract.md). `DuplicateKeyRejectingJsonValueSeed` does not apply a resource budget. For map-shaped Serde events, a seed also cannot tell a real object from an upstream imitation of serde_json's private Number map.
 - **An already materialized `Value` tree:** `JsonTreeReader` counts each existing Number's actual compact display representation without converting it to `f64` or normalizing it. With `arbitrary_precision`, it can count a stored `1e400` or a 39-digit integer at its actual representation length. This accounting rule does not make the number acceptable to an ordinary or JCS encoder.
 - **JCS text:** `JcsDecoder` uses finite IEEE-754 binary64 for every token, including integer lexemes. For example, `9007199254740993` rounds to `9007199254740992`; overflow such as `1e400` is rejected. It also rejects keys duplicated after JSON unescaping and uses the shared builder with configured `max_depth`.
 

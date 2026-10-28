@@ -7,22 +7,31 @@
 // =============================================================================
 //! Cross-API composition and compatibility contract tests.
 
+use std::convert::Infallible;
+use std::io::Cursor;
+
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
 use qubit_json::decode::JsonDecodeNumberModel;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::JsonNumberPolicy;
 use qubit_json::decode::JsonValidatedDecodeError;
 use qubit_json::decode::JsonValidatedDecodeOptions;
 use qubit_json::encode::JsonEncoder;
+use qubit_json::encode::JsonIntegerSignedness;
+use qubit_json::encode::JsonSerializationErrorKind;
 use qubit_json::format::JsonPrettyOptions;
 use qubit_json::format::format_json_tokens;
 use qubit_json::value::JsonValueEncoder;
 #[cfg(feature = "jcs")]
 use qubit_json::value::SafeJsonValue;
+use serde_json::Number;
 use serde_json::Value;
+use serde_json::from_str;
 use serde_json::json;
+use serde_json::to_vec;
 
 #[test]
 fn test_failed_policy_keeps_input_charge_and_next_document_commits_exact_values() {
@@ -57,6 +66,52 @@ fn test_typed_fallback_keeps_duplicate_map_semantics() {
         .unwrap();
     assert_eq!(value["x"], json!(2));
     assert!(value["wide"].as_f64().unwrap().is_finite());
+}
+
+#[test]
+fn test_typed_fallback_matches_active_serde_representation() {
+    let source = "18446744073709551617";
+    let expected: Value = from_str(source).unwrap();
+    let mut input = Cursor::new(source.as_bytes());
+    let actual: Value = JsonDecoder::unlimited()
+        .decode_input_with_number_model(&mut input, JsonDecodeNumberModel::Integer64WithFiniteFallback)
+        .unwrap();
+    assert_eq!(actual.to_string(), expected.to_string());
+    assert_eq!(actual.is_f64(), expected.is_f64());
+
+    let encoded = JsonEncoder::unlimited().to_vec(&actual);
+    let expected_text = expected.to_string();
+    if expected_text == source {
+        let error = encoded.expect_err("the preserved wide integer is not strictly encodable");
+        assert_eq!(
+            error.serialization_error().unwrap().kind(),
+            JsonSerializationErrorKind::IntegerOutOfRange {
+                signedness: JsonIntegerSignedness::Unsigned,
+            },
+        );
+    } else {
+        let rounded = Value::Number(Number::from_f64(source.parse::<f64>().unwrap()).unwrap());
+        assert_eq!(actual.to_string(), rounded.to_string());
+        assert_eq!(encoded.unwrap(), to_vec(&rounded).unwrap());
+    }
+}
+
+#[test]
+fn test_validated_fallback_materializes_encodable_f64() {
+    let source = "18446744073709551617";
+    let options = JsonValidatedDecodeOptions::builder()
+        .number_model(JsonDecodeNumberModel::Integer64WithFiniteFallback)
+        .build();
+    let actual = JsonDecoder::unlimited()
+        .decode_unique_validated_str(source, &options, |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve))
+        .unwrap();
+    let expected = Value::Number(Number::from_f64(source.parse::<f64>().unwrap()).unwrap());
+    assert!(actual.as_value().is_f64());
+    assert_eq!(actual.as_value().to_string(), expected.to_string());
+    assert_eq!(
+        JsonEncoder::unlimited().to_vec(&actual).unwrap(),
+        to_vec(&expected).unwrap(),
+    );
 }
 
 #[test]

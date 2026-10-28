@@ -241,8 +241,9 @@ mod migrated_validated {
         let value: serde_json::Value = JsonDecoder::unlimited()
             .decode_input_with_number_model(&mut input, JsonDecodeNumberModel::Integer64WithFiniteFallback)
             .unwrap();
-        let number = value.as_number().unwrap();
-        assert!(number.is_f64() || number.to_string() == "18446744073709551616");
+        let expected: serde_json::Value = serde_json::from_str("18446744073709551616").unwrap();
+        assert_eq!(value.to_string(), expected.to_string());
+        assert_eq!(value.is_f64(), expected.is_f64());
     }
 
     #[test]
@@ -502,7 +503,9 @@ mod migrated_validated {
             })
             .unwrap();
         let number = fallback.as_value().as_number().unwrap();
-        assert!(number.as_f64().is_some() || number.to_string() == "18446744073709551616");
+        let expected = serde_json::Value::Number(serde_json::Number::from_f64(18446744073709551616_f64).unwrap());
+        assert!(number.is_f64());
+        assert_eq!(number.to_string(), expected.as_number().unwrap().to_string());
 
         let options = JsonValidatedDecodeOptions::builder().build();
         for (token, expected) in [

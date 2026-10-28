@@ -18,8 +18,11 @@ use qubit_json::decode::JsonMaterializationErrorReason;
 use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use serde::Deserialize;
 use serde::de::DeserializeSeed;
+use serde_json::Value;
+use serde_json::from_str;
 
 use super::fixtures::Config;
+use super::fixtures::Expected;
 use super::fixtures::Fixture;
 use super::fixtures::Metadata;
 use super::fixtures::Shape;
@@ -35,47 +38,33 @@ pub(crate) enum Decoded {
     WireEnvelope(WireEnvelope),
 }
 
-pub(crate) fn assert_decoded(decoded: &Decoded, path: DecodePath, shape: Shape) {
-    let valid = match path {
-        DecodePath::UniqueValue => match decoded {
-            Decoded::UniqueValue(value) => assert_value_meaning(value, shape),
-            _ => false,
-        },
-        DecodePath::OrdinaryValue | DecodePath::SerdeValue => match decoded {
-            Decoded::Value(value) => assert_value_meaning(value, shape),
-            _ => false,
-        },
+pub(crate) fn assert_decoded(decoded: &Decoded, path: DecodePath, fixture: &Fixture) {
+    let target_matches = match path {
+        DecodePath::UniqueValue => matches!(decoded, Decoded::UniqueValue(_)),
+        DecodePath::OrdinaryValue | DecodePath::SerdeValue => matches!(decoded, Decoded::Value(_)),
         DecodePath::UniqueTyped | DecodePath::UniqueSeed | DecodePath::OrdinaryTyped | DecodePath::SerdeTyped => {
             matches!(
-                (shape, decoded),
-                (Shape::Config, Decoded::Config(value)) if value.name == "bench" && value.enabled && !value.payload.is_empty()
-            ) || matches!(
-                (shape, decoded),
-                (Shape::Metadata, Decoded::Metadata(value)) if value.name == "bench" && !value.payload.is_empty()
-            ) || matches!(
-                (shape, decoded),
-                (Shape::WireEnvelope, Decoded::WireEnvelope(value)) if value.version == 1 && value.records.len() == 1 && value.records[0].id == 7 && !value.records[0].payload.is_empty()
+                (fixture.shape, decoded),
+                (Shape::Config, Decoded::Config(_))
+                    | (Shape::Metadata, Decoded::Metadata(_))
+                    | (Shape::WireEnvelope, Decoded::WireEnvelope(_))
             )
         }
     };
-    assert!(valid, "decoder path must produce the expected owned target");
-}
-
-fn assert_value_meaning(value: &serde_json::Value, shape: Shape) -> bool {
-    match shape {
-        Shape::Config => {
-            value["name"] == "bench"
-                && value["enabled"] == true
-                && value["payload"].as_str().is_some_and(|text| !text.is_empty())
+    assert!(target_matches, "decoder path must produce the expected owned target");
+    let expected = fixture
+        .expected
+        .as_ref()
+        .expect("success fixture must have expected data");
+    match (decoded, expected) {
+        (Decoded::Config(actual), Expected::Config(expected)) => assert_eq!(actual, expected),
+        (Decoded::Metadata(actual), Expected::Metadata(expected)) => assert_eq!(actual, expected),
+        (Decoded::WireEnvelope(actual), Expected::WireEnvelope(expected)) => assert_eq!(actual, expected),
+        (Decoded::Value(actual) | Decoded::UniqueValue(actual), _) => {
+            let expected: Value = from_str(&fixture.text).expect("successful source fixture must parse");
+            assert_eq!(actual, &expected);
         }
-        Shape::Metadata => value["name"] == "bench" && value["payload"].as_str().is_some_and(|text| !text.is_empty()),
-        Shape::WireEnvelope => {
-            value["version"] == 1
-                && value["records"][0]["id"] == 7
-                && value["records"][0]["payload"]
-                    .as_str()
-                    .is_some_and(|text| !text.is_empty())
-        }
+        _ => panic!("decoded target must match the full expected fixture"),
     }
 }
 
