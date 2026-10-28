@@ -232,10 +232,10 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 
 - 普通严格准入会检查 JSON 语法和数字范围，但不会自动要求对象键唯一。若唯一性属于输入契约，
   可使用 `DuplicateKeyRejectingJsonValue`；JCS 原始文本路径则使用 `JcsDecoder`。
-- 普通文本解码默认采用 `Integer64`：负整数装入 `i64`，非负整数装入 `u64`。只有明确支持
-  `Integer64WithFiniteFallback` 的解码入口才会将范围外整数按有限 `f64` 接受，且可能舍入；这不会自动
-  应用于规范化入口或切片入口。`JcsDecoder` 将所有数字转换为有限 binary64，因此
-  `9007199254740993` 会变成 `9007199254740992`。严格编码仍按自身范围校验，不继承解码 fallback。要求精确保留各位数字时，使用字符串或领域类型。
+- 普通文本解码默认采用 `Integer64`：负整数装入 `i64`，非负整数装入 `u64`。显式 fallback 控制范围外整数能否准入；typed 输入路径的实际表示仍由目标类型 `T` 和启用的 `serde_json` feature 决定。启用
+  `arbitrary_precision` 时，保留的宽整数仍可能无法通过严格重编码。validated 解码配合
+  `JsonNumberPolicy::Preserve` 会将 fallback 整数物化为有限 `f64`，并可能舍入。`JcsDecoder` 将所有数字转换为有限 binary64，因此
+  `9007199254740993` 会变成 `9007199254740992`。要求精确保留各位数字时，使用字符串或领域类型。
 - `JsonValueEncoder` 只识别 `serde_json::Number` 对应的精确私有 Serde struct 协议；普通 map 即使字段同名也仍是对象。格式错误的 `RawValue` 与 `Number` 协议分别返回 `JsonSerializerStateError::InvalidRawValueProtocol` 和 `InvalidNumberProtocol`。seed 只看到原生数字事件，无法从普通 map 猜出私有协议来源。
 - `JsonDecoder::decode_value_*` 返回 `SafeJsonValue`，其自有树操作和清理使用显式栈。唯一的深度限制是调用方配置的 `max_depth`（包含根值）；旧 `decode_*<T>` 仍依赖目标类型自身的构造能力，不保证任意深度都能构造或析构。`JcsDecoder` 保留历史深度错误变体，但不再另设固定的 127 层上限；它返回裸 `serde_json::Value`，处理深结果时应立即用 `SafeJsonValue::new` 接管。
 - `decode_unique_validated_*` 使用 `JsonValidatedDecodeOptions`，并为每个原始数字 token 调用带路径的策略回调。额外的节点数和字符串长度限制按文档计算；`JsonDecodeSession` 的资源用量跨调用累计。若之后遇到语法错误，先前回调产生的副作用不会回滚。

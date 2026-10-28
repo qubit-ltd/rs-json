@@ -262,13 +262,14 @@ identifies the separate auxiliary-capacity limit configured with
   `DuplicateKeyRejectingJsonValue`, or use `JcsDecoder` for raw JCS text, when
   uniqueness is part of the contract.
 - Ordinary text decoding defaults to `Integer64`: negative integers fit `i64`
-  and non-negative integers fit `u64`. Only decode entry points that explicitly
-  support `Integer64WithFiniteFallback` can admit wider integer tokens as finite
-  `f64`, with possible rounding; this does not apply automatically to normalizing
-  or slice-based entry points. `JcsDecoder` converts every number to finite
-  binary64, so `9007199254740993` becomes `9007199254740992`. Strict encoding
-  keeps its own range checks and does not inherit decode fallback. Use strings
-  or domain types when every decimal digit must be preserved.
+  and non-negative integers fit `u64`. Explicit fallback controls admission of
+  wider integer tokens, but the typed input path leaves representation to `T`
+  and active `serde_json` features; under `arbitrary_precision`, a preserved
+  wide integer can still fail strict re-encoding. Validated decoding with
+  `JsonNumberPolicy::Preserve` materializes a fallback integer as finite `f64`,
+  with possible rounding. `JcsDecoder` converts every number to finite binary64,
+  so `9007199254740993` becomes `9007199254740992`. Use strings or domain types
+  when every decimal digit must be preserved.
 - `JsonValueEncoder` recognizes only the exact private `Number` Serde struct protocol; an ordinary map with the same field name remains an object. Malformed `RawValue` and `Number` protocols return `JsonSerializationErrorKind::InvalidSerializerState`, with `JsonSerializerStateError::InvalidRawValueProtocol` or `InvalidNumberProtocol` respectively. Seed-based value construction only sees native numeric events and cannot infer private map provenance.
 - `JsonDecoder::decode_value_*` returns a `SafeJsonValue` whose own tree operations and cleanup use an explicit stack. The configured, root-inclusive `max_depth` is the depth limit; ordinary `decode_*<T>` still relies on the target type and does not promise arbitrary-depth construction or destruction. `JcsDecoder` retains its historical depth-error variant, but has no separate fixed 127-container limit; it returns a bare `serde_json::Value`, so wrap deep results immediately with `SafeJsonValue::new` before retaining or dropping them.
 - `decode_unique_validated_*` applies `JsonValidatedDecodeOptions` and calls the supplied number policy with each original number token and its path. The extra node/string limits apply per document; `JsonDecodeSession` resource usage accumulates across calls. Policy callback side effects are not rolled back if a later syntax error occurs.

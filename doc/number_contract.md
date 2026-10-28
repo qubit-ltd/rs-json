@@ -48,15 +48,20 @@ or by ordinary slice methods.
 
 | Entry point | In-range integers | Out-of-range integer token | Decimal/exponent token |
 | --- | --- | --- | --- |
-| Default `Integer64` | `i64`/`u64` | Rejected | Finite `f64` |
-| `Integer64WithFiniteFallback` | `i64`/`u64` | Accepted as finite `f64`, with possible rounding | Finite `f64` |
+| Typed `decode_input_with_number_model`, default `Integer64` | Admitted as `i64`/`u64`; Serde constructs `T` | Rejected | Admitted as finite `f64`; Serde constructs `T` |
+| Typed `decode_input_with_number_model`, finite fallback | Admitted as `i64`/`u64`; Serde constructs `T` | Admitted if convertible to finite `f64`; Serde constructs `T` according to `T` and active features | Admitted as finite `f64`; Serde constructs `T` |
+| Validated owned-value decoding, default `Integer64` | Materialized as `i64`/`u64` | Rejected | Materialized as finite `f64` |
+| Validated owned-value decoding, finite fallback | Materialized as `i64`/`u64` | Materialized as finite `f64`, with possible rounding | Materialized as finite `f64` |
 | `JcsDecoder` | Converted to `f64` | Converted to finite `f64`, with possible rounding | Finite `f64` |
 
 For example, `18446744073709551617` is outside `u64`: the default model
-rejects it, while the fallback model can represent it as the rounded finite
-binary64 value `18446744073709551616`. `1e400` remains rejected because it is
-not finite. Model selection admits a number token; it does not guarantee that
-every target type or application schema accepts the resulting value.
+rejects it, while fallback admits it. Validated decoding with `Preserve`
+materializes the rounded finite binary64 value `18446744073709551616`. The typed
+input path instead delegates the result representation to Serde; with
+`arbitrary_precision`, it can preserve the wide integer, which strict encoding
+then rejects as out of range. `1e400` remains rejected because it is not finite.
+Model selection admits a number token; it does not guarantee that every target
+type or application schema accepts the resulting value.
 
 Validated owned-value decoding selects the model in its options:
 
@@ -65,6 +70,7 @@ use qubit_json::decode::{
     JsonDecodeNumberModel, JsonDecoder, JsonNumberPolicy,
     JsonValidatedDecodeOptions,
 };
+use serde_json::Value;
 
 let options = JsonValidatedDecodeOptions::builder()
     .number_model(JsonDecodeNumberModel::Integer64WithFiniteFallback)
@@ -74,7 +80,9 @@ let value = decoder
     .decode_unique_validated_str("18446744073709551617", &options,
         |_, _| Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve))
     .unwrap();
-assert_eq!(value.as_value().as_f64().unwrap(), 18446744073709551616_f64);
+assert!(value.as_value().is_f64());
+let expected = Value::Number(serde_json::Number::from_f64(18446744073709551616_f64).unwrap());
+assert_eq!(value.as_value().to_string(), expected.to_string());
 ```
 
 The input-stream typed entry point also accepts an explicit model:
@@ -92,7 +100,9 @@ let value: Value = decoder
         JsonDecodeNumberModel::Integer64WithFiniteFallback,
     )
     .unwrap();
-assert_eq!(value.as_f64().unwrap(), 18446744073709551616_f64);
+let expected: Value = serde_json::from_str("18446744073709551617").unwrap();
+assert_eq!(value.to_string(), expected.to_string());
+assert_eq!(value.is_f64(), expected.is_f64());
 
 let mut input = Cursor::new(b"1e400".to_vec());
 assert!(decoder

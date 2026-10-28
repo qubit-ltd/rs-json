@@ -266,9 +266,15 @@ where
 
     /// Decodes one byte input using an explicit integer/fallback number model.
     ///
-    /// The fallback model converts only integer tokens outside `i64`/`u64`
-    /// to finite `f64`; decimal and exponent forms use the finite-float rule
-    /// in both models.
+    /// The number model controls whether an integer token outside `i64`/`u64`
+    /// is admitted. With the fallback model, that token is admitted only when
+    /// it converts to finite `f64`. Decimal and exponent forms use the
+    /// finite-float rule in both models.
+    ///
+    /// The resulting representation is produced by Serde for `T` and can
+    /// depend on the active `serde_json` features. For deterministic numeric
+    /// projection, use validated decoding with `JsonNumberPolicy::Preserve`;
+    /// it materializes fallback integers as finite `f64` values.
     ///
     /// # Parameters
     ///
@@ -277,7 +283,8 @@ where
     ///
     /// # Returns
     ///
-    /// The owned value produced by Serde.
+    /// The owned value produced by Serde. Its numeric representation follows
+    /// `T` and the active Serde implementation and features.
     ///
     /// # Errors
     ///

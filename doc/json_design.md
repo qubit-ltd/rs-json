@@ -198,12 +198,14 @@ independent of `JsonEncoder` output-byte accounting.
 Strict and normalizing text decoding defaults to `Integer64`: negative integers
 fit `i64`, non-negative integers fit `u64`, and fractional or exponential
 values must be finite `f64`. The opt-in `Integer64WithFiniteFallback` model
-allows an out-of-range integer token when it converts to finite `f64`, which
-can round its value; it does not relax the finite rule for decimal or exponent
-tokens. Fallback is available only on decode entry points that explicitly
-expose model selection; normalizing and ordinary slice entry points do not
-automatically enable it. Strict encoding has separate range checks and does
-not inherit decode fallback. The feature-gated `JcsDecoder` uses a separate binary64 model,
+admits an out-of-range integer token when it converts to finite `f64`; it does
+not relax the finite rule for decimal or exponent tokens. Validated `Preserve`
+materializes fallback integers as finite `f64`, possibly rounded. The typed
+input path delegates representation to `T` and active `serde_json` features;
+with `arbitrary_precision`, a preserved wide integer can fail strict re-encoding.
+Fallback is available only on decode entry points that explicitly expose model
+selection; normalizing and ordinary slice entry points do not automatically
+enable it. Strict encoding has separate range checks and does not inherit decode fallback. The feature-gated `JcsDecoder` uses a separate binary64 model,
 converting every number (including in-range integers) to `f64` and rejecting
 duplicate object keys during materialization. Both ordinary models admit the
 original `NumberBytes` before range validation, so budget failures have

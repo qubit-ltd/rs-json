@@ -131,8 +131,7 @@ builder 在插入值之前检查重复键。共享 builder 没有独立固定容
 ### 数字表示
 
 strict 与 normalizing 文本解码默认采用 `Integer64`：负整数装入 `i64`，非负整数装入 `u64`，
-小数或指数装入有限 `f64`。可选的 `Integer64WithFiniteFallback` 允许超出整数范围、但可转换为有限 `f64` 的
-整数 token，因此可能舍入；它不会放宽小数或指数 token 的有限值要求。只有明确公开模型选择的解码入口才能启用
+小数或指数装入有限 `f64`。可选的 `Integer64WithFiniteFallback` 允许准入可转换为有限 `f64` 的范围外整数 token；它不会放宽小数或指数 token 的有限值要求。validated `Preserve` 会将 fallback 整数物化为有限 `f64`，可能舍入。typed 输入路径的表示由目标类型 `T` 和启用的 `serde_json` feature 决定；启用 `arbitrary_precision` 时，保留的宽整数可能无法严格重编码。只有明确公开模型选择的解码入口才能启用
 fallback；规范化与普通切片入口不会自动启用。严格编码有独立范围校验，不继承解码 fallback。feature-gated 的 `JcsDecoder` 单独采用
 binary64 模型，将所有数字（包括整数范围内的值）转为 `f64`，并在物化时拒绝对象内重复键。普通两种模型都先准入
 原始 `NumberBytes`，再校验范围，因此预算错误优先。crate 自身不启用 serde_json `arbitrary_precision`；但若其他依赖启用该 feature，仍会处理精确的私有 `Number` struct 协议。普通 map 即使有同名键也仍是对象。

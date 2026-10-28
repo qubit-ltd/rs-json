@@ -30,8 +30,11 @@ mod internal;
 /// rejects wider numeric values and non-finite floats, validates map keys, and
 /// rejects duplicate object keys. It owns no resource budget; use
 /// [`crate::encode::JsonEncoder`] when encoded text and resource accounting are
-/// required. The transaction-aware method stages native JSON measurements and
-/// protects its returned tree until the caller explicitly unwraps it.
+/// required. [`Self::encode_in_transaction`] stages native JSON measurements
+/// and returns a [`SafeJsonValue`] protected until the caller explicitly
+/// unwraps it. This construction-time protection does not extend to recursive
+/// cloning or destruction of a bare [`Value`], and taking ownership of a bare
+/// value does not grant budget admission.
 ///
 /// # Examples
 ///
@@ -75,13 +78,35 @@ impl JsonValueEncoder {
     ///
     /// # Returns
     ///
-    /// The fully materialized JSON value.
+    /// The fully materialized, bare [`Value`]. Any protection used while
+    /// constructing it does not extend to recursive destruction or cloning of
+    /// this tree, and taking ownership of it does not mean it passed a caller's
+    /// resource budget. Use [`SafeJsonValue::new`] to immediately take over the
+    /// returned tree when protected ownership is needed, or use
+    /// [`Self::encode_in_transaction`] when budget admission is required. The
+    /// transaction-aware entry point still cannot guarantee protection around
+    /// every recursive action performed internally by an arbitrary third-party
+    /// Serde serializer.
     ///
     /// # Errors
     ///
     /// Returns a strict value error whose precise kind distinguishes number,
     /// object-key, RawValue, capacity, serializer-contract, and opaque custom
     /// failures without retaining arbitrary diagnostic text.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qubit_json::value::JsonValueEncoder;
+    /// use qubit_json::value::SafeJsonValue;
+    /// use serde_json::value::RawValue;
+    ///
+    /// let text = format!("{}0{}", "[".repeat(129), "]".repeat(129));
+    /// let raw = RawValue::from_string(text)?;
+    /// let owner = SafeJsonValue::new(JsonValueEncoder::new().encode(&raw)?);
+    /// assert!(owner.as_value().is_array());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn encode<T>(&self, value: &T) -> Result<Value, JsonSerializationError>
     where
         T: Serialize + ?Sized,

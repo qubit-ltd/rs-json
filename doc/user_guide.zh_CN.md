@@ -935,13 +935,13 @@ assert_eq!(value, json!({"name": "qubit"}));
 普通文本解码默认采用 `JsonDecodeNumberModel::Integer64`：整数 token 必须装入 `i64` 或 `u64`，小数与指数
 token 必须产生有限 `f64`。通过 `JsonValidatedDecodeOptions::builder().number_model(...)` 或
 `JsonDecoder::decode_input_with_number_model` 可选择 `Integer64WithFiniteFallback`，它只改变超出整数范围的
-整数 token。例如 `18446744073709551617` 可能舍入为有限 `f64` 值 `18446744073709551616`；默认模型会拒绝它。
+整数 token 的准入。validated 解码配合 `JsonNumberPolicy::Preserve` 会把该 token 物化为有限 `f64`，并可能舍入；typed 输入路径则由目标类型 `T` 和启用的 `serde_json` feature 决定最终表示。启用 `arbitrary_precision` 时可能保留宽整数，严格重编码会拒绝它。默认模型会拒绝该范围外整数。
 两种普通模型仍拒绝 `1e400`。`JcsDecoder` 对所有数字（包括整数范围内的值）使用 binary64，也会拒绝非有限结果。
 token 准入不保证具体目标类型或应用 schema 一定接受生成的值。可运行示例见[数字契约](number_contract.zh_CN.md)。
 
 三种数字边界要分开判断：
 
-- **普通文本与 Serde 事件：** 默认 `Integer64` strict 文本模型要求负整数在 `i64` 范围、非负整数在 `u64` 范围，小数或指数可转换为有限 `f64`。明确选择有限 fallback 的入口可以接受可转换为有限 `f64` 的范围外整数，并可能舍入。序列化器和 seed 收到 `i128`、`u128` 事件时仍按各自契约显式检查范围。文本解码先准入原始 token 的 `NumberBytes`，再检查数值范围。`AccountingJsonValueSeed` 无法测量原始 token，但会按构造后 `Number` 的紧凑显示字节数执行 `NumberBytes` 限制；默认情况下，3 字节的 `1e2` 会显示为 5 字节的 `100.0`。详见[数字契约](number_contract.zh_CN.md)。`DuplicateKeyRejectingJsonValueSeed` 不施加资源预算。遇到 map 形状事件时，seed 也无法判断它是真对象还是上游模拟的 serde_json 私有 Number map。
+- **普通文本与 Serde 事件：** 默认 `Integer64` strict 文本模型要求负整数在 `i64` 范围、非负整数在 `u64` 范围，小数或指数可转换为有限 `f64`。明确选择有限 fallback 的入口可以准入可转换为有限 `f64` 的范围外整数。validated `Preserve` 会将其物化为有限 `f64`；typed 输入解码则由目标类型和启用的 Serde feature 决定表示，保留的宽整数可能无法严格重编码。序列化器和 seed 收到 `i128`、`u128` 事件时仍按各自契约显式检查范围。文本解码先准入原始 token 的 `NumberBytes`，再检查数值范围。`AccountingJsonValueSeed` 无法测量原始 token，但会按构造后 `Number` 的紧凑显示字节数执行 `NumberBytes` 限制；默认情况下，3 字节的 `1e2` 会显示为 5 字节的 `100.0`。详见[数字契约](number_contract.zh_CN.md)。`DuplicateKeyRejectingJsonValueSeed` 不施加资源预算。遇到 map 形状事件时，seed 也无法判断它是真对象还是上游模拟的 serde_json 私有 Number map。
 - **已经物化的 `Value` 树：** `JsonTreeReader` 按现有 Number 的紧凑显示内容长度计量，不先转 `f64`，也不改写数字。启用 `arbitrary_precision` 后，树读取器能按实际表示计量 `1e400` 或 39 位整数。这条计量规则不代表普通或 JCS encoder 会接受该数字。
 - **JCS 文本：** `JcsDecoder` 对所有 token（包括整数词法）使用有限 IEEE-754 binary64。例如 `9007199254740993` 会舍入为 `9007199254740992`；`1e400` 这类溢出会被拒绝。解码还会拒绝反转义后重复的键，并使用受配置 `max_depth` 控制的共享 builder。
 
