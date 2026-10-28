@@ -458,7 +458,7 @@ mod tests {
             };
             let capacity = values.capacity();
             let tracked = (memory.stack_bytes, memory.object_bytes, memory.peak_bytes());
-            match memory.reserve_object_entries(&mut values, additional) {
+            match memory.reserve_object_entries(&mut values, additional, &mut Vec::<u64>::new()) {
                 Err(JcsReserveError::Limit(error)) => {
                     assert_eq!(error.limit(), usize::MAX);
                     assert_eq!(error.requested(), usize::MAX);
