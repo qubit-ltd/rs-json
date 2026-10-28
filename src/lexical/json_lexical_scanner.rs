@@ -41,8 +41,13 @@ where
     has_value_limits: bool,
     /// Numeric range contract selected by the owning decoder.
     number_model: JsonNumberModel,
+    /// Determines whether token admission uses delimiter-first or token-first
+    /// checks.
     admission_policy: JsonLexicalAdmissionPolicy,
+    /// Optional maximum root-inclusive depth; `None` adds no depth cap.
     depth_limit: Option<Q>,
+    /// Optional maximum encoded bytes inside each string token, excluding
+    /// quotes.
     max_encoded_string_bytes: Option<usize>,
 }
 
@@ -120,16 +125,36 @@ where
         self
     }
 
+    /// Selects when lexical tokens are admitted; defaults to
+    /// [`JsonLexicalAdmissionPolicy::Immediate`].
+    ///
+    /// The ordering depends on token kind: `Immediate` checks delimiters before
+    /// admission for literals and numbers, while `TokenFirst` validates
+    /// complete tokens before following syntax is checked. This policy does
+    /// not enable or disable value-resource accounting.
     pub(crate) const fn with_admission_policy(mut self, policy: JsonLexicalAdmissionPolicy) -> Self {
         self.admission_policy = policy;
         self
     }
 
+    /// Sets an optional root-inclusive maximum depth; `None` disables this
+    /// additional cap.
+    ///
+    /// A limit of zero rejects the root value. This check is independent of
+    /// `has_value_limits`, which controls staging of ordinary value
+    /// measurements.
     pub(crate) const fn with_depth_limit(mut self, depth_limit: Option<Q>) -> Self {
         self.depth_limit = depth_limit;
         self
     }
 
+    /// Sets an optional maximum number of encoded bytes inside each string
+    /// token.
+    ///
+    /// The surrounding quotes are excluded; `None` disables this token-local
+    /// check, while zero permits only empty encoded string contents. This
+    /// check is independent of `has_value_limits` and does not measure
+    /// decoded string bytes.
     pub(crate) const fn with_max_encoded_string_bytes(mut self, maximum: Option<usize>) -> Self {
         self.max_encoded_string_bytes = maximum;
         self
@@ -213,8 +238,16 @@ where
         }
     }
 
-    /// Scans through the shared grammar and stops immediately on consumer
+    /// Scans through the shared grammar and stops at the first reported
     /// failure.
+    ///
+    /// A consumer error is returned as [`JsonLexicalScanError::Consumer`];
+    /// scanner syntax or budget failures are returned as `Lexical`, except
+    /// an encoded-string byte-limit violation, which is returned as
+    /// `EncodedStringLimit`. A failed consumer callback stops further
+    /// callbacks and scanning immediately. The number delimiter is checked
+    /// after `before_number` and its event, so that callback does not
+    /// establish that the following delimiter or document is valid.
     pub(crate) fn scan_with_consumer<'input, C>(
         &mut self,
         input: &'input [u8],

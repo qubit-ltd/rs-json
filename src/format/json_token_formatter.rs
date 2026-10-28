@@ -25,35 +25,57 @@ use crate::lexical::JsonNumberModel;
 
 /// One prevalidated output operation that references source bytes or literals.
 enum Action {
+    /// Copies the half-open input byte range `[start, end)`.
     Span(usize, usize),
+    /// Emits one literal byte.
     Byte(u8),
+    /// Emits the requested number of ASCII spaces.
     Spaces(usize),
 }
 #[derive(Clone, Copy)]
 enum ContainerKind {
+    /// An array whose children are separated and indented as values.
     Array,
+    /// An object whose keys and values alternate.
     Object,
 }
+/// Tracks formatting state for one open container.
 struct Container {
+    /// Container syntax used when preparing children and closing the frame.
     kind: ContainerKind,
+    /// Number of direct array elements or object entries already planned.
     count: usize,
+    /// Whether an object key has been seen and its value is still pending.
     awaiting_value: bool,
 }
 /// Accumulates output operations while the scanner validates the whole input.
 struct Planner<'a> {
+    /// Source bytes referenced by planned span actions.
     input: &'a [u8],
+    /// Formatting choices used to plan indentation.
     options: &'a JsonPrettyOptions,
+    /// Optional maximum planned output length.
     maximum: Option<usize>,
+    /// Operations retained for rendering, including only the prefix within the
+    /// limit.
     actions: Vec<Action>,
+    /// Open container formatting state, ordered from outermost to innermost.
     stack: Vec<Container>,
+    /// Full planned output length, including bytes beyond `maximum`.
     length: usize,
 }
 
 impl Planner<'_> {
+    /// Adds to the full output length, returning `Capacity` if it cannot be
+    /// represented.
     fn add_len(&mut self, amount: usize) -> Result<(), JsonPrettyError> {
         self.length = self.length.checked_add(amount).ok_or_else(|| capacity_error(None))?;
         Ok(())
     }
+    /// Accumulates the full planned length even after the output limit is
+    /// exceeded. Actions past the limit are not retained, but scanning
+    /// continues so a later syntax error is reported before the final
+    /// output-limit rejection.
     fn push(&mut self, action: Action, length: usize) -> Result<(), JsonPrettyError> {
         self.add_len(length)?;
         if self.maximum.is_some_and(|maximum| self.length > maximum) {
@@ -65,9 +87,12 @@ impl Planner<'_> {
         self.actions.push(action);
         Ok(())
     }
+    /// Plans one literal byte.
     fn byte(&mut self, byte: u8) -> Result<(), JsonPrettyError> {
         self.push(Action::Byte(byte), 1)
     }
+    /// Plans a checked source range; invalid or overflowing ranges are capacity
+    /// errors.
     fn span(&mut self, offset: usize, length: usize) -> Result<(), JsonPrettyError> {
         let end = offset
             .checked_add(length)
@@ -75,6 +100,8 @@ impl Planner<'_> {
             .ok_or_else(|| capacity_error(None))?;
         self.push(Action::Span(offset, end), length)
     }
+    /// Plans indentation for the requested nesting level, subject to configured
+    /// caps.
     fn spaces(&mut self, levels: usize) -> Result<(), JsonPrettyError> {
         let shown = self
             .options
@@ -90,6 +117,8 @@ impl Planner<'_> {
         }
         Ok(())
     }
+    /// Plans punctuation and indentation before the next value in the current
+    /// container.
     fn prepare_value(&mut self) -> Result<(), JsonPrettyError> {
         let Some(frame) = self.stack.last_mut() else {
             return Ok(());
@@ -114,6 +143,7 @@ impl Planner<'_> {
             }
         }
     }
+    /// Plans an object key and updates the frame to expect its value.
     fn key(&mut self, offset: usize, length: usize) -> Result<(), JsonPrettyError> {
         let Some(frame) = self.stack.last_mut() else {
             return Err(capacity_error(None));
@@ -131,6 +161,7 @@ impl Planner<'_> {
         self.spaces(self.stack.len())?;
         self.span(offset, length)
     }
+    /// Plans an opening delimiter and pushes a new container frame.
     fn begin(&mut self, kind: ContainerKind, offset: usize) -> Result<(), JsonPrettyError> {
         self.span(offset, 1)?;
         self.stack
@@ -143,6 +174,7 @@ impl Planner<'_> {
         });
         Ok(())
     }
+    /// Validates and plans a closing delimiter, popping the matching frame.
     fn end(&mut self, offset: usize, expected: ContainerKind) -> Result<(), JsonPrettyError> {
         let frame = self.stack.pop().ok_or_else(|| capacity_error(None))?;
         if !matches!(
@@ -311,11 +343,20 @@ pub fn write_json_tokens<O: ByteOutput + ?Sized>(
     Ok(())
 }
 
+/// Completed formatting plan retained for rendering after validation succeeds.
 struct Plan {
+    /// Operations retained within the configured output limit.
     actions: Vec<Action>,
+    /// Full planned output size, including any configured trailing newline.
     length: usize,
 }
 /// Scans a complete document and returns its output plan or a pre-write error.
+///
+/// Syntax and consumer errors stop planning immediately. If the output length
+/// merely exceeds its limit, actions stop being retained but scanning
+/// continues; after a successful scan this function reports `OutputLimit`.
+/// Checked arithmetic, invalid planner state, or failed reservations can
+/// instead report `Capacity`.
 fn make_plan(input: &[u8], options: &JsonPrettyOptions, maximum: Option<usize>) -> Result<Plan, JsonPrettyError> {
     let mut planner = Planner {
         input,
@@ -352,6 +393,9 @@ fn make_plan(input: &[u8], options: &JsonPrettyOptions, maximum: Option<usize>) 
 }
 
 /// Executes an already validated plan into a vector with reserved capacity.
+///
+/// The caller reserves the full planned length first; actions then copy source
+/// spans or emit literal bytes and spaces without further fallible allocation.
 fn render_vec(input: &[u8], actions: &[Action], output: &mut Vec<u8>) {
     const SPACES: [u8; 256] = [b' '; 256];
     for action in actions {
@@ -370,6 +414,7 @@ fn render_vec(input: &[u8], actions: &[Action], output: &mut Vec<u8>) {
     }
 }
 
+/// Maps scanner failures to the formatter's public error categories.
 fn map_scan_error(error: JsonLexicalScanError<JsonPrettyError, JsonResource, usize>) -> JsonPrettyError {
     match error {
         JsonLexicalScanError::Lexical(crate::lexical::JsonLexicalError::Syntax(failure)) => JsonPrettyError::new(
@@ -384,9 +429,12 @@ fn map_scan_error(error: JsonLexicalScanError<JsonPrettyError, JsonResource, usi
         }
     }
 }
+/// Creates a `Capacity` error, retaining an allocation error as its source when
+/// present.
 fn capacity_error(source: Option<Box<dyn Error + Send + Sync>>) -> JsonPrettyError {
     JsonPrettyError::new(JsonPrettyErrorKind::Capacity, None, source)
 }
+/// Wraps an output write failure as an `Io` error.
 fn io_error(error: std::io::Error) -> JsonPrettyError {
     JsonPrettyError::new(JsonPrettyErrorKind::Io, None, Some(Box::new(error)))
 }
