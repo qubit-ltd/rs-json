@@ -7,20 +7,28 @@
 // =============================================================================
 //! Cross-API composition and compatibility contract tests.
 
-use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
-use serde_json::Value;
-use serde_json::json;
 
-use crate::decode::JsonDecodeNumberModel;
-use crate::decode::JsonDecoder;
-use crate::decode::JsonValidatedDecodeError;
-use crate::decode::JsonValidatedDecodeOptions;
-use crate::encode::JsonEncoder;
-use crate::format::JsonPrettyOptions;
-use crate::format::format_json_tokens;
-use crate::value::JsonValueEncoder;
-#[cfg(feature = "jcs")]
-use crate::value::SafeJsonValue;
+use crate::lexical::JsonLexicalScanError;
+use crate::lexical::JsonLexicalScanner;
+use crate::lexical::JsonNumberModel;
+use crate::value::internal::JsonValueMaterializationError;
+use crate::value::internal::LexicalJsonValueBuilder;
+
+#[test]
+fn test_builder_consumer_stops_at_first_materialization_failure() {
+    let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
+    let mut transaction = budget.transaction();
+    let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Integer64);
+    let result =
+        JsonLexicalScanner::new(&mut transaction, false).scan_with_consumer(br#"{"x":0,"x":1,"tail":]"#, &mut builder);
+
+    assert!(matches!(
+        result,
+        Err(JsonLexicalScanError::Consumer(
+            JsonValueMaterializationError::DuplicateKey { .. }
+        ))
+    ));
+}

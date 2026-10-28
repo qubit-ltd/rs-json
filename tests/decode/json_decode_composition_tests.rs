@@ -7,6 +7,7 @@
 // =============================================================================
 //! Cross-API composition and compatibility contract tests.
 
+use std::cell::Cell;
 use std::convert::Infallible;
 use std::io::Cursor;
 
@@ -32,6 +33,66 @@ use serde_json::Value;
 use serde_json::from_str;
 use serde_json::json;
 use serde_json::to_vec;
+
+struct SeedCallProbe<'a>(&'a Cell<bool>);
+
+impl<'de> serde::de::DeserializeSeed<'de> for SeedCallProbe<'_> {
+    type Value = Value;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        self.0.set(true);
+        serde::Deserialize::deserialize(deserializer)
+    }
+}
+
+#[test]
+fn test_unique_seed_keeps_admission_precedence_and_reuses_after_materialization_error() {
+    let called = Cell::new(false);
+    let mut decoder = JsonDecoder::unlimited();
+
+    let syntax_error = decoder
+        .decode_unique_seed_utf8(SeedCallProbe(&called), br#"{"x":0,"x":1,"tail":]"#)
+        .unwrap_err();
+    assert_eq!(
+        syntax_error.kind(),
+        qubit_json::decode::JsonDecodeErrorKind::InvalidJson
+    );
+    assert_eq!(syntax_error.materialization_error_reason(), None);
+    assert!(!called.get(), "seed must not run before full lexical admission");
+
+    let duplicate_error = decoder
+        .decode_unique_seed_utf8(SeedCallProbe(&called), br#"{"x":0,"x":1,"tail":null}"#)
+        .unwrap_err();
+    assert_eq!(
+        duplicate_error.materialization_error_reason(),
+        Some(qubit_json::decode::JsonMaterializationErrorReason::DuplicateKey)
+    );
+    assert!(
+        !called.get(),
+        "duplicate-key materialization failure must stop before seed invocation"
+    );
+
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_number_bytes(1)
+        .build();
+    let mut budget_decoder = JsonDecoder::with_limits(limits);
+    let budget_error = budget_decoder
+        .decode_unique_seed_utf8(SeedCallProbe(&called), br#"{"x":0,"x":1,"later":123}"#)
+        .unwrap_err();
+    assert_eq!(budget_error.kind(), qubit_json::decode::JsonDecodeErrorKind::Budget);
+    assert!(!called.get(), "later admission failure must precede seed invocation");
+
+    assert_eq!(
+        decoder
+            .decode_unique_seed_utf8(SeedCallProbe(&called), b"true")
+            .unwrap(),
+        Value::Bool(true)
+    );
+    assert!(called.get(), "a later successful decode must invoke the seed");
+}
 
 #[test]
 fn test_failed_policy_keeps_input_charge_and_next_document_commits_exact_values() {

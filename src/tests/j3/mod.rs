@@ -7,6 +7,7 @@
 // =============================================================================
 //! J3 JSON refactor contract tests.
 
+mod composition_tests;
 mod decode_tests;
 mod diagnostic_context_tests;
 mod io_tests;

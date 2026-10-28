@@ -236,11 +236,18 @@ fn test_jcs_decoder_complete_admission_precedes_materialization_errors() {
     };
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
 
-    let error = JcsDecoder::unlimited().decode_str(r#"{"x":1,"x":2,]"#).unwrap_err();
+    let mut decoder = JcsDecoder::unlimited();
+    let error = decoder.decode_str(r#"{"x":1,"x":2,]"#).unwrap_err();
     let JcsDecodeError::Decode(error) = error else {
         panic!("whole-document syntax admission must precede duplicate-key materialization")
     };
     assert_eq!(error.kind(), JsonDecodeErrorKind::InvalidJson);
+
+    assert!(matches!(
+        decoder.decode_str(r#"{"x":1,"x":2,"tail":"valid"}"#),
+        Err(JcsDecodeError::DuplicateKey { .. })
+    ));
+    assert_eq!(decoder.decode_str("true").unwrap(), Value::Bool(true));
 
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(JsonValueLimits::builder().max_number_bytes(2).build())
