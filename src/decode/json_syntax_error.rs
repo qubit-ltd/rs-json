@@ -10,6 +10,7 @@
 use std::error::Error;
 use std::fmt;
 
+use super::JsonDecodeContext;
 use super::JsonSyntaxErrorReason;
 use crate::lexical::JsonLexicalFailure;
 
@@ -42,6 +43,8 @@ pub struct JsonSyntaxError {
     column: usize,
     /// Stable classification of the lexical failure.
     reason: JsonSyntaxErrorReason,
+    /// Grammar location where the lexical failure occurred, when known.
+    context: Option<JsonDecodeContext>,
 }
 
 impl JsonSyntaxError {
@@ -64,6 +67,7 @@ impl JsonSyntaxError {
             line,
             column,
             reason,
+            context: None,
         }
     }
 
@@ -83,7 +87,24 @@ impl JsonSyntaxError {
     /// A syntax error with the lexical failure's source coordinates and mapped
     /// reason.
     pub(crate) fn from_lexical(failure: JsonLexicalFailure) -> Self {
-        Self::new(failure.offset, failure.line, failure.column, failure.reason.into())
+        let mut error = Self::new(failure.offset, failure.line, failure.column, failure.reason.into());
+        error.context = failure.context;
+        error
+    }
+
+    /// Returns the grammar location where the error occurred, when known.
+    #[must_use]
+    #[inline(always)]
+    pub const fn context(&self) -> Option<JsonDecodeContext> {
+        self.context
+    }
+
+    /// Returns this error with the supplied grammar context.
+    #[must_use = "the updated syntax error must be used"]
+    #[inline(always)]
+    pub const fn with_context(mut self, context: JsonDecodeContext) -> Self {
+        self.context = Some(context);
+        self
     }
 
     /// Returns the zero-based byte offset.

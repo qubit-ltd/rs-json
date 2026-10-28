@@ -10,6 +10,7 @@
 use qubit_budget::ResourceQuantity;
 use qubit_budget::json::JsonValueTransaction;
 
+use super::JsonLexicalAdmissionPolicy;
 use super::internal::JsonLexicalContainerFrame;
 use super::internal::json_lexical_cursor::JsonLexicalCursor;
 use super::json_lexical_consumer::JsonLexicalConsumer;
@@ -19,6 +20,7 @@ use super::json_lexical_error_reason::JsonLexicalErrorReason;
 use super::json_lexical_event::JsonLexicalEvent;
 use super::json_lexical_scan_error::JsonLexicalScanError;
 use super::json_number_model::JsonNumberModel;
+use crate::decode::JsonDecodeContext;
 
 /// Lexically validates and charges one JSON document without recursion.
 ///
@@ -39,6 +41,7 @@ where
     has_value_limits: bool,
     /// Numeric range contract selected by the owning decoder.
     number_model: JsonNumberModel,
+    admission_policy: JsonLexicalAdmissionPolicy,
     depth_limit: Option<Q>,
     max_encoded_string_bytes: Option<usize>,
 }
@@ -68,6 +71,7 @@ where
             root_depth: 1,
             has_value_limits,
             number_model: JsonNumberModel::Integer64,
+            admission_policy: JsonLexicalAdmissionPolicy::Immediate,
             depth_limit: None,
             max_encoded_string_bytes: None,
         }
@@ -95,6 +99,7 @@ where
             root_depth,
             has_value_limits,
             number_model: JsonNumberModel::Integer64,
+            admission_policy: JsonLexicalAdmissionPolicy::Immediate,
             depth_limit: None,
             max_encoded_string_bytes: None,
         }
@@ -112,6 +117,11 @@ where
     #[inline(always)]
     pub(crate) const fn with_number_model(mut self, number_model: JsonNumberModel) -> Self {
         self.number_model = number_model;
+        self
+    }
+
+    pub(crate) const fn with_admission_policy(mut self, policy: JsonLexicalAdmissionPolicy) -> Self {
+        self.admission_policy = policy;
         self
     }
 
@@ -177,6 +187,7 @@ where
     {
         let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         cursor.set_number_model(self.number_model);
+        cursor.set_admission_policy(self.admission_policy);
         cursor.set_depth_limit(self.depth_limit);
         cursor.set_max_encoded_string_bytes(self.max_encoded_string_bytes);
         let mut adapter = |point| match point {
@@ -188,11 +199,13 @@ where
         };
         let mut stack: Vec<JsonLexicalContainerFrame> = Vec::new();
         cursor.skip_whitespace();
+        cursor.set_context(JsonDecodeContext::Value);
         cursor.value(self.root_depth, &mut stack, &mut adapter)?;
         while let Some(frame) = stack.pop() {
             cursor.resume(frame, &mut stack, &mut adapter)?;
         }
         cursor.skip_whitespace();
+        cursor.set_context(JsonDecodeContext::TrailingInput);
         if cursor.is_at_end() {
             Ok(())
         } else {
@@ -212,6 +225,7 @@ where
     {
         let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         cursor.set_number_model(self.number_model);
+        cursor.set_admission_policy(self.admission_policy);
         cursor.set_depth_limit(self.depth_limit);
         cursor.set_max_encoded_string_bytes(self.max_encoded_string_bytes);
         cursor.set_defer_number_delimiter(true);
@@ -234,11 +248,13 @@ where
         let mut stack = Vec::new();
         let scan = (|| {
             cursor.skip_whitespace();
+            cursor.set_context(JsonDecodeContext::Value);
             cursor.value(self.root_depth, &mut stack, &mut dispatch)?;
             while let Some(frame) = stack.pop() {
                 cursor.resume(frame, &mut stack, &mut dispatch)?;
             }
             cursor.skip_whitespace();
+            cursor.set_context(JsonDecodeContext::TrailingInput);
             if cursor.is_at_end() {
                 Ok(())
             } else {

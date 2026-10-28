@@ -9,6 +9,7 @@
 
 use super::JsonDecodeNumberModel;
 use super::JsonRootKind;
+use super::JsonValidatedAdmissionPolicy;
 use super::JsonValidatedDecodeOptionsBuilder;
 
 /// Generic structural and source-token limits for validated decoding.
@@ -41,6 +42,8 @@ use super::JsonValidatedDecodeOptionsBuilder;
 pub struct JsonValidatedDecodeOptions {
     /// Required root kind, when the caller configured one.
     pub(super) root_kind: Option<JsonRootKind>,
+    /// Token admission order for validated decoding.
+    pub(super) admission_policy: JsonValidatedAdmissionPolicy,
     /// Representation model used for numbers selected for preservation.
     pub(super) number_model: JsonDecodeNumberModel,
     /// Optional combined count for value nodes and object-key nodes.
@@ -65,6 +68,15 @@ impl JsonValidatedDecodeOptions {
     /// The required root kind, or `None` when no root-kind restriction applies.
     pub const fn root_kind(&self) -> Option<JsonRootKind> {
         self.root_kind
+    }
+    /// Returns the token admission order used by validated decoding.
+    ///
+    /// # Returns
+    ///
+    /// The configured policy. The default is
+    /// [`JsonValidatedAdmissionPolicy::Immediate`].
+    pub const fn admission_policy(&self) -> JsonValidatedAdmissionPolicy {
+        self.admission_policy
     }
     /// Returns the selected number model.
     ///

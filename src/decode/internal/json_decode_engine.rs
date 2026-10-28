@@ -39,12 +39,13 @@ use crate::decode::JsonNumberPolicy;
 use crate::decode::JsonNumberToken;
 use crate::decode::JsonPathSegment;
 use crate::decode::JsonRootKind;
+use crate::decode::JsonValidatedAdmissionPolicy;
 use crate::decode::JsonValidatedDecodeError;
 use crate::decode::JsonValidatedDecodeOptions;
 use crate::decode::JsonValidatedLimit;
 use crate::decode::NormalizedJsonDocument;
+use crate::lexical::JsonLexicalAdmissionPolicy;
 use crate::lexical::JsonLexicalError;
-use crate::lexical::JsonLexicalErrorReason;
 use crate::lexical::JsonLexicalScanError;
 use crate::lexical::JsonLexicalScanner;
 use crate::lexical::JsonNumberModel;
@@ -312,9 +313,14 @@ where
             JsonDecodeNumberModel::Integer64 => JsonNumberModel::Integer64,
             JsonDecodeNumberModel::Integer64WithFiniteFallback => JsonNumberModel::Integer64WithFiniteFallback,
         };
+        let admission_policy = match options.admission_policy() {
+            JsonValidatedAdmissionPolicy::Immediate => JsonLexicalAdmissionPolicy::Immediate,
+            JsonValidatedAdmissionPolicy::TokenFirst => JsonLexicalAdmissionPolicy::TokenFirst,
+        };
         let mut consumer = ValidatedValueConsumer::new(options.clone(), policy, model, track_path);
         let result = JsonLexicalScanner::new(attempt.value_transaction_mut(), has_value_limits)
             .with_number_model(model)
+            .with_admission_policy(admission_policy)
             .with_depth_limit(depth_limit)
             .with_max_encoded_string_bytes(options.max_encoded_string_bytes())
             .scan_with_consumer(input, &mut consumer);
@@ -376,18 +382,7 @@ where
             }
             Err(JsonLexicalScanError::Lexical(error)) => {
                 let context = match &error {
-                    JsonLexicalError::Syntax(failure) => Some(match failure.reason {
-                        JsonLexicalErrorReason::ExpectedColon => JsonDecodeContext::Colon,
-                        JsonLexicalErrorReason::ExpectedObjectKey => JsonDecodeContext::ObjectKey,
-                        JsonLexicalErrorReason::ExpectedCommaOrArrayEnd => JsonDecodeContext::ArraySeparator,
-                        JsonLexicalErrorReason::ExpectedCommaOrObjectEnd => JsonDecodeContext::ObjectSeparator,
-                        JsonLexicalErrorReason::TrailingCharacters => JsonDecodeContext::TrailingInput,
-                        JsonLexicalErrorReason::EncodedStringLimit { .. } => JsonDecodeContext::String,
-                        JsonLexicalErrorReason::InvalidNumber
-                        | JsonLexicalErrorReason::IntegerOutOfRange
-                        | JsonLexicalErrorReason::FloatOutOfRange => JsonDecodeContext::Number,
-                        _ => JsonDecodeContext::Value,
-                    }),
+                    JsonLexicalError::Syntax(failure) => failure.context,
                     JsonLexicalError::Budget(_) => None,
                 };
                 return Err(JsonValidatedDecodeError::Decode {
@@ -1005,6 +1000,7 @@ where
                     line,
                     column,
                     reason: crate::lexical::JsonLexicalErrorReason::FloatOutOfRange,
+                    context: Some(JsonDecodeContext::Number),
                 };
                 return Err(JcsDecodeError::Decode(Self::map_lexical_error(
                     JsonLexicalError::Syntax(failure),

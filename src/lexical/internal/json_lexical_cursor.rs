@@ -14,6 +14,7 @@ use qubit_budget::json::JsonContainerKind;
 use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonValueTransaction;
 
+use super::super::json_lexical_admission_policy::JsonLexicalAdmissionPolicy;
 use super::super::json_lexical_consumer::JsonLexicalScanPoint;
 use super::super::json_lexical_error::JsonLexicalError;
 use super::super::json_lexical_error_reason::JsonLexicalErrorReason;
@@ -21,6 +22,7 @@ use super::super::json_lexical_event::JsonLexicalEvent;
 use super::super::json_lexical_failure::JsonLexicalFailure;
 use super::super::json_number_model::JsonNumberModel;
 use super::json_lexical_container_frame::JsonLexicalContainerFrame;
+use crate::decode::JsonDecodeContext;
 
 /// Iterative cursor over the JSON bytes being admitted.
 ///
@@ -43,9 +45,11 @@ where
     has_value_limits: bool,
     /// Numeric range contract selected by the owning decoder.
     number_model: JsonNumberModel,
+    admission_policy: JsonLexicalAdmissionPolicy,
     depth_limit: Option<Q>,
     defer_number_delimiter: bool,
     max_encoded_string_bytes: Option<usize>,
+    context: JsonDecodeContext,
 }
 
 impl<'input, 'transaction, 'budget, R, Q> JsonLexicalCursor<'input, 'transaction, 'budget, R, Q>
@@ -77,9 +81,11 @@ where
             transaction,
             has_value_limits,
             number_model: JsonNumberModel::Integer64,
+            admission_policy: JsonLexicalAdmissionPolicy::Immediate,
             depth_limit: None,
             defer_number_delimiter: false,
             max_encoded_string_bytes: None,
+            context: JsonDecodeContext::Value,
         }
     }
 
@@ -106,6 +112,10 @@ where
         self.number_model = number_model;
     }
 
+    pub(in crate::lexical) const fn set_admission_policy(&mut self, policy: JsonLexicalAdmissionPolicy) {
+        self.admission_policy = policy;
+    }
+
     pub(in crate::lexical) const fn set_depth_limit(&mut self, depth_limit: Option<Q>) {
         self.depth_limit = depth_limit;
     }
@@ -116,6 +126,10 @@ where
 
     pub(in crate::lexical) const fn set_max_encoded_string_bytes(&mut self, maximum: Option<usize>) {
         self.max_encoded_string_bytes = maximum;
+    }
+
+    pub(in crate::lexical) const fn set_context(&mut self, context: JsonDecodeContext) {
+        self.context = context;
     }
 
     /// Advances past JSON whitespace.
@@ -145,6 +159,7 @@ where
             line,
             column,
             reason,
+            context: Some(self.context),
         })
     }
 
@@ -191,6 +206,7 @@ where
     where
         F: FnMut(JsonLexicalScanPoint<'input>) -> bool,
     {
+        self.context = JsonDecodeContext::Value;
         self.skip_whitespace();
         if let Some(maximum) = self.depth_limit
             && Q::try_from_usize(depth).map_or(true, |depth| depth > maximum)
@@ -325,6 +341,7 @@ where
     {
         match frame {
             JsonLexicalContainerFrame::ArrayValue { depth, items } => {
+                self.context = JsonDecodeContext::Value;
                 self.skip_whitespace();
                 if self.peek() == Some(b']') {
                     if items == 0 {
@@ -346,6 +363,7 @@ where
                 self.value(child_depth, stack, emit)
             }
             JsonLexicalContainerFrame::ArrayDelimiter { depth, items } => {
+                self.context = JsonDecodeContext::ArraySeparator;
                 self.skip_whitespace();
                 match self.peek() {
                     Some(b',') => {
@@ -364,6 +382,7 @@ where
                 }
             }
             JsonLexicalContainerFrame::ObjectKey { depth, entries } => {
+                self.context = JsonDecodeContext::ObjectKey;
                 self.skip_whitespace();
                 if self.peek() == Some(b'}') {
                     if entries == 0 {
@@ -397,6 +416,7 @@ where
                         offset: key_start,
                     }),
                 )?;
+                self.context = JsonDecodeContext::Colon;
                 self.skip_whitespace();
                 if self.peek() != Some(b':') {
                     return Err(match self.peek() {
@@ -412,6 +432,7 @@ where
                 self.value(child_depth, stack, emit)
             }
             JsonLexicalContainerFrame::ObjectDelimiter { depth, entries } => {
+                self.context = JsonDecodeContext::ObjectSeparator;
                 self.skip_whitespace();
                 match self.peek() {
                     Some(b',') => {
@@ -496,7 +517,9 @@ where
             });
         }
         let end = self.offset.saturating_add(literal.len());
-        if !Self::is_value_delimiter(self.input.get(end).copied()) {
+        if self.admission_policy == JsonLexicalAdmissionPolicy::Immediate
+            && !Self::is_value_delimiter(self.input.get(end).copied())
+        {
             self.offset = end;
             return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
         }
@@ -507,6 +530,50 @@ where
 
     /// Consumes one JSON string and returns its decoded UTF-8 byte length.
     fn string_bytes(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
+        self.context = JsonDecodeContext::String;
+        if self.admission_policy == JsonLexicalAdmissionPolicy::TokenFirst {
+            let start = self.offset;
+            let end = self.raw_string_token_end(start)?;
+            let original_input = self.input;
+            self.input = &original_input[..end];
+            let result = self.string_bytes_immediate();
+            self.input = original_input;
+            return result;
+        }
+        self.string_bytes_immediate()
+    }
+
+    /// Finds the closing quote while enforcing the token-local encoded byte
+    /// limit.
+    fn raw_string_token_end(&self, start: usize) -> Result<usize, JsonLexicalError<R, Q>> {
+        let mut end = start + 1;
+        let mut escaped = false;
+        loop {
+            let Some(byte) = self.input.get(end).copied() else {
+                return Err(self.syntax_at(end, JsonLexicalErrorReason::UnexpectedEnd));
+            };
+            let scanned = end - start - 1;
+            if let Some(maximum) = self.max_encoded_string_bytes
+                && scanned > maximum
+            {
+                return Err(self.syntax_at(
+                    start,
+                    JsonLexicalErrorReason::EncodedStringLimit {
+                        maximum,
+                        observed: scanned,
+                    },
+                ));
+            }
+            if !escaped && byte == b'"' {
+                return Ok(end + 1);
+            }
+            escaped = !escaped && byte == b'\\';
+            end += 1;
+        }
+    }
+
+    /// Consumes a JSON string and returns its decoded UTF-8 byte length.
+    fn string_bytes_immediate(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
         debug_assert_eq!(self.peek(), Some(b'"'));
         self.offset += 1;
         let mut decoded = 0_usize;
@@ -636,6 +703,28 @@ where
 
     /// Consumes one JSON number and returns its original lexical byte length.
     fn number_bytes(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
+        self.context = JsonDecodeContext::Number;
+        if self.admission_policy == JsonLexicalAdmissionPolicy::Immediate {
+            return self.number_bytes_immediate();
+        }
+        let mut candidate_end = self.offset;
+        while self
+            .input
+            .get(candidate_end)
+            .is_some_and(|byte| matches!(*byte, b'0'..=b'9' | b'e' | b'E' | b'+' | b'.' | b'-'))
+        {
+            candidate_end += 1;
+        }
+        let bytes = self.number_bytes_immediate()?;
+        if self.offset != candidate_end {
+            return Err(self.syntax(JsonLexicalErrorReason::InvalidNumber));
+        }
+        Ok(bytes)
+    }
+
+    /// Applies the existing JSON number grammar without changing its rules.
+    fn number_bytes_immediate(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
+        self.context = JsonDecodeContext::Number;
         let start = self.offset;
         if self.peek() == Some(b'-') {
             self.offset += 1;
@@ -752,6 +841,7 @@ where
             line,
             column,
             reason,
+            context: Some(self.context),
         })
     }
 

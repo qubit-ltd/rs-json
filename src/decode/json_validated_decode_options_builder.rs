@@ -9,6 +9,7 @@
 
 use super::JsonDecodeNumberModel;
 use super::JsonRootKind;
+use super::JsonValidatedAdmissionPolicy;
 use super::JsonValidatedDecodeOptions;
 
 /// Builds [`JsonValidatedDecodeOptions`].
@@ -37,6 +38,8 @@ use super::JsonValidatedDecodeOptions;
 pub struct JsonValidatedDecodeOptionsBuilder {
     /// Required root kind, when configured.
     root_kind: Option<JsonRootKind>,
+    /// Token admission order for validated decoding.
+    admission_policy: JsonValidatedAdmissionPolicy,
     /// Representation model used for preserved numbers.
     number_model: JsonDecodeNumberModel,
     /// Optional combined value-node and object-key-node limit.
@@ -46,6 +49,19 @@ pub struct JsonValidatedDecodeOptionsBuilder {
 }
 
 impl JsonValidatedDecodeOptionsBuilder {
+    /// Selects the token admission order for validated decoding.
+    ///
+    /// # Parameters
+    ///
+    /// * `policy` - The admission order to use.
+    ///
+    /// # Returns
+    ///
+    /// The builder configured with the selected admission policy.
+    pub fn admission_policy(mut self, policy: JsonValidatedAdmissionPolicy) -> Self {
+        self.admission_policy = policy;
+        self
+    }
     /// Requires a particular root kind.
     ///
     /// # Parameters
@@ -111,6 +127,7 @@ impl JsonValidatedDecodeOptionsBuilder {
     pub fn build(self) -> JsonValidatedDecodeOptions {
         JsonValidatedDecodeOptions {
             root_kind: self.root_kind,
+            admission_policy: self.admission_policy,
             number_model: self.number_model,
             max_value_and_key_nodes: self.max_value_and_key_nodes,
             max_encoded_string_bytes: self.max_encoded_string_bytes,

@@ -10,6 +10,7 @@
 use std::fmt;
 
 use super::json_lexical_error_reason::JsonLexicalErrorReason;
+use crate::decode::JsonDecodeContext;
 
 /// Location and stable reason for a lexical JSON rejection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -22,6 +23,8 @@ pub(crate) struct JsonLexicalFailure {
     pub(crate) column: usize,
     /// Stable lexical rejection reason.
     pub(crate) reason: JsonLexicalErrorReason,
+    /// Grammar location where the lexical failure occurred, when known.
+    pub(crate) context: Option<JsonDecodeContext>,
 }
 
 impl fmt::Display for JsonLexicalFailure {
