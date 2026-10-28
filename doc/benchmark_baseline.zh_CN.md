@@ -298,3 +298,71 @@ taskset -c 3 cargo bench --bench tree_bench -- --noplot
 数字检查应覆盖 `i64`/`u64` 边界、范围拒绝和 `NumberBytes` 拒绝。无限制结果仅适用于
 可信数据或已由其他层准入的数据。详见[设计文档](json_design.zh_CN.md)和
 [数字契约](number_contract.zh_CN.md)。
+
+## 重复键长尾与惰性 JSON 值读取帧（2026-10-29）
+
+测量使用 Rust 1.94.0、`serde_json 1.0.154`、Criterion 0.8.2、系统分配器，以及 Linux
+7.0.0-38-generic 上的 Intel Core i5-9600K。主机为共享环境，未设置 CPU 亲和性。唯一键
+基准每项使用 Criterion 默认的 100 个样本；采样期间有其他 crate 的构建任务并行运行，
+因此这些延迟只是观测值，不能作为受控的加速结论。启用和未启用 JCS feature 时，Criterion
+为 `unique_seed` 使用同一组 benchmark ID，因此其自动跨次比较可能选到另一个 feature 的
+最近样本。下表记录匹配 feature 的原始估计值与报告区间。
+
+重复键解码命令：
+
+```bash
+cargo bench --locked --bench unique_decode_bench -- early_duplicate_tail
+cargo bench --locked --bench unique_decode_bench --features jcs -- early_duplicate_tail
+```
+
+| Feature | 操作 | 尾部 | 修改前估计值（报告区间） | 修改后估计值（报告区间） |
+| --- | --- | ---: | ---: | ---: |
+| 默认 | unique seed | 1 KiB | 1.9063 µs（1.8943–1.9187） | 1.5736 µs（1.5269–1.6295） |
+| 默认 | unique seed | 64 KiB | 66.148 µs（65.802–66.563） | 42.870 µs（41.908–43.934） |
+| 默认 | unique seed | 1 MiB | 1.4596 ms（1.4013–1.5223） | 533.18 µs（530.50–536.13） |
+| `jcs` | unique seed | 1 KiB | 2.0086 µs（1.9379–2.0889） | 1.8600 µs（1.8432–1.8774） |
+| `jcs` | unique seed | 64 KiB | 80.856 µs（77.954–83.903） | 72.543 µs（70.221–75.326） |
+| `jcs` | unique seed | 1 MiB | 1.0482 ms（1.0435–1.0531） | 1.0292 ms（1.0234–1.0351） |
+| `jcs` | JCS decode | 1 KiB | 1.7619 µs（1.7091–1.8288） | 1.8726 µs（1.8217–1.9334） |
+| `jcs` | JCS decode | 64 KiB | 77.683 µs（75.496–80.351） | 63.781 µs（63.422–64.200） |
+| `jcs` | JCS decode | 1 MiB | 1.0396 ms（1.0365–1.0428） | 1.0085 ms（1.0043–1.0132） |
+
+fixture 在靠前位置包含重复键，后面跟随合法字符串数据。首遍完整准入仍保留，以维持语法和
+预算错误优先级；第二遍构树会在 builder 首次物化失败时停止。这些样本没有墙钟验收阈值；
+JCS 的 1 KiB 结果略慢，测量也受到共享主机负载影响。
+
+值读取分配二进制在计量操作前创建 fixture；Debug 输出写入丢弃 sink，或在接受 64 字节后
+失败的 sink。realloc 也计入请求字节总量。次数和字节统计分配请求流量，不代表峰值存活内存
+或 RSS。
+
+```bash
+cargo bench --locked --bench value_read_allocations
+cargo bench --locked --bench value_read_allocations --features serde_json/preserve_order
+```
+
+默认 feature 下 owner 与 view 结果一致。新增帧前比较和 Debug 的请求量随宽度增长；修改后
+所有三档宽度（32、512、8192）均报告相同请求：
+
+| 形状 / 操作 | 修改前宽度 32 | 修改前宽度 8192 | 修改后，各宽度 |
+| --- | ---: | ---: | ---: |
+| 数组比较（相等或不等） | 2 次 / 528 B | 2 次 / 131,088 B | 1 次 / 320 B |
+| 对象比较（相等或不等） | 5 次 / 976 B | 13 次 / 262,096 B | 1 次 / 320 B |
+| 数组 Debug（成功或 writer 提前失败） | 6 次 / 3,000 B | 14 次 / 786,360 B | 2 次 / 400 B |
+| 对象 Debug（成功或 writer 提前失败） | 7 次 / 6,072 B | 15 次 / 1,572,792 B | 2 次 / 400 B |
+
+启用 `serde_json/preserve_order` 后，相同宽度下的修改后结果也保持不变：两种形状及 owner/view
+比较均为 1 次 / 128 请求字节，Debug 均为 2 次 / 120 字节。未采集匹配的修改前
+preserve-order 分配数据。深度为 8、64、256 时，默认 feature 修改后的比较请求分别为
+960、9,920、40,640 B，Debug 分别为 2,320、20,240、81,680 B。preserve-order 修改后
+比较分别为 384、3,968、16,256 B，Debug 分别为 696、6,072、24,504 B。深度方向的增长
+符合显式帧/action 栈的设计，也显示每层的分配成本。
+
+定向计时目标使用 10 个样本、0.1 秒预热和测量窗口：
+
+```bash
+cargo bench --locked --bench tree_bench -- json-value-read --warm-up-time 0.1 --measurement-time 0.1 --sample-size 10
+```
+
+当前代码的代表性估计值：8192 元素数组相等比较 38.0 µs、8192 项对象相等比较 676 µs、
+首个子节点不同为 24–46 ns、深度 256 的 Debug 丢弃输出为 3.85 µs。这些短样本存在
+异常值，只用于描述当前实现；宽度扩展证据来自分配计数结果。没有设置计时断言。

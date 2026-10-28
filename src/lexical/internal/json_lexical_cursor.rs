@@ -45,10 +45,17 @@ where
     has_value_limits: bool,
     /// Numeric range contract selected by the owning decoder.
     number_model: JsonNumberModel,
+    /// Determines whether token admission checks delimiters immediately or
+    /// validates a complete token before reporting token-local failures.
     admission_policy: JsonLexicalAdmissionPolicy,
+    /// Optional maximum root-inclusive value depth; the document root is one.
     depth_limit: Option<Q>,
+    /// Defers a number's delimiter check until after its consumer callbacks.
     defer_number_delimiter: bool,
+    /// Optional maximum source bytes inside each string token, excluding its
+    /// two quotes and including bytes used for escapes.
     max_encoded_string_bytes: Option<usize>,
+    /// Context attached to a subsequent syntax failure as parsing advances.
     context: JsonDecodeContext,
 }
 
@@ -112,22 +119,40 @@ where
         self.number_model = number_model;
     }
 
+    /// Selects the order of token-local admission checks.
+    ///
+    /// `Immediate` checks delimiters as tokens are consumed. `TokenFirst`
+    /// validates a complete string or number token before reporting its
+    /// token-local admission or range failure; it still validates the rest of
+    /// the document grammar.
     pub(in crate::lexical) const fn set_admission_policy(&mut self, policy: JsonLexicalAdmissionPolicy) {
         self.admission_policy = policy;
     }
 
+    /// Sets an optional maximum value depth, counting the root as depth one.
     pub(in crate::lexical) const fn set_depth_limit(&mut self, depth_limit: Option<Q>) {
         self.depth_limit = depth_limit;
     }
 
+    /// Controls whether a number delimiter is checked after consumer callbacks.
+    ///
+    /// When enabled by `scan_with_consumer`, the number callback and event run
+    /// before the following delimiter is validated. This lets a consumer stop
+    /// on a materialization error without scanning later syntax; it does not
+    /// change the delimiter rule when scanning continues.
     pub(in crate::lexical) const fn set_defer_number_delimiter(&mut self, defer: bool) {
         self.defer_number_delimiter = defer;
     }
 
+    /// Sets the maximum encoded source bytes per string token, excluding its
+    /// surrounding quotes and counting escape spelling bytes as written.
+    ///
+    /// This measures the source representation, not the decoded UTF-8 length.
     pub(in crate::lexical) const fn set_max_encoded_string_bytes(&mut self, maximum: Option<usize>) {
         self.max_encoded_string_bytes = maximum;
     }
 
+    /// Sets the context attached to a subsequent syntax error.
     pub(in crate::lexical) const fn set_context(&mut self, context: JsonDecodeContext) {
         self.context = context;
     }

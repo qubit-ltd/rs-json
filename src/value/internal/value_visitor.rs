@@ -5,7 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Protected Serde interoperability for [`super::SafeJsonValue`].
+//! Protected Serde interoperability for [`crate::value::SafeJsonValue`].
 //!
 //! Deserialization rejects duplicate object keys and non-finite numbers. Values
 //! are assembled through the guarded builder, so an error cannot expose a
