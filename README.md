@@ -130,9 +130,12 @@ When an application needs stable bytes for a hash or signature, enable `jcs`
 and pass an already constructed `serde_json::Value` to `JcsEncoder`:
 
 ```rust
+# #[cfg(feature = "jcs")]
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
+# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
+# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(4096)
@@ -142,6 +145,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(encoder.to_vec(&value)?, br#"{"a":1,"b":2}"#);
     Ok(())
 }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 The `jcs` feature is disabled by default. `JcsEncoder` canonicalizes the
@@ -330,9 +335,18 @@ renderer collection capacity, not an exact heap ceiling.
 
 ## Testing
 
+`--all-features` covers this crate's declared features; the project check also tests the explicit `serde_json` feature combinations listed in its hook.
+
 ```bash
-# Run this crate's unit tests with the default features
-cargo test --locked --lib
+# Run unit tests and public behavior integration tests with default features
+cargo test --locked --lib --test tests
+
+# Run this crate's tests with all declared features
+cargo test --locked --all-features
+
+# Run documentation examples with default features and with jcs
+cargo test --locked --doc
+cargo test --locked --doc --features jcs
 
 # Run the project checks for this crate
 ./.infra/bin/ci-check.sh

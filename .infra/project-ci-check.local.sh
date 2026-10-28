@@ -22,5 +22,6 @@ for json_features in "${feature_sets[@]}"; do
         cargo test --locked --lib --test tests --features "$json_features"
     fi
 done
+cargo test --locked --doc
 cargo test --locked --doc --features jcs
 cargo test --locked --manifest-path fuzz/Cargo.toml --lib --tests

@@ -201,9 +201,12 @@ serde_json = "1.0"
 应用可以先规范化，再把结果字节传给现有的签名或哈希逻辑：
 
 ```rust
+# #[cfg(feature = "jcs")]
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
+# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
+# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(4096)
@@ -214,6 +217,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical, br#"{"a":1,"b":2}"#);
     Ok(())
 }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 该 feature 默认关闭。编码器接收 `Value`，不接收任意 `Serialize` 实现或原始 JSON 文本。读取原始
@@ -244,6 +249,9 @@ flush 错误。相比之下，`write_incremental` 会在提交值计费前 flush
 `max_depth` 限制准入遍历深度、`max_nodes` 限制树的节点数，并为输出和 renderer 容量分别设限：
 
 ```rust
+# #[cfg(feature = "jcs")]
+# fn main() -> Result<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>> {
+
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
 use qubit_json::encode::JcsEncoder;
 
@@ -256,6 +264,9 @@ let mut encoder = JcsEncoder::with_limits(limits, 8 * 1024);
 let canonical = encoder.to_vec(&serde_json::json!({"status": "ready"}))?;
 assert_eq!(canonical, br#"{"status":"ready"}"#);
 # Ok::<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>>(())
+# }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 这些配置限制逻辑资源和 renderer 集合容量，不代表精确堆内存上限；输入 `Value`、准入栈、分配器
@@ -267,10 +278,14 @@ assert_eq!(canonical, br#"{"status":"ready"}"#);
 `Value`。下面的例子对输入、结构和值数量都设定有限预算，再将结果交给 `JcsEncoder`：
 
 ```rust
+# #[cfg(feature = "jcs")]
 use qubit_budget::json::{JsonDecodeLimits, JsonEncodeLimits, JsonResource};
+# #[cfg(feature = "jcs")]
 use qubit_json::decode::JcsDecoder;
+# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
+# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let decode_limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(4096)
@@ -292,6 +307,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical, br#"{"a":1,"b":100000000000000000000}"#);
     Ok(())
 }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 数字不论输入写成整数、小数还是指数，都会按 binary64 舍入后存入 `Value`。例如
@@ -301,6 +318,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 重复键比较的是 JSON 反转义后的键字符串。下面的断言说明，Unicode 转义可以拼出相同键；双反斜杠则会让反斜杠成为键名的一部分：
 
 ```rust
+# #[cfg(feature = "jcs")]
+# fn main() {
+
 use qubit_json::decode::{JcsDecodeError, JcsDecoder};
 
 let error = JcsDecoder::unlimited()
@@ -311,6 +331,9 @@ let value = JcsDecoder::unlimited()
     .decode_str(r#"{"x":1,"\\u0078":2}"#)
     .unwrap();
 assert_eq!(value.as_object().unwrap().len(), 2);
+# }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 
@@ -319,6 +342,9 @@ JCS 解码只按调用方配置的 `max_depth`（包含根值）准入，不再�
 `JcsDecoder` 返回裸 `serde_json::Value`；若要保留深树，应在返回后立即用 `SafeJsonValue` 接管：
 
 ```rust
+# #[cfg(feature = "jcs")]
+# fn main() {
+
 use qubit_json::decode::JcsDecoder;
 use qubit_json::value::SafeJsonValue;
 
@@ -328,6 +354,9 @@ for depth in [128, 129] {
     let protected = SafeJsonValue::new(value);
     assert!(protected.as_value().is_array());
 }
+# }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 按变体处理 JCS 错误：`Decode(source)` 包含普通输入、语法和预算错误；`DuplicateKey { line, column }`

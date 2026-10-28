@@ -239,9 +239,12 @@ The application can then canonicalize a value before passing its bytes to its
 existing signing or hashing code:
 
 ```rust
+# #[cfg(feature = "jcs")]
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
+# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
+# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(4096)
@@ -252,6 +255,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical, br#"{"a":1,"b":2}"#);
     Ok(())
 }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 The feature is disabled by default. The encoder accepts `Value`, not arbitrary
@@ -301,6 +306,9 @@ that accepts a materialized value can combine finite value, output, and
 renderer limits as follows:
 
 ```rust
+# #[cfg(feature = "jcs")]
+# fn main() -> Result<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>> {
+
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
 use qubit_json::encode::JcsEncoder;
 
@@ -313,6 +321,9 @@ let mut encoder = JcsEncoder::with_limits(limits, 8 * 1024);
 let canonical = encoder.to_vec(&serde_json::json!({"status": "ready"}))?;
 assert_eq!(canonical, br#"{"status":"ready"}"#);
 # Ok::<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>>(())
+# }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 These limits bound configured logical resources and renderer collection
@@ -326,10 +337,14 @@ a `Value` with ordinary `JsonDecoder`. This example sets finite input,
 structure, and value limits, then passes the result to `JcsEncoder`:
 
 ```rust
+# #[cfg(feature = "jcs")]
 use qubit_budget::json::{JsonDecodeLimits, JsonEncodeLimits, JsonResource};
+# #[cfg(feature = "jcs")]
 use qubit_json::decode::JcsDecoder;
+# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
+# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let decode_limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(4096)
@@ -351,6 +366,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical, br#"{"a":1,"b":100000000000000000000}"#);
     Ok(())
 }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 Every number, whether written as an integer, fraction, or exponent, is rounded
@@ -365,6 +382,9 @@ shows that a Unicode escape can spell the same key, while a doubled backslash
 makes the backslash part of a different key:
 
 ```rust
+# #[cfg(feature = "jcs")]
+# fn main() {
+
 use qubit_json::decode::{JcsDecodeError, JcsDecoder};
 
 let error = JcsDecoder::unlimited()
@@ -375,6 +395,9 @@ let value = JcsDecoder::unlimited()
     .decode_str(r#"{"x":1,"\\u0078":2}"#)
     .unwrap();
 assert_eq!(value.as_object().unwrap().len(), 2);
+# }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 
@@ -385,6 +408,9 @@ bare `serde_json::Value`, so callers that accept deep documents should protect
 the result immediately before retaining or dropping it:
 
 ```rust
+# #[cfg(feature = "jcs")]
+# fn main() {
+
 use qubit_json::decode::JcsDecoder;
 use qubit_json::value::SafeJsonValue;
 
@@ -394,6 +420,9 @@ for depth in [128, 129] {
     let protected = SafeJsonValue::new(value);
     assert!(protected.as_value().is_array());
 }
+# }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 Handle JCS errors by variant: `Decode(source)` carries ordinary input,

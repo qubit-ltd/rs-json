@@ -115,9 +115,12 @@ feature 配置变化。解码 JSON 文本时请使用 `JsonDecoder::decode_value
 `serde_json::Value` 交给 `JcsEncoder`：
 
 ```rust
+# #[cfg(feature = "jcs")]
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
+# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
+# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(4096)
@@ -127,6 +130,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(encoder.to_vec(&value)?, br#"{"a":1,"b":2}"#);
     Ok(())
 }
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
 ```
 
 `jcs` 默认关闭。规范化对象是 `Value` 数据模型，不接受任意 `Serialize` 值或原始 JSON 文本。
@@ -274,11 +279,20 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 
 ## 测试
 
-```bash
-# 运行本 crate 默认 feature 下的单元测试
-cargo test --locked --lib
+`--all-features` 覆盖当前 crate 声明的 feature；项目检查还会测试 hook 中显式列出的 `serde_json` feature 组合。
 
-# 运行本 crate 的项目检查
+```bash
+# 使用默认 feature 运行单元测试和公开行为集成测试
+cargo test --locked --lib --test tests
+
+# 使用当前 crate 声明的全部 feature 运行测试
+cargo test --locked --all-features
+
+# 使用默认 feature 和 jcs 运行文档示例
+cargo test --locked --doc
+cargo test --locked --doc --features jcs
+
+# 运行本项目检查
 ./.infra/bin/ci-check.sh
 
 # 检查代码覆盖率
