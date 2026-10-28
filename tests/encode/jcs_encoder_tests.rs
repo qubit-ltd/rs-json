@@ -473,7 +473,8 @@ fn test_jcs_encoder_working_memory_exact_boundary_for_object() {
 #[test]
 fn test_jcs_encoder_preserves_exact_budgets_for_wide_deep_mixed_trees() {
     let limits = JsonEncodeLimits::<JsonResource, usize>::new();
-    // Derive layout costs through public failures instead of assuming a frame layout.
+    // Derive layout costs through public failures instead of assuming a frame
+    // layout.
     let frame_bytes = JcsEncoder::with_limits(limits, 0)
         .to_vec(&serde_json::json!([null]))
         .expect_err("a nonempty array needs a traversal frame")
@@ -583,7 +584,8 @@ fn test_jcs_encoder_reclaim_preserves_ancestor_object_tables_and_later_siblings(
         child = serde_json::Value::Array(vec![child]);
     }
     let value = serde_json::json!({"a": child, "z": {"later": [1, 2]}});
-    // Seven simultaneous frames plus the ancestor's two and child's sixteen entries.
+    // Seven simultaneous frames plus the ancestor's two and child's sixteen
+    // entries.
     let exact = 7 * frame_bytes + 18 * entry_bytes;
     assert_eq!(
         JcsEncoder::with_limits(limits, exact)
