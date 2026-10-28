@@ -249,6 +249,16 @@ dependency enables `arbitrary_precision`. Use
 JSON text with the text decoder's numeric model. That path recognizes the
 private struct protocol while retaining literal objects with the same key.
 
+`JsonValueRef<'a>` is a `Copy` borrowed view over `&'a Value`. Its constructor
+does not copy or traverse the tree. `Eq` and `Debug` use the owner's explicit
+work-stack read operations; `Debug` is Rust diagnostic output, not JSON text.
+`Serialize` delegates the `Value` data model to the selected Serde serializer
+and remains subject to that serializer's recursion limits, so the view does
+not extend deep-tree serialization protection. The view has no independent
+cleanup, mutation, deserialization, or budget behavior. O(1) construction
+therefore does not imply allocation-free comparison, formatting, or
+serialization. Output syntax and formatting belong to the selected serializer.
+
 The direct bridge rejects duplicate object keys after decoding escapes and
 does not normalize Unicode. Its duplicate-key index is an auxiliary
 `BTreeSet<String>` alongside the collected members. The number of key
@@ -296,6 +306,36 @@ limits. Policy diagnostics retain the source byte offset without formatting
 the opaque caller error payload. `JsonValueEncodeError` separates budget
 rejection from strict JSON serialization failure when projecting a Serde value
 into a caller-owned transaction.
+
+`JsonSyntaxError` stores an optional `JsonDecodeContext` for the grammar
+location known by the scanner. `new(...)` keeps its historical `None` context;
+scanner-created errors carry a context through validated decode errors under
+both redacted and detailed diagnostics. The field participates in derived
+`Eq` and `Debug`, so their structured results can change; `Display` omits it
+and remains stable.
+
+Validated decoding uses `JsonValidatedAdmissionPolicy`, defaulting to
+`Immediate`. The opt-in `TokenFirst` is applied only by the validated decode
+facade. A complete literal is admitted and emitted before the parent checks
+its following delimiter: `{"a":truex}` therefore fails at the object's
+separator after `true` was admitted, with `ObjectSeparator` context. This
+policy does not change typed decoding, syntax-only pretty formatting, or JCS
+decoding. Sharing a scanner or consumer does not imply sharing this option.
+
+For TokenFirst string scanning, source bytes inside the quotes are counted
+before string decoding or decoded-value measurement. With maximum 1, an
+unclosed `"ab` reaches EOF before another limit check and reports syntax
+`UnexpectedEnd`; complete `"ab"` reports the `EncodedStringBytes` limit; and
+unclosed `"abc` reports that limit when the next byte is available after the
+over-limit `ab` prefix. The distinction is deliberate: EOF is tested before
+the limit at each scan step. On successful parsing, decoded key/string
+measurement still follows encoded-token admission.
+
+Input measurement and value transactions are separate. Bytes already read
+remain charged after later syntax, policy, or limit failure; staged value
+charges commit only after complete document success. Callback side effects
+cannot be rolled back by the library. This accounting contract does not claim
+to bound all temporary heap allocations.
 
 ## Tree
 

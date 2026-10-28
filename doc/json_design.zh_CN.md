@@ -163,6 +163,11 @@ JCS Value 构造复用共享 builder，没有独立固定容器上限；包含�
 
 其通用 `Deserialize` 实现消费 Serde 事件并保护部分构造的值，但没有源 token 来源信息。特别是，map 事件无法区分字面对象和 `serde_json` 的私有任意精度数字协议，因此都作为普通对象处理。依赖启用 `arbitrary_precision` 时，直接桥接 JSON 数字得到的形态可能与未启用时不同。若从 JSON 文本解码并需要文本 decoder 的数字模型，请用 `JsonDecoder::decode_value_str` 或对应的 UTF-8/reader 入口；该路径能识别私有 struct 协议，同时保留使用同名键的字面对象。
 
+`JsonValueRef<'a>` 是对 `&'a Value` 的 `Copy` 借用视图。构造时既不复制也不遍历值树。`Eq` 和 `Debug` 使用 owner
+的显式工作栈只读操作；`Debug` 是 Rust 诊断格式，不是 JSON 文本。`Serialize` 则把 `Value` 数据模型交给所选
+Serde serializer，并受该 serializer 的递归限制约束，因此视图不会扩展深树序列化保护。视图不负责独立清理、修改、
+反序列化或预算。构造为 O(1) 不代表比较、格式化或序列化不分配内存；输出语法和格式由所选 serializer 决定。
+
 直接桥接会在键解码后拒绝重复键，不执行 Unicode 归一化。重复键索引使用额外的 `BTreeSet<String>`，并与已收集成员同时存在；键比较次数为 O(n log n)，每次 `String` 比较的字节成本取决于共同前缀长度。辅助键存储不包含在值预算中。对象仍通过 `SafeValueBuilder` 构造，并遵从当前 `serde_json::Map` 的顺序策略。
 
 ## 保留 token 的排版
@@ -178,6 +183,23 @@ JCS Value 构造复用共享 builder，没有独立固定容器上限；包含�
 准入与该 seed 的职责不同：前者验证 JSON 文本，后者观察已解码值。seed 看不到原始数字 lexeme，文本级 `NumberBytes` 保证须由 `JsonDecoder` 或采用 JCS 契约的 `JcsDecoder` 提供。seed 收到的原生整数事件仍会按有符号/无符号 64 位并集检查；缺少 token 来源时，map 事件按对象处理，不猜测它是否模拟 Number 协议。
 
 `JsonValidatedDecodeError` 区分普通解码失败、调用方数字策略拒绝、精确安全整数转换失败和附加 validated 限额失败。策略诊断保留源字节偏移，但不会格式化调用方提供的不透明错误内容。`JsonValueEncodeError` 则在把 Serde 值投影到调用方 transaction 时，区分预算拒绝与严格 JSON 序列化失败。
+
+`JsonSyntaxError` 可选记录 scanner 已知的语法位置 `JsonDecodeContext`。原有 `new(...)` 仍创建 `None` context；scanner
+生成的错误会在 redacted 与 detailed 诊断下都将 context 传入 validated 错误。该字段参与派生的 `Eq` 和 `Debug`，因此
+结构化结果可能变化；`Display` 不显示它，文本保持不变。
+
+validated 解码使用 `JsonValidatedAdmissionPolicy`，默认是 `Immediate`。只有 validated 解码 facade 应用可选的
+`TokenFirst`。完整 literal 会先准入并发出事件，再由父对象检查后续分隔符：`{"a":truex}` 因此是在准入 `true` 后，
+于对象分隔符处失败，上下文为 `ObjectSeparator`。typed 解码、仅检查语法的 pretty 排版以及 JCS 解码都不因此改变。
+内部共用 scanner 或 consumer 不等于它们也共用此选项。
+
+TokenFirst 字符串扫描先按引号内的源文本字节检查额度，再处理字符串解码或 decoded-value 计量。上限为 1 时，未闭合
+的 `"ab` 在 EOF 先报语法 `UnexpectedEnd`；完整 `"ab"` 报 `EncodedStringBytes` limit；未闭合的 `"abc` 则在超额的
+`ab` 之后还有可读字节时先报 limit。这是有意规定的顺序：每轮先检查 EOF，再检查当前字节是否使额度超限。只有 token
+语法完整后，才继续准入解码后的字符串或键长度。
+
+输入计量和值 transaction 分属不同提交边界。之后即使语法、策略或限额检查失败，已读取的输入字节仍计费；暂存的值资源
+只有完整文档成功才提交。库无法回滚数字策略回调产生的副作用；此计量约定也不表示所有临时堆分配都受限。
 
 ## Tree
 

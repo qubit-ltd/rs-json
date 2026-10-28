@@ -474,6 +474,29 @@ without budget admission; `copy_from(&value)` copies it with an explicit stack.
 when deep-tree destruction must stay iterative. Calling recursive operations
 on a borrowed bare `Value` is outside that protection.
 
+When a caller only needs a short-lived read-only view, `JsonValueRef` borrows
+the existing tree and implements `Serialize` without cloning it:
+
+```rust
+use qubit_json::value::{JsonValueRef, SafeJsonValue};
+
+fn serialize_view(owner: &SafeJsonValue) -> Result<String, serde_json::Error> {
+    let view = JsonValueRef::new(owner.as_value());
+    serde_json::to_string(&view)
+}
+
+let owner = SafeJsonValue::new(serde_json::json!({"a": true}));
+assert_eq!(serialize_view(&owner)?, r#"{"a":true}"#);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The view lifetime is bounded by the borrowed value. Constructing it is O(1)
+and does not copy the tree; comparisons, `Debug`, and `Serialize` still walk
+the tree and may allocate according to their implementation or serializer.
+Keep the owner alive for the full view use. Its serializer preserves the
+underlying `Value` data model, but the output spelling and formatting remain
+the serializer's choice.
+
 ### Inspect original number tokens
 
 Use `decode_unique_validated_*` when policy must inspect original number tokens
@@ -514,6 +537,68 @@ encoded bytes in each string token for that document. The decoder's
 `JsonDecodeSession` still accumulates its configured resource usage across
 calls. Policy callback effects are application effects: a later syntax error
 does not undo them.
+
+Validated decoding defaults to `JsonValidatedAdmissionPolicy::Immediate`,
+which preserves the existing first-error order. Call
+`JsonValidatedDecodeOptions::builder().admission_policy(
+JsonValidatedAdmissionPolicy::TokenFirst)` only when the application wants a
+complete token admitted before checking its following delimiter. For example,
+with TokenFirst, `{"a":truex}` admits the complete `true` token and then
+reports the `x` at the object's separator, exposed as
+`JsonDecodeContext::ObjectSeparator`:
+
+```rust
+use qubit_json::decode::{
+    JsonDecodeContext, JsonDecoder, JsonNumberPolicy,
+    JsonValidatedAdmissionPolicy, JsonValidatedDecodeError,
+    JsonValidatedDecodeOptions,
+};
+
+let options = JsonValidatedDecodeOptions::builder()
+    .admission_policy(JsonValidatedAdmissionPolicy::TokenFirst)
+    .build();
+let mut decoder = JsonDecoder::unlimited();
+let error = decoder
+    .decode_unique_validated_str("{\"a\":truex}", &options, |_path, _token| {
+        Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+    })
+    .expect_err("the object still requires a separator after true");
+match error {
+    JsonValidatedDecodeError::Decode { error, context } => {
+        assert_eq!(context, Some(JsonDecodeContext::ObjectSeparator));
+        assert_eq!(error.syntax_error().unwrap().context(), context);
+    }
+    other => panic!("unexpected error: {other:?}"),
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+This option is specific to the validated decode APIs. Typed `JsonDecoder`
+decoding, pretty formatting, and JCS decoding keep their existing admission
+rules; choosing a shared scanner internally does not opt them into TokenFirst.
+
+The encoded-string limit counts source bytes inside the quotes, including
+escape spelling. With a maximum of one byte, an unclosed `"ab` reports a
+syntax `UnexpectedEnd` at EOF because the scanner checks for EOF before the
+next byte's limit decision. The complete `"ab"` reports the
+`JsonValidatedDecodeError::Limit` variant for `EncodedStringBytes` instead.
+The unclosed over-limit `"abc` reports that same limit first: after `"ab` has
+exceeded the maximum, the scanner sees the next available byte before it can
+reach EOF. This distinction makes the first error depend on whether the
+over-limit prefix has another byte to inspect.
+
+Input accounting and value transactions have different commit boundaries.
+Input bytes already read remain charged when validated decoding later fails;
+value-resource charges commit only after the entire document succeeds. A
+number-policy callback is application code, so effects it performs are not
+rolled back when syntax or a later limit fails.
+
+Generic Serde deserialization has an additional boundary: with
+`serde_json/arbitrary_precision`, an upstream deserializer can present the
+number representation through Serde's private map protocol, which a generic
+`SafeJsonValue` bridge cannot reliably distinguish from an ordinary map. If
+JSON text and number-token semantics matter, prefer `JsonDecoder` and its
+validated entry points, which scan the source text directly.
 
 ### Project values and format their output
 
@@ -1068,6 +1153,13 @@ positions in normalized text and do not map them back to the original input.
 Under `Detailed` diagnostics, a retained parser source can format coordinates
 according to its backend, so its text coordinates need not match the
 structured scanner coordinates.
+
+`JsonSyntaxError::context()` adds the grammar location when the scanner knows
+it, such as `ObjectSeparator` or `Value`. This field participates in derived
+`Eq` and `Debug`, so those structured representations can differ from earlier
+versions; `Display` remains unchanged and does not print the context. The
+context is propagated through validated errors in both redacted and detailed
+diagnostic modes.
 
 Adapters that own the error can instead call `into_source()` and exhaustively
 match `JsonDecodeErrorSource` without cloning budget or syntax details.

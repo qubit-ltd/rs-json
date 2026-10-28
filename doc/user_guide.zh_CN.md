@@ -388,6 +388,25 @@ assert_eq!(
 调用 `into_value()` 后，裸树不再由 owner 负责清理；深树需要迭代析构时应继续保留 owner。
 对借出的裸 `Value` 调用递归操作，也不在 owner 的保护范围内。
 
+如果只需短期只读访问，可以用 `JsonValueRef` 借用现有值树。它实现了 `Serialize`，不会先克隆整棵树：
+
+```rust
+use qubit_json::value::{JsonValueRef, SafeJsonValue};
+
+fn serialize_view(owner: &SafeJsonValue) -> Result<String, serde_json::Error> {
+    let view = JsonValueRef::new(owner.as_value());
+    serde_json::to_string(&view)
+}
+
+let owner = SafeJsonValue::new(serde_json::json!({"a": true}));
+assert_eq!(serialize_view(&owner)?, r#"{"a":true}"#);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+视图的生命周期受借用值约束，使用期间必须保留 owner。构造视图是 O(1)，不复制值树；比较、`Debug`
+和 `Serialize` 仍会遍历值树，且可能按具体实现或 serializer 的需要分配内存。视图序列化的是底层 `Value`
+数据模型，最终文本的空白和写法由 serializer 决定。
+
 应用需要拥有一棵可安全复制、比较和清理的 JSON 树时，使用 `decode_value_*`，它返回 `SafeJsonValue`。
 树操作保护与 Serde 输入语义是两件事：直接反序列化 `SafeJsonValue` 时，桥接无法区分真实对象与上游
 反序列化器提供的私有数字 map。启用 `arbitrary_precision` 后，这类 map 可能作为普通对象保留，
@@ -436,6 +455,51 @@ assert!(owner.as_value().is_object());
 ```
 
 若之后发生语法错误，策略回调已产生的应用副作用不会回滚。
+
+validated 解码默认使用 `JsonValidatedAdmissionPolicy::Immediate`，首错顺序与既有行为一致。只有在希望先准入
+完整 token、再检查后续分隔符时，才在 `JsonValidatedDecodeOptions` builder 中显式选择
+`JsonValidatedAdmissionPolicy::TokenFirst`。例如输入 `{"a":truex}` 会先准入完整的 `true`，随后在对象分隔符处
+发现 `x`；错误上下文是 `JsonDecodeContext::ObjectSeparator`：
+
+```rust
+use qubit_json::decode::{
+    JsonDecodeContext, JsonDecoder, JsonNumberPolicy, JsonValidatedAdmissionPolicy,
+    JsonValidatedDecodeError, JsonValidatedDecodeOptions,
+};
+
+let options = JsonValidatedDecodeOptions::builder()
+    .admission_policy(JsonValidatedAdmissionPolicy::TokenFirst)
+    .build();
+let mut decoder = JsonDecoder::unlimited();
+let error = decoder
+    .decode_unique_validated_str("{\"a\":truex}", &options, |_path, _token| {
+        Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+    })
+    .expect_err("true 后仍必须有对象分隔符");
+match error {
+    JsonValidatedDecodeError::Decode { error, context } => {
+        assert_eq!(context, Some(JsonDecodeContext::ObjectSeparator));
+        assert_eq!(error.syntax_error().unwrap().context(), context);
+    }
+    other => panic!("意外错误：{other:?}"),
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+该选项只影响 validated 解码入口。typed `JsonDecoder` 解码、pretty 排版和 JCS 解码继续使用各自既有的准入顺序；
+内部共用 scanner 不会让它们自动采用 TokenFirst。
+
+字符串上限按引号内的源文本字节计量，转义写法也计入。上限设为 1 时，未闭合的 `"ab` 会在 EOF 报语法
+`UnexpectedEnd`：scanner 在检查下一个字节额度前先检查了 EOF。完整的 `"ab"` 则返回
+`JsonValidatedDecodeError::Limit`，其中 limit 是 `EncodedStringBytes`。未闭合的超额输入 `"abc` 也先返回该
+limit，因为超出上限的 `ab` 后还有一个字节可供检查，扫描尚未到达 EOF。首错因此取决于超额前缀之后是否还有字节。
+
+输入计费与值资源事务的提交边界不同：即使后续 validated 解码失败，已经读取的输入字节仍会计费；值资源只在完整文档
+成功后提交。数字策略回调是应用代码，语法错误或后续额度错误不会回滚回调副作用。
+
+泛型 Serde 反序列化还有一个边界：启用 `serde_json/arbitrary_precision` 后，上游反序列化器可能通过 Serde 私有
+map 协议传递数字表示；通用 `SafeJsonValue` 桥接无法可靠地区分这种 map 与普通对象。若需要遵守 JSON 文本及数字
+token 语义，优先使用直接扫描原文的 `JsonDecoder` 和 validated 解码入口。
 
 ### 投影值树并排版输出
 
@@ -885,6 +949,10 @@ CR 都会开始新行；CRLF 只算一个换行。对于 `Deserialize`，坐标�
 只有 LF 会开始新行。目标 seed 错误没有原始源码位置。规范化解码器报告规范化文本中的位置，
 不会映射回原始输入。启用 `Detailed` 诊断时，保留的 parser 来源错误可能按其后端格式化坐标，
 因此其文本坐标可能与结构化扫描器坐标不同。
+
+`JsonSyntaxError::context()` 在已知时提供语法位置，例如 `ObjectSeparator` 或 `Value`。该字段属于派生的
+`Eq` 和 `Debug` 比较/输出内容，因此结构化诊断与旧版本相比可能不同；`Display` 文本保持不变，也不会输出 context。
+无论采用 Redacted 还是 Detailed 诊断，validated 错误都会保留该上下文。
 
 适配层取得错误所有权后，也可以调用 `into_source()`，对 `JsonDecodeErrorSource` 做穷举匹配，
 不需要克隆预算或语法错误详情。
