@@ -30,6 +30,7 @@ use serde::de::Visitor;
 use serde_json::Value;
 
 use crate::json_number_contract::numbers_fit_contract;
+use crate::json_reference::parse_literal_value;
 use crate::unique_decode_reference::parse_unique_literal_value;
 
 const MAX_REFERENCE_OPENING_DELIMITERS: usize = 64;
@@ -433,6 +434,10 @@ fn reference_exact_integer(raw: &str) -> Option<Option<i64>> {
 }
 
 /// Checks token preservation, output-limit boundaries, and writer parity.
+/// Reference success is a sufficient condition for required acceptance;
+/// reference failure does not prove that formatting should fail. The input
+/// bound, three-level display indentation, and output quota leave planning
+/// headroom for every reference-accepted shallow input.
 pub fn assert_token_format_invariants(input: &[u8]) {
     if input.len() > 4096 {
         return;
@@ -444,7 +449,14 @@ pub fn assert_token_format_invariants(input: &[u8]) {
         .build()
         .expect("fixed formatting options are valid");
     const MAX_OUTPUT: usize = 131_072;
-    let Ok(output) = format_json_tokens(input, &options, Some(MAX_OUTPUT)) else {
+    let result = format_json_tokens(input, &options, Some(MAX_OUTPUT));
+    if is_within_reference_domain(input) && parse_literal_value(input).is_ok() {
+        assert!(
+            result.is_ok(),
+            "reference-accepted shallow JSON must format successfully",
+        );
+    }
+    let Ok(output) = result else {
         let mut writer = Vec::new();
         assert!(write_json_tokens(&mut writer, input, &options, Some(MAX_OUTPUT)).is_err());
         assert!(writer.is_empty(), "planning failures must not write a prefix");

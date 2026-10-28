@@ -174,7 +174,7 @@ fn test_json_key_seed_preserves_payload_error_priority() {
 #[test]
 fn test_json_key_seed_accounts_payload_for_duplicate_entries() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .max_payload_bytes(3)
+        .max_payload_bytes(9)
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
@@ -183,10 +183,13 @@ fn test_json_key_seed_accounts_payload_for_duplicate_entries() {
     AccountingJsonValueSeed::new(&mut transaction)
         .deserialize(&mut deserializer)
         .expect_err("payload from both duplicate entries must be accounted");
-    assert_eq!(
-        transaction.commit().unwrap_err().resource(),
-        &JsonResource::PayloadBytes
-    );
+    let error = transaction
+        .commit()
+        .expect_err("the second duplicate value must exhaust payload");
+    assert_eq!(error.resource(), &JsonResource::PayloadBytes);
+    let source = error.budget_error().expect("payload rejection must be a budget error");
+    assert_eq!(source.remaining(), Some(1));
+    assert_eq!(source.requested(), Some(2));
 }
 
 #[test]
