@@ -16,12 +16,23 @@ use qubit_budget::json::JsonValueTransaction;
 use crate::encode::JsonSerializationError;
 use crate::encode::JsonSerializationErrorKind;
 
+/// The first failure retained while projecting one JSON value.
+///
+/// It records a measured budget rejection, a structured serialization error,
+/// or a private payload exceeding its per-payload UTF-8 byte limit. Serde may
+/// receive an opaque error to stop traversal; the owning encoder recovers the
+/// retained failure and its original category afterward.
 pub(in crate::value::json_value_encoder) enum JsonValueEncodeFailure<R, Q>
 where
     Q: ResourceQuantity,
 {
+    /// A measured budget rejected a value, container, or collection count.
     Budget(MeasuredBudgetError<R, Q>),
+    /// Serde or the projection serializer reported a structured error.
     Serialization(JsonSerializationError),
+    /// A private payload exceeded the inclusive UTF-8 byte limit in `maximum`.
+    ///
+    /// `maximum` is the per-payload UTF-8 byte threshold.
     PrivateTextLimitExceeded { maximum: usize },
 }
 
@@ -29,13 +40,17 @@ where
 ///
 /// A recorded error is sticky: later checks return its serialization form and
 /// cannot replace the original failure. Private text limits are configured by
-/// the owning encoder and apply to each private payload independently.
+/// the owning encoder and apply to each private payload independently. Budget
+/// charges remain staged in `transaction` until its owner commits it.
 pub(in crate::value::json_value_encoder) struct JsonValueEncodeContext<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
+    /// Mutable staged transaction shared by the projection.
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+    /// First failure observed by this projection, retained until consumed.
     failure: Option<JsonValueEncodeFailure<R, Q>>,
+    /// Optional inclusive UTF-8 byte limit applied separately to each payload.
     max_private_text_bytes: Option<usize>,
 }
 
@@ -58,14 +73,23 @@ where
         }
     }
 
+    /// Borrows the staged transaction for inspection or a budget operation.
+    ///
+    /// This does not commit the transaction; commit remains the responsibility
+    /// of the owning encoder.
     pub(in crate::value::json_value_encoder) fn transaction(&mut self) -> &mut JsonValueTransaction<'budget, R, Q> {
         self.transaction
     }
 
+    /// Reports whether the staged budget transaction has resource limits.
+    ///
+    /// This says nothing about the independent private text limit or whether a
+    /// projection failure has already been recorded.
     pub(in crate::value::json_value_encoder) fn has_limits(&self) -> bool {
         self.transaction.has_limits()
     }
 
+    /// Reports whether this projection has retained a first failure.
     pub(in crate::value::json_value_encoder) fn has_failure(&self) -> bool {
         self.failure.is_some()
     }
@@ -196,6 +220,13 @@ where
         self.ser_error()
     }
 
+    /// Produces the error form used to stop a Serde traversal.
+    ///
+    /// A structured serialization failure keeps its category. Budget and
+    /// private text limit failures are represented by an opaque custom error;
+    /// the owning encoder recovers their actual categories from
+    /// [`Self::take_failure`]. With no retained failure, this also returns
+    /// a generic custom error.
     pub(in crate::value::json_value_encoder) fn ser_error(&self) -> JsonSerializationError {
         match self.failure.as_ref() {
             Some(JsonValueEncodeFailure::Serialization(error)) => *error,
@@ -210,6 +241,9 @@ where
     }
 
     /// Consumes the context and returns its retained first failure, if any.
+    ///
+    /// This is the recovery path for the original failure category after a
+    /// Serde traversal was interrupted by [`Self::ser_error`].
     pub(in crate::value::json_value_encoder) fn take_failure(self) -> Option<JsonValueEncodeFailure<R, Q>> {
         self.failure
     }

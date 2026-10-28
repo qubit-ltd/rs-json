@@ -33,6 +33,7 @@ use crate::internal::JsonPrivateProtocolState;
 use crate::value::SafeJsonValue;
 use crate::value::internal::SafeValueBuilder;
 
+/// Shared interior-mutable context used by the serializer and its descendants.
 type ContextCell<'context, 'transaction, 'budget, R, Q> =
     &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
 
@@ -48,7 +49,9 @@ pub(in crate::value::json_value_encoder) struct JsonValueSerializer<'context, 't
 where
     Q: ResourceQuantity,
 {
+    /// Shared transaction, failure, and private-payload-limit state.
     context: ContextCell<'context, 'transaction, 'budget, R, Q>,
+    /// Root-inclusive depth of the value currently being serialized.
     depth: usize,
 }
 
@@ -68,26 +71,31 @@ where
         Self { context, depth }
     }
 
+    /// Records an error as the sticky first failure and returns its Serde form.
     fn fail(&self, error: JsonSerializationError) -> JsonSerializationError {
         self.context.borrow_mut().record_serialization_error(error)
     }
 
+    /// Charges a measurement to the staged transaction and retains rejection.
     fn admit(&self, measurement: JsonMeasurement) -> Result<(), JsonSerializationError> {
         let result = { self.context.borrow_mut().admit(measurement) };
         result.map_err(|error| self.fail(error))
     }
 
+    /// Enters this node as a container at its current depth.
     fn enter(&self, kind: JsonContainerKind) -> Result<(), JsonSerializationError> {
         let result = { self.context.borrow_mut().enter_container(kind, self.depth) };
         result.map_err(|error| self.fail(error))
     }
 
+    /// Records collection length or depth arithmetic overflow for `kind`.
     fn collection_error(&self, kind: JsonCollectionKind) -> JsonSerializationError {
         self.fail(JsonSerializationError::new(
             JsonSerializationErrorKind::CollectionLengthOverflow { kind },
         ))
     }
 
+    /// Accounts for a number using its compact JSON lexical byte length.
     fn number(&self, number: Number) -> Result<SafeJsonValue, JsonSerializationError> {
         let bytes = crate::value::internal::json_number_lexeme_length(&number);
         let depth = self.depth;
@@ -95,6 +103,7 @@ where
         Ok(SafeJsonValue::new(Value::Number(number)))
     }
 
+    /// Accounts for a string using its UTF-8 byte length.
     fn string(&self, text: String) -> Result<SafeJsonValue, JsonSerializationError> {
         let depth = self.depth;
         self.admit(JsonMeasurement::String {
@@ -104,12 +113,17 @@ where
         Ok(SafeJsonValue::new(Value::String(text)))
     }
 
+    /// Checks a prospective container item count without charging it.
     fn container_count(&self, kind: JsonContainerKind, count: usize) -> Result<(), JsonSerializationError> {
         let result = { self.context.borrow_mut().check_container_count(kind, count) };
         result.map_err(|error| self.fail(error))
     }
 }
 
+/// Returns a bounded initial allocation hint for a known collection length.
+///
+/// Unknown lengths produce zero. Known lengths are capped at 1024; this is
+/// only a preallocation hint and does not limit accepted collection size.
 fn preallocated_capacity(len: Option<usize>) -> usize {
     len.unwrap_or(0).min(1_024)
 }
@@ -119,35 +133,53 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Completed projected JSON value.
     type Ok = SafeJsonValue;
+    /// Structured error used to interrupt Serde serialization.
     type Error = JsonSerializationError;
+    /// Sequence, tuple, and tuple struct compound state.
     type SerializeSeq = JsonValueCompound<'context, 'transaction, 'budget, R, Q>;
+    /// Tuple compound state.
     type SerializeTuple = JsonValueCompound<'context, 'transaction, 'budget, R, Q>;
+    /// Tuple struct compound state.
     type SerializeTupleStruct = JsonValueCompound<'context, 'transaction, 'budget, R, Q>;
+    /// Tuple variant compound state.
     type SerializeTupleVariant = JsonValueCompound<'context, 'transaction, 'budget, R, Q>;
+    /// Map compound state.
     type SerializeMap = JsonValueCompound<'context, 'transaction, 'budget, R, Q>;
+    /// Struct compound state, including recognized private protocols.
     type SerializeStruct = JsonValueCompound<'context, 'transaction, 'budget, R, Q>;
+    /// Struct variant compound state.
     type SerializeStructVariant = JsonValueCompound<'context, 'transaction, 'budget, R, Q>;
 
+    /// Serializes a boolean and charges one boolean measurement at this depth.
     fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
         self.admit(JsonMeasurement::Boolean { depth: self.depth })?;
         Ok(SafeJsonValue::new(Value::Bool(value)))
     }
 
+    /// Serializes a signed 8-bit integer through the signed 64-bit path.
     fn serialize_i8(self, value: i8) -> Result<Self::Ok, Self::Error> {
         self.serialize_i64(value.into())
     }
+    /// Serializes a signed 16-bit integer through the signed 64-bit path.
     fn serialize_i16(self, value: i16) -> Result<Self::Ok, Self::Error> {
         self.serialize_i64(value.into())
     }
+    /// Serializes a signed 32-bit integer through the signed 64-bit path.
     fn serialize_i32(self, value: i32) -> Result<Self::Ok, Self::Error> {
         self.serialize_i64(value.into())
     }
 
+    /// Serializes a signed 64-bit integer using its compact JSON number form.
     fn serialize_i64(self, value: i64) -> Result<Self::Ok, Self::Error> {
         self.number(value.into())
     }
 
+    /// Serializes a signed 128-bit integer if it fits JSON's supported range.
+    ///
+    /// Returns an integer-out-of-range error when it fits neither `i64` nor
+    /// `u64`.
     fn serialize_i128(self, value: i128) -> Result<Self::Ok, Self::Error> {
         if let Ok(value) = i64::try_from(value) {
             return self.serialize_i64(value);
@@ -162,20 +194,28 @@ where
         )))
     }
 
+    /// Serializes an unsigned 8-bit integer through the unsigned 64-bit path.
     fn serialize_u8(self, value: u8) -> Result<Self::Ok, Self::Error> {
         self.serialize_u64(value.into())
     }
+    /// Serializes an unsigned 16-bit integer through the unsigned 64-bit path.
     fn serialize_u16(self, value: u16) -> Result<Self::Ok, Self::Error> {
         self.serialize_u64(value.into())
     }
+    /// Serializes an unsigned 32-bit integer through the unsigned 64-bit path.
     fn serialize_u32(self, value: u32) -> Result<Self::Ok, Self::Error> {
         self.serialize_u64(value.into())
     }
 
+    /// Serializes an unsigned 64-bit integer using its compact JSON number
+    /// form.
     fn serialize_u64(self, value: u64) -> Result<Self::Ok, Self::Error> {
         self.number(value.into())
     }
 
+    /// Serializes an unsigned 128-bit integer when it fits in `u64`.
+    ///
+    /// Returns an integer-out-of-range error otherwise.
     fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
         match u64::try_from(value) {
             Ok(value) => self.serialize_u64(value),
@@ -187,6 +227,9 @@ where
         }
     }
 
+    /// Serializes a finite 32-bit float through serde_json's number parser.
+    ///
+    /// Non-finite values and invalid JSON number representations are rejected.
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
         if !value.is_finite() {
             return Err(self.fail(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat)));
@@ -199,6 +242,9 @@ where
         }
     }
 
+    /// Serializes a finite 64-bit float as a JSON number.
+    ///
+    /// Non-finite values are rejected.
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
         match Number::from_f64(value) {
             Some(number) => self.number(number),
@@ -206,6 +252,7 @@ where
         }
     }
 
+    /// Serializes a character as a string, charging its UTF-8 byte length.
     fn serialize_char(self, value: char) -> Result<Self::Ok, Self::Error> {
         self.admit(JsonMeasurement::String {
             depth: self.depth,
@@ -213,6 +260,7 @@ where
         })?;
         Ok(SafeJsonValue::new(Value::String(value.to_string())))
     }
+    /// Serializes a string slice and charges its UTF-8 byte length.
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
         self.admit(JsonMeasurement::String {
             depth: self.depth,
@@ -221,6 +269,8 @@ where
         Ok(SafeJsonValue::new(Value::String(value.to_owned())))
     }
 
+    /// Serializes bytes as a JSON array of numbers, accounting for each
+    /// element.
     fn serialize_bytes(self, bytes: &[u8]) -> Result<Self::Ok, Self::Error> {
         self.enter(JsonContainerKind::Sequence)?;
         let mut values = Vec::with_capacity(preallocated_capacity(Some(bytes.len())));
@@ -248,9 +298,11 @@ where
         Ok(SafeJsonValue::new(builder.finish()))
     }
 
+    /// Serializes `None` as JSON null.
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         self.serialize_unit()
     }
+    /// Serializes the contained value without adding a wrapper.
     fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -258,15 +310,18 @@ where
         value.serialize(self)
     }
 
+    /// Serializes unit as JSON null.
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         self.admit(JsonMeasurement::Null { depth: self.depth })?;
         Ok(SafeJsonValue::new(Value::Null))
     }
 
+    /// Serializes a unit struct as JSON null.
     fn serialize_unit_struct(self, _: &'static str) -> Result<Self::Ok, Self::Error> {
         self.serialize_unit()
     }
 
+    /// Serializes a unit enum variant as its variant name string.
     fn serialize_unit_variant(self, _: &'static str, _: u32, variant: &'static str) -> Result<Self::Ok, Self::Error> {
         self.admit(JsonMeasurement::String {
             depth: self.depth,
@@ -275,6 +330,7 @@ where
         Ok(SafeJsonValue::new(Value::String(variant.to_owned())))
     }
 
+    /// Serializes a newtype struct by delegating directly to its value.
     fn serialize_newtype_struct<T>(self, _: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -282,6 +338,7 @@ where
         value.serialize(self)
     }
 
+    /// Serializes a newtype enum variant as a one-entry JSON object.
     fn serialize_newtype_variant<T>(
         self,
         _: &'static str,
@@ -305,6 +362,7 @@ where
         Ok(SafeJsonValue::new(object.finish()))
     }
 
+    /// Starts a sequence compound; its reported length is an allocation hint.
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         self.enter(JsonContainerKind::Sequence)?;
         Ok(JsonValueCompound::sequence(
@@ -315,13 +373,16 @@ where
         ))
     }
 
+    /// Starts a tuple using its fixed length as an allocation hint.
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.serialize_seq(Some(len))
     }
+    /// Starts a tuple struct using its fixed length as an allocation hint.
     fn serialize_tuple_struct(self, _: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.serialize_seq(Some(len))
     }
 
+    /// Starts a tuple enum variant represented as a one-entry object.
     fn serialize_tuple_variant(
         self,
         _: &'static str,
@@ -386,6 +447,7 @@ where
         ))
     }
 
+    /// Starts a struct enum variant represented as a one-entry object.
     fn serialize_struct_variant(
         self,
         _: &'static str,
@@ -410,6 +472,8 @@ where
         ))
     }
 
+    /// Formats `value` into a string, charging bytes emitted by its display
+    /// implementation.
     fn collect_str<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Display + ?Sized,
