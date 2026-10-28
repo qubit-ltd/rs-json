@@ -134,7 +134,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
         let mut values: Vec<(String, SafeJsonValue)> = Vec::new();
         while let Some(key) = map.next_key::<String>()? {
             if !keys.insert(key.clone()) {
-                return Err(serde::de::Error::custom("duplicate object key"));
+                return Err(serde::de::Error::custom("duplicate JSON object key"));
             }
             let value = map.next_value::<SafeJsonValue>()?;
             values.push((key, value));

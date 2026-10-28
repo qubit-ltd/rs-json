@@ -13,7 +13,7 @@ fn test_safe_value_bridge_rejects_decoded_duplicate_keys() {
         serde_json::from_str::<SafeJsonValue>(r#"{"a":1,"\u0061":2}"#).expect_err("decoded duplicate keys must fail");
     assert!(error.is_data(), "duplicates must retain the data error category");
     assert!(
-        error.to_string().contains("duplicate object key"),
+        error.to_string().contains("duplicate JSON object key"),
         "duplicate diagnostic must stay stable"
     );
 }
@@ -39,7 +39,7 @@ fn test_safe_value_bridge_rejects_duplicates_at_both_object_positions() {
         let error = serde_json::from_str::<SafeJsonValue>(input).expect_err("repeated key must fail");
         assert!(error.is_data(), "duplicates must retain the data error category");
         assert!(
-            error.to_string().contains("duplicate object key"),
+            error.to_string().contains("duplicate JSON object key"),
             "duplicate diagnostic must stay stable"
         );
     }
