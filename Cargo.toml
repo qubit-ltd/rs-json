@@ -88,6 +88,10 @@ harness = false
 name = "unique_decode_allocations"
 harness = false
 
+[[bench]]
+name = "value_read_allocations"
+harness = false
+
 [profile.release]
 opt-level = 3
 lto = true
