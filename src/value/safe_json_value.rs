@@ -43,7 +43,7 @@ use super::internal::values_equal;
 ///
 /// [`JsonDecoder::decode_value_str`]: crate::decode::JsonDecoder::decode_value_str
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// use qubit_json::value::SafeJsonValue;
@@ -62,13 +62,34 @@ pub struct SafeJsonValue {
 }
 
 impl SafeJsonValue {
-    /// Takes ownership of a JSON value.
+    /// Takes ownership of a JSON tree without traversing it or admitting it to
+    /// a budget.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - JSON tree whose ownership is transferred to this owner.
+    ///
+    /// # Returns
+    ///
+    /// An owner for the supplied tree. Construction does not copy or allocate.
     #[must_use]
+    #[inline]
     pub fn new(value: Value) -> Self {
         Self { root: Some(value) }
     }
 
-    /// Copies a JSON value using an explicit traversal stack.
+    /// Copies an entire JSON tree using an explicit traversal stack.
+    ///
+    /// This operation allocates work-stack storage and result storage for the
+    /// copied tree; it does not impose a budget on the source tree.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - JSON tree to copy.
+    ///
+    /// # Returns
+    ///
+    /// An independently owned copy of the complete tree.
     #[must_use]
     pub fn copy_from(value: &Value) -> Self {
         #[cfg(test)]
@@ -113,14 +134,32 @@ impl SafeJsonValue {
         output.pop().expect("a JSON value always produces a root")
     }
 
-    /// Borrows the underlying value for interoperability.
+    /// Returns a shared borrow of the underlying JSON tree for
+    /// interoperability.
+    ///
+    /// The returned borrow is tied to this owner. Recursive operations
+    /// performed through it are the caller's responsibility and may use the
+    /// backend's stack behavior.
+    ///
+    /// # Returns
+    ///
+    /// The underlying tree borrowed for no longer than this owner.
     #[must_use]
+    #[inline]
     pub fn as_value(&self) -> &Value {
         self.root.as_ref().expect("owner root is present")
     }
 
-    /// Transfers the underlying value to an unprotected caller-owned tree.
+    /// Transfers the tree and its destruction responsibility to the caller.
+    ///
+    /// The returned `Value` is no longer protected by this owner; recursive
+    /// operations and destruction are the caller's responsibility.
+    ///
+    /// # Returns
+    ///
+    /// The previously owned JSON tree.
     #[must_use]
+    #[inline]
     pub fn into_value(self) -> Value {
         let mut this = ManuallyDrop::new(self);
         this.root.take().expect("owner root is present")

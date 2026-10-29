@@ -58,6 +58,8 @@ impl JsonValidatedDecodeOptions {
     /// # Returns
     ///
     /// A builder whose optional root kind and additional limits are unset.
+    #[must_use]
+    #[inline]
     pub fn builder() -> JsonValidatedDecodeOptionsBuilder {
         JsonValidatedDecodeOptionsBuilder::default()
     }
@@ -66,6 +68,8 @@ impl JsonValidatedDecodeOptions {
     /// # Returns
     ///
     /// The required root kind, or `None` when no root-kind restriction applies.
+    #[must_use]
+    #[inline]
     pub const fn root_kind(&self) -> Option<JsonRootKind> {
         self.root_kind
     }
@@ -75,6 +79,8 @@ impl JsonValidatedDecodeOptions {
     ///
     /// The configured policy. The default is
     /// [`JsonValidatedAdmissionPolicy::Immediate`].
+    #[must_use]
+    #[inline]
     pub const fn admission_policy(&self) -> JsonValidatedAdmissionPolicy {
         self.admission_policy
     }
@@ -83,6 +89,8 @@ impl JsonValidatedDecodeOptions {
     /// # Returns
     ///
     /// The number representation model used for preserved numbers.
+    #[must_use]
+    #[inline]
     pub const fn number_model(&self) -> JsonDecodeNumberModel {
         self.number_model
     }
@@ -92,6 +100,8 @@ impl JsonValidatedDecodeOptions {
     /// # Returns
     ///
     /// The configured combined node limit, or `None` when it is disabled.
+    #[must_use]
+    #[inline]
     pub const fn max_value_and_key_nodes(&self) -> Option<usize> {
         self.max_value_and_key_nodes
     }
@@ -102,6 +112,8 @@ impl JsonValidatedDecodeOptions {
     /// # Returns
     ///
     /// The configured per-token source-byte limit, or `None` when disabled.
+    #[must_use]
+    #[inline]
     pub const fn max_encoded_string_bytes(&self) -> Option<usize> {
         self.max_encoded_string_bytes
     }

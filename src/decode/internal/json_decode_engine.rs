@@ -1369,6 +1369,25 @@ where
         }
     }
 
+    /// Maps validated scanning failures without reparsing the original input.
+    ///
+    /// Budget failures retain the admission stage. Syntax failures preserve
+    /// scanner coordinates and context; Detailed diagnostics retain the
+    /// scanner failure as their source. This helper does not commit or
+    /// change resource accounting.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - Syntax or value-budget failure produced by the scanner.
+    /// * `raw_input_bytes` - Original byte count retained in the decode
+    ///   metadata.
+    /// * `diagnostic_policy` - Whether an input-derived syntax source may be
+    ///   retained.
+    ///
+    /// # Returns
+    ///
+    /// A structured decode error with the supplied input length and diagnostic
+    /// policy.
     fn map_validated_lexical_error(
         error: JsonLexicalError<R, Q>,
         raw_input_bytes: usize,

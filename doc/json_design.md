@@ -268,12 +268,15 @@ private struct protocol while retaining literal objects with the same key.
 `JsonValueRef<'a>` is a `Copy` borrowed view over `&'a Value`. Its constructor
 does not copy or traverse the tree. `Eq` and `Debug` use the owner's explicit
 work-stack read operations; `Debug` is Rust diagnostic output, not JSON text.
-`Serialize` delegates the `Value` data model to the selected Serde serializer
-and remains subject to that serializer's recursion limits, so the view does
-not extend deep-tree serialization protection. The view has no independent
-cleanup, mutation, deserialization, or budget behavior. O(1) construction
-therefore does not imply allocation-free comparison, formatting, or
-serialization. Output syntax and formatting belong to the selected serializer.
+Serialization uses the same stack-growing Serde bridge as `SafeJsonValue`.
+The bridge protects its own recursive traversal, while the selected serializer
+can still impose depth limits or perform recursive work outside that
+protection; serialization failures propagate from the backend. This does not
+promise allocation-free serialization or an exact memory bound. The view does
+not control destruction of the borrowed tree. It has no independent cleanup,
+mutation, deserialization, or budget behavior.
+O(1) construction therefore does not imply allocation-free comparison or
+formatting. Output syntax and formatting belong to the selected serializer.
 
 The direct bridge rejects duplicate object keys after decoding escapes and
 does not normalize Unicode. Its duplicate-key index is an auxiliary

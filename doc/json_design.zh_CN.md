@@ -171,9 +171,10 @@ JCS Value 构造复用共享 builder，没有独立固定容器上限；包含�
 其通用 `Deserialize` 实现消费 Serde 事件并保护部分构造的值，但没有源 token 来源信息。特别是，map 事件无法区分字面对象和 `serde_json` 的私有任意精度数字协议，因此都作为普通对象处理。依赖启用 `arbitrary_precision` 时，直接桥接 JSON 数字得到的形态可能与未启用时不同。若从 JSON 文本解码并需要文本 decoder 的数字模型，请用 `JsonDecoder::decode_value_str` 或对应的 UTF-8/reader 入口；该路径能识别私有 struct 协议，同时保留使用同名键的字面对象。
 
 `JsonValueRef<'a>` 是对 `&'a Value` 的 `Copy` 借用视图。构造时既不复制也不遍历值树。`Eq` 和 `Debug` 使用 owner
-的显式工作栈只读操作；`Debug` 是 Rust 诊断格式，不是 JSON 文本。`Serialize` 则把 `Value` 数据模型交给所选
-Serde serializer，并受该 serializer 的递归限制约束，因此视图不会扩展深树序列化保护。视图不负责独立清理、修改、
-反序列化或预算。构造为 O(1) 不代表比较、格式化或序列化不分配内存；输出语法和格式由所选 serializer 决定。
+的显式工作栈只读操作；`Debug` 是 Rust 诊断格式，不是 JSON 文本。序列化与 `SafeJsonValue` 共用带栈增长保护的
+Serde 桥接。该保护覆盖桥接层自身的递归遍历；具体 serializer 仍可能限制深度，或执行保护范围之外的递归工作；
+序列化失败会传播后端错误。这不代表序列化无需分配或具有精确内存上限。借用树的析构仍由其所有者负责。视图不负责
+独立清理、修改、反序列化或预算。构造为 O(1) 不代表比较或格式化不分配内存；输出语法和格式由所选 serializer 决定。
 
 直接桥接会在键解码后拒绝重复键，不执行 Unicode 归一化。重复键索引使用额外的 `BTreeSet<String>`，并与已收集成员同时存在；键比较次数为 O(n log n)，每次 `String` 比较的字节成本取决于共同前缀长度。辅助键存储不包含在值预算中。对象仍通过 `SafeValueBuilder` 构造，并遵从当前 `serde_json::Map` 的顺序策略。
 
