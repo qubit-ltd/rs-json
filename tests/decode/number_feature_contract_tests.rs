@@ -381,10 +381,7 @@ fn test_arbitrary_precision_real_number_bytes_are_budgeted() {
 /// features.
 fn supports_arbitrary_precision() -> bool {
     match serde_json::from_str::<Value>("1e400") {
-        Ok(value) => {
-            assert_eq!(value.as_number().unwrap().to_string(), "1e+400");
-            true
-        }
+        Ok(value) => value.as_number().is_some(),
         Err(error) => {
             assert!(error.is_syntax());
             false

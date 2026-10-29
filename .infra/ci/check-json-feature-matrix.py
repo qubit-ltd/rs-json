@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the standalone JSON feature fixture against selected serde_json versions."""
+"""Test the root crate against selected serde_json versions and feature sets."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ import tempfile
 from pathlib import Path
 
 
-MINIMUM_SERDE_JSON = "1.0.151"
-FIXTURE_MANIFEST = Path("tests/fixtures/jcs_feature_unification/Cargo.toml")
+BASELINE_SERDE_JSON = "1.0.135"
+SERDE_JSON_REGISTRY_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
 COPIED_PATHS = (
     "Cargo.toml",
     "Cargo.lock",
@@ -21,17 +21,19 @@ COPIED_PATHS = (
     "tests",
     "benches",
     "README.md",
+    "README.zh_CN.md",
+    "doc",
     "LICENSE",
 )
 FEATURE_SETS = (
     "",
-    "arbitrary_precision",
-    "preserve_order",
-    "arbitrary_precision preserve_order",
     "jcs",
-    "jcs arbitrary_precision",
-    "jcs preserve_order",
-    "jcs arbitrary_precision preserve_order",
+    "serde_json/arbitrary_precision",
+    "serde_json/preserve_order",
+    "serde_json/arbitrary_precision,serde_json/preserve_order",
+    "jcs,serde_json/arbitrary_precision",
+    "jcs,serde_json/preserve_order",
+    "jcs,serde_json/arbitrary_precision,serde_json/preserve_order",
 )
 
 
@@ -44,7 +46,7 @@ def run(command: list[str], *, env: dict[str, str]) -> subprocess.CompletedProce
         raise
 
 
-def fixture_serde_json_version(manifest: Path, *, env: dict[str, str]) -> str:
+def resolved_serde_json(manifest: Path, *, env: dict[str, str]) -> tuple[str, str | None]:
     command = [
         "cargo",
         "metadata",
@@ -58,21 +60,19 @@ def fixture_serde_json_version(manifest: Path, *, env: dict[str, str]) -> str:
     result = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
     metadata = json.loads(result.stdout)
     resolve = metadata.get("resolve")
-    if resolve is None:
-        raise RuntimeError("cargo metadata did not return a resolved dependency graph")
+    root_id = None if resolve is None else resolve.get("root")
+    if root_id is None:
+        raise RuntimeError("cargo metadata did not return the root package")
 
-    root_ids = [
-        node["id"]
-        for node in resolve["nodes"]
-        if node["id"].startswith("path+")
-        and "#qubit-json-jcs-feature-unification@" in node["id"]
-    ]
-    if len(root_ids) != 1:
-        raise RuntimeError(f"expected one fixture root package, found {root_ids!r}")
+    packages = {package["id"]: package for package in metadata["packages"]}
+    root_package = packages.get(root_id)
+    if root_package is None or root_package["name"] != "qubit-json":
+        name = None if root_package is None else root_package["name"]
+        raise RuntimeError(f"expected root package qubit-json, found {name!r}")
 
     nodes = {node["id"]: node for node in resolve["nodes"]}
     reachable = set()
-    pending = list(root_ids)
+    pending = [root_id]
     while pending:
         package_id = pending.pop()
         if package_id in reachable:
@@ -82,14 +82,22 @@ def fixture_serde_json_version(manifest: Path, *, env: dict[str, str]) -> str:
         if node is not None:
             pending.extend(dependency["pkg"] for dependency in node["deps"])
 
-    versions = {
-        package["version"]
-        for package in metadata["packages"]
-        if package["name"] == "serde_json" and package["id"] in reachable
-    }
-    if len(versions) != 1:
-        raise RuntimeError(f"expected exactly one resolved serde_json version, found {sorted(versions)!r}")
-    return versions.pop()
+    serde_json = [
+        package for package_id, package in packages.items()
+        if package_id in reachable and package["name"] == "serde_json"
+    ]
+    if len(serde_json) != 1:
+        versions = sorted(package["version"] for package in serde_json)
+        raise RuntimeError(f"expected exactly one reachable serde_json version, found {versions!r}")
+    return serde_json[0]["version"], serde_json[0].get("source")
+
+
+def require_crates_io_source(source: str | None) -> None:
+    if source != SERDE_JSON_REGISTRY_SOURCE:
+        raise RuntimeError(
+            f"serde_json must resolve from crates.io, found {source or 'local path'}; "
+            "refusing to label an overridden package as a registry version"
+        )
 
 
 def copy_project(project_root: Path, destination: Path) -> None:
@@ -111,9 +119,17 @@ def run_case(case: str, project_root: Path, temp_root: Path, target_dir: Path) -
     with tempfile.TemporaryDirectory(prefix=f"{case}-", dir=case_parent) as temporary:
         case_root = Path(temporary)
         copy_project(project_root, case_root)
-        manifest = case_root / FIXTURE_MANIFEST
+        manifest = case_root / "Cargo.toml"
         environment = dict(os.environ)
         environment["CARGO_TARGET_DIR"] = str(target_dir)
+
+        original_version, original_source = resolved_serde_json(manifest, env=environment)
+        require_crates_io_source(original_source)
+        print(
+            f"Case {case}: starting serde_json {original_version}; "
+            f"source: {original_source or 'local path'}",
+            flush=True,
+        )
 
         update = [
             "cargo",
@@ -124,24 +140,39 @@ def run_case(case: str, project_root: Path, temp_root: Path, target_dir: Path) -
             "serde_json",
         ]
         if case == "minimum":
-            update.extend(("--precise", MINIMUM_SERDE_JSON))
+            update.extend(("--precise", BASELINE_SERDE_JSON))
         run(update, env=environment)
 
-        resolved_version = fixture_serde_json_version(manifest, env=environment)
-        if case == "minimum" and resolved_version != MINIMUM_SERDE_JSON:
+        resolved_version, resolved_source = resolved_serde_json(manifest, env=environment)
+        if resolved_source != original_source:
             raise RuntimeError(
-                f"minimum case resolved serde_json {resolved_version}, expected {MINIMUM_SERDE_JSON}"
+                f"case {case} changed serde_json source from {original_source!r} "
+                f"to {resolved_source!r}; refusing to test a different dependency source"
+            )
+        require_crates_io_source(resolved_source)
+        if case == "minimum" and resolved_version != BASELINE_SERDE_JSON:
+            raise RuntimeError(
+                f"baseline case resolved serde_json {resolved_version}, "
+                f"expected test baseline {BASELINE_SERDE_JSON}"
             )
 
-        print(f"Case {case}: serde_json {resolved_version}", flush=True)
+        print(
+            f"Case {case}: serde_json {resolved_version}; "
+            f"meaning: {'test baseline' if case == 'minimum' else 'latest compatible'}",
+            flush=True,
+        )
         for features in FEATURE_SETS:
-            print(f"Testing serde_json {resolved_version}; features: {features or '(default)'}", flush=True)
+            label = features or "(default)"
+            print(f"Case {case}; serde_json {resolved_version}; features: {label}", flush=True)
             command = [
                 "cargo",
                 "test",
                 "--locked",
                 "--manifest-path",
                 str(manifest),
+                "--lib",
+                "--test",
+                "tests",
             ]
             if features:
                 command.extend(("--features", features))

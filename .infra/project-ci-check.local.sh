@@ -25,3 +25,4 @@ done
 cargo test --locked --doc
 cargo test --locked --doc --features jcs
 cargo test --locked --manifest-path fuzz/Cargo.toml --lib --tests
+python3 .infra/ci/check-json-feature-matrix.py --case all

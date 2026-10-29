@@ -8,25 +8,6 @@
       "features": []
     },
     {
-      "name": "serde-json-minimum",
-      "commands": ["test"],
-      "allFeatures": true,
-      "dependency": {
-        "name": "serde_json",
-        "resolution": "precise",
-        "version": "1.0.151"
-      }
-    },
-    {
-      "name": "serde-json-latest",
-      "commands": ["test"],
-      "allFeatures": true,
-      "dependency": {
-        "name": "serde_json",
-        "resolution": "latest"
-      }
-    },
-    {
       "name": "qubit-budget-minimum",
       "commands": ["test"],
       "allFeatures": true,

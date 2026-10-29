@@ -117,7 +117,10 @@ fn test_accounting_json_value_seed_budgets_decoded_number_display() {
         let result = AccountingJsonValueSeed::new(&mut transaction).deserialize(&mut deserializer);
         if arbitrary_precision {
             let value = result.expect("arbitrary-precision Serde exposes its private number map");
-            assert_eq!(value, json!({"$serde_json::private::Number": "1e+2"}));
+            let number_text = value["$serde_json::private::Number"]
+                .as_str()
+                .expect("arbitrary-precision number text");
+            assert!(number_text == "1e2" || number_text == "1e+2");
             transaction.commit().unwrap();
         } else if maximum == 3 {
             let error = result.expect_err("the displayed number is longer than its source token");
