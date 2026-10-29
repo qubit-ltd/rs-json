@@ -49,9 +49,11 @@ use crate::lexical::JsonNumberModel;
 /// # Errors
 ///
 /// Returns `Syntax` for invalid or incomplete JSON, `OutputLimit` when the
-/// planned bytes exceed the configured maximum, or `Capacity` when checked
-/// length arithmetic or allocation fails. No result bytes are returned on
-/// these errors.
+/// planned bytes exceed the configured maximum, or `Capacity` for checked
+/// length overflow or a failed explicit fallible reservation. Other
+/// allocations, including the scanner's container stack, follow the global
+/// allocation-error behavior; `Capacity` does not guarantee recovery from every
+/// allocation failure. No result bytes are returned on these errors.
 ///
 /// # Examples
 ///
@@ -105,9 +107,14 @@ pub fn format_json_tokens(
 ///
 /// # Errors
 ///
-/// Returns `Syntax`, `OutputLimit`, or `Capacity` before writing begins.
-/// Returns `Io` if a write fails; in that case the destination may already
-/// contain an accepted prefix. No flush is attempted.
+/// Returns `Syntax` for invalid or incomplete JSON, `OutputLimit` when the
+/// planned bytes exceed the configured maximum, or `Capacity` for checked
+/// length overflow or a failed explicit fallible reservation. Other
+/// allocations, including the scanner's container stack, follow the global
+/// allocation-error behavior; `Capacity` does not guarantee recovery from every
+/// allocation failure. These errors occur before writing begins. Returns `Io`
+/// if a write fails; in that case the destination may already contain an
+/// accepted prefix. No flush is attempted.
 ///
 /// # Examples
 ///
