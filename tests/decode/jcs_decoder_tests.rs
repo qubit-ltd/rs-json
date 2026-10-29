@@ -153,6 +153,88 @@ fn test_jcs_decoder_entry_points_share_binary64_value_semantics() {
 }
 
 #[test]
+fn test_jcs_guarded_entry_points_preserve_binary64_and_objects() {
+    let input = r#"{"id":9007199254740993,"items":[1.5,-0]}"#;
+    let from_str = JcsDecoder::unlimited().decode_value_str(input).unwrap();
+    let from_bytes = JcsDecoder::unlimited().decode_value_utf8(input.as_bytes()).unwrap();
+    let mut source = Cursor::new(input.as_bytes());
+    let from_input = JcsDecoder::unlimited().decode_value_input(&mut source).unwrap();
+    assert_eq!(from_str, from_bytes);
+    assert_eq!(from_str, from_input);
+    assert_eq!(from_str.as_value()["id"].as_f64(), Some(9_007_199_254_740_992.0));
+    assert!(from_str.as_value()["items"][1].as_f64().unwrap().is_sign_negative());
+}
+
+#[test]
+fn test_jcs_guarded_deep_tree_cleanup_and_unwind() {
+    std::thread::Builder::new()
+        .stack_size(512 * 1024)
+        .spawn(|| {
+            let text = format!("{}0{}", "[".repeat(4096), "]".repeat(4096));
+            let owner = JcsDecoder::unlimited().decode_value_str(&text).unwrap();
+            drop(owner);
+            let result = std::panic::catch_unwind(|| {
+                let _owner = JcsDecoder::unlimited().decode_value_str(&text).unwrap();
+                panic!("exercise guarded cleanup");
+            });
+            assert!(result.is_err());
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
+fn test_jcs_guarded_api_keeps_legacy_value_signature() {
+    let mut decoder = JcsDecoder::unlimited();
+    let value: Value = decoder.decode_str("true").unwrap();
+    assert_eq!(value, Value::Bool(true));
+}
+
+#[test]
+fn test_jcs_guarded_and_legacy_entry_points_charge_once() {
+    let limits = || {
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(16)
+            .max_nodes(8)
+            .build()
+    };
+    let mut guarded = JcsDecoder::with_limits(limits());
+    let mut legacy = JcsDecoder::with_limits(limits());
+    let guarded_value = guarded.decode_value_str(r#"{"x":true}"#).unwrap();
+    let legacy_value: Value = legacy.decode_str(r#"{"x":true}"#).unwrap();
+    assert_eq!(guarded_value.as_value(), &legacy_value);
+    assert_eq!(guarded.session().value_budget().used_nodes(), Some(2));
+    assert_eq!(
+        guarded.session().value_budget().used_nodes(),
+        legacy.session().value_budget().used_nodes()
+    );
+    assert_eq!(guarded.session().input_budget().unwrap().used(), 10);
+    assert_eq!(
+        guarded.session().input_budget().unwrap().used(),
+        legacy.session().input_budget().unwrap().used()
+    );
+
+    let guarded_error = guarded.decode_value_str("x").unwrap_err();
+    let legacy_error = legacy.decode_str("x").unwrap_err();
+    let (JcsDecodeError::Decode(guarded_error), JcsDecodeError::Decode(legacy_error)) = (guarded_error, legacy_error)
+    else {
+        panic!("guarded and legacy methods should classify malformed JSON alike");
+    };
+    assert_eq!(guarded_error.kind(), legacy_error.kind());
+    assert_eq!(guarded.session().value_budget().used_nodes(), Some(2));
+    assert_eq!(
+        guarded.session().value_budget().used_nodes(),
+        legacy.session().value_budget().used_nodes()
+    );
+    assert_eq!(guarded.session().input_budget().unwrap().used(), 11);
+    assert_eq!(
+        guarded.session().input_budget().unwrap().used(),
+        legacy.session().input_budget().unwrap().used()
+    );
+}
+
+#[test]
 fn test_jcs_decoder_input_materialization_failure_keeps_input_and_allows_reuse() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(64)

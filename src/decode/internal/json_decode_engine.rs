@@ -905,7 +905,7 @@ where
         &mut self,
         input: &[u8],
         diagnostic_policy: DiagnosticPolicy,
-    ) -> Result<serde_json::Value, JcsDecodeError<R, Q>> {
+    ) -> Result<SafeJsonValue, JcsDecodeError<R, Q>> {
         let metadata = DecodeMetadata {
             raw_input_bytes: input.len(),
             normalized_input_bytes: None,
@@ -939,7 +939,7 @@ where
         &mut self,
         input: &mut I,
         diagnostic_policy: DiagnosticPolicy,
-    ) -> Result<serde_json::Value, JcsDecodeError<R, Q>>
+    ) -> Result<SafeJsonValue, JcsDecodeError<R, Q>>
     where
         I: Input<Item = u8> + ?Sized,
     {
@@ -982,7 +982,7 @@ where
         metadata: DecodeMetadata,
         charge_raw_input: bool,
         has_value_limits: bool,
-    ) -> Result<serde_json::Value, JcsDecodeError<R, Q>> {
+    ) -> Result<SafeJsonValue, JcsDecodeError<R, Q>> {
         Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
         let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Binary64);
         let scan = JsonLexicalScanner::new(attempt.value_transaction_mut(), false)
@@ -1028,7 +1028,7 @@ where
                 metadata.diagnostic_policy,
             )
         })?;
-        Ok(value.into_value())
+        Ok(value)
     }
 
     /// Reads and charges bytes for one attempt, allowing one uncharged probe.

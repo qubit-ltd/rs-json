@@ -16,13 +16,14 @@ use qubit_io::Input;
 use super::DiagnosticPolicy;
 use super::JcsDecodeError;
 use super::internal::JsonDecodeEngine;
+use crate::value::SafeJsonValue;
 
 /// Decodes strict JSON text into an owned value using finite binary64 numbers.
 /// Construction uses the shared builder and the configured, root-inclusive
-/// `max_depth`; there is no additional fixed container limit. The returned
-/// `serde_json::Value` is a bare tree, so callers accepting deep documents must
-/// wrap it with [`crate::value::SafeJsonValue::new`] immediately before
-/// retaining or dropping it.
+/// `max_depth`; there is no additional fixed container limit. The legacy
+/// methods return a bare `serde_json::Value`; callers accepting deep
+/// documents should use the `decode_value_*` methods to retain iterative
+/// cleanup.
 /// The decoder borrows its accounting session for `'budget`; `R` selects the
 /// resource kind and `Q` is the quantity representation used by that session.
 /// Calls reuse the same cumulative session, so limits apply across all inputs
@@ -213,6 +214,68 @@ where
         self.decode_utf8(input.as_bytes())
     }
 
+    /// Decodes a complete JSON string into a tree with protected cleanup.
+    ///
+    /// The returned [`SafeJsonValue`] can be retained and dropped without
+    /// recursive tree cleanup. Resource usage is charged to this decoder's
+    /// cumulative session exactly once. The same root-inclusive configured
+    /// depth limit applies as for the legacy methods.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` is the complete UTF-8 JSON document to decode.
+    ///
+    /// # Returns
+    ///
+    /// The guarded owned JSON value on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JcsDecodeError`] for invalid JSON, unsupported JCS numbers,
+    /// duplicate keys, or resource-limit violations. Accepted input bytes
+    /// remain charged when materialization fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qubit_json::decode::JcsDecoder;
+    /// use qubit_json::encode::JcsEncoder;
+    ///
+    /// let owner = JcsDecoder::unlimited()
+    ///     .decode_value_str(r#"{"b":2,"a":1}"#)
+    ///     .unwrap();
+    /// let bytes = JcsEncoder::unlimited().to_vec(owner.as_value()).unwrap();
+    /// assert_eq!(bytes, br#"{"a":1,"b":2}"#);
+    /// ```
+    pub fn decode_value_str(&mut self, input: &str) -> Result<SafeJsonValue, JcsDecodeError<R, Q>> {
+        self.decode_value_utf8(input.as_bytes())
+    }
+
+    /// Decodes a complete UTF-8 JSON document into a tree with protected
+    /// cleanup.
+    ///
+    /// The guarded result supports iterative cleanup when dropped, including
+    /// during panic unwinding. Its `as_value()` view can be passed to
+    /// [`crate::encode::JcsEncoder`]. The configured root-inclusive depth limit
+    /// and cumulative accounting session are shared with the legacy methods.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` is the complete UTF-8 JSON document to decode.
+    ///
+    /// # Returns
+    ///
+    /// The guarded owned JSON value on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JcsDecodeError`] for invalid JSON, unsupported JCS numbers,
+    /// duplicate keys, or resource-limit violations. Input usage already
+    /// admitted remains charged when later materialization fails.
+    pub fn decode_value_utf8(&mut self, input: &[u8]) -> Result<SafeJsonValue, JcsDecodeError<R, Q>> {
+        self.engine.decode_jcs_utf8(input, self.diagnostic_policy)
+    }
+
     /// Decodes one complete UTF-8 JSON document into an owned value.
     ///
     /// The input is parsed with strict JSON and JCS binary64 number semantics;
@@ -231,7 +294,38 @@ where
     /// Returns `JcsDecodeError` for invalid JSON, unsupported JCS numbers, or
     /// resource-limit violations.
     pub fn decode_utf8(&mut self, input: &[u8]) -> Result<serde_json::Value, JcsDecodeError<R, Q>> {
-        self.engine.decode_jcs_utf8(input, self.diagnostic_policy)
+        self.decode_value_utf8(input).map(SafeJsonValue::into_value)
+    }
+
+    /// Reads a complete byte input through EOF into a guarded JSON value.
+    ///
+    /// The implementation buffers the full input before decoding. With a
+    /// finite input budget it may read one uncharged probe byte beyond the
+    /// limit to detect overflow; admitted bytes remain charged if decoding
+    /// later fails. The guarded result supports iterative cleanup on drop.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `I` is the byte input implementation; it may be unsized.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` supplies the document bytes and is read through EOF or the
+    ///   first input-budget overflow probe.
+    ///
+    /// # Returns
+    ///
+    /// The guarded owned JSON value on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JcsDecodeError`] for input read failures, invalid JSON,
+    /// duplicate keys, JCS number violations, or resource-limit violations.
+    pub fn decode_value_input<I>(&mut self, input: &mut I) -> Result<SafeJsonValue, JcsDecodeError<R, Q>>
+    where
+        I: Input<Item = u8> + ?Sized,
+    {
+        self.engine.decode_jcs_input(input, self.diagnostic_policy)
     }
 
     /// Reads a complete byte input through EOF and decodes it into an owned
@@ -261,6 +355,6 @@ where
     where
         I: Input<Item = u8> + ?Sized,
     {
-        self.engine.decode_jcs_input(input, self.diagnostic_policy)
+        self.decode_value_input(input).map(SafeJsonValue::into_value)
     }
 }

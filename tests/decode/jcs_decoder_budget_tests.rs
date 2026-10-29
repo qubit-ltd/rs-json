@@ -53,6 +53,62 @@ fn test_jcs_decoder_duplicate_key_rolls_back_values_but_keeps_input() {
 }
 
 #[test]
+fn test_jcs_guarded_duplicate_key_rolls_back_values_but_keeps_input() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4096)
+        .max_nodes(32)
+        .build();
+    let mut decoder = JcsDecoder::with_limits(limits);
+    let input = r#"{"x":1,"x":2}"#;
+    let error = decoder
+        .decode_value_str(input)
+        .expect_err("duplicate object keys should be rejected");
+    assert!(matches!(error, JcsDecodeError::DuplicateKey { line: 1, column: 8 }));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(decoder.session().input_budget().unwrap().used(), input.len());
+    let owner = decoder
+        .decode_value_str("true")
+        .expect("a valid JSON boolean should decode within the remaining limits");
+    assert_eq!(owner.as_value(), &Value::Bool(true));
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
+    assert_eq!(decoder.session().input_budget().unwrap().used(), input.len() + 4);
+}
+
+#[test]
+fn test_jcs_guarded_deep_materialization_and_lexical_failures_do_not_commit_values() {
+    let limits = || {
+        JsonDecodeLimits::<JsonResource, usize>::builder()
+            .max_input_bytes(4096)
+            .max_nodes(32)
+            .build()
+    };
+    let mut duplicate_decoder = JcsDecoder::with_limits(limits());
+    let depth = 16;
+    let duplicate = format!("{}{{\"x\":1,\"x\":2}}{}", "{\"nest\":".repeat(depth), "}".repeat(depth),);
+    let error = duplicate_decoder
+        .decode_value_str(&duplicate)
+        .expect_err("a deeply nested duplicate key must be rejected");
+    assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
+    assert_eq!(duplicate_decoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(
+        duplicate_decoder.session().input_budget().unwrap().used(),
+        duplicate.len()
+    );
+
+    let mut lexical_decoder = JcsDecoder::with_limits(limits());
+    let malformed = format!("{}0,]{}", "[".repeat(depth), "]".repeat(depth));
+    let error = lexical_decoder
+        .decode_value_str(&malformed)
+        .expect_err("malformed syntax must be rejected before value accounting commits");
+    assert!(matches!(error, JcsDecodeError::Decode(_)));
+    assert_eq!(lexical_decoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(
+        lexical_decoder.session().input_budget().unwrap().used(),
+        malformed.len()
+    );
+}
+
+#[test]
 fn test_jcs_decoder_number_budget_precedes_binary64_range_error() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(JsonValueLimits::builder().max_number_bytes(2).build())
@@ -149,6 +205,40 @@ fn test_jcs_decoder_input_entry_rejects_overflow_probe_byte() {
             .used(),
         4
     );
+}
+
+#[test]
+fn test_jcs_guarded_input_entry_commits_exact_budget_and_probes_overflow() {
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4)
+        .max_nodes(32)
+        .build();
+    let mut decoder = JcsDecoder::with_limits(limits);
+    let mut exact = Cursor::new(b"true".to_vec());
+    let owner = decoder
+        .decode_value_input(&mut exact)
+        .expect("input exactly at the byte budget should decode");
+    assert_eq!(owner.as_value(), &Value::Bool(true));
+    assert_eq!(exact.position(), 4);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 4);
+
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(4)
+        .max_nodes(32)
+        .build();
+    let mut decoder = JcsDecoder::with_limits(limits);
+    let mut oversized = Cursor::new(b"true ".to_vec());
+    let error = decoder
+        .decode_value_input(&mut oversized)
+        .expect_err("the fifth byte must exceed the input budget");
+    let JcsDecodeError::Decode(error) = error else {
+        panic!("input overflow must be reported as a decode budget error");
+    };
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(oversized.position(), 5);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 4);
 }
 
 #[test]
