@@ -238,6 +238,99 @@ limits when reporting results.
 
 The first command runs Criterion with only the JCS feature, so its timed
 samples use the system allocator without allocation-counting instrumentation.
+
+### Typed unique-decode peak-live sample (2026-10-29)
+
+This sample checks whether typed unique-key decoding has a measurable
+intermediate live-allocation peak before considering an optimization. The
+allocation benchmark's opt-in live counter records successful allocator
+requests and frees during one decode. `peak_extra` is the high-water mark above
+the live bytes at the start of the operation; `end_delta` is the live-byte
+difference at the end. These are allocator-request measurements, not RSS or an
+exact count of duplicate `Value` materialization. The `protected_value` path is
+a control that retains a protected dynamic value; the difference also includes
+any other path-specific work and result shape. The implementation worktree
+started at `cdcdf2c` and contained only this task's implementation changes
+while collecting samples. Fixture setup and the counter self-check were
+outside the measured operation. Direct Serde is a separate, non-equivalent
+control because it does not enforce global duplicate-key rejection or the
+decoder's resource contract.
+
+Each allocation run used one of four feature groups, three times per group:
+
+```bash
+cargo bench --locked --bench unique_decode_allocations
+cargo bench --locked --features "serde_json/arbitrary_precision" --bench unique_decode_allocations
+cargo bench --locked --features "serde_json/preserve_order" --bench unique_decode_allocations
+cargo bench --locked --features "serde_json/arbitrary_precision serde_json/preserve_order" --bench unique_decode_allocations
+```
+
+The same 4 commands were repeated for runs 2 and 3. Each invocation emitted
+390 structural records plus its CSV header. All records had `peak >= baseline`
+and `peak >= end`; the three runs were identical. The table reports fresh,
+unlimited `unique_typed` versus `protected_value`; numbers are `peak_extra`
+bytes, with the control in parentheses.
+
+| Features | Shape | Items | Typed peak extra (control) | Typed minus control |
+| --- | --- | ---: | ---: | ---: |
+| default | `wide_object` | 512 | 131,616 (90,432) | 41,184 |
+| default | `wide_object` | 4096 | 1,065,048 (726,776) | 338,272 |
+| arbitrary precision | `wide_object` | 512 | 131,616 (90,432) | 41,184 |
+| arbitrary precision | `wide_object` | 4096 | 1,065,048 (726,776) | 338,272 |
+| preserve order | `wide_object` | 512 | 200,368 (159,184) | 41,184 |
+| preserve order | `wide_object` | 4096 | 1,608,496 (1,270,224) | 338,272 |
+| combined | `wide_object` | 512 | 200,368 (159,184) | 41,184 |
+| combined | `wide_object` | 4096 | 1,608,496 (1,270,224) | 338,272 |
+| default | `record_array` | 512 | 384,512 (364,992) | 19,520 |
+| default | `record_array` | 4096 | 3,076,096 (2,916,800) | 159,296 |
+| arbitrary precision | `record_array` | 512 | 385,024 (365,504) | 19,520 |
+| arbitrary precision | `record_array` | 4096 | 3,080,192 (2,920,896) | 159,296 |
+| preserve order | `record_array` | 512 | 288,256 (268,736) | 19,520 |
+| preserve order | `record_array` | 4096 | 2,306,048 (2,146,752) | 159,296 |
+| combined | `record_array` | 512 | 288,768 (269,248) | 19,520 |
+| combined | `record_array` | 4096 | 2,310,144 (2,150,848) | 159,296 |
+
+These differences cross the 20% screening threshold for the wide-object
+fixtures, but they do not identify which allocations are removable. The
+record-array differences are smaller and the control retains a different
+result. Therefore the measurement does not establish a 20% reducible
+duplicate-materialization cost or an equivalent safe decode path.
+
+For latency context, the full Criterion command was run three times, with its
+default 100 samples and `--noplot`:
+
+```bash
+cargo bench --locked --bench unique_decode_bench -- unique_decode_structural --noplot
+```
+
+The following are the center estimates and 95% confidence intervals for
+unlimited, fresh, 4096-item cases (ms):
+
+| Case | Run 1 | Run 2 | Run 3 |
+| --- | ---: | ---: | ---: |
+| `wide_object` / `unique_typed` | 8.265 (7.613–8.978) | 6.249 (5.574–7.068) | 4.146 (4.105–4.192) |
+| `wide_object` / `unique_seed` | 7.471 (6.876–8.132) | 30.671 (28.019–33.431) | 4.253 (4.199–4.310) |
+| `record_array` / `unique_typed` | 5.356 (5.060–5.686) | 11.688 (10.707–12.724) | 3.546 (3.486–3.607) |
+| `record_array` / `unique_seed` | 5.438 (5.182–5.711) | 6.498 (5.980–7.084) | 3.496 (3.448–3.545) |
+
+The recorded 1-minute load average was about 10.78–19.65 during run 1, 10–33
+during run 2, and about 26 at the start of run 3 before declining. The runs
+also saw long-sample warnings and outliers; several comparisons changed
+substantially between runs. Treat these timings as descriptive only. Since
+neither the peak counter nor the latency samples
+show an attributable, safely removable duplicate-materialization cost, this
+check does not authorize a production-path optimization. A future proposal
+would need a concrete consuming decode design and evidence for equivalent
+number handling, error behavior, object ordering, and bounded failure-path
+destruction before implementation.
+
+The environment was Ubuntu 24.04.4 on Linux 7.0.0-38-generic, x86_64, Intel
+Core i5-9600K (six cores), Rust 1.94.0, Criterion 0.8.2, and `serde_json`
+1.0.154, using the system allocator. `Cargo.lock` SHA-256 was
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`. The
+allocation counter self-check covered allocation/free, a free outside the
+measurement window, realloc growth and shrinkage, and its byte-request
+accounting. It is a benchmark diagnostic, not a production API.
 The second command enables `jcs-allocation-diagnostics` and sets
 `JCS_ALLOCATION_DIAGNOSTICS`; it prints one
 `JCS_ALLOC` diagnostic for each fixture and each of the finite JCS, unlimited

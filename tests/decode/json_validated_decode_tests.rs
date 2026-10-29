@@ -10,13 +10,187 @@ use std::convert::Infallible;
 use std::io::Cursor;
 
 use qubit_budget::json::JsonDecodeLimits;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonNumberPolicy;
+use qubit_json::decode::JsonValidatedAdmissionPolicy;
 use qubit_json::decode::JsonValidatedDecodeError;
 use qubit_json::decode::JsonValidatedDecodeOptions;
+use qubit_json::decode::JsonValidatedLimit;
 
 #[derive(Clone)]
 struct OpaqueResource;
+
+#[test]
+fn test_number_policy_admission_calls_policy_before_number_budget() {
+    for mode in [
+        JsonValidatedAdmissionPolicy::Immediate,
+        JsonValidatedAdmissionPolicy::TokenFirst,
+    ] {
+        let options = JsonValidatedDecodeOptions::builder().admission_policy(mode).build();
+        let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+            .max_input_bytes(8)
+            .max_nodes(0)
+            .build();
+        let mut decoder = JsonDecoder::with_limits(limits);
+        let mut calls = 0;
+        let error = decoder
+            .decode_unique_validated_str("1", &options, |_, _| {
+                calls += 1;
+                Ok::<_, ()>(JsonNumberPolicy::Preserve)
+            })
+            .unwrap_err();
+        assert_eq!(calls, 1, "number budget must follow policy: {mode:?}");
+        let JsonValidatedDecodeError::Decode { error, .. } = error else {
+            panic!("expected a decode budget rejection");
+        };
+        assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+        assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+        assert_eq!(decoder.session().input_budget().unwrap().used(), 1);
+    }
+}
+
+#[test]
+fn test_number_policy_admission_policy_error_precedes_number_budget() {
+    for mode in [
+        JsonValidatedAdmissionPolicy::Immediate,
+        JsonValidatedAdmissionPolicy::TokenFirst,
+    ] {
+        let options = JsonValidatedDecodeOptions::builder().admission_policy(mode).build();
+        let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+            .max_nodes(0)
+            .build();
+        let mut decoder = JsonDecoder::with_limits(limits);
+        let mut calls = 0;
+        let error = decoder
+            .decode_unique_validated_str("1", &options, |_, _| {
+                calls += 1;
+                Err::<JsonNumberPolicy, _>("policy-first")
+            })
+            .unwrap_err();
+        assert_eq!(calls, 1);
+        assert!(matches!(
+            error,
+            JsonValidatedDecodeError::Policy {
+                source: "policy-first",
+                offset: 0,
+            }
+        ));
+        assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+    }
+}
+
+#[test]
+fn test_number_policy_admission_number_bytes_after_policy() {
+    for mode in [
+        JsonValidatedAdmissionPolicy::Immediate,
+        JsonValidatedAdmissionPolicy::TokenFirst,
+    ] {
+        let options = JsonValidatedDecodeOptions::builder().admission_policy(mode).build();
+        let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+            .max_number_bytes(0)
+            .max_nodes(10)
+            .build();
+        let mut decoder = JsonDecoder::with_limits(limits);
+        let mut calls = 0;
+        let error = decoder
+            .decode_unique_validated_str("1", &options, |_, _| {
+                calls += 1;
+                Ok::<_, ()>(JsonNumberPolicy::Preserve)
+            })
+            .unwrap_err();
+        assert_eq!(calls, 1, "number bytes admission must follow policy: {mode:?}");
+        let JsonValidatedDecodeError::Decode { error, .. } = error else {
+            panic!("expected decode budget error");
+        };
+        assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+        assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+    }
+}
+
+#[test]
+fn test_number_policy_admission_payload_after_policy() {
+    for mode in [
+        JsonValidatedAdmissionPolicy::Immediate,
+        JsonValidatedAdmissionPolicy::TokenFirst,
+    ] {
+        let options = JsonValidatedDecodeOptions::builder().admission_policy(mode).build();
+        let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+            .max_payload_bytes(0)
+            .max_nodes(10)
+            .build();
+        let mut decoder = JsonDecoder::with_limits(limits);
+        let mut calls = 0;
+        let error = decoder
+            .decode_unique_validated_str("1", &options, |_, _| {
+                calls += 1;
+                Ok::<_, ()>(JsonNumberPolicy::Preserve)
+            })
+            .unwrap_err();
+        assert_eq!(calls, 1, "payload admission must follow policy: {mode:?}");
+        let JsonValidatedDecodeError::Decode { error, .. } = error else {
+            panic!("expected decode budget error");
+        };
+        assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+        assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+    }
+}
+
+#[test]
+fn test_number_policy_admission_input_limit_before_policy() {
+    for mode in [
+        JsonValidatedAdmissionPolicy::Immediate,
+        JsonValidatedAdmissionPolicy::TokenFirst,
+    ] {
+        let options = JsonValidatedDecodeOptions::builder().admission_policy(mode).build();
+        let limits = JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::builder()
+            .max_input_bytes(0)
+            .build();
+        let mut decoder = JsonDecoder::with_limits(limits);
+        let mut calls = 0;
+        let error = decoder
+            .decode_unique_validated_str("1", &options, |_, _| {
+                calls += 1;
+                Ok::<_, ()>(JsonNumberPolicy::Preserve)
+            })
+            .unwrap_err();
+        assert_eq!(calls, 0, "input admission precedes policy: {mode:?}");
+        let JsonValidatedDecodeError::Decode { error, .. } = error else {
+            panic!("expected decode budget error");
+        };
+        assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
+    }
+}
+
+#[test]
+fn test_number_policy_admission_validated_nodes_before_policy() {
+    for mode in [
+        JsonValidatedAdmissionPolicy::Immediate,
+        JsonValidatedAdmissionPolicy::TokenFirst,
+    ] {
+        let options = JsonValidatedDecodeOptions::builder()
+            .max_value_and_key_nodes(0)
+            .admission_policy(mode)
+            .build();
+        let mut calls = 0;
+        let error = JsonDecoder::unlimited()
+            .decode_unique_validated_str("1", &options, |_, _| {
+                calls += 1;
+                Ok::<_, ()>(JsonNumberPolicy::Preserve)
+            })
+            .unwrap_err();
+        assert_eq!(calls, 0, "validated node admission precedes policy: {mode:?}");
+        assert!(matches!(
+            error,
+            JsonValidatedDecodeError::Limit {
+                limit: JsonValidatedLimit::ValueAndKeyNodes,
+                maximum: 0,
+                observed: 1,
+                offset: 0,
+            }
+        ));
+    }
+}
 
 #[test]
 fn test_validated_entries_accept_non_debug_resource() {

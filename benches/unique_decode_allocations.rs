@@ -31,8 +31,16 @@ use unique_decode_support::structural_fixtures::StructuralShape;
 const SIZES: [usize; 3] = [1024, 64 * 1024, 1024 * 1024];
 
 fn main() {
+    if std::env::args().any(|argument| argument == "--allocation-counter-self-check") {
+        allocation_counter::self_check();
+        println!("allocation counter self-check passed");
+        return;
+    }
     println!(
         "UNIQUE_DECODE_ALLOC,shape,bytes,path,budget,mode,allocation_count,allocated_request_bytes,reallocation_count"
+    );
+    println!(
+        "UNIQUE_DECODE_LIVE,shape,items,bytes,path,budget,mode,baseline_live_bytes,peak_live_bytes,end_live_bytes,peak_extra_bytes"
     );
     for shape in Shape::ALL {
         for requested in SIZES {
@@ -70,6 +78,18 @@ fn main() {
                         fresh.allocated_request_bytes,
                         fresh.reallocation_count
                     );
+                    println!(
+                        "UNIQUE_DECODE_LIVE,{},{},{},{},{},fresh,{},{},{},{}",
+                        shape.name(),
+                        0,
+                        fixture.bytes(),
+                        path.name(),
+                        budget,
+                        fresh.baseline_live_bytes,
+                        fresh.peak_live_bytes,
+                        fresh.end_live_bytes,
+                        fresh.peak_extra_bytes
+                    );
 
                     let mut warmup_decoder = if finite {
                         finite_decoder(&fixture, 8)
@@ -102,7 +122,46 @@ fn main() {
                         batch.allocated_request_bytes,
                         batch.reallocation_count
                     );
+                    println!(
+                        "UNIQUE_DECODE_LIVE,{},{},{},{},{},batch8,{},{},{},{}",
+                        shape.name(),
+                        0,
+                        fixture.bytes(),
+                        path.name(),
+                        budget,
+                        batch.baseline_live_bytes,
+                        batch.peak_live_bytes,
+                        batch.end_live_bytes,
+                        batch.peak_extra_bytes
+                    );
                 }
+            }
+            for finite in [false, true] {
+                let budget = if finite { "finite" } else { "unlimited" };
+                let mut decoder = if finite {
+                    finite_decoder(&fixture, 1)
+                } else {
+                    JsonDecoder::unlimited()
+                };
+                let (owner, measurement) = allocation_counter::measure(|| {
+                    decoder
+                        .decode_value_str(&fixture.text)
+                        .expect("protected-value byte fixture must decode")
+                });
+                let expected: serde_json::Value =
+                    serde_json::from_str(&fixture.text).expect("byte fixture must be valid JSON");
+                assert_eq!(owner.as_value(), &expected);
+                drop(owner);
+                println!(
+                    "UNIQUE_DECODE_LIVE,{},0,{},protected_value,{},fresh,{},{},{},{}",
+                    shape.name(),
+                    fixture.bytes(),
+                    budget,
+                    measurement.baseline_live_bytes,
+                    measurement.peak_live_bytes,
+                    measurement.end_live_bytes,
+                    measurement.peak_extra_bytes
+                );
             }
             let reject = reject_fixture(shape, requested);
             for finite in [false, true] {
@@ -167,6 +226,18 @@ fn main() {
                         fresh.allocated_request_bytes,
                         fresh.reallocation_count
                     );
+                    println!(
+                        "UNIQUE_DECODE_LIVE,{},{},{},{},{},fresh,{},{},{},{}",
+                        shape.name(),
+                        fixture.count,
+                        fixture.text.len(),
+                        path.name(),
+                        budget,
+                        fresh.baseline_live_bytes,
+                        fresh.peak_live_bytes,
+                        fresh.end_live_bytes,
+                        fresh.peak_extra_bytes
+                    );
 
                     let mut warmup_decoder = if finite {
                         structural_decode::finite_decoder(&fixture, 8)
@@ -201,7 +272,48 @@ fn main() {
                         batch.allocated_request_bytes,
                         batch.reallocation_count
                     );
+                    println!(
+                        "UNIQUE_DECODE_LIVE,{},{},{},{},{},batch8,{},{},{},{}",
+                        shape.name(),
+                        fixture.count,
+                        fixture.text.len(),
+                        path.name(),
+                        budget,
+                        batch.baseline_live_bytes,
+                        batch.peak_live_bytes,
+                        batch.end_live_bytes,
+                        batch.peak_extra_bytes
+                    );
                 }
+            }
+            for finite in [false, true] {
+                let budget = if finite { "finite" } else { "unlimited" };
+                let mut decoder = if finite {
+                    structural_decode::finite_decoder(&fixture, 1)
+                } else {
+                    JsonDecoder::unlimited()
+                };
+                let (owner, measurement) = allocation_counter::measure(|| {
+                    decoder
+                        .decode_value_str(&fixture.text)
+                        .expect("protected-value structural fixture must decode")
+                });
+                structural_decode::assert_decoded(
+                    &structural_decode::StructuralDecoded::Value(owner.as_value().clone()),
+                    &fixture,
+                );
+                drop(owner);
+                println!(
+                    "UNIQUE_DECODE_LIVE,{},{},{},protected_value,{},fresh,{},{},{},{}",
+                    shape.name(),
+                    fixture.count,
+                    fixture.text.len(),
+                    budget,
+                    measurement.baseline_live_bytes,
+                    measurement.peak_live_bytes,
+                    measurement.end_live_bytes,
+                    measurement.peak_extra_bytes
+                );
             }
         }
     }

@@ -366,3 +366,75 @@ cargo bench --locked --bench tree_bench -- json-value-read --warm-up-time 0.1 --
 当前代码的代表性估计值：8192 元素数组相等比较 38.0 µs、8192 项对象相等比较 676 µs、
 首个子节点不同为 24–46 ns、深度 256 的 Debug 丢弃输出为 3.85 µs。这些短样本存在
 异常值，只用于描述当前实现；宽度扩展证据来自分配计数结果。没有设置计时断言。
+
+### 类型化唯一键解码峰值存活分配采样（2026-10-29）
+
+本次先测量类型化唯一键解码的中间存活分配峰值，再决定是否优化。分配基准的可选 live
+计数器记录单次解码期间成功的分配器请求及释放。`peak_extra` 表示相对操作开始时存活字节的
+峰值增量；`end_delta` 是操作结束时的存活字节变化。这些是分配器请求计量，不是 RSS，也不是
+重复 `Value` 物化的精确计数。`protected_value` 对照保留受保护的动态值；路径相关的其他工作和
+结果形态差异也会影响两者差值。实施 worktree 起始于 `cdcdf2c`，采样期间仅包含本任务的实现
+变更。fixture 准备和计数器自检均在被测操作之外。直接 Serde 是独立且不等价的对照，因为它不提供
+全局重复键拒绝或 decoder 的资源契约。
+
+四种 feature 组合各运行三轮：
+
+```bash
+cargo bench --locked --bench unique_decode_allocations
+cargo bench --locked --features "serde_json/arbitrary_precision" --bench unique_decode_allocations
+cargo bench --locked --features "serde_json/preserve_order" --bench unique_decode_allocations
+cargo bench --locked --features "serde_json/arbitrary_precision serde_json/preserve_order" --bench unique_decode_allocations
+```
+
+以上四条命令重复三轮。每次运行输出 390 条结构记录和一行 CSV 标题。所有记录均满足
+`peak >= baseline` 且 `peak >= end`；三轮数据一致。下表为 fresh、unlimited 的
+`unique_typed`，对比 `protected_value`；单位为 `peak_extra` 字节，括号内是对照值。
+
+| Features | 形状 | 条目数 | 类型化峰值额外量（对照） | 类型化减对照 |
+| --- | --- | ---: | ---: | ---: |
+| default | `wide_object` | 512 | 131,616（90,432） | 41,184 |
+| default | `wide_object` | 4096 | 1,065,048（726,776） | 338,272 |
+| arbitrary precision | `wide_object` | 512 | 131,616（90,432） | 41,184 |
+| arbitrary precision | `wide_object` | 4096 | 1,065,048（726,776） | 338,272 |
+| preserve order | `wide_object` | 512 | 200,368（159,184） | 41,184 |
+| preserve order | `wide_object` | 4096 | 1,608,496（1,270,224） | 338,272 |
+| combined | `wide_object` | 512 | 200,368（159,184） | 41,184 |
+| combined | `wide_object` | 4096 | 1,608,496（1,270,224） | 338,272 |
+| default | `record_array` | 512 | 384,512（364,992） | 19,520 |
+| default | `record_array` | 4096 | 3,076,096（2,916,800） | 159,296 |
+| arbitrary precision | `record_array` | 512 | 385,024（365,504） | 19,520 |
+| arbitrary precision | `record_array` | 4096 | 3,080,192（2,920,896） | 159,296 |
+| preserve order | `record_array` | 512 | 288,256（268,736） | 19,520 |
+| preserve order | `record_array` | 4096 | 2,306,048（2,146,752） | 159,296 |
+| combined | `record_array` | 512 | 288,768（269,248） | 19,520 |
+| combined | `record_array` | 4096 | 2,310,144（2,150,848） | 159,296 |
+
+宽对象样例的差值超过 20% 初筛门槛，但这些数据没有指出哪些分配可以消除。record-array
+差值更小，而且对照保留的是不同结果。因此测量不能证明存在可减少 20% 的重复物化成本，也不能
+证明存在语义等价的安全解码路径。
+
+延迟参考使用完整 Criterion 命令运行三轮，每轮默认 100 个样本并传入 `--noplot`：
+
+```bash
+cargo bench --locked --bench unique_decode_bench -- unique_decode_structural --noplot
+```
+
+以下为 unlimited、fresh、4096 项场景的中心估计及 95% 置信区间（毫秒）：
+
+| 场景 | 第 1 轮 | 第 2 轮 | 第 3 轮 |
+| --- | ---: | ---: | ---: |
+| `wide_object` / `unique_typed` | 8.265（7.613–8.978） | 6.249（5.574–7.068） | 4.146（4.105–4.192） |
+| `wide_object` / `unique_seed` | 7.471（6.876–8.132） | 30.671（28.019–33.431） | 4.253（4.199–4.310） |
+| `record_array` / `unique_typed` | 5.356（5.060–5.686） | 11.688（10.707–12.724） | 3.546（3.486–3.607） |
+| `record_array` / `unique_seed` | 5.438（5.182–5.711） | 6.498（5.980–7.084） | 3.496（3.448–3.545） |
+
+采样期间 1 分钟 load average 在第 1 轮约为 10.78–19.65，第 2 轮约为 10–33，第 3 轮开始约为
+26 后逐渐下降。运行还出现长样本警告和离群值，多项结果在不同轮次间变化明显。这些计时只作描述。
+live 峰值和延迟采样都没有识别出可归因且可安全消除的重复物化成本，
+因此本轮不授权优化生产解码路径。后续若提出方案，应先给出具体的消费式解码设计，并证明数字处理、
+错误行为、对象顺序和失败路径有界析构与现有实现等价，再进入实现。
+
+环境为 Ubuntu 24.04.4、Linux 7.0.0-38-generic、x86_64、Intel Core i5-9600K（6 核）、
+Rust 1.94.0、Criterion 0.8.2、`serde_json` 1.0.154，使用系统分配器。`Cargo.lock` SHA-256 为
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`。分配计数器自检覆盖了
+分配/释放、测量窗口外释放、realloc 扩大与缩小，以及请求字节累计。它是基准诊断机制，不是生产 API。

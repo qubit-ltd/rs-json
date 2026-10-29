@@ -43,3 +43,7 @@ jobs:
         run: cargo +nightly-2026-06-05 miri setup
       - name: Test mutable traversal with preserve_order
         run: cargo +nightly-2026-06-05 miri test --locked --test tests --features serde_json/preserve_order value::traverse::json_tree_mutator_tests
+      - name: Test protected-value drop fallback
+        run: cargo +nightly-2026-06-05 miri test --locked --lib test_owner_drop_fallback_
+      - name: Test protected-value drop fallback with preserve_order
+        run: cargo +nightly-2026-06-05 miri test --locked --lib --features serde_json/preserve_order test_owner_drop_fallback_

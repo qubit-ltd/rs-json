@@ -3,6 +3,7 @@ set -euo pipefail
 
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 cd "$project_root"
+python3 -B -m unittest discover -s .infra/ci/tests -p 'test_*.py'
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --locked --test tests --features serde_json/preserve_order value::traverse::json_tree_mutator_tests
 feature_sets=(

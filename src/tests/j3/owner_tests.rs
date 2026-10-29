@@ -66,6 +66,34 @@ fn test_owner_drop_uses_allocation_free_fallback_when_reserve_fails() {
 }
 
 #[test]
+fn test_owner_drop_fallback_mixed_array_with_pending_siblings() {
+    for successful_reserves in [0, 1, 2] {
+        let owner = SafeJsonValue::new(serde_json::json!([
+            {"first": ["a", null, {}]},
+            {"second": [[], "b"]},
+            {"third": {"nested": "c"}}
+        ]));
+        SafeJsonValue::fail_drop_reserve_after_for_test(successful_reserves);
+        drop(owner);
+        SafeJsonValue::assert_drop_reserve_failure_consumed_for_test();
+    }
+}
+
+#[test]
+fn test_owner_drop_fallback_mixed_object_with_pending_siblings() {
+    for successful_reserves in [0, 1, 2] {
+        let owner = SafeJsonValue::new(serde_json::json!({
+            "a": ["a", null, {}],
+            "b": {"nested": [[], "b"]},
+            "c": ["c", {"leaf": null}]
+        }));
+        SafeJsonValue::fail_drop_reserve_after_for_test(successful_reserves);
+        drop(owner);
+        SafeJsonValue::assert_drop_reserve_failure_consumed_for_test();
+    }
+}
+
+#[test]
 fn test_owner_deep_drop_is_safe_during_unwind() {
     let result = std::panic::catch_unwind(|| {
         let mut value = Value::Null;

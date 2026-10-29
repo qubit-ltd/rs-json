@@ -17,11 +17,18 @@
 /// integral values outside that interval are rejected as distinct
 /// [`JsonNumberTokenError`](super::JsonNumberTokenError) categories.
 ///
-/// Number processing first applies lexical syntax and resource admission,
-/// then calls the number policy, checks the selected decode model's range, and
-/// finally performs the exact integer projection. A policy callback error
-/// returns immediately. Selecting `ExactSafeInteger` does not bypass the
-/// decode model range check, so a spelling such as `1e400` can fail first as
+/// After the scanner recognizes a valid number token, it calls the number
+/// policy before admitting that number's resource measurements. It then
+/// checks the selected decode model's range and applies the selected
+/// projection. A policy error returns immediately and can therefore precede
+/// a number-resource budget error.
+///
+/// Earlier input, depth, container, and validated-option checks can reject the
+/// document before the callback. A successful callback does not imply that
+/// resource admission or validation of the complete document succeeded; its
+/// side effects are not rolled back after a later failure. Selecting
+/// `ExactSafeInteger` does not bypass the decode model range check, so a
+/// spelling such as `1e400` can fail first as
 /// [`JsonValidatedDecodeError::Decode`](super::JsonValidatedDecodeError::Decode)
 /// with [`JsonSyntaxErrorReason::FloatOutOfRange`](super::JsonSyntaxErrorReason::FloatOutOfRange).
 ///
