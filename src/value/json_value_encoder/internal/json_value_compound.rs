@@ -172,6 +172,23 @@ where
         self.failure.get().unwrap_or(error)
     }
 
+    /// Records a compound-finalization error in the shared context before
+    /// returning it. The retained failure remains observable even if an
+    /// enclosing `Serialize` implementation ignores this result and later
+    /// reports success. The shared context preserves first-failure precedence.
+    ///
+    /// # Parameters
+    ///
+    /// * `context` - Shared serialization context that retains failures.
+    /// * `result` - Result of finalizing the compound.
+    ///
+    /// # Returns
+    ///
+    /// The finalization value on success, or the retained serialization error.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first serialization error recorded in the shared context.
     fn keep_end_error<T>(
         context: ContextCell<'_, '_, '_, R, Q>,
         result: Result<T, JsonSerializationError>,
@@ -197,6 +214,24 @@ where
         result.map_err(|error| self.fail(error))
     }
 
+    /// Serializes one child and checks shared failure state even after an `Ok`
+    /// result. A custom `Serialize` implementation may swallow a nested
+    /// serializer error; checking the context prevents that error from being
+    /// converted into success. Child errors are retained through this
+    /// compound's failure path.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Child value to serialize.
+    /// * `depth` - Nesting depth at which to serialize the child.
+    ///
+    /// # Returns
+    ///
+    /// The protected child value when serialization succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first retained serialization failure.
     fn serialize_child<T>(&mut self, value: &T, depth: usize) -> Result<SafeJsonValue, JsonSerializationError>
     where
         T: Serialize + ?Sized,

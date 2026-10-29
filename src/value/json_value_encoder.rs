@@ -213,6 +213,29 @@ impl JsonValueEncoder {
         self.encode_in_transaction_impl(value, transaction, Some(max_private_text_bytes))
     }
 
+    /// Projects a value using the caller-owned transaction and an optional
+    /// per-payload private-text limit. A retained context failure takes
+    /// precedence over the final `Serialize` result, including an apparent
+    /// success after a swallowed error. This helper neither commits nor rolls
+    /// back the borrowed batch transaction. After an error or unwind, the
+    /// caller must drop the entire transaction rather than commit its staged
+    /// usage.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Borrowed Serde value to project.
+    /// * `transaction` - Caller-owned transaction receiving staged usage.
+    /// * `max_private_text_bytes` - Optional inclusive UTF-8 byte limit for
+    ///   each private RawValue or Number payload.
+    ///
+    /// # Returns
+    ///
+    /// A protected JSON value when serialization and measurement succeed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first retained budget or serialization failure, or a
+    /// private-text-limit failure when a payload exceeds the configured limit.
     fn encode_in_transaction_impl<T, R, Q>(
         &self,
         value: &T,
