@@ -125,7 +125,10 @@ UTF-8 字节计列，列号从 1 开始，只有 LF 会开始新行。
 `DuplicateKey { line, column }` 与 `MaterializationDepthLimit { limit, line, column }` 是结构化物化错误，
 且不保存键名或 backend source。完整词法准入后，scanner 会再次运行并同步向迭代式 Value builder 发送事件；
 builder 在插入值之前检查重复键。共享 builder 没有独立固定容器上限；包含根值的配置项 `max_depth` 控制准入，
-超限作为预算错误返回。历史 `MaterializationDepthLimit` 变体因源码兼容而保留，但当前 builder 不会产生该变体。
+超限作为预算错误返回。历史 `MaterializationDepthLimit` 变体因源码兼容而保留，但当前 builder 不会产生该变体。公开的 `decode_value_str`、`decode_value_utf8` 和
+`decode_value_input` 直接返回 `SafeJsonValue`，适合深树所有权；兼容保留的旧
+`decode_str`、`decode_utf8` 和 `decode_input` 返回裸 `serde_json::Value`。将受保护值交给
+`JcsEncoder::to_vec` 时传入 `owner.as_value()`。
 其他语法和预算失败仍保留普通解码错误分类。完整文档成功后才提交值资源；失败时已接受的输入字节仍计入 session。
 
 ### 数字表示
@@ -142,7 +145,12 @@ binary64 模型，将所有数字（包括整数范围内的值）转为 `f64`�
 JCS Value 构造复用共享 builder，没有独立固定容器上限；包含根值的配置项 `max_depth` 控制准入，深度超限作为
 `Decode` 中的预算错误返回。历史 `JcsDecodeError::MaterializationDepthLimit { limit, line, column }` 变体因源码兼容而保留，
 当前 builder 不会产生该变体。`decode_input` 沿用读取到 EOF 并缓冲完整文档的流程，有限输入上限允许一个不计费的探测字节。
-预算描述被计量资源，不构成精确 malloc 上限。JCS 解码只检查并构造值，已规范字节验证须由调用方将编码结果与输入比较。
+预算描述被计量资源，不构成精确 malloc 上限。JCS 解码只检查并构造值，已规范字节验证须由调用方将编码结果与输入比较。根 crate 兼容矩阵以
+`serde_json 1.0.135` 和可解析到的最新版本运行 `jcs`、`arbitrary_precision`、`preserve_order`
+的八种组合，测试对象是当前 crate 自身。最低基线 `1.0.135` 由 API 边界确定：
+`serde_json::Map::into_values()` 从此版本开始提供。若锁文件版本更早，应先执行
+`cargo update -p serde_json` 再运行带 `--locked` 的验证；使用最低版本不需要启用
+`arbitrary_precision` 或 `preserve_order`。
 
 `JsonValueEncoder` 使用同一个 RawValue 物化器，因此真正的 `serde_json::value::RawValue` payload 也遵循同一配置深度契约。
 `InvalidRawValue` 表示严格物化契约拒绝输入，可能涉及重复键、数字约束或深度，并非仅用于语法错误。

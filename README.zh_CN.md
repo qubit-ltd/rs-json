@@ -20,7 +20,7 @@
 [dependencies]
 qubit-json = "0.12"
 qubit-budget = { version = "0.10", features = ["json"] }
-serde_json = "1.0"
+serde_json = "1.0.135"
 ```
 
 本地 checkout：
@@ -29,7 +29,7 @@ serde_json = "1.0"
 [dependencies]
 qubit-json = { version = "0.12", path = "../rs-json" }
 qubit-budget = { version = "0.10", features = ["json"] }
-serde_json = "1.0"
+serde_json = "1.0.135"
 ```
 
 如果需要解码到通过 derive 生成的应用类型，再添加
@@ -141,8 +141,30 @@ JCS 数值遵循 IEEE 754 双精度语义，因此 `9007199254740993` 可能输�
 `9007199254740992`。若协议必须保留整数的每一位十进制数字，应将整数编码为 JSON 字符串。
 普通 `JsonDecoder` 也不接受所有 JCS 数字词法形式作为原始文本。
 
-需要从原始文本开始时，可在 `jcs` feature 下使用 `JcsDecoder`。它返回自有
-`serde_json::Value`，把所有数字舍入为有限 binary64，并拒绝反转义后重复的对象键。有限预算示例
+需要从原始文本开始时，可在 `jcs` feature 下使用 `JcsDecoder`。深树建议使用
+`decode_value_str`、`decode_value_utf8` 或 `decode_value_input`，它们直接返回
+`SafeJsonValue`。旧的 `decode_str`、`decode_utf8` 和 `decode_input` 仍兼容保留，返回裸
+`serde_json::Value`。
+
+```rust
+# #[cfg(feature = "jcs")]
+use qubit_json::decode::JcsDecoder;
+# #[cfg(feature = "jcs")]
+use qubit_json::encode::JcsEncoder;
+# #[cfg(feature = "jcs")]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let owner = JcsDecoder::unlimited()
+        .decode_value_str(r#"{"b":2,"a":1.0}"#)?;
+    let mut encoder = JcsEncoder::unlimited();
+    let canonical = encoder.to_vec(owner.as_value())?;
+    assert_eq!(canonical, br#"{"a":1,"b":2}"#);
+    Ok(())
+}
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
+```
+
+JCS 解码会把所有数字舍入为有限 binary64，并拒绝反转义后重复的对象键。有限预算示例
 以及舍入、Unicode、深度和输入缓冲边界见[用户手册](doc/user_guide.zh_CN.md#按-jcs-规则解码原始文本)。
 `JcsDecoder` 解析输入但不验证输入字节是否已经规范化；规范输出仍由 `JcsEncoder` 生成。
 
@@ -182,7 +204,7 @@ JSON 语法和 Serde 兼容性，并允许调用方限制原始及规范化输�
 | `value::SafeJsonValue` | `Value` → 受保护所有者；`as_value` → `&Value`；`into_value` → `Value` | 持有值树，复制、比较和清理等操作使用显式栈。`new` 只接管所有权，不执行预算准入。 |
 | `value::traverse::JsonTreeReader` | `&Value` + `JsonTreeVisitor` → 进入、离开节点的回调 | 借用值事务，在遍历中对节点进行准入计量；只需计量整棵树时使用 `account`。 |
 | `value::traverse::JsonTreeMutator` | `&mut Value` + `JsonTreeMutVisitor` → 修改后的树 | 分别借用输入、输出值事务，先检查输入，再执行修改，最后检查输出；后续失败会保留此前的修改。 |
-| `decode::JcsDecoder` / `encode::JcsEncoder`（`jcs`） | 文本 → `Value` / `&Value` → 规范化字节 | 解码采用有限 binary64 数字并拒绝重复键；编码遵循 RFC 8785，另设辅助工作容量上限。 |
+| `decode::JcsDecoder` / `encode::JcsEncoder`（`jcs`） | `decode_value_*`：文本 → `SafeJsonValue`（兼容旧 `decode_*` → `Value`）；`&Value` → 规范化字节 | 解码采用有限 binary64 数字并拒绝重复键；编码遵循 RFC 8785，另设辅助工作容量上限。 |
 | `format::JsonPrettyOptions` + `format_json_tokens` / `write_json_tokens` | JSON 字节 → 排版字节或字节输出源 | 可设置缩进宽度、显示缩进深度和末尾换行。排版保留标量 token 原文，不生成 JCS 规范形式。 |
 
 底层值树沿用 Serde 的数据模型：
@@ -237,7 +259,7 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
   `JsonNumberPolicy::Preserve` 会将 fallback 整数物化为有限 `f64`，并可能舍入。`JcsDecoder` 将所有数字转换为有限 binary64，因此
   `9007199254740993` 会变成 `9007199254740992`。要求精确保留各位数字时，使用字符串或领域类型。
 - `JsonValueEncoder` 只识别 `serde_json::Number` 对应的精确私有 Serde struct 协议；普通 map 即使字段同名也仍是对象。格式错误的 `RawValue` 与 `Number` 协议分别返回 `JsonSerializerStateError::InvalidRawValueProtocol` 和 `InvalidNumberProtocol`。seed 只看到原生数字事件，无法从普通 map 猜出私有协议来源。
-- `JsonDecoder::decode_value_*` 返回 `SafeJsonValue`，其自有树操作和清理使用显式栈。唯一的深度限制是调用方配置的 `max_depth`（包含根值）；旧 `decode_*<T>` 仍依赖目标类型自身的构造能力，不保证任意深度都能构造或析构。`JcsDecoder` 保留历史深度错误变体，但不再另设固定的 127 层上限；它返回裸 `serde_json::Value`，处理深结果时应立即用 `SafeJsonValue::new` 接管。
+- `JsonDecoder::decode_value_*` 返回 `SafeJsonValue`，其自有树操作和清理使用显式栈。唯一的深度限制是调用方配置的 `max_depth`（包含根值）；旧 `decode_*<T>` 仍依赖目标类型自身的构造能力，不保证任意深度都能构造或析构。`JcsDecoder` 保留历史深度错误变体，但不再另设固定的 127 层上限。其 `decode_value_str`、`decode_value_utf8` 和 `decode_value_input` 方法直接返回 `SafeJsonValue`，是深树推荐入口。只有兼容性的 `decode_str`、`decode_utf8` 和 `decode_input` 方法返回裸 `serde_json::Value`；若使用这些旧入口，处理深结果时应立即用 `SafeJsonValue::new` 接管。
 - `decode_unique_validated_*` 使用 `JsonValidatedDecodeOptions`，并为每个原始数字 token 调用带路径的策略回调。额外的节点数和字符串长度限制按文档计算；`JsonDecodeSession` 的资源用量跨调用累计。若之后遇到语法错误，先前回调产生的副作用不会回滚。
 - `JsonValueEncoder::encode_in_transaction` 会把测量结果暂存在调用方的值事务中，并返回受保护的 owner。可选的 `encode_in_transaction_with_private_text_limit` 分别限制每个 RawValue/Number 私有 payload 的 UTF-8 原文字节；额度不累计、不限制普通字符串、不影响旧入口，并独立于 `JsonEncoder` 的输出字节上限。遇到 `PrivateTextLimitExceeded` 后应丢弃整笔事务。详见[投影指南](doc/user_guide.zh_CN.md#投影值树并排版输出)。可以继续把 owner 交给 `JsonEncoder` 生成严格 JSON，再交给 `format_json_tokens` 排版；后者验证 JSON 语法并保留数字、字符串 token 原文及重复键，不构造 `Value`，也不执行规范化。
 - `JsonSerializationErrorKind::InvalidRawValue` 表示原始值未通过严格物化契约，失败原因可能不只是语法错误。普通 newtype 仍保持透明；需要按原始 JSON 物化时应使用 `serde_json::value::RawValue`。
@@ -254,7 +276,10 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 - `JcsDecoder::decode_input` 也会读取并缓冲完整输入；有限输入预算下可能多读取一个不计费且无法放回输入源的探测字节。
   词法预算不是堆内存上限，结果容器容量、分配器元数据和输入缓冲区容量不受精确约束。JCS Value 构造复用共享 builder，
   只受调用方配置的、包含根值的 `max_depth` 限制，没有额外固定层数上限。历史变体 `MaterializationDepthLimit` 仍保留，
-  当前配置深度超限会作为 `Decode` 中的预算错误返回。`JcsDecoder` 返回裸 `Value`；保留深结果前应立即用 `SafeJsonValue::new` 接管。重复键按反转义后的字符串比较，
+  当前配置深度超限会作为 `Decode` 中的预算错误返回。`decode_value_str`、`decode_value_utf8` 和
+  `decode_value_input` 直接返回 `SafeJsonValue`，是深树推荐入口。只有兼容性的 `decode_str`、
+  `decode_utf8` 和 `decode_input` 方法返回裸 `Value`；若使用这些旧入口，保留深结果前应立即用
+  `SafeJsonValue::new` 接管。重复键按反转义后的字符串比较，
   不做 Unicode 规范化；该 API 不验证规范字节。
 - `JcsEncoder::write_buffered` 和 `write_incremental` 在后续写入或 flush 失败时，可能在外部目标留下已经接受的字节，
   这些字节会计入输出预算。增量模式直接写入，并在成功时 flush；值预算只在完整操作成功后提交。
@@ -279,7 +304,12 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 
 ## 测试
 
-`--all-features` 覆盖当前 crate 声明的 feature；项目检查还会测试 hook 中显式列出的 `serde_json` feature 组合。
+`--all-features` 覆盖根 crate 自身声明的 feature。兼容矩阵会以根 crate 测试验证
+`serde_json 1.0.135` 基线和可解析到的最新版本，各运行 `jcs`、`serde_json/arbitrary_precision`、
+`serde_json/preserve_order` 的八种组合。`1.0.135` 是由 API 边界证据确定的最低兼容版本：
+`serde_json::Map::into_values()` 从该版本开始提供。若现有 `Cargo.lock` 锁定了更早版本，
+先运行 `cargo update -p serde_json`，再执行使用 `--locked` 的验证命令。最低版本不要求启用
+`arbitrary_precision` 或 `preserve_order`。
 
 ```bash
 # 使用默认 feature 运行单元测试和公开行为集成测试
@@ -291,6 +321,9 @@ cargo test --locked --all-features
 # 使用默认 feature 和 jcs 运行文档示例
 cargo test --locked --doc
 cargo test --locked --doc --features jcs
+
+# 运行根 crate 的 serde_json 版本 × feature 矩阵（两个版本各八组）
+python3 .infra/ci/check-json-feature-matrix.py --case all
 
 # 运行本项目检查
 ./.infra/bin/ci-check.sh

@@ -46,7 +46,7 @@
 [dependencies]
 qubit-json = "0.12"
 qubit-budget = { version = "0.10", features = ["json"] }
-serde_json = "1.0"
+serde_json = "1.0.135"
 ```
 
 如果应用需要解码到通过 derive 生成的类型，再添加
@@ -54,8 +54,13 @@ serde_json = "1.0"
 
 ### 核心工作流
 
-本手册及两份 README 的 Rust 示例由 crate 的[文档示例模块](../src/documentation_examples.rs)
+本手册及两份 README 的 Rust 示例由根 crate 的[文档示例模块](../src/documentation_examples.rs)
 统一收录。在仓库根目录运行 `cargo test --locked --doc --features jcs`，即可执行这些示例。
+serde_json 兼容矩阵同样测试根 crate，而非下游 fixture：以 `1.0.135` 基线和可解析到的最新版本，
+分别运行 `jcs`、`serde_json/arbitrary_precision`、`serde_json/preserve_order` 的八种组合。
+基线来自 API 边界证据：`serde_json::Map::into_values()` 从 1.0.135 开始提供。若现有
+`Cargo.lock` 锁定了更早版本，应先运行 `cargo update -p serde_json`，再执行带 `--locked` 的验证。
+最低版本不要求启用 `arbitrary_precision` 或 `preserve_order`。
 
 ```rust
 use qubit_budget::json::JsonDecodeLimits;
@@ -176,7 +181,7 @@ assert_eq!(bytes, br#"{"ok":true}"#);
 | 输出严格 JSON | `JsonEncoder::to_vec(&T)` → `Vec<u8>`；`write_*(&mut output, &T)` → `()` | 接受 `T: Serialize`，持有累计编码会话。失败时，外部输出仍可能保留已经接受的字节。 |
 | 将 Serde 数据投影为值树 | `JsonValueEncoder::encode(&T)` → `Value`；`encode_in_transaction` → `SafeJsonValue` | 编码器无状态；`encode` 不配置资源限制，事务入口则把值计量暂存在调用方事务中。 |
 | 读取或修改已有树 | `JsonTreeReader::process(&Value, &mut visitor)` / `JsonTreeMutator::process(&mut Value, &mut visitor)` | 借用值事务；修改器分别使用输入、输出事务，丢弃事务不会撤销树上的修改。 |
-| 为签名或哈希生成规范形式 | `JcsDecoder`：文本 → `Value`；`JcsEncoder`：`&Value` → 规范化字节 | 需开启 `jcs`，数字采用 binary64 语义；编码器辅助工作容量与值、输出预算分别配置。 |
+| 为签名或哈希生成规范形式 | `JcsDecoder::decode_value_*`：文本 → `SafeJsonValue`（兼容旧 `decode_*` → `Value`）；`JcsEncoder`：`&Value` → 规范化字节 | 需开启 `jcs`，数字采用 binary64 语义；编码器辅助工作容量与值、输出预算分别配置。 |
 | 保留 token 原文排版 | `format_json_tokens` / `write_json_tokens` + `JsonPrettyOptions` | 处理 JSON 字节，保留标量拼写和重复键；输出上限独立于编解码器会话。 |
 
 值树模型为 `Null | Bool | Number | String | Array(Vec<Value>) | Object(Map<String, Value>)`。
@@ -195,7 +200,7 @@ assert_eq!(bytes, br#"{"ok":true}"#);
 ```toml
 [dependencies]
 qubit-json = { version = "0.12", features = ["jcs"] }
-serde_json = "1.0"
+serde_json = "1.0.135"
 ```
 
 应用可以先规范化，再把结果字节传给现有的签名或哈希逻辑：
@@ -224,7 +229,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 该 feature 默认关闭。编码器接收 `Value`，不接收任意 `Serialize` 实现或原始 JSON 文本。读取原始
 JSON 时，可使用 `JcsDecoder` 在构造 `Value` 时拒绝重复键；重复成员一旦合并到 map 中，编码器就无法再发现它们。
 现有 `JsonDecoder` 用于严格 JSON 解码，但其整数文本范围不足以覆盖 JCS 接受的所有数字词法。
-需要应用 JCS 数字和重复键规则时，原始文本应使用 `JcsDecoder`。
+需要应用 JCS 数字和重复键规则时，原始文本应使用 `JcsDecoder`。深树优先调用
+`decode_value_str`、`decode_value_utf8` 或 `decode_value_input`，直接得到
+`SafeJsonValue`；旧的 `decode_str`、`decode_utf8`、`decode_input` 为兼容性继续保留，并返回裸
+`serde_json::Value`。
 
 JCS 数值遵循 IEEE 754 双精度模型。包含 `9007199254740993` 的值可能规范化为
 `9007199254740992`。协议必须精确保留的整数应表示成 JSON 字符串。
@@ -297,13 +305,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .max_key_bytes(64)
         .build();
     let mut decoder = JcsDecoder::with_limits(decode_limits);
-    let value = decoder.decode_str(r#"{"b":100000000000000000000,"a":1.0}"#)?;
+    let value = decoder
+        .decode_value_str(r#"{"b":100000000000000000000,"a":1.0}"#)?;
 
     let encode_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(4096)
         .build();
     let mut encoder = JcsEncoder::with_limits(encode_limits, 16 * 1024);
-    let canonical = encoder.to_vec(&value)?;
+    let canonical = encoder.to_vec(value.as_value())?;
     assert_eq!(canonical, br#"{"a":1,"b":100000000000000000000}"#);
     Ok(())
 }
@@ -339,7 +348,8 @@ assert_eq!(value.as_object().unwrap().len(), 2);
 
 
 JCS 解码只按调用方配置的 `max_depth`（包含根值）准入，不再另设 127 层构造上限。
-`JcsDecoder` 返回裸 `serde_json::Value`；若要保留深树，应在返回后立即用 `SafeJsonValue` 接管：
+深树建议使用直接返回 `SafeJsonValue` 的 `decode_value_*` 方法。旧 `decode_*` 方法仍返回裸
+`serde_json::Value`；若继续使用，接收深文档后应立即保护结果：
 
 ```rust
 # #[cfg(feature = "jcs")]
@@ -380,7 +390,9 @@ Unicode 不做 NFC/NFD 归一化，因而不同码点序列仍是不同键。合
 资源预算限制被计量的 JSON 资源，不是精确的 malloc 上限：输入缓冲区、`Vec`/`Map` 容量和分配器元数据
 不会被精确计入。词法深度按包含根值的 `max_depth` 计量。JCS Value 构造使用共享 builder，没有额外固定
 层数上限；历史 `MaterializationDepthLimit` 变体仍保留以兼容旧调用方，当前配置深度超限会作为 `Decode` 中的
-预算错误返回。`JcsDecoder` 的结果仍是裸 `Value`；保留深结果前应立即交给 `SafeJsonValue::new`。
+预算错误返回。`decode_value_str`、`decode_value_utf8` 和 `decode_value_input` 直接返回
+`SafeJsonValue`，是深树推荐入口。只有兼容性的 `decode_str`、`decode_utf8` 和 `decode_input` 方法返回裸
+`Value`；若使用这些旧入口，保留深结果前应立即交给 `SafeJsonValue::new`。
 
 ## 受保护值、验证解码与排版
 

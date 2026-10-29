@@ -23,7 +23,7 @@ For the `0.12` version described by this checkout:
 [dependencies]
 qubit-json = "0.12"
 qubit-budget = { version = "0.10", features = ["json"] }
-serde_json = "1.0"
+serde_json = "1.0.135"
 ```
 
 Local checkout:
@@ -32,7 +32,7 @@ Local checkout:
 [dependencies]
 qubit-json = { version = "0.12", path = "../rs-json" }
 qubit-budget = { version = "0.10", features = ["json"] }
-serde_json = "1.0"
+serde_json = "1.0.135"
 ```
 
 Add `serde = { version = "1.0", features = ["derive"] }` when decoding into
@@ -159,10 +159,33 @@ JSON string when its exact decimal digits must be preserved. The regular
 `JsonDecoder` does not accept every JCS number lexeme as raw text.
 
 For raw JSON text with JCS number semantics, enable `jcs` and use
-`JcsDecoder`. It returns an owned `serde_json::Value`, rounds every number to
-finite binary64, and rejects keys that are duplicates after JSON unescaping.
-See the [user guide](doc/user_guide.md#decode-raw-text-with-jcs-semantics) for
-finite-budget usage and the rounding, Unicode, depth, and input-buffering
+`JcsDecoder`. Prefer `decode_value_str`, `decode_value_utf8`, or
+`decode_value_input` when the result may be deeply nested: each returns a
+`SafeJsonValue`. The older `decode_str`, `decode_utf8`, and `decode_input`
+methods remain available for compatibility and return a bare
+`serde_json::Value`.
+
+```rust
+# #[cfg(feature = "jcs")]
+use qubit_json::decode::JcsDecoder;
+# #[cfg(feature = "jcs")]
+use qubit_json::encode::JcsEncoder;
+# #[cfg(feature = "jcs")]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let owner = JcsDecoder::unlimited()
+        .decode_value_str(r#"{"b":2,"a":1.0}"#)?;
+    let mut encoder = JcsEncoder::unlimited();
+    let canonical = encoder.to_vec(owner.as_value())?;
+    assert_eq!(canonical, br#"{"a":1,"b":2}"#);
+    Ok(())
+}
+# #[cfg(not(feature = "jcs"))]
+# fn main() {}
+```
+
+All JCS decode entry points round numbers to finite binary64 and reject keys
+that are duplicates after JSON unescaping. See the [user guide](doc/user_guide.md#decode-raw-text-with-jcs-semantics)
+for finite-budget usage and rounding, Unicode, depth, and input-buffering
 boundaries. `JcsDecoder` parses input; it does not verify that the input bytes
 are already canonical. `JcsEncoder` still produces canonical output.
 
@@ -205,7 +228,7 @@ the arrows show successful input/output shapes; fallible operations return
 | `value::SafeJsonValue` | `Value` → protected owner; `as_value` → `&Value`; `into_value` → `Value` | Owns a tree and uses explicit stacks for its copy, comparison, and cleanup operations. `new` takes ownership without performing budget admission. |
 | `value::traverse::JsonTreeReader` | `&Value` + `JsonTreeVisitor` → enter/leave callbacks | Borrows a value transaction and measures admitted nodes during traversal. `account` measures a tree without callbacks. |
 | `value::traverse::JsonTreeMutator` | `&mut Value` + `JsonTreeMutVisitor` → modified tree | Borrows separate input/output value transactions. Checks input, runs mutations, then checks output; a later failure retains earlier mutations. |
-| `decode::JcsDecoder` / `encode::JcsEncoder` (`jcs`) | Text → `Value` / `&Value` → canonical bytes | Decode with finite binary64 numbers and duplicate-key rejection; encode under RFC 8785 with a separate auxiliary working-capacity limit. |
+| `decode::JcsDecoder` / `encode::JcsEncoder` (`jcs`) | `decode_value_*`: text → `SafeJsonValue` (legacy `decode_*` → `Value`); `&Value` → canonical bytes | Decode with finite binary64 numbers and duplicate-key rejection; encode under RFC 8785 with a separate auxiliary working-capacity limit. |
 | `format::JsonPrettyOptions` + `format_json_tokens` / `write_json_tokens` | JSON bytes → formatted bytes or a byte output | Configure indentation, displayed indentation depth, and the final newline. Formatting preserves scalar tokens and does not canonicalize them. |
 
 The underlying tree remains Serde's familiar data model:
@@ -271,7 +294,7 @@ identifies the separate auxiliary-capacity limit configured with
   so `9007199254740993` becomes `9007199254740992`. Use strings or domain types
   when every decimal digit must be preserved.
 - `JsonValueEncoder` recognizes only the exact private `Number` Serde struct protocol; an ordinary map with the same field name remains an object. Malformed `RawValue` and `Number` protocols return `JsonSerializationErrorKind::InvalidSerializerState`, with `JsonSerializerStateError::InvalidRawValueProtocol` or `InvalidNumberProtocol` respectively. Seed-based value construction only sees native numeric events and cannot infer private map provenance.
-- `JsonDecoder::decode_value_*` returns a `SafeJsonValue` whose own tree operations and cleanup use an explicit stack. The configured, root-inclusive `max_depth` is the depth limit; ordinary `decode_*<T>` still relies on the target type and does not promise arbitrary-depth construction or destruction. `JcsDecoder` retains its historical depth-error variant, but has no separate fixed 127-container limit; it returns a bare `serde_json::Value`, so wrap deep results immediately with `SafeJsonValue::new` before retaining or dropping them.
+- `JsonDecoder::decode_value_*` returns a `SafeJsonValue` whose own tree operations and cleanup use an explicit stack. The configured, root-inclusive `max_depth` is the depth limit; ordinary `decode_*<T>` still relies on the target type and does not promise arbitrary-depth construction or destruction. `JcsDecoder` retains its historical depth-error variant, but has no separate fixed 127-container limit. Its `decode_value_str`, `decode_value_utf8`, and `decode_value_input` methods return `SafeJsonValue` directly and are the recommended entry points for deep trees. Only the compatibility methods `decode_str`, `decode_utf8`, and `decode_input` return bare `serde_json::Value`; if using one of them, wrap a deep result immediately with `SafeJsonValue::new` before retaining or dropping it.
 - `decode_unique_validated_*` applies `JsonValidatedDecodeOptions` and calls the supplied number policy with each original number token and its path. The extra node/string limits apply per document; `JsonDecodeSession` resource usage accumulates across calls. Policy callback side effects are not rolled back if a later syntax error occurs.
 - `JsonValueEncoder::encode_in_transaction` stages measurements in a caller-owned value transaction and returns a protected owner. The optional `encode_in_transaction_with_private_text_limit` bounds each private RawValue/Number payload's UTF-8 source bytes independently; this is not cumulative, does not constrain ordinary strings, does not affect the older entry point, and is separate from `JsonEncoder`'s output-byte limit. On `PrivateTextLimitExceeded`, drop the entire transaction. See the [projection guide](doc/user_guide.md#project-values-and-format-their-output). Passing the owner to `JsonEncoder` and then `format_json_tokens` composes value projection, strict JSON output, and token formatting without changing the numeric model. `format_json_tokens` validates JSON syntax and preserves number/string token spellings and duplicate keys; it does not materialize a `Value` or canonicalize the document.
 - `JsonSerializationErrorKind::InvalidRawValue` reports rejection by the strict raw-value materialization contract, which includes more than syntax errors. Ordinary newtype structs remain transparent; use `serde_json::value::RawValue` when raw JSON materialization is intended.
@@ -301,8 +324,12 @@ identifies the separate auxiliary-capacity limit configured with
   configured root-inclusive `max_depth`; there is no separate fixed container
   cap. The legacy `MaterializationDepthLimit` variant remains for source
   compatibility, while configured depth rejection is reported as `Decode`
-  with a budget error. A `JcsDecoder` result is a bare `Value`; use
-  `SafeJsonValue::new` immediately when retaining a deep result. Duplicate keys are compared after JSON unescaping, without
+  with a budget error. The `decode_value_str`, `decode_value_utf8`, and
+  `decode_value_input` methods return `SafeJsonValue` directly and are the
+  recommended entry points for deep trees. Only the compatibility methods
+  `decode_str`, `decode_utf8`, and `decode_input` return a bare `Value`; if
+  using one of them, wrap a deep result immediately with `SafeJsonValue::new`.
+  Duplicate keys are compared after JSON unescaping, without
   Unicode normalization; canonical-byte verification is outside this API.
 - `JcsEncoder::write_buffered` and `write_incremental` can leave and charge
   bytes accepted by an external destination before a later write or flush
@@ -336,7 +363,15 @@ renderer collection capacity, not an exact heap ceiling.
 
 ## Testing
 
-`--all-features` covers this crate's declared features; the project check also tests the explicit `serde_json` feature combinations listed in its hook.
+`--all-features` covers this root crate's declared features. The compatibility
+matrix also runs the root crate tests against the `serde_json 1.0.135` baseline
+and the latest resolvable version, with eight combinations of `jcs`,
+`serde_json/arbitrary_precision`, and `serde_json/preserve_order`. The baseline
+is `1.0.135` because `serde_json::Map::into_values()` first appears there;
+this is the lowest compatible version established by that API boundary. If an
+existing `Cargo.lock` pins an older release, run `cargo update -p serde_json`
+before using the `--locked` verification commands. The minimum does not require
+enabling `arbitrary_precision` or `preserve_order`.
 
 ```bash
 # Run unit tests and public behavior integration tests with default features
@@ -348,6 +383,9 @@ cargo test --locked --all-features
 # Run documentation examples with default features and with jcs
 cargo test --locked --doc
 cargo test --locked --doc --features jcs
+
+# Run the root-crate serde_json version × feature matrix (two versions × eight combinations)
+python3 .infra/ci/check-json-feature-matrix.py --case all
 
 # Run the project checks for this crate
 ./.infra/bin/ci-check.sh

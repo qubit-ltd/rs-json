@@ -62,7 +62,7 @@ while developing against unpublished changes:
 [dependencies]
 qubit-json = "0.12"
 qubit-budget = { version = "0.10", features = ["json"] }
-serde_json = "1.0"
+serde_json = "1.0.135"
 ```
 
 Add `serde = { version = "1.0", features = ["derive"] }` when the application
@@ -70,9 +70,16 @@ decodes into derived types.
 
 ### Core workflow
 
-The Rust examples in this guide and both READMEs are included by the crate's
-[documentation example module](../src/documentation_examples.rs). Run them with
-`cargo test --locked --doc --features jcs` from the repository root.
+The Rust examples in this guide and both READMEs are included by the root
+crate's [documentation example module](../src/documentation_examples.rs). Run
+them from the repository root with `cargo test --locked --doc --features jcs`.
+The serde_json compatibility matrix also tests this root crate, not a downstream
+fixture: it runs eight combinations of `jcs`, `serde_json/arbitrary_precision`,
+and `serde_json/preserve_order` against baseline `1.0.135` and the latest
+resolvable version. The baseline follows the API boundary: `Map::into_values()`
+was added in serde_json 1.0.135. If an existing `Cargo.lock` pins an older
+release, run `cargo update -p serde_json` before the `--locked` checks. The
+minimum does not require `arbitrary_precision` or `preserve_order`.
 
 ```rust
 use qubit_budget::json::JsonDecodeLimits;
@@ -208,7 +215,7 @@ and fallible calls return `Result`.
 | Emit strict JSON | `JsonEncoder::to_vec(&T)` → `Vec<u8>`; `write_*(&mut output, &T)` → `()` | Accepts `T: Serialize` and retains a cumulative encode session. External output can retain accepted bytes after failure. |
 | Project Serde data into a tree | `JsonValueEncoder::encode(&T)` → `Value`; `encode_in_transaction` → `SafeJsonValue` | The encoder is stateless. `encode` has no configured resource limits; the transaction-aware method stages caller-owned value accounting. |
 | Read or modify an existing tree | `JsonTreeReader::process(&Value, &mut visitor)` / `JsonTreeMutator::process(&mut Value, &mut visitor)` | Borrows value transactions. Mutators use separate input and output transactions; dropping them does not undo tree mutations. |
-| Sign or hash a canonical representation | `JcsDecoder`: text → `Value`; `JcsEncoder`: `&Value` → canonical bytes | Requires `jcs`. Numbers use binary64 semantics; encoder working capacity is configured separately from value/output budgets. |
+| Sign or hash a canonical representation | `JcsDecoder::decode_value_*`: text → `SafeJsonValue` (legacy `decode_*` → `Value`); `JcsEncoder`: `&Value` → canonical bytes | Requires `jcs`. Numbers use binary64 semantics; encoder working capacity is configured separately from value/output budgets. |
 | Pretty-print without changing tokens | `format_json_tokens` / `write_json_tokens` + `JsonPrettyOptions` | Operates on JSON bytes, preserving scalar spellings and duplicate keys. Its output limit is separate from codec sessions. |
 
 The tree model is `Null | Bool | Number | String | Array(Vec<Value>) | Object(Map<String, Value>)`.
@@ -232,7 +239,7 @@ Enable the optional `jcs` feature and give `JcsEncoder` a constructed
 ```toml
 [dependencies]
 qubit-json = { version = "0.12", features = ["jcs"] }
-serde_json = "1.0"
+serde_json = "1.0.135"
 ```
 
 The application can then canonicalize a value before passing its bytes to its
@@ -333,8 +340,13 @@ input `Value`, admission stack, allocator metadata, or output buffer.
 ### Decode raw text with JCS semantics
 
 For raw JSON text, use the feature-gated `JcsDecoder` instead of first building
-a `Value` with ordinary `JsonDecoder`. This example sets finite input,
-structure, and value limits, then passes the result to `JcsEncoder`:
+a `Value` with ordinary `JsonDecoder`. Prefer `decode_value_str`,
+`decode_value_utf8`, and `decode_value_input` when the result may be deeply
+nested; they return `SafeJsonValue` directly. The older `decode_str`,
+`decode_utf8`, and `decode_input` methods remain for compatibility and return
+bare `serde_json::Value`. Pass the protected tree's borrowed view to
+`JcsEncoder::to_vec`. This example sets finite input, structure, and value
+limits, then encodes the protected value:
 
 ```rust
 # #[cfg(feature = "jcs")]
@@ -356,13 +368,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .max_key_bytes(64)
         .build();
     let mut decoder = JcsDecoder::with_limits(decode_limits);
-    let value = decoder.decode_str(r#"{"b":100000000000000000000,"a":1.0}"#)?;
+    let value = decoder
+        .decode_value_str(r#"{"b":100000000000000000000,"a":1.0}"#)?;
 
     let encode_limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(4096)
         .build();
     let mut encoder = JcsEncoder::with_limits(encode_limits, 16 * 1024);
-    let canonical = encoder.to_vec(&value)?;
+    let canonical = encoder.to_vec(value.as_value())?;
     assert_eq!(canonical, br#"{"a":1,"b":100000000000000000000}"#);
     Ok(())
 }
@@ -403,9 +416,11 @@ assert_eq!(value.as_object().unwrap().len(), 2);
 
 
 The decoder uses the configured, root-inclusive `max_depth` for admission;
-there is no separate 127-container construction guard. `JcsDecoder` returns a
-bare `serde_json::Value`, so callers that accept deep documents should protect
-the result immediately before retaining or dropping it:
+there is no separate 127-container construction guard. The `decode_value_*`
+methods return `SafeJsonValue` directly and are the recommended entry points
+for deep documents. Legacy `decode_*` methods return bare
+`serde_json::Value` for compatibility; protect such a result immediately if
+you keep using that API:
 
 ```rust
 # #[cfg(feature = "jcs")]
@@ -460,9 +475,12 @@ measured precisely. Lexical depth is root-inclusive and follows the configured
 `max_depth`. JCS Value construction uses the shared builder and has no separate
 fixed container cap. The legacy `MaterializationDepthLimit` variant remains
 for source compatibility; configured depth rejection is reported as
-`JcsDecodeError::Decode` with a budget error. A `JcsDecoder` result is a bare
-`Value`; wrap a deep result immediately with `SafeJsonValue::new` before
-retaining or dropping it.
+`JcsDecodeError::Decode` with a budget error. The `decode_value_str`,
+`decode_value_utf8`, and `decode_value_input` methods return `SafeJsonValue`
+directly and are the recommended entry points for deep trees. Only the
+compatibility methods `decode_str`, `decode_utf8`, and `decode_input` return a
+bare `Value`; if using one of them, wrap a deep result immediately with
+`SafeJsonValue::new` before retaining or dropping it.
 
 ## Protected values, validated decoding, and formatting
 

@@ -229,6 +229,20 @@ read-through-EOF, full-buffering behavior and may consume one uncharged probe
 byte with a finite input limit. Budgets describe measured resources, not an
 exact malloc ceiling. JCS decoding parses and constructs a value; verifying
 already canonical bytes requires callers to compare input with encoded output.
+The public `decode_value_str`, `decode_value_utf8`, and `decode_value_input`
+methods return `SafeJsonValue` directly for protected deep-tree ownership.
+The legacy `decode_str`, `decode_utf8`, and `decode_input` methods remain
+available for compatibility and return bare `serde_json::Value`. Pass
+`owner.as_value()` to `JcsEncoder::to_vec` to canonicalize the protected tree.
+The root-crate compatibility matrix runs all eight combinations of `jcs`,
+`serde_json/arbitrary_precision`, and `serde_json/preserve_order` against
+serde_json 1.0.135 and the latest resolvable version. Version 1.0.135 is the
+lowest compatibility baseline because `serde_json::Map::into_values()`,
+which was added in that release, is used by the crate. Matrix commands target
+the root crate's own unit and integration tests. A lockfile pinned below
+1.0.135 must be refreshed with `cargo update -p serde_json` before locked
+verification; using this minimum does not require `arbitrary_precision` or
+`preserve_order`.
 
 The private Number protocol is recognized only by its exact Serde struct name and payload shape. A real object whose key is `$serde_json::private::Number` remains an object. The separate `RawValue` protocol is also recognized and strictly validated. Finite float lexeme lengths use the public
 `serde_json::ser::CompactFormatter` interface, without a direct dependency on
