@@ -18,7 +18,39 @@ use super::JsonDecodeError;
 use super::JsonNumberTokenError;
 use super::JsonValidatedLimit;
 
-/// A validated decoding failure with source offset and privacy-safe display.
+/// A validated decoding failure with source offset and privacy-safe outer
+/// formatting.
+///
+/// The `Policy` variant preserves the caller's error unchanged. Its contents
+/// are omitted from this error's [`Display`](fmt::Display) and
+/// [`Debug`](fmt::Debug) output, but are available through [`Error::source`].
+/// This caller-provided source is outside [`super::DiagnosticPolicy`]'s
+/// redaction boundary; callers must choose safe policy error contents and
+/// logging behavior themselves.
+///
+/// ```
+/// use qubit_json::decode::{
+///     DiagnosticPolicy, JsonDecoder, JsonNumberPolicy,
+///     JsonValidatedDecodeError, JsonValidatedDecodeOptions,
+/// };
+/// use std::error::Error;
+///
+/// let options = JsonValidatedDecodeOptions::builder().build();
+/// let error = JsonDecoder::unlimited()
+///     .with_diagnostic_policy(DiagnosticPolicy::Redacted)
+///     .decode_unique_validated_str("1", &options, |_, token| {
+///         Err::<JsonNumberPolicy, _>(std::io::Error::other(format!(
+///             "policy-sensitive-marker:{}", token.raw(),
+///         )))
+///     })
+///     .unwrap_err();
+/// let sentinel = "policy-sensitive-marker";
+/// assert!(!error.to_string().contains(sentinel));
+/// assert!(!format!("{error:?}").contains(sentinel));
+/// let source = Error::source(&error).expect("caller policy error is preserved");
+/// assert!(source.to_string().contains(sentinel));
+/// assert!(matches!(error, JsonValidatedDecodeError::Policy { .. }));
+/// ```
 #[non_exhaustive]
 pub enum JsonValidatedDecodeError<E, R = JsonResource, Q = usize>
 where
@@ -33,7 +65,13 @@ where
     },
     /// The caller's number policy rejected a source token.
     Policy {
-        /// Opaque error returned by the caller's policy.
+        /// Error returned by the caller's policy, preserved as the source.
+        ///
+        /// This value is not redacted by [`super::DiagnosticPolicy`]. Its
+        /// formatting is omitted from the outer error's `Display` and `Debug`,
+        /// but it remains accessible through [`Error::source`]. The caller is
+        /// responsible for keeping sensitive data out of this error and its
+        /// logs.
         source: E,
         /// Byte offset of the rejected number token.
         offset: usize,

@@ -1047,6 +1047,13 @@ reason 和源码坐标。validated 解码返回 `Decode` 错误时，错误中�
 `JsonTreeMutateError`。JCS 解码另返回 `JcsDecodeError`：普通输入、预算和深度限制在 `Decode` 中，重复键由
 `DuplicateKey` 标识并带有源坐标；`MaterializationDepthLimit` 仅作为历史兼容变体保留。
 
+上述脱敏边界针对库生成的诊断。`JsonValidatedDecodeError::Policy` 会保留数字策略回调返回的错误；
+当该错误实现 `Error + 'static` 时，`Error::source()` 可以取得它。外层错误的 `Display` 和
+`Debug` 不格式化这个值，但 source 链仍可能包含敏感文本。`DiagnosticPolicy::Redacted` 不会清理
+调用方提供的错误。如果策略错误包含 `token.raw()` 或其他敏感信息，调用方必须自行选择安全的
+错误内容，并控制 source 链的记录方式。参见
+[`JsonValidatedDecodeError` API 文档](https://docs.rs/qubit-json/latest/qubit_json/decode/enum.JsonValidatedDecodeError.html)中的示例。
+
 默认 `Integer64` 数字契约独立于资源限制：负整数装入 `i64`，非负整数装入 `u64`，小数/指数必须是有限 `f64`。
 在此默认模型下，超出范围的值或必须避免二进制浮点舍入的精确十进制应使用字符串或显式领域表示。
 明确选择有限 fallback 的入口可以接受转换为有限 `f64` 的范围外整数，并可能舍入。详见

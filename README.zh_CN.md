@@ -287,7 +287,9 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 - 诊断信息默认脱敏。严格解码器通过 `JsonDecoder::with_diagnostic_policy` 配置，规范化
   解码器通过其规范化策略配置。脱敏错误只保留稳定分类和源坐标，不保留意外字节、token、
   键/值文本或 parser/Serde 来源。只有在输入派生来源可以安全保留和记录时，才启用
-  `DiagnosticPolicy::Detailed`。
+  `DiagnosticPolicy::Detailed`。此策略不会脱敏校验数字策略回调返回的错误：外层错误的
+  `Display`/`Debug` 会隐藏该错误，但 source 链仍会保留它。调用方应自行选择安全的策略错误内容
+  和日志方式，详见[错误与诊断](doc/user_guide.zh_CN.md#错误与诊断)。
 
 ## 延伸阅读
 

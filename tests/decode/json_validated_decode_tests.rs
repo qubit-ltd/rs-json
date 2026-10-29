@@ -115,11 +115,18 @@ mod migrated_validated {
     fn test_validated_policy_error_exposes_error_source_when_available() {
         let options = JsonValidatedDecodeOptions::builder().build();
         let error = JsonDecoder::unlimited()
-            .decode_unique_validated_str("1", &options, |_, _| {
-                Err::<JsonNumberPolicy, _>(std::io::Error::other("policy source"))
+            .decode_unique_validated_str("1", &options, |_, token| {
+                Err::<JsonNumberPolicy, _>(std::io::Error::other(format!(
+                    "policy-sensitive-marker-2414:{}",
+                    token.raw(),
+                )))
             })
             .unwrap_err();
-        assert!(std::error::Error::source(&error).is_some());
+        let sentinel = "policy-sensitive-marker-2414";
+        assert!(!error.to_string().contains(sentinel));
+        assert!(!format!("{error:?}").contains(sentinel));
+        let source = std::error::Error::source(&error).expect("caller error stays available");
+        assert!(source.to_string().contains(sentinel));
     }
 
     #[test]

@@ -346,7 +346,11 @@ renderer collection capacity, not an exact heap ceiling.
   normalization policy. Redacted errors retain only stable classifications and
   source coordinates: they never retain an offending byte, token/key/value
   text, or parser/Serde source. Enable `DiagnosticPolicy::Detailed` only
-  where input-derived sources are safe to retain and log.
+  where input-derived sources are safe to retain and log. This does not redact
+  errors returned by validated number policy callbacks: the outer error hides
+  them in `Display`/`Debug`, but preserves them in its source chain. Callers
+  must choose safe policy error contents and logging; see [Errors and
+  diagnostics](doc/user_guide.md#errors-and-diagnostics).
 
 ## Learn more
 
