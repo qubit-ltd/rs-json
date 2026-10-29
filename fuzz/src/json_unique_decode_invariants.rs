@@ -18,6 +18,9 @@ use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonMaterializationErrorReason;
 use qubit_json::decode::JsonNumberPolicy;
+use qubit_json::decode::JsonValidatedAdmissionPolicy;
+use qubit_json::decode::JsonValidatedDecodeError;
+use qubit_json::decode::JsonValidatedDecodeOptions;
 use qubit_json::format::JsonPrettyOptions;
 use qubit_json::format::format_json_tokens;
 use qubit_json::format::write_json_tokens;
@@ -110,6 +113,71 @@ pub fn assert_unique_decode_invariants(input: &[u8], max_nodes: usize) {
     assert_failed_seed_session_reuse();
     assert_protected_decode_invariants(input);
     assert_token_format_invariants(input);
+    assert_validated_admission_invariants(input);
+}
+
+/// Checks that both validated admission policies agree on accepted values,
+/// preserve input and value-budget accounting, and report number-token slices
+/// that point into the original input.
+pub fn assert_validated_admission_invariants(input: &[u8]) {
+    if input.len() > 4096 {
+        return;
+    }
+    for maximum in [None, Some(input.len() % 17)] {
+        let mut first: Option<Option<qubit_json::value::SafeJsonValue>> = None;
+        for policy in [
+            JsonValidatedAdmissionPolicy::Immediate,
+            JsonValidatedAdmissionPolicy::TokenFirst,
+        ] {
+            let mut builder = JsonValidatedDecodeOptions::builder().admission_policy(policy);
+            if let Some(maximum) = maximum {
+                builder = builder.max_encoded_string_bytes(maximum);
+            }
+            let options = builder.build();
+            let mut decoder = JsonDecoder::with_limits(decode_limits(input, usize::MAX));
+            let result = decoder.decode_unique_validated_utf8(input, &options, |_, token| {
+                let end = token
+                    .offset()
+                    .checked_add(token.raw().len())
+                    .expect("token range must not overflow");
+                assert_eq!(input.get(token.offset()..end), Some(token.raw().as_bytes()));
+                Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+            });
+            assert_input_accounted(&decoder, input.len());
+            if result.is_err() {
+                assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+            } else {
+                assert!(
+                    decoder
+                        .session()
+                        .value_budget()
+                        .used_nodes()
+                        .is_some_and(|nodes| nodes > 0)
+                );
+            }
+            if let Err(JsonValidatedDecodeError::Limit {
+                maximum,
+                observed,
+                offset,
+                ..
+            }) = &result
+            {
+                assert!(observed > maximum);
+                assert!(*offset <= input.len());
+            }
+            let accepted = result.ok();
+            if maximum.is_none() {
+                let mut baseline = JsonDecoder::with_limits(decode_limits(input, usize::MAX));
+                let expected = baseline.decode_value_utf8(input).ok();
+                assert_eq!(accepted, expected);
+            }
+            if let Some(expected) = &first {
+                assert_eq!(&accepted, expected);
+            } else {
+                first = Some(accepted);
+            }
+        }
+    }
 }
 
 /// Checks protected and validated decode agreement, plus token-preserving

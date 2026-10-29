@@ -14,6 +14,32 @@ use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonMaterializationErrorReason;
 use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use qubit_json_fuzz::json_unique_decode_invariants::assert_unique_decode_invariants;
+use qubit_json_fuzz::json_unique_decode_invariants::assert_validated_admission_invariants;
+
+#[test]
+fn test_validated_admission_invariants_cover_both_modes() {
+    let inputs: &[&[u8]] = &[
+        b"",
+        b"null",
+        b"truex",
+        br#"{"a":truex}"#,
+        b"1x",
+        b"1-2",
+        b"1e+",
+        b"1e400",
+        b"\xff",
+        b"\"ab",
+        b"\"abc",
+        b"\"ab\"",
+        br#"{"a\u0062":[1,{"x":2}]}"#,
+        br#"{"x":1,"\u0078":2}"#,
+        br#"{"$serde_json::private::Number":"1.5"}"#,
+    ];
+    for input in inputs {
+        assert_validated_admission_invariants(input);
+        assert_validated_admission_invariants(input);
+    }
+}
 
 /// Checks representative valid, invalid, duplicate, boundary, and budgeted
 /// inputs.
