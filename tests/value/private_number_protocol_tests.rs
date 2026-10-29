@@ -436,3 +436,133 @@ fn valid_probe() -> NumberProtocol {
         payload: "1.5",
     }
 }
+
+mod projection_lifecycle {
+    use qubit_json::encode::JsonSerializerStateError;
+    use qubit_json::value::JsonValueEncoder;
+    use serde::Serialize;
+    use serde::ser::SerializeMap;
+    use serde::ser::SerializeStruct;
+
+    use super::NUMBER;
+    use super::RAW;
+
+    struct ValidPrivateNumber;
+
+    impl Serialize for ValidPrivateNumber {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let mut protocol = serializer.serialize_struct(NUMBER, 1)?;
+            protocol.serialize_field(NUMBER, "17")?;
+            protocol.end()
+        }
+    }
+
+    struct InvalidPrivateNumber;
+
+    impl Serialize for InvalidPrivateNumber {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let mut protocol = serializer.serialize_struct(NUMBER, 1)?;
+            protocol.serialize_field(NUMBER, "not-a-number")?;
+            protocol.end()
+        }
+    }
+
+    struct InvalidPrivateNumberField;
+
+    impl Serialize for InvalidPrivateNumberField {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let mut protocol = serializer.serialize_struct(NUMBER, 1)?;
+            let _ignored = protocol.serialize_field("other", "17");
+            protocol.end()
+        }
+    }
+
+    struct IgnoresMapEndFailure;
+
+    impl Serialize for IgnoresMapEndFailure {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let mut map = serializer.serialize_map(Some(1))?;
+            map.serialize_key("orphan")?;
+            let _ignored = map.end();
+            Err(serde::ser::Error::custom("later source error"))
+        }
+    }
+
+    struct IgnoresPrivateProtocolEndFailure;
+
+    impl Serialize for IgnoresPrivateProtocolEndFailure {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let protocol = serializer.serialize_struct(NUMBER, 1)?;
+            let _ignored = protocol.end();
+            Err(serde::ser::Error::custom("later source error"))
+        }
+    }
+
+    struct MissingPrivateRawValue;
+
+    impl Serialize for MissingPrivateRawValue {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let protocol = serializer.serialize_struct(RAW, 1)?;
+            protocol.end()
+        }
+    }
+
+    #[test]
+    fn test_projection_validates_real_private_number_protocol_lifecycle() {
+        let projected = JsonValueEncoder::new().encode(&ValidPrivateNumber).unwrap();
+        assert_eq!(projected, serde_json::json!(17));
+        let error = JsonValueEncoder::new().encode(&InvalidPrivateNumber).unwrap_err();
+        assert!(error.is_number_error());
+    }
+
+    #[test]
+    fn test_projection_private_protocol_child_error_is_sticky() {
+        let result = JsonValueEncoder::new().encode(&InvalidPrivateNumberField);
+        assert!(matches!(result, Err(error) if error.is_serializer_contract_error()));
+    }
+
+    #[test]
+    fn test_projection_keeps_ignored_compound_finalization_errors_sticky() {
+        let map_error = JsonValueEncoder::new().encode(&IgnoresMapEndFailure).unwrap_err();
+        assert_eq!(
+            map_error.serializer_state_error(),
+            Some(JsonSerializerStateError::MapEndedWithPendingKey)
+        );
+
+        let private_error = JsonValueEncoder::new()
+            .encode(&IgnoresPrivateProtocolEndFailure)
+            .unwrap_err();
+        assert_eq!(
+            private_error.serializer_state_error(),
+            Some(JsonSerializerStateError::InvalidNumberProtocol)
+        );
+    }
+
+    #[test]
+    fn test_projection_rejects_incomplete_private_raw_value_protocol() {
+        let error = JsonValueEncoder::new().encode(&MissingPrivateRawValue).unwrap_err();
+        assert!(error.is_serializer_contract_error());
+        assert_eq!(
+            error.serializer_state_error(),
+            Some(JsonSerializerStateError::InvalidRawValueProtocol)
+        );
+    }
+}

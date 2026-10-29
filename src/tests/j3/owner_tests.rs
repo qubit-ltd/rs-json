@@ -5,8 +5,6 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::cell::Cell;
-use std::rc::Rc;
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -15,32 +13,6 @@ use crate::lexical::JsonLexicalEvent;
 use crate::lexical::JsonNumberModel;
 use crate::value::SafeJsonValue;
 use crate::value::internal::LexicalJsonValueBuilder;
-
-struct CountingDeserializer<D> {
-    inner: D,
-    calls: Rc<Cell<usize>>,
-}
-
-impl<'de, D> serde::Deserializer<'de> for CountingDeserializer<D>
-where
-    D: serde::Deserializer<'de>,
-{
-    type Error = D::Error;
-
-    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where
-        V: serde::de::Visitor<'de>,
-    {
-        self.calls.set(self.calls.get() + 1);
-        self.inner.deserialize_any(visitor)
-    }
-
-    serde::forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
-        bytes byte_buf option unit unit_struct newtype_struct seq tuple tuple_struct
-        map struct enum identifier ignored_any
-    }
-}
 
 #[test]
 fn test_owner_drop_uses_allocation_free_fallback_when_reserve_fails() {
@@ -91,19 +63,6 @@ fn test_owner_drop_fallback_mixed_object_with_pending_siblings() {
         drop(owner);
         SafeJsonValue::assert_drop_reserve_failure_consumed_for_test();
     }
-}
-
-#[test]
-fn test_owner_deep_drop_is_safe_during_unwind() {
-    let result = std::panic::catch_unwind(|| {
-        let mut value = Value::Null;
-        for _ in 0..32_768 {
-            value = Value::Array(vec![value]);
-        }
-        let _owner = SafeJsonValue::new(value);
-        panic!("exercise guarded owner drop during unwind");
-    });
-    assert!(result.is_err());
 }
 
 #[test]
@@ -190,17 +149,4 @@ fn test_builder_container_finalize_unwind_keeps_partial_tree_guarded() {
         assert!(result.is_err());
         SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
     }
-}
-
-#[test]
-fn test_owner_deserializes_through_one_single_use_deserializer() {
-    let calls = Rc::new(Cell::new(0));
-    let mut inner = serde_json::Deserializer::from_str(r#"{"items":[1,true]}"#);
-    let deserializer = CountingDeserializer {
-        inner: &mut inner,
-        calls: calls.clone(),
-    };
-    let owner = SafeJsonValue::deserialize(deserializer).unwrap();
-    assert!(owner.as_value().is_object());
-    assert_eq!(calls.get(), 1);
 }

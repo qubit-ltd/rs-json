@@ -12,19 +12,17 @@ use qubit_budget::StructureLimits;
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueLimits;
-
-use crate::decode::JsonDecodeContext as Context;
-use crate::decode::JsonDecodeErrorKind;
-use crate::decode::JsonDecoder;
-use crate::decode::JsonMaterializationErrorReason;
-use crate::decode::JsonNumberPolicy;
-use crate::decode::JsonNumberToken;
-use crate::decode::JsonPathSegment;
-use crate::decode::JsonRootKind;
-use crate::decode::JsonValidatedAdmissionPolicy;
-use crate::decode::JsonValidatedDecodeError;
-use crate::decode::JsonValidatedDecodeOptions;
-use crate::decode::JsonValidatedLimit;
+use qubit_json::decode::JsonDecodeContext as Context;
+use qubit_json::decode::JsonDecodeErrorKind;
+use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::JsonMaterializationErrorReason;
+use qubit_json::decode::JsonNumberPolicy;
+use qubit_json::decode::JsonPathSegment;
+use qubit_json::decode::JsonRootKind;
+use qubit_json::decode::JsonValidatedAdmissionPolicy;
+use qubit_json::decode::JsonValidatedDecodeError;
+use qubit_json::decode::JsonValidatedDecodeOptions;
+use qubit_json::decode::JsonValidatedLimit;
 
 fn options(policy: JsonValidatedAdmissionPolicy) -> JsonValidatedDecodeOptions {
     JsonValidatedDecodeOptions::builder().admission_policy(policy).build()
@@ -39,7 +37,7 @@ fn decode_error(input: &str, policy: JsonValidatedAdmissionPolicy) -> JsonValida
 }
 
 #[test]
-fn immediate_remains_the_default_and_keeps_its_first_error_order() {
+fn test_immediate_remains_the_default_and_keeps_its_first_error_order() {
     let defaults = JsonValidatedDecodeOptions::builder().build();
     assert_eq!(defaults.admission_policy(), JsonValidatedAdmissionPolicy::Immediate);
     assert_eq!(
@@ -60,7 +58,7 @@ fn immediate_remains_the_default_and_keeps_its_first_error_order() {
             assert_eq!(context, Some(Context::TrailingInput));
             assert_eq!(
                 error.syntax_error().unwrap().reason(),
-                crate::decode::JsonSyntaxErrorReason::TrailingCharacters
+                qubit_json::decode::JsonSyntaxErrorReason::TrailingCharacters
             );
         }
         other => panic!("unexpected error: {other:?}"),
@@ -68,7 +66,7 @@ fn immediate_remains_the_default_and_keeps_its_first_error_order() {
 }
 
 #[test]
-fn token_first_admits_complete_literals_before_container_delimiters() {
+fn test_token_first_admits_complete_literals_before_container_delimiters() {
     for (input, expected) in [
         ("truex", Context::TrailingInput),
         ("[truex]", Context::ArraySeparator),
@@ -87,8 +85,8 @@ fn token_first_admits_complete_literals_before_container_delimiters() {
     }
 
     for (input, reason) in [
-        ("tru", crate::decode::JsonSyntaxErrorReason::UnexpectedEnd),
-        ("[tru]", crate::decode::JsonSyntaxErrorReason::UnexpectedByte),
+        ("tru", qubit_json::decode::JsonSyntaxErrorReason::UnexpectedEnd),
+        ("[tru]", qubit_json::decode::JsonSyntaxErrorReason::UnexpectedByte),
     ] {
         match decode_error(input, JsonValidatedAdmissionPolicy::TokenFirst) {
             JsonValidatedDecodeError::Decode { error, context } => {
@@ -101,7 +99,7 @@ fn token_first_admits_complete_literals_before_container_delimiters() {
 }
 
 #[test]
-fn token_first_preserves_escaped_quotes_and_classifies_incomplete_escapes() {
+fn test_token_first_preserves_escaped_quotes_and_classifies_incomplete_escapes() {
     let owner = JsonDecoder::unlimited()
         .decode_unique_validated_str(
             r#""before\"after""#,
@@ -117,7 +115,7 @@ fn token_first_preserves_escaped_quotes_and_classifies_incomplete_escapes() {
                 assert_eq!(context, Some(Context::String), "{input:?}");
                 assert_eq!(
                     error.syntax_error().unwrap().reason(),
-                    crate::decode::JsonSyntaxErrorReason::UnexpectedEnd,
+                    qubit_json::decode::JsonSyntaxErrorReason::UnexpectedEnd,
                     "{input:?}"
                 );
             }
@@ -127,32 +125,32 @@ fn token_first_preserves_escaped_quotes_and_classifies_incomplete_escapes() {
 }
 
 #[test]
-fn token_first_uses_maximal_number_tokens_and_rejects_invalid_candidates() {
+fn test_token_first_uses_maximal_number_tokens_and_rejects_invalid_candidates() {
     for (input, expected_context, expected_reason) in [
         (
             "1x",
             Context::TrailingInput,
-            crate::decode::JsonSyntaxErrorReason::TrailingCharacters,
+            qubit_json::decode::JsonSyntaxErrorReason::TrailingCharacters,
         ),
         (
             "01",
             Context::Number,
-            crate::decode::JsonSyntaxErrorReason::InvalidNumber,
+            qubit_json::decode::JsonSyntaxErrorReason::InvalidNumber,
         ),
         (
             "1-2",
             Context::Number,
-            crate::decode::JsonSyntaxErrorReason::InvalidNumber,
+            qubit_json::decode::JsonSyntaxErrorReason::InvalidNumber,
         ),
         (
             "{\"a\":1-2}",
             Context::Number,
-            crate::decode::JsonSyntaxErrorReason::InvalidNumber,
+            qubit_json::decode::JsonSyntaxErrorReason::InvalidNumber,
         ),
         (
             "1e+",
             Context::Number,
-            crate::decode::JsonSyntaxErrorReason::InvalidNumber,
+            qubit_json::decode::JsonSyntaxErrorReason::InvalidNumber,
         ),
     ] {
         match decode_error(input, JsonValidatedAdmissionPolicy::TokenFirst) {
@@ -168,7 +166,7 @@ fn token_first_uses_maximal_number_tokens_and_rejects_invalid_candidates() {
             assert_eq!(context, Some(Context::ArraySeparator));
             assert_eq!(
                 error.syntax_error().unwrap().reason(),
-                crate::decode::JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd
+                qubit_json::decode::JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd
             );
         }
         other => panic!("unexpected error: {other:?}"),
@@ -176,7 +174,7 @@ fn token_first_uses_maximal_number_tokens_and_rejects_invalid_candidates() {
 }
 
 #[test]
-fn token_first_applies_decoded_string_and_key_budgets_after_source_admission() {
+fn test_token_first_applies_decoded_string_and_key_budgets_after_source_admission() {
     let options = JsonValidatedDecodeOptions::builder()
         .admission_policy(JsonValidatedAdmissionPolicy::TokenFirst)
         .max_encoded_string_bytes(6)
@@ -229,7 +227,7 @@ fn token_first_applies_decoded_string_and_key_budgets_after_source_admission() {
 }
 
 #[test]
-fn token_first_checks_raw_string_budgets_before_decoding_contents() {
+fn test_token_first_checks_raw_string_budgets_before_decoding_contents() {
     let options = JsonValidatedDecodeOptions::builder()
         .admission_policy(JsonValidatedAdmissionPolicy::TokenFirst)
         .max_encoded_string_bytes(1)
@@ -243,7 +241,7 @@ fn token_first_checks_raw_string_budgets_before_decoding_contents() {
                 assert_eq!(context, Some(Context::String));
                 assert_eq!(
                     error.syntax_error().unwrap().reason(),
-                    crate::decode::JsonSyntaxErrorReason::UnexpectedEnd
+                    qubit_json::decode::JsonSyntaxErrorReason::UnexpectedEnd
                 );
             }
             (
@@ -264,10 +262,10 @@ fn token_first_checks_raw_string_budgets_before_decoding_contents() {
     }
 
     for (malformed, expected_reason) in [
-        ("\"\\q\"", crate::decode::JsonSyntaxErrorReason::InvalidEscape),
+        ("\"\\q\"", qubit_json::decode::JsonSyntaxErrorReason::InvalidEscape),
         (
             "\"\\u12xz\"",
-            crate::decode::JsonSyntaxErrorReason::InvalidUnicodeEscape,
+            qubit_json::decode::JsonSyntaxErrorReason::InvalidUnicodeEscape,
         ),
     ] {
         match decode_error(malformed, JsonValidatedAdmissionPolicy::TokenFirst) {
@@ -281,7 +279,7 @@ fn token_first_checks_raw_string_budgets_before_decoding_contents() {
 }
 
 #[test]
-fn token_first_checks_limit_and_escape_order_with_small_strings() {
+fn test_token_first_checks_limit_and_escape_order_with_small_strings() {
     let options = JsonValidatedDecodeOptions::builder()
         .admission_policy(JsonValidatedAdmissionPolicy::TokenFirst)
         .max_encoded_string_bytes(0)
@@ -318,7 +316,7 @@ fn token_first_checks_limit_and_escape_order_with_small_strings() {
 }
 
 #[test]
-fn token_first_reports_duplicates_before_the_following_colon() {
+fn test_token_first_reports_duplicates_before_the_following_colon() {
     let error = decode_error("{\"a\":1,\"a\" x}", JsonValidatedAdmissionPolicy::TokenFirst);
     match error {
         JsonValidatedDecodeError::Decode { error, .. } => {
@@ -332,7 +330,7 @@ fn token_first_reports_duplicates_before_the_following_colon() {
 }
 
 #[test]
-fn token_first_checks_complete_document_before_root_kind() {
+fn test_token_first_checks_complete_document_before_root_kind() {
     let options = JsonValidatedDecodeOptions::builder()
         .admission_policy(JsonValidatedAdmissionPolicy::TokenFirst)
         .root_kind(JsonRootKind::Object)
@@ -352,7 +350,7 @@ fn token_first_checks_complete_document_before_root_kind() {
 }
 
 #[test]
-fn token_first_keeps_number_path_and_exact_integer_projection() {
+fn test_token_first_keeps_number_path_and_exact_integer_projection() {
     let options = JsonValidatedDecodeOptions::builder()
         .admission_policy(JsonValidatedAdmissionPolicy::TokenFirst)
         .build();
@@ -375,12 +373,20 @@ fn token_first_keeps_number_path_and_exact_integer_projection() {
     assert_eq!(owner.as_value()["id"].as_i64(), Some(42));
     assert_eq!(owner.as_value()["ratio"].as_f64(), Some(1.25));
 
-    let token = JsonNumberToken::from_validated("9007199254740992", 0);
-    assert!(token.exact_safe_integer().is_err());
+    let value = JsonDecoder::unlimited()
+        .decode_unique_validated_str("9007199254740992", &options, |_, token| {
+            assert_eq!(
+                token.exact_safe_integer(),
+                Err(qubit_json::decode::JsonNumberTokenError::OutOfSafeIntegerRange),
+            );
+            Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
+        })
+        .expect("the ordinary Integer64 model admits this integer");
+    assert_eq!(value.as_value().as_u64(), Some(9_007_199_254_740_992));
 }
 
 #[test]
-fn token_first_preserves_depth_and_node_limit_precedence() {
+fn test_token_first_preserves_depth_and_node_limit_precedence() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder().max_depth(0).build();
     let mut decoder = JsonDecoder::with_limits(limits);
     let limited_nodes = JsonValidatedDecodeOptions::builder()
