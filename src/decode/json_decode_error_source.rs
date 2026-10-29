@@ -20,11 +20,14 @@ use super::JsonSyntaxError;
 
 /// An owned semantic source extracted from a JSON decoding failure.
 ///
-/// This enum preserves the complete structured state of exactly one failure.
-/// It lets downstream adapters move error data into their own models with one
+/// This enum contains the owned operation-level source for one failure. It lets
+/// downstream adapters move that source into their own models with one
 /// exhaustive `match`, without pairing [`super::JsonDecodeError::kind`] with
-/// fallible source accessors. Parser and Serde sources remain present only
-/// when decoding used [`super::DiagnosticPolicy::Detailed`].
+/// fallible source accessors. A materialization reason is stored separately:
+/// read it with [`super::JsonDecodeError::materialization_error_reason`] before
+/// consuming the error with [`super::JsonDecodeError::into_source`]. Parser and
+/// Serde sources remain present only when decoding used
+/// [`super::DiagnosticPolicy::Detailed`].
 ///
 /// # Type Parameters
 ///

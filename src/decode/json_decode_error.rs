@@ -589,17 +589,35 @@ where
         }
     }
 
-    /// Consumes this error and returns its owned semantic source.
+    /// Consumes this error and returns its owned operation-level source.
     ///
-    /// Unlike the kind-specific accessors, this operation preserves the
-    /// complete mutually exclusive failure state. Input-derived third-party
-    /// sources remain present only when the decoder used
-    /// [`DiagnosticPolicy::Detailed`].
+    /// The materialization reason returned by
+    /// [`Self::materialization_error_reason`] is stored separately and is not
+    /// included in the returned source. Read it before consuming this error.
+    /// Input-derived third-party sources remain present only when the decoder
+    /// used [`DiagnosticPolicy::Detailed`].
     ///
     /// # Returns
     ///
-    /// The complete owned budget, input, syntax, top-level, or deserialization
-    /// source retained by this error.
+    /// The owned budget, input, syntax, top-level, or deserialization source
+    /// retained by this error. Any materialization reason is not returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qubit_json::decode::{
+    ///     JsonDecodeErrorSource, JsonDecoder, JsonMaterializationErrorReason,
+    /// };
+    ///
+    /// let error = JsonDecoder::unlimited()
+    ///     .decode_value_str(r#"{"id":1,"id":2}"#)
+    ///     .expect_err("duplicate keys must be rejected");
+    /// let reason = error.materialization_error_reason();
+    /// let source = error.into_source();
+    ///
+    /// assert_eq!(reason, Some(JsonMaterializationErrorReason::DuplicateKey));
+    /// assert!(matches!(source, JsonDecodeErrorSource::Deserialize { .. }));
+    /// ```
     #[inline(always)]
     pub fn into_source(self) -> JsonDecodeErrorSource<R, Q> {
         self.failure
