@@ -119,10 +119,14 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 
 The observable success result is an admitted `serde_json::Value`. The failure
 branch returns `JsonDecodeErrorKind::Budget` and reports 11 observed input bytes.
-That accessor describes bytes observed by this call, not bytes committed to a
-cumulative budget: the rejected input charge is rolled back with the failed
-value attempt, while a previously accepted input charge remains committed. This lets an HTTP adapter map
-stable error categories to responses without matching private parser details.
+That accessor reports bytes observed by this call, not the amount committed to
+the cumulative input budget. In this slice example, the over-limit input charge
+is rejected atomically and consumes no additional input allowance. This is
+separate from value-transaction rollback: input charges already accepted remain
+consumed if later syntax validation or target deserialization fails. Streamed
+input can likewise retain charges for an accepted prefix. Value-resource usage
+is staged until the complete operation succeeds. HTTP adapters can use stable
+error categories without matching private parser details.
 
 For output, create `JsonEncoder::with_limits(JsonEncodeLimits::...)` and call
 `to_vec`, `write_buffered`, or `write_incremental`:

@@ -99,8 +99,8 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 ```
 
 成功分支会得到已经通过资源准入的 `serde_json::Value`。失败分支返回 `JsonDecodeErrorKind::Budget`，并报告本次观察到的 11 个输入字节。这个 accessor
-描述本次调用观察到的字节数，不表示它们已提交到累计预算。超限时，被拒绝的那次输入计费不会生效；
-流式读取中此前已接受的输入前缀仍会保留计费。HTTP 适配层可以依据稳定错误类别生成响应。
+描述本次调用观察到的字节数，不表示它们已提交到累计预算。切片输入超限时，被拒绝的那次输入计费不会生效，且本次输入消费会原子拒绝。
+输入已成功计费后，后续语法或目标解码失败仍保留这部分输入用量；流式读取中此前已接受的输入前缀也会保留计费。值资源暂存到完整操作成功才提交。HTTP 适配层可以依据稳定错误类别生成响应。
 
 输出侧使用 `JsonEncoder::with_limits(JsonEncodeLimits::...)`，再调用 `to_vec`、`write_buffered` 或
 `write_incremental`：
