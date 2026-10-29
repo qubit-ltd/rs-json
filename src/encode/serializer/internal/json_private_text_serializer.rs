@@ -54,22 +54,8 @@ where
 
 macro_rules! delegate_number_method {
     ($name:ident, $type:ty) => {
-        #[doc = "Forwards the scalar unchanged outside private text modes."]
-        #[doc = "Private text modes reject scalar payloads; both require a text method."]
-        #[doc = ""]
-        #[doc = "# Parameters"]
-        #[doc = ""]
-        #[doc = "* `self` — serializer decorator consumed for this payload."]
-        #[doc = "* `value` — scalar payload forwarded to the wrapped serializer."]
-        #[doc = ""]
-        #[doc = "# Returns"]
-        #[doc = ""]
-        #[doc = "The result returned by the wrapped serializer."]
-        #[doc = ""]
-        #[doc = "# Errors"]
-        #[doc = ""]
-        #[doc = "Returns the wrapped serializer's error, or the protocol error"]
-        #[doc = "when a private text mode rejects this non-text payload."]
+        #[doc = "Rejects this non-text payload for the selected private text protocol."]
+        #[doc = "Returns the selected private protocol's stable serializer-state error."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
             self.reject_non_text_payload()?;
             self.inner.$name(value)
@@ -173,67 +159,34 @@ where
         self.inner.serialize_str(value)
     }
 
-    /// Forwards byte payloads unless a private text mode rejects this non-text
-    /// payload.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `value` - Byte payload forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The result returned by the wrapped serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_bytes(value)
     }
 
-    /// Forwards an absent optional payload unless a private text mode rejects
-    /// it.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    ///
-    /// # Returns
-    ///
-    /// The result returned by the wrapped serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_none()
     }
 
-    /// Forwards a present optional payload unless a private text mode rejects
-    /// it.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Serializable wrapped payload type.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `value` - Present payload forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The result returned by the wrapped serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -242,63 +195,34 @@ where
         self.inner.serialize_some(value)
     }
 
-    /// Forwards a unit payload unless a private text mode rejects this non-text
-    /// payload.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    ///
-    /// # Returns
-    ///
-    /// The result returned by the wrapped serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_unit()
     }
 
-    /// Forwards a unit-struct payload unless a private text mode rejects it.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `name` - Unit-struct name forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The result returned by the wrapped serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_unit_struct(name)
     }
 
-    /// Forwards a unit-variant payload unless a private text mode rejects it.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `name` - Enum name forwarded to the wrapped serializer.
-    /// * `variant_index` - Variant index forwarded to the wrapped serializer.
-    /// * `variant` - Variant name forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The result returned by the wrapped serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_unit_variant(
         self,
         name: &'static str,
@@ -309,26 +233,12 @@ where
         self.inner.serialize_unit_variant(name, variant_index, variant)
     }
 
-    /// Forwards a newtype-struct payload unless a private text mode rejects it.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Serializable wrapped payload type.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `name` - Newtype-struct name forwarded to the wrapped serializer.
-    /// * `value` - Wrapped payload forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The result returned by the wrapped serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -337,29 +247,12 @@ where
         self.inner.serialize_newtype_struct(name, value)
     }
 
-    /// Forwards a newtype-variant payload unless a private text mode rejects
-    /// it.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - Serializable wrapped payload type.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `name` - Enum name forwarded to the wrapped serializer.
-    /// * `variant_index` - Variant index forwarded to the wrapped serializer.
-    /// * `variant` - Variant name forwarded to the wrapped serializer.
-    /// * `value` - Wrapped payload forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The result returned by the wrapped serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_newtype_variant<T>(
         self,
         name: &'static str,
@@ -375,88 +268,45 @@ where
             .serialize_newtype_variant(name, variant_index, variant, value)
     }
 
-    /// Creates a sequence serializer unless a private text mode rejects this
-    /// non-text payload.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `len` - Optional sequence length forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped serializer's sequence serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_seq(len)
     }
 
-    /// Creates a tuple serializer unless a private text mode rejects this
-    /// non-text payload.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `len` - Tuple length forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped serializer's tuple serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_tuple(len)
     }
 
-    /// Creates a tuple-struct serializer unless a private text mode rejects it.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `name` - Tuple-struct name forwarded to the wrapped serializer.
-    /// * `len` - Tuple-struct field count forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped serializer's tuple-struct serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_tuple_struct(name, len)
     }
 
-    /// Creates a tuple-variant serializer unless a private text mode rejects
-    /// it.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `name` - Enum name forwarded to the wrapped serializer.
-    /// * `variant_index` - Variant index forwarded to the wrapped serializer.
-    /// * `variant` - Variant name forwarded to the wrapped serializer.
-    /// * `len` - Variant field count forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped serializer's tuple-variant serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_tuple_variant(
         self,
         name: &'static str,
@@ -468,68 +318,34 @@ where
         self.inner.serialize_tuple_variant(name, variant_index, variant, len)
     }
 
-    /// Creates a map serializer unless a private text mode rejects this
-    /// non-text payload.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `len` - Optional entry count forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped serializer's map serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_map(len)
     }
 
-    /// Creates a struct serializer unless a private text mode rejects this
-    /// non-text payload.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `name` - Struct name forwarded to the wrapped serializer.
-    /// * `len` - Struct field count forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped serializer's struct serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_struct(name, len)
     }
 
-    /// Creates a struct-variant serializer unless a private text mode rejects
-    /// it.
-    ///
-    /// # Parameters
-    ///
-    /// * `self` - Serializer decorator consumed for this payload.
-    /// * `name` - Enum name forwarded to the wrapped serializer.
-    /// * `variant_index` - Variant index forwarded to the wrapped serializer.
-    /// * `variant` - Variant name forwarded to the wrapped serializer.
-    /// * `len` - Variant field count forwarded to the wrapped serializer.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped serializer's struct-variant serializer.
+    /// Rejects this non-text payload because the selected private text
+    /// protocol accepts string payloads only.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped serializer's error, or the protocol error when
-    /// private text modes reject this non-text payload.
+    /// Returns the selected protocol's stable serializer-state error.
     fn serialize_struct_variant(
         self,
         name: &'static str,

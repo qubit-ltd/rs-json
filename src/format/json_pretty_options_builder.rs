@@ -28,6 +28,7 @@ use super::JsonPrettyOptions;
 /// assert_eq!(output, b"[\n  1\n]\n");
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[must_use = "store the updated builder or call build to use the formatting options"]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JsonPrettyOptionsBuilder {
     /// Spaces used per displayed indentation level.

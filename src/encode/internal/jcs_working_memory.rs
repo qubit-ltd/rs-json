@@ -20,9 +20,12 @@ pub(super) struct JcsWorkingMemory {
     stack_bytes: usize,
     /// Bytes currently held by object member tables.
     object_bytes: usize,
-    /// Whether object-table pressure disabled speculative stack growth for
-    /// the rest of this render, avoiding repeated copies of deep ancestors.
-    stack_growth_is_exact: bool,
+    /// Largest stack length requested so far, used as the growth high-water
+    /// mark.
+    stack_max_required_capacity: usize,
+    /// Stack depth through which speculative growth stays disabled after
+    /// reclaim.
+    stack_growth_exact_through: usize,
     /// Largest combined tracked capacity observed so far.
     peak_bytes: usize,
     /// Successful stack growths observed by the allocation diagnostic.
@@ -65,7 +68,8 @@ impl JcsWorkingMemory {
             limit,
             stack_bytes: 0,
             object_bytes: 0,
-            stack_growth_is_exact: false,
+            stack_max_required_capacity: 0,
+            stack_growth_exact_through: 0,
             peak_bytes: 0,
             #[cfg(feature = "jcs-allocation-diagnostics")]
             stack_growth_count: 0,
@@ -222,6 +226,9 @@ impl JcsWorkingMemory {
             .len()
             .checked_add(additional)
             .ok_or_else(|| self.limit_error(usize::MAX))?;
+        if is_stack {
+            self.stack_max_required_capacity = self.stack_max_required_capacity.max(required_capacity);
+        }
         if required_capacity <= values.capacity() {
             return Ok(());
         }
@@ -237,7 +244,7 @@ impl JcsWorkingMemory {
         let mut without_old = current
             .checked_sub(old_bytes)
             .ok_or_else(|| self.limit_error(usize::MAX))?;
-        let target_capacity = if is_stack && !self.stack_growth_is_exact {
+        let target_capacity = if is_stack && required_capacity > self.stack_growth_exact_through {
             let preferred = values.capacity().max(1).saturating_mul(2).max(required_capacity);
             let preferred = if self.limit == usize::MAX {
                 preferred
@@ -355,7 +362,7 @@ impl JcsWorkingMemory {
                 // Future siblings may need progressively larger tables.
                 // Reusing their reclaimed spare would copy these ancestors
                 // again on each sibling, even when the old exact path fits.
-                self.stack_growth_is_exact = true;
+                self.stack_growth_exact_through = self.stack_growth_exact_through.max(self.stack_max_required_capacity);
                 *without_old = without_old
                     .checked_sub(old_stack_bytes)
                     .and_then(|bytes| bytes.checked_add(self.stack_bytes))
@@ -721,5 +728,79 @@ mod tests {
             memory.object_max_actual_bytes,
             entries.capacity() * std::mem::size_of::<(usize, usize)>(),
         );
+    }
+
+    #[cfg(feature = "jcs-allocation-diagnostics")]
+    #[test]
+    fn test_diagnoses_stack_growth_after_reclaiming_wide_table() {
+        use std::mem::size_of;
+
+        for depth in [128, 512, 2048] {
+            let mut stack = Vec::<[u64; 4]>::new();
+            let mut memory = JcsWorkingMemory::new(depth * size_of::<[u64; 4]>() + 1024);
+            for _ in 0..9 {
+                memory.reserve_stack(&mut stack, 1).unwrap();
+                stack.push([0; 4]);
+            }
+            stack.pop();
+            assert!(stack.capacity() > stack.len());
+
+            let budget = memory.limit;
+            let old_stack_bytes = stack.capacity() * size_of::<[u64; 4]>();
+            let live_stack_bytes = stack.len() * size_of::<[u64; 4]>();
+            let table_element_bytes = size_of::<[u64; 3]>();
+            let table_width = (budget - old_stack_bytes) / table_element_bytes + 1;
+            let mut entries = Vec::<[u64; 3]>::new();
+            memory
+                .reserve_object_entries(&mut entries, table_width, &mut stack)
+                .expect("wide table fits after reclaiming unused stack capacity");
+            assert!(stack.capacity() < 128, "stack capacity was not reclaimed");
+            assert!(memory.stack_bytes >= live_stack_bytes);
+            let peak_with_table = memory.peak_bytes();
+            memory.release_object_entries(&entries).unwrap();
+            drop(entries);
+            let replacements_for_reclaim = memory.stack_replacement_count;
+
+            let (growth_snapshot, replacement_snapshot, requested_snapshot) = (
+                memory.stack_growth_count,
+                memory.stack_replacement_count,
+                memory.stack_requested_bytes,
+            );
+            let initial_stack_capacity = stack.capacity();
+            let initial_stack_len = stack.len();
+            while stack.len() < depth {
+                memory.reserve_stack(&mut stack, 1).unwrap();
+                stack.push([0; 4]);
+            }
+            let post_growths = memory.stack_growth_count - growth_snapshot;
+            let post_replacements = memory.stack_replacement_count - replacement_snapshot;
+            let post_requested = memory.stack_requested_bytes - requested_snapshot;
+            let peak_after_deep_branch = memory.peak_bytes();
+            assert!(memory.stack_bytes + memory.object_bytes <= budget);
+
+            let mut control_memory = JcsWorkingMemory::new(budget);
+            let mut control_stack = Vec::<[u64; 4]>::new();
+            for _ in 0..8 {
+                control_memory.reserve_stack(&mut control_stack, 1).unwrap();
+                control_stack.push([0; 4]);
+            }
+            assert_eq!(control_stack.capacity(), initial_stack_capacity);
+            assert_eq!(control_stack.len(), initial_stack_len);
+            let control_growth_snapshot = control_memory.stack_growth_count;
+            while control_stack.len() < depth {
+                control_memory.reserve_stack(&mut control_stack, 1).unwrap();
+                control_stack.push([0; 4]);
+            }
+            let control_growths = control_memory.stack_growth_count - control_growth_snapshot;
+            assert!(replacements_for_reclaim >= 1);
+            assert!(
+                post_growths <= 2 * depth.ilog2() as usize + 4,
+                "post-reclaim stack growth should remain geometric: depth={depth}, growths={post_growths}",
+            );
+            println!(
+                "JCS_STACK_RECLAIM depth={depth} budget={budget} live_stack_bytes={live_stack_bytes} peak_with_table={peak_with_table} peak_after_deep_branch={peak_after_deep_branch} reclaim_replacements={replacements_for_reclaim} post_growths={post_growths} post_replacements={post_replacements} post_requested_bytes={post_requested} control_growths={control_growths} control_requested_bytes={}",
+                control_memory.stack_requested_bytes,
+            );
+        }
     }
 }

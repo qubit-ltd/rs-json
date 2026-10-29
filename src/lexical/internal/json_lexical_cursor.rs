@@ -188,6 +188,12 @@ where
         })
     }
 
+    /// Emits one scan point and stops scanning when the callback declines it.
+    ///
+    /// A `false` result becomes a `ConsumerStopped` syntax sentinel. The
+    /// scanner returns immediately; its caller can use that sentinel to
+    /// restore the consumer's saved error. Side effects from earlier callback
+    /// invocations are not rolled back.
     fn emit_scan_point<F>(
         &self,
         emit: &mut F,
@@ -489,6 +495,15 @@ where
         self.transaction.try_admit(measurement).map_err(JsonLexicalError::from)
     }
 
+    /// Checks the encoded source length of a completely consumed string token.
+    ///
+    /// `start` must be the input byte offset of its opening quote, and the
+    /// cursor must be just past its closing quote. The measured length removes
+    /// both quotes and includes escape spelling bytes; it is not the decoded
+    /// UTF-8 length. Under `TokenFirst`, [`Self::raw_string_token_end`] checks
+    /// the limit while scanning the token, before this completed-token check.
+    /// The incremental check reports unexpected EOF before a limit violation
+    /// when the input ends before the token can be completed.
     fn check_encoded_string_limit(&self, start: usize) -> Result<(), JsonLexicalError<R, Q>> {
         let Some(maximum) = self.max_encoded_string_bytes else {
             return Ok(());

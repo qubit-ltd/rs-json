@@ -263,6 +263,59 @@ cargo bench --locked --features jcs --bench jcs_bench -- jcs-encode --noplot --s
 对象成员表所需的预算，回收余量还需要与 renderer 准入逻辑协调，因此保留了有限配置的
 精确容量策略。
 
+### 回收对象表后的 JCS 栈增长（2026-10-29）
+
+`src/encode/internal/jcs_working_memory.rs` 中的内部测试
+`test_diagnoses_stack_growth_after_reclaiming_wide_table` 使用
+`jcs-allocation-diagnostics` 执行真实的 reserve、push、release 及后续栈增长。对每个目标深度
+（128、512、2048），测试先建立有剩余容量的栈，再预留一个宽成员表；该表请求字节数与栈原容量
+同时存活时会超过预算。测试确认栈容量被替换/回收，释放成员表，快照诊断计数器，然后增长深数组
+分支。无回收对照从相同栈容量和长度开始，并使用相同预算。预算为
+`depth * size_of::<[u64; 4]>() + 1024` 字节；成员表宽度根据预算与原栈容量之差，使用
+`size_of::<[u64; 3]>()` 推导。两种场景都能在预算内完成。
+
+旧策略数据复现的是基线版本
+`48c4be653c3e342342327f46eb9e60b620e5a264` 的精确增长行为。由于诊断 fixture 是本次变更新增的，
+复现时使用本文件中的 fixture，并临时将回收后的高水位赋值设为 `usize::MAX`，与基线策略的
+`stack_growth_is_exact = true` 等价；采集时仅禁用了几何增长断言，以便输出三个深度的数据。环境为
+`rustc 1.94.0 (4a4ef493e 2026-03-02)` 和锁定的依赖集合。完整输出：
+
+```text
+JCS_STACK_RECLAIM depth=128 budget=5120 live_stack_bytes=256 peak_with_table=4888 peak_after_deep_branch=4888 reclaim_replacements=1 post_growths=120 post_replacements=0 post_requested_bytes=263040 control_growths=4 control_requested_bytes=8128
+JCS_STACK_RECLAIM depth=512 budget=17408 live_stack_bytes=256 peak_with_table=17176 peak_after_deep_branch=17176 reclaim_replacements=1 post_growths=504 post_replacements=0 post_requested_bytes=4201344 control_growths=6 control_requested_bytes=32704
+JCS_STACK_RECLAIM depth=2048 budget=66560 live_stack_bytes=256 peak_with_table=66328 peak_after_deep_branch=66328 reclaim_replacements=1 post_growths=2040 post_replacements=0 post_requested_bytes=67140480 control_growths=8 control_requested_bytes=131008
+```
+
+另一次启用几何增长断言的运行在深度 128 停止，观察到回收后增长 120 次，并因超过上限而失败。
+两次采集均使用以下命令：
+
+```bash
+cargo test --locked --lib --features 'jcs jcs-allocation-diagnostics' encode::internal::jcs_working_memory::tests -- --nocapture
+```
+
+新策略从 8 个存活元素和有剩余容量的栈开始；无回收对照也使用同一起点。历史需求高水位规则
+允许仅对超过历史请求深度的需求进行几何增长。下表峰值来自新策略运行。未运行 Criterion 或墙钟计时。
+
+| 深度 | 预算（B） | 新策略宽表期间峰值（B） | 新策略深分支后峰值（B） | 回收 replacement 次数 | 回收后增长次数，旧 / 新 | 回收后请求字节，旧 / 新（B） | 新策略无回收增长次数 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | 5,120 | 4,888 | 4,888 | 1 | 120 / 5 | 263,040 / 8,928 | 4 |
+| 512 | 17,408 | 17,176 | 17,408 | 1 | 504 / 7 | 4,201,344 / 35,552 | 6 |
+| 2048 | 66,560 | 66,328 | 66,560 | 1 | 2,040 / 9 | 67,140,480 / 140,000 | 8 |
+
+旧策略在回收后观察到随新增深度成比例增长的次数。使用高水位规则后，这些深度的增长次数呈对数
+趋势，并接近同起点无回收对照。请求字节总量是成功增长事件的容量请求之和；它不代表复制字节、
+分配器流量、存活内存或耗时。峰值列是该内部 fixture 观测到的栈与成员表跟踪容量。有限深分支
+峰值达到预算但未超过。新策略通过了既有的精确边界、有限增长、逐渐增宽兄弟及祖先表保留回归。
+
+复现命令：
+
+```bash
+cargo test --locked --lib --features 'jcs jcs-allocation-diagnostics' encode::internal::jcs_working_memory::tests -- --nocapture
+```
+
+这个有界合成 fixture 证明了容量增长回归及其修复；它不估算端到端渲染延迟，也不能证明实际
+物理复制量。
+
 ## 测量步骤
 
 1. 记录代码版本与未提交改动、Rust 工具链、依赖解析结果、硬件、操作系统、输入形态、

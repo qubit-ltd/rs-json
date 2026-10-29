@@ -273,7 +273,7 @@ where
         value.serialize(self)
     }
 
-    /// Forwards a newtype-variant key and its payload.
+    /// Rejects newtype-variant keys as unsupported JSON object keys.
     fn serialize_newtype_variant<T>(
         self,
         _name: &'static str,

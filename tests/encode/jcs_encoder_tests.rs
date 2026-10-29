@@ -18,6 +18,7 @@ use qubit_budget::json::JsonResource;
 use qubit_io::Output;
 use qubit_json::encode::JcsEncodeErrorKind;
 use qubit_json::encode::JcsEncoder;
+use qubit_json::value::SafeJsonValue;
 
 #[derive(Clone)]
 struct SharedOutput(Rc<RefCell<Vec<u8>>>);
@@ -457,7 +458,12 @@ fn test_jcs_encoder_working_memory_exact_boundary_for_object() {
             }
             Err(error) => {
                 assert_eq!(error.kind(), JcsEncodeErrorKind::WorkingMemory);
-                exact_limit = error.working_memory_error().unwrap().requested();
+                let requested = error.working_memory_error().unwrap().requested();
+                assert!(
+                    requested > exact_limit,
+                    "working-memory boundary must progress: previous={exact_limit}, requested={requested}"
+                );
+                exact_limit = requested;
             }
         }
         assert!(exact_limit < 4096, "working-memory boundary did not converge");
@@ -593,6 +599,68 @@ fn test_jcs_encoder_reclaim_preserves_ancestor_object_tables_and_later_siblings(
             .expect("reclamation preserves live ancestor frames and their tables"),
         serde_json_canonicalizer::to_vec(&value).expect("fixture is canonicalizable"),
     );
+}
+
+#[test]
+fn test_jcs_encoder_reclaims_before_deep_array_sibling_at_exact_budget() {
+    let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
+        .max_nodes(4096)
+        .max_output_bytes(65_536)
+        .build();
+    let frame_bytes = JcsEncoder::with_limits(limits, 0)
+        .to_vec(&serde_json::json!([null]))
+        .expect_err("an array frame needs working memory")
+        .working_memory_error()
+        .expect("working-memory details")
+        .requested();
+    let entry_bytes = JcsEncoder::with_limits(limits, 0)
+        .to_vec(&serde_json::json!({"a": null}))
+        .expect_err("an object member needs working memory")
+        .working_memory_error()
+        .expect("working-memory details")
+        .requested();
+
+    let depth = 128;
+    let prefix_array_frames = 6;
+    assert!(entry_bytes < frame_bytes);
+    let exact = (prefix_array_frames + depth) * frame_bytes;
+    // Six live array frames grow the renderer stack to a capacity of eight.
+    // This table is one member beyond the budget left alongside that spare
+    // capacity, but it fits after reclaim and the object's own frame reserve.
+    let wide_object_entries = ((depth - 2) * frame_bytes) / entry_bytes + 1;
+    let wide_object = serde_json::Value::Object(
+        (0..wide_object_entries)
+            .map(|index| (format!("key-{index:03}"), serde_json::Value::Null))
+            .collect(),
+    );
+    let mut deep_array = serde_json::Value::Null;
+    for _ in 0..depth {
+        deep_array = serde_json::Value::Array(vec![deep_array]);
+    }
+    let mut value = serde_json::Value::Array(vec![wide_object, deep_array]);
+    for _ in 0..5 {
+        value = serde_json::Value::Array(vec![value]);
+    }
+    let value = SafeJsonValue::new(value);
+    let expected = serde_json_canonicalizer::to_vec(value.as_value()).expect("fixture is canonicalizable");
+
+    let mut sufficient = JcsEncoder::with_limits(limits, exact);
+    assert_eq!(
+        sufficient
+            .to_vec(value.as_value())
+            .expect("deep sibling fits after wide table release"),
+        expected,
+    );
+    assert!(sufficient.session().value_budget().used_nodes().unwrap() > 0);
+
+    let mut one_byte_short = JcsEncoder::with_limits(limits, exact - 1);
+    let error = one_byte_short
+        .to_vec(value.as_value())
+        .expect_err("the deepest array frame needs the exact remaining byte");
+    assert_eq!(error.kind(), JcsEncodeErrorKind::WorkingMemory);
+    assert_eq!(error.working_memory_error().expect("limit details").requested(), exact);
+    assert_eq!(one_byte_short.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(one_byte_short.session().output_budget().unwrap().used(), 0);
 }
 
 #[test]

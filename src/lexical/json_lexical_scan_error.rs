@@ -13,20 +13,34 @@ use qubit_budget::ResourceQuantity;
 
 use super::JsonLexicalError;
 
+/// Classifies failures produced while scanning JSON for a consumer.
+///
+/// Lexical syntax and budget failures are carried by [`Self::Lexical`], while
+/// callback failures are carried by [`Self::Consumer`]. An encoded string
+/// limit violation has its own variant so callers can inspect its byte
+/// measurements and input location.
 #[derive(Debug)]
 pub(crate) enum JsonLexicalScanError<E, R, Q>
 where
     Q: ResourceQuantity,
 {
+    /// A scanner syntax or value-budget failure.
     Lexical(JsonLexicalError<R, Q>),
+    /// The error returned by a consumer callback that stopped the scan.
     Consumer(E),
+    /// A string token exceeded its maximum encoded source length.
     EncodedStringLimit {
+        /// Maximum bytes between the string's quotes, including escape
+        /// spelling.
         maximum: usize,
+        /// Observed source bytes between the quotes, including escape spelling.
         observed: usize,
+        /// Byte offset of the opening quote relative to the input start.
         offset: usize,
     },
 }
 
+/// Converts scanner syntax and budget failures into the lexical category.
 impl<E, R, Q> From<JsonLexicalError<R, Q>> for JsonLexicalScanError<E, R, Q>
 where
     Q: ResourceQuantity,
@@ -36,6 +50,7 @@ where
     }
 }
 
+/// Formats the contained lexical or consumer error, or a stable limit message.
 impl<E, R, Q> fmt::Display for JsonLexicalScanError<E, R, Q>
 where
     E: fmt::Display,

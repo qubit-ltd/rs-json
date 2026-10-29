@@ -451,6 +451,76 @@ speculative stack capacity can consume bytes needed by a later object member
 table; reclaiming that capacity would require additional coordination with
 renderer admission.
 
+### JCS stack growth after object-table reclamation (2026-10-29)
+
+The internal `test_diagnoses_stack_growth_after_reclaiming_wide_table` fixture
+in `src/encode/internal/jcs_working_memory.rs` exercises real reserve, push,
+release, and later stack growth operations with
+`jcs-allocation-diagnostics`. For each target depth (128, 512, 2048), it
+creates a stack with spare capacity, reserves a wide member table whose
+requested bytes exceed the budget remaining alongside that capacity, verifies
+the stack replacement/reclamation, releases the table, snapshots diagnostic
+counters, and then grows a deep array branch. A no-reclaim control starts from
+the same stack capacity and length and uses the same budget. Budgets are
+`depth * size_of::<[u64; 4]>() + 1024` bytes; the table width is derived from
+the difference between that budget and the original stack capacity, using
+`size_of::<[u64; 3]>()`. Both scenarios fit within their budgets.
+
+The old-policy totals replay the exact-growth behavior in base revision
+`48c4be653c3e342342327f46eb9e60b620e5a264`. Since the diagnostic fixture was
+added by this change, the replay used the fixture here with the post-reclaim
+high-water assignment temporarily set to `usize::MAX`, which matches the base
+policy's `stack_growth_is_exact = true`. The geometric-growth assertion was
+disabled for this capture so all three depths could be reported. It ran with
+`rustc 1.94.0 (4a4ef493e 2026-03-02)` and the locked dependency set. Complete
+output:
+
+```text
+JCS_STACK_RECLAIM depth=128 budget=5120 live_stack_bytes=256 peak_with_table=4888 peak_after_deep_branch=4888 reclaim_replacements=1 post_growths=120 post_replacements=0 post_requested_bytes=263040 control_growths=4 control_requested_bytes=8128
+JCS_STACK_RECLAIM depth=512 budget=17408 live_stack_bytes=256 peak_with_table=17176 peak_after_deep_branch=17176 reclaim_replacements=1 post_growths=504 post_replacements=0 post_requested_bytes=4201344 control_growths=6 control_requested_bytes=32704
+JCS_STACK_RECLAIM depth=2048 budget=66560 live_stack_bytes=256 peak_with_table=66328 peak_after_deep_branch=66328 reclaim_replacements=1 post_growths=2040 post_replacements=0 post_requested_bytes=67140480 control_growths=8 control_requested_bytes=131008
+```
+
+A separate run with the geometric-growth assertion enabled stopped at depth
+128, observed 120 post-reclaim growths, and failed the bound. Both captures
+used the command below:
+
+```bash
+cargo test --locked --lib --features 'jcs jcs-allocation-diagnostics' encode::internal::jcs_working_memory::tests -- --nocapture
+```
+
+The revised run starts from 8 live values with spare capacity and uses the
+same start for its no-reclaim control. Its high-water mark allows geometric
+growth only beyond previously requested depths. Peak values below are from the
+revised run. No Criterion or wall-clock measurement was taken.
+
+| Depth | Budget (B) | Revised peak with table (B) | Revised peak after deep branch (B) | Reclaim replacements | Post-reclaim growths, old / revised | Post-reclaim requested bytes, old / revised (B) | No-reclaim growths, revised |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | 5,120 | 4,888 | 4,888 | 1 | 120 / 5 | 263,040 / 8,928 | 4 |
+| 512 | 17,408 | 17,176 | 17,408 | 1 | 504 / 7 | 4,201,344 / 35,552 | 6 |
+| 2048 | 66,560 | 66,328 | 66,560 | 1 | 2,040 / 9 | 67,140,480 / 140,000 | 8 |
+
+The old policy therefore showed growth counts proportional to the added depth
+after reclaim. With the high-water rule, the measured counts are logarithmic
+over these depths and remain close to the same-start no-reclaim control. The
+requested-byte sums count requested capacities across successful growth
+events; they are not bytes copied, allocator traffic, live memory, or elapsed
+time. The peak column is the tracked stack plus member-table capacity observed
+by this internal fixture. The finite deep-branch peak reaches, but does not
+exceed, its budget. The existing exact-boundary, finite-growth, gradually
+wider-sibling, and ancestor-table preservation regressions passed with the
+revised policy.
+
+Reproduce with:
+
+```bash
+cargo test --locked --lib --features 'jcs jcs-allocation-diagnostics' encode::internal::jcs_working_memory::tests -- --nocapture
+```
+
+This bounded synthetic fixture establishes a capacity-growth regression and
+its correction; it does not estimate end-to-end rendering latency or prove a
+particular amount of physical copying.
+
 ## Measurement procedure
 
 1. Record the code revision and uncommitted changes, Rust toolchain, dependency
