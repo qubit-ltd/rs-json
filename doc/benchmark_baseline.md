@@ -1290,3 +1290,19 @@ The experimental production diff and its candidate-only fault-injection
 change were removed after the comparison. The allocation harness and this
 measurement record remain; no performance conclusion is inferred from the
 allocation reduction alone.
+
+### 2026-10-31 review reassessment
+
+The current review did not start a new baseline or candidate run. Before
+sampling, the host reported 1/5/15-minute loads of `23.99/26.59/27.31` on six
+online CPUs, the `powersave` governor, about 21 GiB available memory, and about
+12 GiB of swap in use. Unrelated Rust and C++ compilation and Miri processes
+were active across other repositories. The checkout was `116b170`
+(`dev-starfish` starting revision), `Cargo.lock` SHA-256 was
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`, and the
+toolchain was Rust/Cargo 1.94.0. These conditions do not provide an idle,
+comparable baseline; no allocation preflight or Criterion latency sample was
+run, and no candidate was created. The array-frame production implementation
+is unchanged. Reassess when no unrelated build or Miri work is active and
+system load is stable below the six-CPU capacity for repeated baseline and
+candidate runs. Status: unresolved pending a controlled measurement window.
