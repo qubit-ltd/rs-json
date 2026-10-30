@@ -491,3 +491,147 @@ live 峰值和延迟采样都没有识别出可归因且可安全消除的重复
 Rust 1.94.0、Criterion 0.8.2、`serde_json` 1.0.154，使用系统分配器。`Cargo.lock` SHA-256 为
 `65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`。分配计数器自检覆盖了
 分配/释放、测量窗口外释放、realloc 扩大与缩小，以及请求字节累计。它是基准诊断机制，不是生产 API。
+
+### SafeJsonValue 复制分配基线（2026-10-30）
+
+本基线在任何生产复制实现变更前测量 `SafeJsonValue::copy_from` 和 `Clone`。fixture 在计量窗口
+外构建；窗口内只创建副本，值相等检查、`black_box` 和副本析构均在窗口外。基准首先运行分配
+计数器自检。对象 feature 标签通过运行时检查 `serde_json::Map` 的迭代顺序确定。
+
+以下两条命令各顺序运行三次。每种配置的 24 行记录在三轮间完全一致；默认配置第 2 轮输出过
+一次 Cargo package-cache 锁等待，其余五轮没有输出锁等待。每种形状与规模下，`copy_from` 和
+`clone` 的输出也完全相同。
+
+```bash
+cargo bench --locked --bench value_clone_allocations
+cargo bench --locked --bench value_clone_allocations --features serde_json/preserve_order
+```
+
+CSV 字段为
+`VALUE_CLONE_ALLOC,shape,size,feature,operation,revision,allocation_count,allocated_request_bytes,reallocation_count,baseline_live_bytes,peak_live_bytes,end_live_bytes,peak_extra_bytes`。
+表中 `operation=copy_from, clone` 表示两个操作分别输出了所列的相同数据。数组/对象的 `size`
+表示宽度，混合链表示深度。`end_live_bytes` 包含仍存活的 fixture 和基准进程状态；用它减去
+`baseline_live_bytes` 得到结果仍存活时的净存活字节变化。`peak_extra_bytes` 表示超过窗口开始
+时基线的最大存活字节，因此同时包括副本和临时分配。`allocated_request_bytes` 包括 realloc 请求
+大小。这些是分配器计量，不是 RSS，也不是耗时数据。
+
+| Feature | 形状 | 规模 | 操作 | 分配次数 | 请求字节 | Realloc 次数 | 基线存活 B | 峰值存活 B | 结束存活 B | 峰值额外 B |
+| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| default | array | 32 | copy_from, clone | 11 | 5,680 | 7 | 2,636 | 6,500 | 3,660 | 3,864 |
+| default | array | 512 | copy_from, clone | 19 | 94,000 | 15 | 17,996 | 79,460 | 34,380 | 61,464 |
+| default | array | 8192 | copy_from, clone | 27 | 1,507,120 | 23 | 263,756 | 1,246,820 | 525,900 | 983,064 |
+| default | object_fixed_key | 32 | copy_from, clone | 45 | 8,072 | 4 | 5,380 | 12,532 | 8,924 | 7,152 |
+| default | object_fixed_key | 512 | copy_from, clone | 608 | 132,400 | 8 | 63,948 | 180,068 | 122,700 | 116,120 |
+| default | object_fixed_key | 8192 | copy_from, clone | 9,573 | 2,134,696 | 12 | 1,014,084 | 2,886,740 | 1,969,212 | 1,872,656 |
+| default | object_escaped_non_ascii_key | 32 | copy_from, clone | 45 | 8,168 | 4 | 5,316 | 12,564 | 8,956 | 7,248 |
+| default | object_escaped_non_ascii_key | 512 | copy_from, clone | 608 | 133,936 | 8 | 62,924 | 180,580 | 123,212 | 117,656 |
+| default | object_escaped_non_ascii_key | 8192 | copy_from, clone | 9,573 | 2,159,272 | 12 | 997,700 | 2,894,932 | 1,977,404 | 1,897,232 |
+| default | mixed_deep_chain | 8 | copy_from, clone | 29 | 4,528 | 3 | 4,292 | 7,996 | 7,356 | 3,704 |
+| default | mixed_deep_chain | 64 | copy_from, clone | 200 | 35,832 | 6 | 23,052 | 50,892 | 47,564 | 27,840 |
+| default | mixed_deep_chain | 256 | copy_from, clone | 778 | 143,160 | 8 | 87,372 | 197,964 | 185,420 | 110,592 |
+| preserve_order | array | 32 | copy_from, clone | 11 | 11,760 | 7 | 3,916 | 11,620 | 6,220 | 7,704 |
+| preserve_order | array | 512 | copy_from, clone | 19 | 196,080 | 15 | 38,476 | 161,380 | 75,340 | 122,904 |
+| preserve_order | array | 8192 | copy_from, clone | 27 | 3,145,200 | 23 | 591,436 | 2,557,540 | 1,181,260 | 1,966,104 |
+| preserve_order | object_fixed_key | 32 | copy_from, clone | 50 | 20,924 | 8 | 6,044 | 18,916 | 12,748 | 12,872 |
+| preserve_order | object_fixed_key | 512 | copy_from, clone | 542 | 344,028 | 16 | 72,284 | 277,636 | 179,308 | 205,352 |
+| preserve_order | object_fixed_key | 8192 | copy_from, clone | 8,234 | 5,512,732 | 24 | 1,132,124 | 4,417,156 | 2,844,268 | 3,285,032 |
+| preserve_order | object_escaped_non_ascii_key | 32 | copy_from, clone | 50 | 21,020 | 8 | 5,980 | 18,948 | 12,780 | 12,968 |
+| preserve_order | object_escaped_non_ascii_key | 512 | copy_from, clone | 542 | 345,564 | 16 | 71,260 | 278,148 | 179,820 | 206,888 |
+| preserve_order | object_escaped_non_ascii_key | 8192 | copy_from, clone | 8,234 | 5,537,308 | 24 | 1,115,740 | 4,425,348 | 2,852,460 | 3,309,608 |
+| preserve_order | mixed_deep_chain | 8 | copy_from, clone | 33 | 4,576 | 3 | 3,380 | 6,852 | 6,012 | 3,472 |
+| preserve_order | mixed_deep_chain | 64 | copy_from, clone | 232 | 35,096 | 6 | 15,756 | 40,340 | 36,812 | 24,584 |
+| preserve_order | mixed_deep_chain | 256 | copy_from, clone | 906 | 139,736 | 8 | 58,188 | 155,156 | 142,412 | 96,968 |
+
+采样 revision 为 `db0a09232b634a26b87393628e20f83c4a47e709`；`Cargo.lock` SHA-256 为
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`。`rustc -Vv` 为 Rust
+1.94.0，host `x86_64-unknown-linux-gnu`，LLVM 21.1.8。平台为 Ubuntu 24.04.4、Linux
+`7.0.0-38-generic`、x86_64。六轮采样期间工作树均有改动：`Cargo.toml`、`fuzz/Cargo.toml`、
+`fuzz/src/json_unique_decode_invariants.rs`、`fuzz/src/lib.rs`、
+`fuzz/tests/json_extended_invariants_tests.rs`、`src/encode/json_encoder.rs`，以及未跟踪的
+`benches/value_clone_allocations.rs`、`fuzz/src/json_syntax_reference.rs`、
+`fuzz/tests/json_syntax_reference_tests.rs`。这些是并行任务 R01、R03 和基准自身的改动；
+`src/value/safe_json_value.rs` 未改动。
+
+在宽度 8192 时，测量结束时副本仍存活。default 下数组的净结束存活字节 / 峰值额外字节为
+262,144 B / 983,064 B，固定键对象为 955,128 B / 1,872,656 B，转义及非 ASCII 键对象为
+979,704 B / 1,897,232 B。`preserve_order` 下相应结果为数组 589,824 B / 1,966,104 B、固定键
+对象 1,712,144 B / 3,285,032 B、转义及非 ASCII 键对象 1,736,720 B / 3,309,608 B。两种
+map 配置中，最大宽度的峰值存活字节都显著高于最终结果的净存活变化。因此值得进入 T4 做候选
+实验；这还不能证明候选能达到前后至少 10% 的门槛。本基线没有修改生产复制实现，也没有设置
+耗时断言或将分配器数据称作 RSS。
+
+### SafeJsonValue 复制候选后测（2026-10-30）
+
+基线后，候选实现将批量 Task/output 栈换为深度优先迭代器帧。最终帧存放 iterator、至多一个
+对象键，以及一个布尔值来表示是否持有 builder 栈项。活动 `SafeValueBuilder` 保存在独立的
+LIFO 向量中。只有当前容器在首个子节点后还有兄弟节点时才创建 builder，因此单子节点链不分配
+或持有 builder 项。回溯时，已完成子树由 `SafeJsonValue` 持有，部分结果由 builder 保护，嵌套
+builder 按帧的后进先出顺序弹出。没有新增 unsafe。
+
+最终候选上，以下两条命令各顺序运行三次。每种 feature 的 24 行记录在三轮间完全一致；
+`copy_from` 和 `clone` 每行数据也完全相同。default 三轮没有 Cargo 锁等待；preserve_order 第
+一轮编译前出现过一次 package-cache 锁等待，后两轮没有。下表沿用基线表中的 CSV 字段定义，
+操作列列出两个相同结果的操作。
+
+| Feature | 形状 | 规模 | 操作 | 分配次数 | 请求字节 | Realloc 次数 | 基线存活 B | 峰值存活 B | 结束存活 B | 峰值额外 B |
+| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| default | array | 32 | copy_from, clone | 6 | 2,400 | 3 | 2,636 | 4,140 | 3,660 | 1,504 |
+| default | array | 512 | copy_from, clone | 10 | 33,120 | 7 | 17,996 | 34,860 | 34,380 | 16,864 |
+| default | array | 8192 | copy_from, clone | 14 | 524,640 | 11 | 263,756 | 526,380 | 525,900 | 262,624 |
+| default | object_fixed_key | 32 | copy_from, clone | 39 | 4,024 | 0 | 5,380 | 9,404 | 8,924 | 4,024 |
+| default | object_fixed_key | 512 | copy_from, clone | 598 | 59,232 | 0 | 63,948 | 123,180 | 122,700 | 59,232 |
+| default | object_fixed_key | 8192 | copy_from, clone | 9,559 | 955,608 | 0 | 1,014,084 | 1,969,692 | 1,969,212 | 955,608 |
+| default | object_escaped_non_ascii_key | 32 | copy_from, clone | 39 | 4,120 | 0 | 5,316 | 9,436 | 8,956 | 4,120 |
+| default | object_escaped_non_ascii_key | 512 | copy_from, clone | 598 | 60,768 | 0 | 62,924 | 123,692 | 123,212 | 60,768 |
+| default | object_escaped_non_ascii_key | 8192 | copy_from, clone | 9,559 | 980,184 | 0 | 997,700 | 1,977,884 | 1,977,404 | 980,184 |
+| default | mixed_deep_chain | 8 | copy_from, clone | 14 | 4,120 | 1 | 4,292 | 8,060 | 7,356 | 3,768 |
+| default | mixed_deep_chain | 64 | copy_from, clone | 101 | 35,424 | 4 | 23,052 | 53,196 | 47,564 | 30,144 |
+| default | mixed_deep_chain | 256 | copy_from, clone | 391 | 142,752 | 6 | 87,372 | 207,948 | 185,420 | 120,576 |
+| preserve_order | array | 32 | copy_from, clone | 6 | 4,736 | 3 | 3,916 | 6,636 | 6,220 | 2,720 |
+| preserve_order | array | 512 | copy_from, clone | 10 | 73,856 | 7 | 38,476 | 75,756 | 75,340 | 37,280 |
+| preserve_order | array | 8192 | copy_from, clone | 14 | 1,179,776 | 11 | 591,436 | 1,181,676 | 1,181,260 | 590,240 |
+| preserve_order | object_fixed_key | 32 | copy_from, clone | 44 | 13,132 | 4 | 6,044 | 13,164 | 12,748 | 7,120 |
+| preserve_order | object_fixed_key | 512 | copy_from, clone | 532 | 209,516 | 8 | 72,284 | 179,724 | 179,308 | 107,440 |
+| preserve_order | object_fixed_key | 8192 | copy_from, clone | 8,220 | 3,350,700 | 12 | 1,132,124 | 2,844,684 | 2,844,268 | 1,712,560 |
+| preserve_order | object_escaped_non_ascii_key | 32 | copy_from, clone | 44 | 13,228 | 4 | 5,980 | 13,196 | 12,780 | 7,216 |
+| preserve_order | object_escaped_non_ascii_key | 512 | copy_from, clone | 532 | 211,052 | 8 | 71,260 | 180,236 | 179,820 | 108,976 |
+| preserve_order | object_escaped_non_ascii_key | 8192 | copy_from, clone | 8,220 | 3,375,276 | 12 | 1,115,740 | 2,852,876 | 2,852,460 | 1,737,136 |
+| preserve_order | mixed_deep_chain | 8 | copy_from, clone | 18 | 3,016 | 1 | 3,380 | 6,268 | 6,012 | 2,888 |
+| preserve_order | mixed_deep_chain | 64 | copy_from, clone | 133 | 25,024 | 4 | 15,756 | 38,860 | 36,812 | 23,104 |
+| preserve_order | mixed_deep_chain | 256 | copy_from, clone | 519 | 100,480 | 6 | 58,188 | 150,604 | 142,412 | 92,416 |
+
+后测 revision 仍为 `db0a09232b634a26b87393628e20f83c4a47e709`，`Cargo.lock` SHA-256 仍为
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`，Rust/platform 信息与前一节
+基线相同。后测期间的 dirty worktree 包含 `Cargo.toml`、两份 benchmark 基线文档、R01 的 fuzz
+源文件及 `fuzz/Cargo.toml`、`src/encode/json_encoder.rs`、`src/tests/j3/owner_tests.rs`、
+`src/value/internal/mod.rs`、`src/value/safe_json_value.rs`、
+`tests/value/safe_json_value_tests.rs`，以及未跟踪的 `benches/value_clone_allocations.rs`、
+`src/value/internal/json_value_copy_frame.rs` 和新的 R01 fuzz module/test。采样未修改
+`Cargo.lock`。
+
+宽度 8192 时，`peak_extra_bytes` 基线到最终候选的变化为：default 数组 983,064→262,624 B
+（降低 73.3%）、固定键对象 1,872,656→955,608 B（降低 49.0%）、转义/非 ASCII 键对象
+1,897,232→980,184 B（降低 48.3%）。`preserve_order` 下分别为数组 1,966,104→590,240 B
+（降低 70.0%）、固定键对象 3,285,032→1,712,560 B（降低 47.9%）、转义/非 ASCII 键对象
+3,309,608→1,737,136 B（降低 47.5%）。因此，8192 项数组和两类对象在两种 map 配置下均达到
+设计要求的至少 10% 降幅。
+
+最终 mixed-chain 结果如下：
+
+| Feature | 深度 | 基线峰值额外 B | 候选峰值额外 B | 变化 |
+| --- | ---: | ---: | ---: | ---: |
+| default | 8 | 3,704 | 3,768 | +1.7% |
+| default | 64 | 27,840 | 30,144 | +8.3% |
+| default | 256 | 110,592 | 120,576 | +9.0%（+9,984 B） |
+| preserve_order | 8 | 3,472 | 2,888 | -16.8% |
+| preserve_order | 64 | 24,584 | 23,104 | -6.0% |
+| preserve_order | 256 | 96,968 | 92,416 | -4.7% |
+
+第一版帧在每层内联保存 builder，使深度 256 的 `peak_extra` 增加 default 14.6%、
+`preserve_order` 12.2%，所以没有保留。最终紧凑帧去掉 8-byte builder 索引，改用布尔标志；
+独立 builder 栈仅为还有未访问兄弟节点的帧持有 builder。基准中的单子节点链不会分配该栈。
+最终 default 深度 256 的峰值仍比基线高 9.0%（9,984 B），但请求字节总量是 142,752 B，
+低于基线的 143,160 B；preserve_order 深链峰值均低于基线。这里如实记录 default 深链峰值差异，
+不把它描述成优化。考虑其规模、较低的总请求流量、无 unsafe/语义变更，以及两种配置下宽形状
+47.5–73.3% 的峰值下降，按设计条件保留候选。测试逐值比较副本、比较源和副本的键迭代顺序、
+覆盖深度 8/64/256，并验证注入 unwind 时数组和对象部分结果的清理。没有墙钟阈值或 RSS 声明。

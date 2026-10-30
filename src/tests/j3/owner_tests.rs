@@ -77,6 +77,21 @@ fn test_owner_copy_from_unwind_drops_partial_object_iteratively() {
     SafeJsonValue::panic_after_guarded_inserts_for_test(64);
     let result = std::panic::catch_unwind(|| SafeJsonValue::copy_from(source.as_value()));
     assert!(result.is_err());
+    SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
+    drop(source);
+}
+
+#[test]
+fn test_owner_copy_from_unwind_drops_partial_array_iteratively() {
+    let mut source = Value::Null;
+    for _ in 0..128 {
+        source = Value::Array(vec![source]);
+    }
+    let source = SafeJsonValue::new(source);
+    SafeJsonValue::panic_after_guarded_inserts_for_test(64);
+    let result = std::panic::catch_unwind(|| SafeJsonValue::copy_from(source.as_value()));
+    assert!(result.is_err());
+    SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
     drop(source);
 }
 

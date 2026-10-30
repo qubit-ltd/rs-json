@@ -647,3 +647,182 @@ Representative current estimates were 38.0 µs for equal 8192-element arrays,
 3.85 µs for depth-256 Debug to a discard sink. These short samples had outliers
 and are descriptive only; the allocation results provide the width-scaling
 evidence. No timing assertion is used.
+
+### SafeJsonValue copy allocation baseline (2026-10-30)
+
+This baseline measures `SafeJsonValue::copy_from` and `Clone` before any
+production copy implementation change. Fixtures are created before the
+measurement window. Each measured operation only creates the copy; equality
+checks, `black_box`, and dropping the result happen after the window. The
+benchmark first runs the allocation counter self-check. Object feature labels
+are detected from `serde_json::Map` iteration order at runtime.
+
+The two commands below were each run three times, sequentially. All 24 rows
+for each feature configuration were identical across its three runs. The
+default run 2 printed one Cargo package-cache lock wait; the other five runs
+printed no lock wait. The printed `copy_from` and `clone` records were also
+identical for every shape and size.
+
+```bash
+cargo bench --locked --bench value_clone_allocations
+cargo bench --locked --bench value_clone_allocations --features serde_json/preserve_order
+```
+
+The CSV schema is
+`VALUE_CLONE_ALLOC,shape,size,feature,operation,revision,allocation_count,allocated_request_bytes,reallocation_count,baseline_live_bytes,peak_live_bytes,end_live_bytes,peak_extra_bytes`.
+In the table, `operation=copy_from,clone` means each operation emitted the
+listed identical measurements. `size` is width for arrays/objects and depth
+for the mixed chain. `end_live_bytes` includes the live fixture and benchmark
+process state; subtracting `baseline_live_bytes` gives the net live-byte
+change while the result is still alive. `peak_extra_bytes` is the maximum live
+bytes above the baseline and therefore includes the copied result as well as
+temporary allocations. `allocated_request_bytes` includes realloc request
+sizes. These allocator diagnostics are not RSS or elapsed-time measurements.
+
+| Feature | Shape | Size | Operation | Allocation count | Requested bytes | Reallocations | Baseline live B | Peak live B | End live B | Peak extra B |
+| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| default | array | 32 | copy_from, clone | 11 | 5,680 | 7 | 2,636 | 6,500 | 3,660 | 3,864 |
+| default | array | 512 | copy_from, clone | 19 | 94,000 | 15 | 17,996 | 79,460 | 34,380 | 61,464 |
+| default | array | 8192 | copy_from, clone | 27 | 1,507,120 | 23 | 263,756 | 1,246,820 | 525,900 | 983,064 |
+| default | object_fixed_key | 32 | copy_from, clone | 45 | 8,072 | 4 | 5,380 | 12,532 | 8,924 | 7,152 |
+| default | object_fixed_key | 512 | copy_from, clone | 608 | 132,400 | 8 | 63,948 | 180,068 | 122,700 | 116,120 |
+| default | object_fixed_key | 8192 | copy_from, clone | 9,573 | 2,134,696 | 12 | 1,014,084 | 2,886,740 | 1,969,212 | 1,872,656 |
+| default | object_escaped_non_ascii_key | 32 | copy_from, clone | 45 | 8,168 | 4 | 5,316 | 12,564 | 8,956 | 7,248 |
+| default | object_escaped_non_ascii_key | 512 | copy_from, clone | 608 | 133,936 | 8 | 62,924 | 180,580 | 123,212 | 117,656 |
+| default | object_escaped_non_ascii_key | 8192 | copy_from, clone | 9,573 | 2,159,272 | 12 | 997,700 | 2,894,932 | 1,977,404 | 1,897,232 |
+| default | mixed_deep_chain | 8 | copy_from, clone | 29 | 4,528 | 3 | 4,292 | 7,996 | 7,356 | 3,704 |
+| default | mixed_deep_chain | 64 | copy_from, clone | 200 | 35,832 | 6 | 23,052 | 50,892 | 47,564 | 27,840 |
+| default | mixed_deep_chain | 256 | copy_from, clone | 778 | 143,160 | 8 | 87,372 | 197,964 | 185,420 | 110,592 |
+| preserve_order | array | 32 | copy_from, clone | 11 | 11,760 | 7 | 3,916 | 11,620 | 6,220 | 7,704 |
+| preserve_order | array | 512 | copy_from, clone | 19 | 196,080 | 15 | 38,476 | 161,380 | 75,340 | 122,904 |
+| preserve_order | array | 8192 | copy_from, clone | 27 | 3,145,200 | 23 | 591,436 | 2,557,540 | 1,181,260 | 1,966,104 |
+| preserve_order | object_fixed_key | 32 | copy_from, clone | 50 | 20,924 | 8 | 6,044 | 18,916 | 12,748 | 12,872 |
+| preserve_order | object_fixed_key | 512 | copy_from, clone | 542 | 344,028 | 16 | 72,284 | 277,636 | 179,308 | 205,352 |
+| preserve_order | object_fixed_key | 8192 | copy_from, clone | 8,234 | 5,512,732 | 24 | 1,132,124 | 4,417,156 | 2,844,268 | 3,285,032 |
+| preserve_order | object_escaped_non_ascii_key | 32 | copy_from, clone | 50 | 21,020 | 8 | 5,980 | 18,948 | 12,780 | 12,968 |
+| preserve_order | object_escaped_non_ascii_key | 512 | copy_from, clone | 542 | 345,564 | 16 | 71,260 | 278,148 | 179,820 | 206,888 |
+| preserve_order | object_escaped_non_ascii_key | 8192 | copy_from, clone | 8,234 | 5,537,308 | 24 | 1,115,740 | 4,425,348 | 2,852,460 | 3,309,608 |
+| preserve_order | mixed_deep_chain | 8 | copy_from, clone | 33 | 4,576 | 3 | 3,380 | 6,852 | 6,012 | 3,472 |
+| preserve_order | mixed_deep_chain | 64 | copy_from, clone | 232 | 35,096 | 6 | 15,756 | 40,340 | 36,812 | 24,584 |
+| preserve_order | mixed_deep_chain | 256 | copy_from, clone | 906 | 139,736 | 8 | 58,188 | 155,156 | 142,412 | 96,968 |
+
+The sample revision was `db0a09232b634a26b87393628e20f83c4a47e709`; the
+`Cargo.lock` SHA-256 was
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`.
+`rustc -Vv` reported Rust 1.94.0, host `x86_64-unknown-linux-gnu`, LLVM
+21.1.8. The platform was Ubuntu 24.04.4, Linux
+`7.0.0-38-generic`, x86_64. The working tree was dirty during all samples:
+`Cargo.toml`, `fuzz/Cargo.toml`, `fuzz/src/json_unique_decode_invariants.rs`,
+`fuzz/src/lib.rs`, `fuzz/tests/json_extended_invariants_tests.rs`,
+`src/encode/json_encoder.rs`, and untracked
+`benches/value_clone_allocations.rs`, `fuzz/src/json_syntax_reference.rs`,
+`fuzz/tests/json_syntax_reference_tests.rs`. These are the concurrent R01,
+R03, and benchmark changes; `src/value/safe_json_value.rs` was unchanged.
+
+At width 8192, the result remained live at the end of each measurement. The
+net end-live changes and peak-extra measurements were 262,144 B / 983,064 B
+for the default array, 955,128 B / 1,872,656 B for the default fixed-key
+object, and 979,704 B / 1,897,232 B for its escaped/non-ASCII-key variant.
+With `preserve_order`, they were 589,824 B / 1,966,104 B for the array,
+1,712,144 B / 3,285,032 B for the fixed-key object, and 1,736,720 B /
+3,309,608 B for its escaped/non-ASCII-key variant. Thus peak live bytes were
+substantially above the final live result at the largest width in both map
+configurations. This makes a T4 candidate experiment worth evaluating; it is
+not evidence that a candidate will meet the 10% before/after threshold. No
+production copy implementation was changed for this baseline, and no timing
+assertion or RSS claim is made.
+
+### SafeJsonValue copy candidate post-sample (2026-10-30)
+
+After the baseline, the candidate replaced the eager task/output stacks with
+depth-first iterator frames. The final frame stores an iterator, one optional
+object key, and a boolean indicating whether its protected builder is active.
+Active `SafeValueBuilder`s are kept in a separate LIFO vector. A builder is
+created only when a container has siblings after the first child; single-child
+chains therefore do not allocate or retain builder entries. On unwind, each
+completed child remains a `SafeJsonValue`, each partial builder remains
+protected, and nested builders are popped in frame order. No unsafe code was
+added.
+
+The same two commands were run three times each, sequentially, against this
+final candidate. All 24 records per feature were identical across the three
+runs; `copy_from` and `clone` matched for every record. The default runs had no
+Cargo lock wait. The first preserve-order run printed one package-cache lock
+wait before compiling; its two later runs did not. The candidate measurements
+use the same schema and field definitions as the baseline table above. The
+`operation` column below lists both identical operations.
+
+| Feature | Shape | Size | Operation | Allocation count | Requested bytes | Reallocations | Baseline live B | Peak live B | End live B | Peak extra B |
+| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| default | array | 32 | copy_from, clone | 6 | 2,400 | 3 | 2,636 | 4,140 | 3,660 | 1,504 |
+| default | array | 512 | copy_from, clone | 10 | 33,120 | 7 | 17,996 | 34,860 | 34,380 | 16,864 |
+| default | array | 8192 | copy_from, clone | 14 | 524,640 | 11 | 263,756 | 526,380 | 525,900 | 262,624 |
+| default | object_fixed_key | 32 | copy_from, clone | 39 | 4,024 | 0 | 5,380 | 9,404 | 8,924 | 4,024 |
+| default | object_fixed_key | 512 | copy_from, clone | 598 | 59,232 | 0 | 63,948 | 123,180 | 122,700 | 59,232 |
+| default | object_fixed_key | 8192 | copy_from, clone | 9,559 | 955,608 | 0 | 1,014,084 | 1,969,692 | 1,969,212 | 955,608 |
+| default | object_escaped_non_ascii_key | 32 | copy_from, clone | 39 | 4,120 | 0 | 5,316 | 9,436 | 8,956 | 4,120 |
+| default | object_escaped_non_ascii_key | 512 | copy_from, clone | 598 | 60,768 | 0 | 62,924 | 123,692 | 123,212 | 60,768 |
+| default | object_escaped_non_ascii_key | 8192 | copy_from, clone | 9,559 | 980,184 | 0 | 997,700 | 1,977,884 | 1,977,404 | 980,184 |
+| default | mixed_deep_chain | 8 | copy_from, clone | 14 | 4,120 | 1 | 4,292 | 8,060 | 7,356 | 3,768 |
+| default | mixed_deep_chain | 64 | copy_from, clone | 101 | 35,424 | 4 | 23,052 | 53,196 | 47,564 | 30,144 |
+| default | mixed_deep_chain | 256 | copy_from, clone | 391 | 142,752 | 6 | 87,372 | 207,948 | 185,420 | 120,576 |
+| preserve_order | array | 32 | copy_from, clone | 6 | 4,736 | 3 | 3,916 | 6,636 | 6,220 | 2,720 |
+| preserve_order | array | 512 | copy_from, clone | 10 | 73,856 | 7 | 38,476 | 75,756 | 75,340 | 37,280 |
+| preserve_order | array | 8192 | copy_from, clone | 14 | 1,179,776 | 11 | 591,436 | 1,181,676 | 1,181,260 | 590,240 |
+| preserve_order | object_fixed_key | 32 | copy_from, clone | 44 | 13,132 | 4 | 6,044 | 13,164 | 12,748 | 7,120 |
+| preserve_order | object_fixed_key | 512 | copy_from, clone | 532 | 209,516 | 8 | 72,284 | 179,724 | 179,308 | 107,440 |
+| preserve_order | object_fixed_key | 8192 | copy_from, clone | 8,220 | 3,350,700 | 12 | 1,132,124 | 2,844,684 | 2,844,268 | 1,712,560 |
+| preserve_order | object_escaped_non_ascii_key | 32 | copy_from, clone | 44 | 13,228 | 4 | 5,980 | 13,196 | 12,780 | 7,216 |
+| preserve_order | object_escaped_non_ascii_key | 512 | copy_from, clone | 532 | 211,052 | 8 | 71,260 | 180,236 | 179,820 | 108,976 |
+| preserve_order | object_escaped_non_ascii_key | 8192 | copy_from, clone | 8,220 | 3,375,276 | 12 | 1,115,740 | 2,852,876 | 2,852,460 | 1,737,136 |
+| preserve_order | mixed_deep_chain | 8 | copy_from, clone | 18 | 3,016 | 1 | 3,380 | 6,268 | 6,012 | 2,888 |
+| preserve_order | mixed_deep_chain | 64 | copy_from, clone | 133 | 25,024 | 4 | 15,756 | 38,860 | 36,812 | 23,104 |
+| preserve_order | mixed_deep_chain | 256 | copy_from, clone | 519 | 100,480 | 6 | 58,188 | 150,604 | 142,412 | 92,416 |
+
+The post-sample revision remained
+`db0a09232b634a26b87393628e20f83c4a47e709`, with `Cargo.lock` SHA-256
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a` and the
+Rust/platform details recorded for the baseline above. The dirty worktree
+during these samples contained `Cargo.toml`, both benchmark baseline documents,
+the R01 fuzz files and `fuzz/Cargo.toml`, `src/encode/json_encoder.rs`,
+`src/tests/j3/owner_tests.rs`, `src/value/internal/mod.rs`,
+`src/value/safe_json_value.rs`, `tests/value/safe_json_value_tests.rs`, and
+untracked `benches/value_clone_allocations.rs`,
+`src/value/internal/json_value_copy_frame.rs`, and the new R01 fuzz module and
+test. No changes were made to `Cargo.lock`.
+
+At width 8192, baseline to final-candidate `peak_extra_bytes` changed from
+983,064 to 262,624 B for the default array (73.3% lower), from 1,872,656 to
+955,608 B for the fixed-key object (49.0% lower), and from 1,897,232 to
+980,184 B for the escaped/non-ASCII-key object (48.3% lower). Under
+`preserve_order`, the corresponding changes were 1,966,104 to 590,240 B
+(70.0% lower), 3,285,032 to 1,712,560 B (47.9% lower), and 3,309,608 to
+1,737,136 B (47.5% lower). Thus the candidate clears the design's 10% gate
+for the 8192-item array and both object fixtures in both configurations.
+
+The final mixed-chain measurements differ from baseline as follows:
+
+| Feature | Depth | Baseline peak extra B | Candidate peak extra B | Change |
+| --- | ---: | ---: | ---: | ---: |
+| default | 8 | 3,704 | 3,768 | +1.7% |
+| default | 64 | 27,840 | 30,144 | +8.3% |
+| default | 256 | 110,592 | 120,576 | +9.0% (+9,984 B) |
+| preserve_order | 8 | 3,472 | 2,888 | -16.8% |
+| preserve_order | 64 | 24,584 | 23,104 | -6.0% |
+| preserve_order | 256 | 96,968 | 92,416 | -4.7% |
+
+The first frame variant stored a builder inline in every frame and raised
+depth-256 peak-extra by 14.6% (default) and 12.2% (`preserve_order`). That
+variant was not retained. The final compact frame removes the 8-byte builder
+index and stores only a boolean; a separate builder stack contains entries
+only for frames with unvisited siblings. For the tested single-child chain,
+that vector remains allocation-free. The final default depth-256 peak is still
+9.0% (9,984 B) above baseline, while allocated request volume is 142,752 B
+versus 143,160 B at baseline; preserve-order deep-chain peaks are below
+baseline. This remaining default deep-chain peak increase is reported as a
+tradeoff, not hidden as an improvement. Given its size, the lower total request
+volume, no unsafe code or semantic changes, and the 47.5–73.3% width gains in
+both configurations, the candidate is retained under the design's conditions.
+The tests directly compare copied values, compare source/copy key iteration
+order, cover mixed depths 8/64/256, and exercise partial array and object
+cleanup during injected unwind. No wall-clock threshold or RSS claim is made.

@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use qubit_json::value::SafeJsonValue;
+use serde_json::Map;
+use serde_json::Value;
 
 #[test]
 fn test_safe_value_bridge_rejects_decoded_duplicate_keys() {
@@ -56,6 +58,63 @@ fn test_safe_value_bridge_preserves_object_entry_order() {
         object.keys().map(String::as_str).collect::<Vec<_>>(),
         expected.keys().map(String::as_str).collect::<Vec<_>>(),
     );
+}
+
+#[test]
+fn test_copy_from_preserves_wide_array_and_object_contents() {
+    for width in [32, 512, 8_192] {
+        let source_array = SafeJsonValue::new(Value::Array(
+            (0..width).map(|index| Value::from(index as u64)).collect(),
+        ));
+        let copied_array = SafeJsonValue::copy_from(source_array.as_value());
+        assert_eq!(copied_array, source_array, "array width {width}");
+
+        let mut entries = Map::with_capacity(width);
+        for index in (0..width).rev() {
+            entries.insert(format!("key-{index:05}"), Value::from(index as u64));
+        }
+        let source_object = SafeJsonValue::new(Value::Object(entries));
+        let copied_object = SafeJsonValue::copy_from(source_object.as_value());
+        assert_eq!(copied_object, source_object, "object width {width}");
+        assert_eq!(
+            copied_object
+                .as_value()
+                .as_object()
+                .expect("copy remains an object")
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            source_object
+                .as_value()
+                .as_object()
+                .expect("source remains an object")
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            "object width {width} must retain its map iteration order"
+        );
+    }
+}
+
+#[test]
+fn test_copy_from_preserves_mixed_deep_chain() {
+    for depth in [8, 64, 256] {
+        let mut value = Value::Null;
+        for level in 0..depth {
+            value = if level % 2 == 0 {
+                Value::Array(vec![value])
+            } else {
+                let mut object = Map::new();
+                object.insert("层-\"\n".to_owned(), value);
+                Value::Object(object)
+            };
+        }
+        let source = SafeJsonValue::new(value);
+        let copied = SafeJsonValue::copy_from(source.as_value());
+        assert_eq!(copied, source, "mixed chain depth {depth}");
+        drop(copied);
+        drop(source);
+    }
 }
 
 mod view_robustness {

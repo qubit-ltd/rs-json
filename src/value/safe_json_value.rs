@@ -14,6 +14,7 @@ use std::mem::ManuallyDrop;
 
 use serde_json::Value;
 
+use super::internal::JsonValueCopyFrame;
 use super::internal::SafeValueBuilder;
 use super::internal::debug_value;
 use super::internal::values_equal;
@@ -98,43 +99,60 @@ impl SafeJsonValue {
         #[cfg(test)]
         COPY_FROM_CALLS.with(|calls| calls.set(calls.get() + 1));
 
-        enum Task<'a> {
-            Visit(&'a Value),
-            Array(usize),
-            Object(Vec<String>),
-        }
-        let mut tasks = vec![Task::Visit(value)];
-        let mut output: Vec<Self> = Vec::new();
-        while let Some(task) = tasks.pop() {
-            match task {
-                Task::Visit(Value::Array(values)) => {
-                    tasks.push(Task::Array(values.len()));
-                    tasks.extend(values.iter().rev().map(Task::Visit));
-                }
-                Task::Visit(Value::Object(values)) => {
-                    tasks.push(Task::Object(values.keys().cloned().collect()));
-                    tasks.extend(values.values().rev().map(Task::Visit));
-                }
-                Task::Visit(value) => output.push(Self::new(value.clone())),
-                Task::Array(length) => {
-                    let children = output.split_off(output.len() - length);
-                    let mut builder = SafeValueBuilder::array();
-                    for child in children {
-                        builder.push(child);
+        let mut frames: Vec<JsonValueCopyFrame<'_>> = Vec::new();
+        let mut builders: Vec<SafeValueBuilder> = Vec::new();
+        let mut next_value = Some(value);
+        let mut completed_value = None;
+        loop {
+            if let Some(source) = next_value.take() {
+                match source {
+                    Value::Array(values) => {
+                        let mut frame = JsonValueCopyFrame::array(values);
+                        if let Some(child) = frame.next_value() {
+                            if frame.has_remaining() {
+                                frame.start_builder(&mut builders);
+                            }
+                            frames.push(frame);
+                            next_value = Some(child);
+                        } else {
+                            completed_value = Some(frame.finish_empty());
+                        }
                     }
-                    output.push(Self::new(builder.finish()));
-                }
-                Task::Object(keys) => {
-                    let children = output.split_off(output.len() - keys.len());
-                    let mut builder = SafeValueBuilder::object();
-                    for (key, child) in keys.into_iter().zip(children) {
-                        builder.insert(key, child);
+                    Value::Object(values) => {
+                        let mut frame = JsonValueCopyFrame::object(values);
+                        if let Some(child) = frame.next_value() {
+                            if frame.has_remaining() {
+                                frame.start_builder(&mut builders);
+                            }
+                            frames.push(frame);
+                            next_value = Some(child);
+                        } else {
+                            completed_value = Some(frame.finish_empty());
+                        }
                     }
-                    output.push(Self::new(builder.finish()));
+                    leaf => completed_value = Some(Self::new(leaf.clone())),
+                }
+            }
+
+            if let Some(child) = completed_value.take() {
+                let Some(parent) = frames.last_mut() else {
+                    return child;
+                };
+                if let Some(completed_parent) = parent.push_child(child, &mut builders) {
+                    frames.pop().expect("a completed child has a parent frame");
+                    completed_value = Some(completed_parent);
+                } else if let Some(source) = parent.next_value() {
+                    next_value = Some(source);
+                } else {
+                    completed_value = Some(
+                        frames
+                            .pop()
+                            .expect("a completed child has a parent frame")
+                            .finish(&mut builders),
+                    );
                 }
             }
         }
-        output.pop().expect("a JSON value always produces a root")
     }
 
     /// Returns a shared borrow of the underlying JSON tree for
