@@ -21,7 +21,8 @@ pub(in crate::value::json_value_encoder) enum CompoundState {
     Sequence {
         /// Guarded children accumulated for this sequence.
         values: Vec<SafeJsonValue>,
-        /// Depth used to encode each child.
+        /// Depth of this sequence container; its children are encoded at `depth
+        /// + 1`.
         depth: usize,
         /// Number of accepted children, checked before incrementing.
         count: usize,
@@ -36,7 +37,7 @@ pub(in crate::value::json_value_encoder) enum CompoundState {
         keys: BTreeSet<String>,
         /// Key awaiting exactly one value; cleared after successful insertion.
         next_key: Option<String>,
-        /// Depth used to encode each value.
+        /// Depth of this map container; its values are encoded at `depth + 1`.
         depth: usize,
         /// Number of accepted entries, checked before incrementing.
         count: usize,
@@ -47,7 +48,8 @@ pub(in crate::value::json_value_encoder) enum CompoundState {
         variant: String,
         /// Guarded children retained until the variant succeeds.
         values: Vec<SafeJsonValue>,
-        /// Child nesting depth.
+        /// Depth of the outer enum-variant object. The inner container is at
+        /// `depth + 1`, and its children are encoded at `depth + 2`.
         depth: usize,
         /// Accepted child count, checked against overflow and limits.
         count: usize,
@@ -60,7 +62,8 @@ pub(in crate::value::json_value_encoder) enum CompoundState {
         values: Vec<(String, SafeJsonValue)>,
         /// Field names already accepted, used to reject duplicates.
         keys: BTreeSet<String>,
-        /// Child nesting depth.
+        /// Depth of the outer enum-variant object. The inner container is at
+        /// `depth + 1`, and its children are encoded at `depth + 2`.
         depth: usize,
         /// Accepted field count, checked before incrementing.
         count: usize,

@@ -64,6 +64,22 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Creates an accumulator for an already-admitted sequence container.
+    ///
+    /// # Parameters
+    ///
+    /// * `context` - Shared staged accounting and sticky failure state.
+    /// * `depth` - Depth of this container; child values use `depth + 1`.
+    /// * `kind` - Container identity used for sequence-item admission.
+    /// * `capacity` - Initial allocation hint, bounded by the caller before
+    ///   entry.
+    ///
+    /// # Returns
+    ///
+    /// An empty guarded accumulator. Construction does not admit the container
+    /// or commit the transaction. Current callers cap the allocation hint at
+    /// 1024; the hint is not a limit on the accepted collection size or
+    /// total memory.
     pub(in crate::value::json_value_encoder) fn sequence(
         context: ContextCell<'context, 'transaction, 'budget, R, Q>,
         depth: usize,
@@ -82,6 +98,21 @@ where
         }
     }
 
+    /// Creates an accumulator for an already-admitted map container.
+    ///
+    /// # Parameters
+    ///
+    /// * `context` - Shared staged accounting and sticky failure state.
+    /// * `depth` - Depth of this container; values use `depth + 1`.
+    /// * `capacity` - Initial allocation hint, bounded by the caller before
+    ///   entry.
+    ///
+    /// # Returns
+    ///
+    /// An empty guarded accumulator. Construction does not admit the container
+    /// or commit the transaction. Current callers cap the allocation hint at
+    /// 1024; the hint is not a limit on the accepted collection size or
+    /// total memory.
     pub(in crate::value::json_value_encoder) fn map(
         context: ContextCell<'context, 'transaction, 'budget, R, Q>,
         depth: usize,
@@ -100,6 +131,23 @@ where
         }
     }
 
+    /// Creates an accumulator for an already-admitted tuple enum variant.
+    ///
+    /// # Parameters
+    ///
+    /// * `context` - Shared staged accounting and sticky failure state.
+    /// * `variant` - Name of the variant used as the outer object's key.
+    /// * `depth` - Depth of the outer object; the inner sequence is at `depth +
+    ///   1`.
+    /// * `capacity` - Initial allocation hint, bounded by the caller before
+    ///   entry.
+    ///
+    /// # Returns
+    ///
+    /// An empty guarded accumulator. The caller has already admitted the outer
+    /// one-entry object, its variant key, and the inner sequence. Children use
+    /// `depth + 2`. Capacity is only a caller-bounded initial allocation hint.
+    /// Creating the accumulator does not commit the staged transaction.
     pub(in crate::value::json_value_encoder) fn tuple_variant(
         context: ContextCell<'context, 'transaction, 'budget, R, Q>,
         variant: &str,
@@ -118,6 +166,23 @@ where
         }
     }
 
+    /// Creates an accumulator for an already-admitted struct enum variant.
+    ///
+    /// # Parameters
+    ///
+    /// * `context` - Shared staged accounting and sticky failure state.
+    /// * `variant` - Name of the variant used as the outer object's key.
+    /// * `depth` - Depth of the outer object; the inner map is at `depth + 1`.
+    /// * `capacity` - Initial allocation hint, bounded by the caller before
+    ///   entry.
+    ///
+    /// # Returns
+    ///
+    /// An empty guarded accumulator. The caller has already admitted the outer
+    /// one-entry object, its variant key, and the inner map. Fields use `depth
+    /// + 2`. Capacity is only a caller-bounded initial allocation hint.
+    ///
+    /// Creating the accumulator does not commit the staged transaction.
     pub(in crate::value::json_value_encoder) fn struct_variant(
         context: ContextCell<'context, 'transaction, 'budget, R, Q>,
         variant: &str,
