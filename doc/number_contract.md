@@ -19,6 +19,7 @@ default model, not every decoder.
 | --- | --- |
 | Negative integer | `i64::MIN..=-1` |
 | Non-negative integer | `0..=u64::MAX` |
+| Negative-zero token `-0` | Admitted; controlled value construction preserves floating-point negative zero |
 | Fraction or exponent | Must parse to a finite `f64` |
 
 The boundaries are inclusive. `-9223372036854775808` and
@@ -41,6 +42,15 @@ it admits one when conversion to a finite `f64` succeeds. Ordinary decimal and
 exponent tokens must be finite in either model. `JcsDecoder` is a separate
 contract: it converts every number, including values inside the integer range,
 to finite binary64, as required by JCS.
+
+The integer descriptions above have a negative-zero exception. Controlled
+owned-value construction, including unique-value decoding and validated
+decoding with `Preserve`, represents `-0` as floating-point negative zero.
+`ExactSafeInteger` converts it to integer `0`, discarding the sign. Typed
+decoding delegates the final representation to the target type and active
+Serde features; the integer range description does not promise an integer
+representation for `-0`. Preserving the sign does not promise preservation of
+the original token spelling.
 
 Fallback is available only through decode entry points that explicitly expose
 number-model selection. It is not automatically enabled by normalizing decode
