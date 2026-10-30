@@ -7,6 +7,8 @@
 // =============================================================================
 //! Shared support for the `qubit-json` fuzz targets.
 
+mod internal;
+
 pub mod fuzz_record;
 pub mod input_limit;
 pub mod jcs_decode_invariants;

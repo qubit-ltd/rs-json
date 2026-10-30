@@ -13,8 +13,26 @@ use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonMaterializationErrorReason;
 use qubit_json::value::DuplicateKeyRejectingJsonValue;
+use qubit_json_fuzz::json_unique_decode_invariants::assert_protected_decode_invariants;
 use qubit_json_fuzz::json_unique_decode_invariants::assert_unique_decode_invariants;
 use qubit_json_fuzz::json_unique_decode_invariants::assert_validated_admission_invariants;
+
+#[test]
+fn test_unique_number_feature_regression() {
+    for input in [b"1.5".as_slice(), b"-0", b"1e2"] {
+        assert_unique_decode_invariants(input, input.len());
+    }
+}
+
+#[test]
+fn test_protected_number_path_feature_regression() {
+    for input in [
+        br#"{"z":1.5,"a":-0,"m":[1e2]}"#.as_slice(),
+        br#"{"$serde_json::private::Number":"1.5","nested":[-0,1e2]}"#,
+    ] {
+        assert_protected_decode_invariants(input);
+    }
+}
 
 #[test]
 fn test_validated_admission_invariants_cover_both_modes() {

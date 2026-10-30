@@ -32,7 +32,9 @@ use serde::de::SeqAccess;
 use serde::de::Visitor;
 use serde_json::Value;
 
+use crate::internal::deserialize_reference_value;
 use crate::json_number_contract::numbers_fit_contract;
+use crate::json_number_contract::parse_strict_reference_number;
 use crate::json_reference::parse_literal_value;
 use crate::json_syntax_reference::validate_json_syntax;
 use crate::unique_decode_reference::parse_unique_literal_value;
@@ -302,8 +304,8 @@ fn assert_number_events_match_reference(
         );
         let end = offset.saturating_add(raw.len());
         assert_eq!(input.get(*offset..end), Some(raw.as_bytes()));
-        let actual_number: serde_json::Number =
-            serde_json::from_str(raw).expect("number callback raw text must be one JSON number");
+        let actual_number = parse_strict_reference_number(raw)
+            .expect("number callback raw text must fit the strict reference number contract");
         assert_eq!(
             actual_number, expected_number,
             "number callback at {actual_path:?} must match its reference value",
@@ -385,7 +387,7 @@ impl<'de> serde::Deserialize<'de> for ReferenceJsonValue {
             }
         }
 
-        deserializer.deserialize_any(ReferenceVisitor)
+        deserialize_reference_value(deserializer, ReferenceVisitor)
     }
 }
 

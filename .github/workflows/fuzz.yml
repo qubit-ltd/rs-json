@@ -33,6 +33,10 @@ jobs:
             profile: preserve-order
             features: preserve-order
             seconds: 210
+          - target: json_unique_decode_invariants
+            profile: arbitrary-precision
+            features: arbitrary-precision
+            seconds: 210
     steps:
       - name: Checkout source
         uses: actions/checkout@v6

@@ -19,7 +19,13 @@ use serde_json::Map;
 use serde_json::Number;
 use serde_json::Value;
 
+use crate::internal::deserialize_reference_value;
+
 /// Parses one complete JSON document while rejecting decoded duplicate keys.
+///
+/// Numeric tokens are restricted to the strict reference number contract.
+/// Nonnumeric containers retain source order while traversed, and ordinary
+/// object keys that resemble Serde JSON's private protocol keys remain data.
 pub fn parse_unique_literal_value(input: &[u8]) -> Result<Value, serde_json::Error> {
     let mut deserializer = serde_json::Deserializer::from_slice(input);
     let ReferenceValue(value) = ReferenceValue::deserialize(&mut deserializer)?;
@@ -31,7 +37,7 @@ struct ReferenceValue(Value);
 
 impl<'de> Deserialize<'de> for ReferenceValue {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(ReferenceValueVisitor).map(Self)
+        deserialize_reference_value(deserializer, ReferenceValueVisitor).map(Self)
     }
 }
 
