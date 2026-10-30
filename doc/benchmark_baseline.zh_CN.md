@@ -15,6 +15,7 @@
 | `decoder_bench` / `jcs_decode` | JCS 文本解码：数字数组、嵌套对象、普通/转义键和重复键拒绝；区分有限/无限预算及 fresh/reused session |
 | `unique_decode_bench` | 配置对象、元数据字符串 map 和 wire envelope 的唯一键解码；规模约 1 KiB、64 KiB、1 MiB；比较动态值、类型化目标、typed seed、普通 decoder 和直接 Serde |
 | `unique_decode_allocations` | 对相同路径及重复键拒绝单独统计分配请求，不注册 Criterion 计时样本 |
+| `lexical_array_allocations` | 测量标量、记录、空数组与单子链的分配请求和结果保留量 |
 
 在仓库根目录运行：
 
@@ -27,6 +28,8 @@ cargo bench --features jcs --bench decoder_bench -- jcs_decode --noplot
 JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --features "jcs jcs-allocation-diagnostics" --bench jcs_bench -- --noplot
 cargo bench --locked --bench unique_decode_bench -- --noplot
 cargo bench --locked --bench unique_decode_allocations
+cargo bench --locked --bench lexical_array_allocations
+cargo bench --locked --bench unique_decode_bench -- lexical_arrays
 ```
 
 通过过滤器缩小测量范围：
@@ -945,3 +948,95 @@ default 原始输出仅是不可用于判断的尝试，不是可靠延迟基线
 前测后，才重新考虑该候选。对象桥接 focused tests 仍验证行为，包括
 `{"a":0,"a":[}` 会在读取畸形重复值之前报告重复键 data error；这属于正确性
 结果，不是性能证据。
+
+### RSJSON-002 词法数组分配基线
+
+`lexical_array_allocations` 测量词法 JSON 值消费者构建数组的分配行为。夹具在测量外生成，包含空数组、
+元素数为 1/32/512/4096 的标量数组、记录数为 32/512/4096 的记录数组，以及深度为 8/64/256/4096 的单子链。
+深链使用 `SafeJsonValue`；计数窗口结束前保留结果，形状检查逐层迭代，不使用递归 clone、Debug 或析构。
+
+覆盖 `decode_value`、保留数字拼写的 validated decode、标量和记录的 unique typed/seed，以及启用 `jcs` 时的
+`JcsDecoder::decode_value_str`。每条适用路径分别使用 unlimited 和足够容纳相同输入的 finite 预算；预算以源字节数、
+根计为一的深度、节点数和序列项数设置。typed 路径不覆盖深链。`unique_decode_bench` 的 `lexical_arrays` 组
+重用相同夹具和路径，不启用分配计数器；计时闭包统一包含 decoder 创建和结果销毁。
+
+CSV 中的请求字节是分配器请求总量，不是 RSS 或物理峰值。`peak_extra` 使用现有计数器的请求容量口径，并非精确
+物理峰值；`end_delta` 在解码结果仍存活时计算，用来发现最终保留容量的变化。Cargo 不会把依赖 feature 暴露成 crate
+自身的 `cfg`，因此运行时用 `RSJSON_FEATURES` 标记准确的 feature 组合。原始输出在测量期间保存在 `target/rsjson002/`，结果记录后作为可再生成的构建产物清理。
+
+| 基线项目 | 结果 |
+| --- | --- |
+| Revision | `af5342897dedfbd4b8451fdee50d346600b5837d` |
+| T2 源码范围 | `Cargo.toml`、`benches/unique_decode_bench.rs`、`benches/unique_decode_support/mod.rs` 和两个新词法数组 bench 文件；未改生产源码 |
+| `Cargo.lock` SHA-256 | `65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a` |
+| 工具链 | `rustc 1.94.0 (4a4ef493e 2026-03-02)`、Cargo 1.94.0、Criterion 0.8.2 |
+| 主机 | Ubuntu 24.04.4 LTS、Linux 7.0.0-38-generic、Intel Core i5-9600K、6 CPU、`powersave`、允许 CPU affinity 0–5；23 个登录用户 |
+| 分配矩阵 | 8 种 feature 组合各成功运行三次；每次包含 76 条非 JCS 数据行或 100 条 JCS 数据行。完整重复值曾保存于 `target/rsjson002/allocation-summary.csv`（SHA-256 `7586cf83f6936eec58c36e54502bea20efb97190816b4d124c8b3f554f730452`），已将结果记入本文后清理该生成文件 |
+| 完整 Criterion 采样 | 未运行：6 CPU 共享主机持续高负载，存在其他 Rust、Python 和 Miri 任务；此环境不能提供可靠延迟基线 |
+
+下表为 4096 标量项数组、unlimited 路径。三轮各指标一致；`requested` 为分配请求总字节数，`end delta` 在结果仍存活时记录。完整 summary 还包含 finite 预算、512 项数组、记录数组、全部深链规模和所有适用路径。
+
+| Feature | 路径 | 分配次数 | 请求字节 | Peak extra | End delta |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `default` | `decode_value` | 15 | 393,536 | 262,592 | 131,072 |
+| `arbitrary_precision` | `decode_value` | 4,111 | 408,810 | 277,866 | 146,346 |
+| `preserve_order` | `decode_value` | 15 | 884,896 | 590,272 | 294,912 |
+| 两个 serde_json features | `decode_value` | 4,111 | 900,170 | 605,546 | 310,186 |
+| `jcs` | `JcsDecoder` | 15 | 393,568 | 262,528 | 131,072 |
+| `jcs` + `arbitrary_precision` | `JcsDecoder` | 4,111 | 417,034 | 285,994 | 154,538 |
+| `jcs` + `preserve_order` | `JcsDecoder` | 15 | 884,928 | 590,208 | 294,912 |
+| 三个 features | `JcsDecoder` | 4,111 | 908,394 | 613,674 | 318,378 |
+
+这组数据中，`arbitrary_precision` 为每个整数增加一次分配；`preserve_order` 显著改变数组的请求和保留字节数。这是各配置的基线差异，不代表优化收益。4096 深度链的 default `decode_value` 请求 1,572,416 字节、end delta 为 131,072；启用 `preserve_order` 后分别为 2,391,616 和 294,912。4096 标量数组中，JCS 路径比默认 `decode_value` 多请求 32 字节。JCS 数字使用 binary64；预检按浮点语义核对数值，同时检查数组形状、长度、键和值。
+
+测量期间多次记录主机负载：2026-10-30 本地时间 23:44、23:57、23:58、23:59 的 1 分钟负载依次为 45.75、37.34、36.11、28.86；最后一次 5/15 分钟均值仍为 32.27/32.85。2026-10-31 午夜后另一次读数为 32.39/32.81/33.01。主机只有 6 CPU，期间可见其他 worktree 的 Rust 编译、Python 任务和 Miri，因此未启动完整 Criterion 采样，也不作延迟结论。第一次 JCS 尝试 `alloc-jcs-r1.log` 因预检把 JCS `0.0` 与 serde_json `0` 直接比较而失败；该日志保留为 harness 失败，不作为数据。修正为 binary64-aware 预检后，JCS 全矩阵均通过。
+
+分配矩阵中的每种配置各运行三次，完整 stdout/stderr 在测量期间保存在 `target/rsjson002/` 供复核。结果记录后会清理这些可再生成产物；可重新运行以下命令生成：
+
+```bash
+RSJSON_FEATURES=default cargo bench --locked --bench lexical_array_allocations
+RSJSON_FEATURES=arbitrary_precision cargo bench --locked --features serde_json/arbitrary_precision --bench lexical_array_allocations
+RSJSON_FEATURES=preserve_order cargo bench --locked --features serde_json/preserve_order --bench lexical_array_allocations
+RSJSON_FEATURES=arbitrary_precision+preserve_order cargo bench --locked --features "serde_json/arbitrary_precision serde_json/preserve_order" --bench lexical_array_allocations
+RSJSON_FEATURES=jcs cargo bench --locked --features jcs --bench lexical_array_allocations
+RSJSON_FEATURES=jcs+arbitrary_precision cargo bench --locked --features "jcs serde_json/arbitrary_precision" --bench lexical_array_allocations
+RSJSON_FEATURES=jcs+preserve_order cargo bench --locked --features "jcs serde_json/preserve_order" --bench lexical_array_allocations
+RSJSON_FEATURES=jcs+arbitrary_precision+preserve_order cargo bench --locked --features "jcs serde_json/arbitrary_precision serde_json/preserve_order" --bench lexical_array_allocations
+cargo bench --locked --bench unique_decode_bench -- lexical_arrays --save-baseline rsjson002-before
+cargo bench --locked --bench unique_decode_allocations
+```
+
+后续延迟比较应使用 Criterion 完整默认采样，并在同一主机、同一工具链重复；保留完整 Criterion 输出。
+若噪声较大或区间重叠，则结论记为不确定。本轮未执行该延迟采样。
+
+### RSJSON-002 候选对照与决定
+
+实验候选让未闭合的词法数组直接由 `SafeValueBuilder` 累积。owner unwind、validated
+decode、JCS 和 decoder session 的聚焦测试均通过。每种 feature 配置的分配测量重复三次，
+下表各轮数值相同。候选降低了 512 和 4096 个标量数组的 requested bytes 与 `peak_extra`，
+同时保持 `end_delta` 不变：
+
+| Feature / 路径 | 元素数 | requested bytes，基线 → 候选 | `peak_extra`，基线 → 候选 | `end_delta`，基线 = 候选 |
+| --- | ---: | ---: | ---: | ---: |
+| `default` / `decode_value` | 512 | 49,472 → 33,088 | 33,216 → 16,832 | 16,384 |
+| `default` / `decode_value` | 4096 | 393,536 → 262,464 | 262,592 → 131,520 | 131,072 |
+| `arbitrary_precision` / `decode_value` | 512 | 50,898 → 34,514 | 34,642 → 18,258 | 17,810 |
+| `arbitrary_precision` / `decode_value` | 4096 | 408,810 → 277,738 | 277,866 → 146,794 | 146,346 |
+| `preserve_order` / `decode_value` | 512 | 110,752 → 73,920 | 74,176 → 37,344 | 36,864 |
+| `preserve_order` / `decode_value` | 4096 | 884,896 → 590,016 | 590,272 → 295,392 | 294,912 |
+| 两种 serde_json feature / `decode_value` | 512 | 112,178 → 75,346 | 75,602 → 38,770 | 38,290 |
+| 两种 serde_json feature / `decode_value` | 4096 | 900,170 → 605,290 | 605,546 → 310,666 | 310,186 |
+| `jcs` / `JcsDecoder` | 512 | 49,504 → 33,120 | 33,152 → 16,768 | 16,384 |
+| `jcs` / `JcsDecoder` | 4096 | 393,568 → 262,496 | 262,528 → 131,456 | 131,072 |
+| `jcs` + `arbitrary_precision` / `JcsDecoder` | 512 | 51,954 → 35,570 | 35,602 → 19,218 | 18,834 |
+| `jcs` + `arbitrary_precision` / `JcsDecoder` | 4096 | 417,034 → 285,962 | 285,994 → 154,922 | 154,538 |
+| `jcs` + `preserve_order` / `JcsDecoder` | 512 | 110,784 → 73,952 | 74,112 → 37,280 | 36,864 |
+| `jcs` + `preserve_order` / `JcsDecoder` | 4096 | 884,928 → 590,048 | 590,208 → 295,328 | 294,912 |
+| 三种 feature 全启用 / `JcsDecoder` | 512 | 113,234 → 76,402 | 76,562 → 39,730 | 39,314 |
+| 三种 feature 全启用 / `JcsDecoder` | 4096 | 908,394 → 613,514 | 613,674 → 318,794 | 318,378 |
+
+候选满足分配下降与最终保留容量检查。延迟门槛没有测量：多次主机读数显示负载持续远高于
+可用的 6 个 CPU，且有无关 Rust 编译、Python 与 Miri 任务并行。因此延迟要求属于未判定，
+不能视为通过或实测回退。依照设计的保留门槛，撤回了生产候选，保留原数组 frame 实现。
+实验生产差异及只服务于候选的故障注入改动已移除；分配测量设施和本结论保留。不能仅凭
+分配下降推断性能提升。

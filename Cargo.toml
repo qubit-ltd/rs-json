@@ -89,6 +89,10 @@ name = "unique_decode_allocations"
 harness = false
 
 [[bench]]
+name = "lexical_array_allocations"
+harness = false
+
+[[bench]]
 name = "value_read_allocations"
 harness = false
 

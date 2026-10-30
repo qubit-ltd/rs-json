@@ -16,6 +16,7 @@ changes. Results depend on the hardware, inputs, and enabled limits.
 | `decoder_bench` / `jcs_decode` | JCS text decoding of number arrays, nested objects, ordinary/escaped keys, and duplicate-key rejection with finite/unlimited budgets and fresh/reused sessions |
 | `unique_decode_bench` | Unique-key decoding across config, metadata-map, and wire-envelope fixtures at approximately 1 KiB, 64 KiB, and 1 MiB, with dynamic, typed, typed-seed, ordinary decoder, and direct Serde paths |
 | `unique_decode_allocations` | Separate one-shot allocation-request diagnostics for the same paths and duplicate-key rejection; no Criterion samples |
+| `lexical_array_allocations` | Requested allocation and retained-result diagnostics for scalar, record, empty, and single-child-chain arrays |
 
 Run from the repository root:
 
@@ -28,6 +29,8 @@ cargo bench --features jcs --bench decoder_bench -- jcs_decode --noplot
 JCS_ALLOCATION_DIAGNOSTICS=1 cargo bench --features "jcs jcs-allocation-diagnostics" --bench jcs_bench -- --noplot
 cargo bench --locked --bench unique_decode_bench -- --noplot
 cargo bench --locked --bench unique_decode_allocations
+cargo bench --locked --bench lexical_array_allocations
+cargo bench --locked --bench unique_decode_bench -- lexical_arrays
 ```
 
 Use filters for focused measurements:
@@ -1145,3 +1148,145 @@ low-interference environment. The focused object-bridge tests still verify
 behavior, including that `{"a":0,"a":[}` reports the duplicate-key data
 error before attempting to read the malformed duplicate value; this is a
 correctness result, not performance evidence.
+## Lexical array allocation baseline (RSJSON-002)
+
+`lexical_array_allocations` measures arrays assembled by the lexical JSON value
+consumer. Fixtures are built before measurement and include an empty array,
+scalar arrays of 1/32/512/4096 items, record arrays of 32/512/4096 records, and
+single-child chains of depth 8/64/256/4096. Chain measurements use
+`SafeJsonValue`; validation walks each chain iteratively, and the owner remains
+alive until the allocation window has closed.
+
+Paths include `decode_value`, validated number-preserving decode, unique typed
+and seed decode for scalar and record arrays, and `JcsDecoder::decode_value_str`
+when the `jcs` feature is enabled. Every path runs unlimited and with finite
+limits set to the exact source byte, node, root-inclusive depth, and sequence
+item requirements of that fixture. Typed paths intentionally omit deep chains.
+The Criterion `lexical_arrays` group uses the same inputs and paths and runs
+without the counting allocator, with decoder construction and result destruction
+inside the timed operation.
+
+The captured CSV output reports allocation calls, requested bytes, realloc calls,
+`peak_extra_bytes`, and `end_delta`. Requested bytes are cumulative allocator
+requests, not RSS or physical peak memory. `peak_extra_bytes` follows the
+existing allocator's requested-size live-byte accounting and is not a precise
+physical peak. `end_delta` is measured while the decoded output remains alive;
+it helps detect retained-capacity changes. The feature label is supplied with
+`RSJSON_FEATURES` when running the matrix because Cargo does not expose
+dependency features as crate `cfg` values. The raw outputs were captured under
+`target/rsjson002/` and removed as reproducible build artifacts after their
+results were recorded here.
+
+| Baseline item | Result |
+| --- | --- |
+| Revision | `af5342897dedfbd4b8451fdee50d346600b5837d` |
+| T2 source scope | `Cargo.toml`, `benches/unique_decode_bench.rs`, `benches/unique_decode_support/mod.rs`, plus the two new lexical-array bench files; no production source changed |
+| `Cargo.lock` SHA-256 | `65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a` |
+| Toolchain | `rustc 1.94.0 (4a4ef493e 2026-03-02)`, Cargo 1.94.0, Criterion 0.8.2 |
+| Host | Ubuntu 24.04.4 LTS, Linux 7.0.0-38-generic, Intel Core i5-9600K, 6 CPUs, `powersave`, allowed CPU affinity 0–5; 23 logged-in users |
+| Allocation matrix | 8 feature configurations × 3 successful runs; each run contains 76 non-JCS rows or 100 JCS rows. Full per-run values were captured in `target/rsjson002/allocation-summary.csv` (SHA-256 `7586cf83f6936eec58c36e54502bea20efb97190816b4d124c8b3f554f730452`); the generated file was removed after the results were recorded here. |
+| Full Criterion samples | Not collected: shared-host load remained 28.86–45.75 on a 6-CPU host with concurrent Rust, Python, and Miri work. Criterion samples would not provide a dependable latency baseline under these conditions. |
+
+The allocation values below are the unlimited 4096-scalar fixture. Each value
+is identical across the three repeats; `requested` is cumulative requested
+bytes, and `end delta` is recorded with the result alive. The complete summary
+also contains finite-budget rows, 512-item arrays, records, all chain depths,
+and each applicable path.
+
+| Features | Path | Allocations | Requested | Peak extra | End delta |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `default` | `decode_value` | 15 | 393,536 | 262,592 | 131,072 |
+| `arbitrary_precision` | `decode_value` | 4,111 | 408,810 | 277,866 | 146,346 |
+| `preserve_order` | `decode_value` | 15 | 884,896 | 590,272 | 294,912 |
+| both serde_json features | `decode_value` | 4,111 | 900,170 | 605,546 | 310,186 |
+| `jcs` | `JcsDecoder` | 15 | 393,568 | 262,528 | 131,072 |
+| `jcs` + `arbitrary_precision` | `JcsDecoder` | 4,111 | 417,034 | 285,994 | 154,538 |
+| `jcs` + `preserve_order` | `JcsDecoder` | 15 | 884,928 | 590,208 | 294,912 |
+| all three features | `JcsDecoder` | 4,111 | 908,394 | 613,674 | 318,378 |
+
+The existing comparison target also completed once with exit code 0:
+`cargo bench --locked --bench unique_decode_allocations`; its 783 output rows
+were captured in `target/rsjson002/unique-decode-allocations-default.log` and
+removed after review. It provides the existing typed/seed controls, not a
+directly comparable estimate of removable lexical-array buffering.
+
+The measurements show that `arbitrary_precision` adds one allocation per
+integer in this fixture, while `preserve_order` materially changes array
+requested and retained bytes. These are configuration-specific baselines, not
+evidence of an optimization. For the 4096-deep chain, default `decode_value`
+reported 1,572,416 requested bytes and a 131,072-byte end delta; with
+`preserve_order`, the corresponding values were 2,391,616 and 294,912 bytes.
+The JCS path differed from default `decode_value` by 32 requested bytes on the
+4096-scalar fixture. JCS number representation is binary64, so its preflight
+checks exact shape and values using floating-point numeric comparison.
+
+Load was checked repeatedly during the run: at local 23:44, 23:57, 23:58, and
+23:59 on 2026-10-30, 1-minute load was 45.75, 37.34, 36.11, and 28.86; 5- and
+15-minute averages also stayed above 32 at the last reading. A further
+post-midnight reading on 2026-10-31 was 32.39/32.81/33.01. Other worktrees
+had active Rust compilers, Python jobs, and Miri. Therefore full Criterion
+sampling is deferred; no latency conclusion is drawn. The incomplete first
+JCS attempt (`alloc-jcs-r1.log`) failed its initial assertion because it
+compared JCS `0.0` to serde_json `0`; it is retained as a harness failure and
+excluded. The corrected binary64-aware preflight passed for all JCS matrix
+runs.
+
+The allocation matrix runs each row three times and captures complete
+stdout/stderr in `target/rsjson002/` for review. These generated outputs are
+removed after the results are recorded; rerun the commands to regenerate them:
+
+```bash
+RSJSON_FEATURES=default cargo bench --locked --bench lexical_array_allocations
+RSJSON_FEATURES=arbitrary_precision cargo bench --locked --features serde_json/arbitrary_precision --bench lexical_array_allocations
+RSJSON_FEATURES=preserve_order cargo bench --locked --features serde_json/preserve_order --bench lexical_array_allocations
+RSJSON_FEATURES=arbitrary_precision+preserve_order cargo bench --locked --features "serde_json/arbitrary_precision serde_json/preserve_order" --bench lexical_array_allocations
+RSJSON_FEATURES=jcs cargo bench --locked --features jcs --bench lexical_array_allocations
+RSJSON_FEATURES=jcs+arbitrary_precision cargo bench --locked --features "jcs serde_json/arbitrary_precision" --bench lexical_array_allocations
+RSJSON_FEATURES=jcs+preserve_order cargo bench --locked --features "jcs serde_json/preserve_order" --bench lexical_array_allocations
+RSJSON_FEATURES=jcs+arbitrary_precision+preserve_order cargo bench --locked --features "jcs serde_json/arbitrary_precision serde_json/preserve_order" --bench lexical_array_allocations
+cargo bench --locked --bench unique_decode_bench -- lexical_arrays --save-baseline rsjson002-before
+cargo bench --locked --bench unique_decode_allocations
+```
+
+Any later latency comparison should use Criterion's complete default sampling.
+Compare repeated runs made on the same host and toolchain; retain the full
+Criterion output and treat noisy or overlapping intervals as inconclusive.
+
+### RSJSON-002 candidate comparison and decision
+
+An experimental candidate stored each open lexical array directly in
+`SafeValueBuilder`. It passed the focused owner-unwind, validated-decode, JCS,
+and decoder-session tests. Allocation measurements were repeated three times
+for every feature configuration; values below were identical in all repeats.
+The candidate reduced requested bytes and `peak_extra` for the 512- and
+4096-scalar arrays while leaving `end_delta` unchanged:
+
+| Features / path | Items | Requested bytes, baseline → candidate | `peak_extra`, baseline → candidate | `end_delta`, baseline = candidate |
+| --- | ---: | ---: | ---: | ---: |
+| `default` / `decode_value` | 512 | 49,472 → 33,088 | 33,216 → 16,832 | 16,384 |
+| `default` / `decode_value` | 4096 | 393,536 → 262,464 | 262,592 → 131,520 | 131,072 |
+| `arbitrary_precision` / `decode_value` | 512 | 50,898 → 34,514 | 34,642 → 18,258 | 17,810 |
+| `arbitrary_precision` / `decode_value` | 4096 | 408,810 → 277,738 | 277,866 → 146,794 | 146,346 |
+| `preserve_order` / `decode_value` | 512 | 110,752 → 73,920 | 74,176 → 37,344 | 36,864 |
+| `preserve_order` / `decode_value` | 4096 | 884,896 → 590,016 | 590,272 → 295,392 | 294,912 |
+| both serde_json features / `decode_value` | 512 | 112,178 → 75,346 | 75,602 → 38,770 | 38,290 |
+| both serde_json features / `decode_value` | 4096 | 900,170 → 605,290 | 605,546 → 310,666 | 310,186 |
+| `jcs` / `JcsDecoder` | 512 | 49,504 → 33,120 | 33,152 → 16,768 | 16,384 |
+| `jcs` / `JcsDecoder` | 4096 | 393,568 → 262,496 | 262,528 → 131,456 | 131,072 |
+| `jcs` + `arbitrary_precision` / `JcsDecoder` | 512 | 51,954 → 35,570 | 35,602 → 19,218 | 18,834 |
+| `jcs` + `arbitrary_precision` / `JcsDecoder` | 4096 | 417,034 → 285,962 | 285,994 → 154,922 | 154,538 |
+| `jcs` + `preserve_order` / `JcsDecoder` | 512 | 110,784 → 73,952 | 74,112 → 37,280 | 36,864 |
+| `jcs` + `preserve_order` / `JcsDecoder` | 4096 | 884,928 → 590,048 | 590,208 → 295,328 | 294,912 |
+| all three features / `JcsDecoder` | 512 | 113,234 → 76,402 | 76,562 → 39,730 | 39,314 |
+| all three features / `JcsDecoder` | 4096 | 908,394 → 613,514 | 613,674 → 318,794 | 318,378 |
+
+The candidate met the allocation-reduction and retained-capacity checks. The
+latency gate was not measured: repeated host readings showed sustained load
+far above the six available CPUs, with unrelated compilation, Python, and Miri
+work active. Therefore the required latency comparison is unresolved, not a
+pass or a measured regression. Under the design's keep gate, the production
+candidate was withdrawn and the original array-frame implementation remains.
+The experimental production diff and its candidate-only fault-injection
+change were removed after the comparison. The allocation harness and this
+measurement record remain; no performance conclusion is inferred from the
+allocation reduction alone.

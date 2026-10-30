@@ -19,6 +19,9 @@ use criterion::criterion_main;
 #[cfg(feature = "jcs")]
 use qubit_json::decode::JcsDecoder;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::JsonNumberPolicy;
+use qubit_json::decode::JsonValidatedDecodeOptions;
+use qubit_json::value::SafeJsonValue;
 use unique_decode_support::decode_path::DecodePath;
 use unique_decode_support::decode_path::assert_decoded;
 use unique_decode_support::decode_path::assert_duplicate_rejected;
@@ -30,6 +33,12 @@ use unique_decode_support::decode_path::finite_decoder;
 use unique_decode_support::fixtures::Shape;
 use unique_decode_support::fixtures::fixture;
 use unique_decode_support::fixtures::reject_fixture;
+use unique_decode_support::lexical_array_fixtures::ArrayFixture;
+use unique_decode_support::lexical_array_fixtures::ArrayShape;
+use unique_decode_support::lexical_array_fixtures::CHAIN_DEPTHS;
+use unique_decode_support::lexical_array_fixtures::RECORD_SIZES;
+use unique_decode_support::lexical_array_fixtures::Record;
+use unique_decode_support::lexical_array_fixtures::SIZES as ARRAY_SIZES;
 use unique_decode_support::structural_decode;
 use unique_decode_support::structural_fixtures::COUNTS;
 use unique_decode_support::structural_fixtures::DuplicatePosition;
@@ -313,5 +322,280 @@ fn unique_decode_structural(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, unique_decode, unique_decode_structural, early_duplicate_tail);
+fn lexical_arrays(c: &mut Criterion) {
+    for fixture in std::iter::once(ArrayFixture::empty())
+        .chain(ARRAY_SIZES.into_iter().map(ArrayFixture::scalars))
+        .chain(RECORD_SIZES.into_iter().map(ArrayFixture::records))
+        .chain(CHAIN_DEPTHS.into_iter().map(ArrayFixture::chain))
+    {
+        let mut paths = vec!["value", "validated_preserve"];
+        if fixture.shape != ArrayShape::Chain && fixture.shape != ArrayShape::Empty {
+            paths.extend(["unique_typed", "unique_seed"]);
+        }
+        #[cfg(feature = "jcs")]
+        paths.push("jcs_value");
+        for path in paths {
+            for finite in [false, true] {
+                if fixture.shape == ArrayShape::Chain && path != "value" && path != "validated_preserve" {
+                    continue;
+                }
+                let budget = if finite { "finite" } else { "unlimited" };
+                match path {
+                    "value" => assert_lexical_owner(&decode_lexical_value(&fixture, finite), &fixture),
+                    "validated_preserve" => assert_lexical_owner(&decode_lexical_preserve(&fixture, finite), &fixture),
+                    "unique_typed" if fixture.shape == ArrayShape::Scalar => {
+                        let mut decoder = if finite {
+                            lexical_finite_decoder(&fixture)
+                        } else {
+                            JsonDecoder::unlimited()
+                        };
+                        let value = decoder
+                            .decode_unique_str::<Vec<u64>>(&fixture.text)
+                            .expect("typed array preflight");
+                        assert_eq!(value.len(), fixture.size);
+                        assert!(value.iter().enumerate().all(|(index, item)| *item == index as u64));
+                    }
+                    "unique_seed" if fixture.shape == ArrayShape::Scalar => {
+                        let mut decoder = if finite {
+                            lexical_finite_decoder(&fixture)
+                        } else {
+                            JsonDecoder::unlimited()
+                        };
+                        let value = decoder
+                            .decode_unique_seed_utf8(std::marker::PhantomData::<Vec<u64>>, fixture.text.as_bytes())
+                            .expect("seed array preflight");
+                        assert_eq!(value.len(), fixture.size);
+                        assert!(value.iter().enumerate().all(|(index, item)| *item == index as u64));
+                    }
+                    "unique_typed" | "unique_seed" if fixture.shape == ArrayShape::Records => {
+                        let mut decoder = if finite {
+                            lexical_finite_decoder(&fixture)
+                        } else {
+                            JsonDecoder::unlimited()
+                        };
+                        let value = if path == "unique_typed" {
+                            decoder
+                                .decode_unique_str::<Vec<Record>>(&fixture.text)
+                                .expect("typed record preflight")
+                        } else {
+                            decoder
+                                .decode_unique_seed_utf8(
+                                    std::marker::PhantomData::<Vec<Record>>,
+                                    fixture.text.as_bytes(),
+                                )
+                                .expect("seed record preflight")
+                        };
+                        assert_eq!(value.len(), fixture.size);
+                        assert!(
+                            value
+                                .iter()
+                                .enumerate()
+                                .all(|(index, row)| row.id == index as u64 && row.label == format!("v{index:06}"))
+                        );
+                    }
+                    #[cfg(feature = "jcs")]
+                    "jcs_value" => {
+                        let value = if finite {
+                            JcsDecoder::with_limits(lexical_limits(&fixture))
+                                .decode_value_str(&fixture.text)
+                                .expect("JCS preflight")
+                        } else {
+                            JcsDecoder::unlimited()
+                                .decode_value_str(&fixture.text)
+                                .expect("JCS preflight")
+                        };
+                        assert_jcs_lexical_owner(&value, &fixture);
+                    }
+                    _ => unreachable!("unsupported lexical path preflight"),
+                }
+                let name = format!(
+                    "lexical_arrays/{}/{}/{path}/{budget}",
+                    fixture.shape.name(),
+                    fixture.size
+                );
+                let mut group = c.benchmark_group(name);
+                group.throughput(Throughput::Bytes(fixture.text.len() as u64));
+                group.bench_function("fresh", |bencher| {
+                    bencher.iter(|| {
+                        match path {
+                            "value" => {
+                                black_box(decode_lexical_value(black_box(&fixture), finite));
+                            }
+                            "validated_preserve" => {
+                                black_box(decode_lexical_preserve(black_box(&fixture), finite));
+                            }
+                            "unique_typed" if fixture.shape == ArrayShape::Scalar => {
+                                let mut decoder = if finite {
+                                    lexical_finite_decoder(&fixture)
+                                } else {
+                                    JsonDecoder::unlimited()
+                                };
+                                black_box(
+                                    decoder
+                                        .decode_unique_str::<Vec<u64>>(black_box(&fixture.text))
+                                        .expect("typed array decodes"),
+                                );
+                            }
+                            "unique_seed" if fixture.shape == ArrayShape::Scalar => {
+                                let mut decoder = if finite {
+                                    lexical_finite_decoder(&fixture)
+                                } else {
+                                    JsonDecoder::unlimited()
+                                };
+                                black_box(
+                                    decoder
+                                        .decode_unique_seed_utf8(
+                                            std::marker::PhantomData::<Vec<u64>>,
+                                            black_box(fixture.text.as_bytes()),
+                                        )
+                                        .expect("seed array decodes"),
+                                );
+                            }
+                            "unique_typed" | "unique_seed" if fixture.shape == ArrayShape::Records => {
+                                let mut decoder = if finite {
+                                    lexical_finite_decoder(&fixture)
+                                } else {
+                                    JsonDecoder::unlimited()
+                                };
+                                let result = if path == "unique_typed" {
+                                    decoder
+                                        .decode_unique_str::<Vec<Record>>(black_box(&fixture.text))
+                                        .expect("typed records decode")
+                                } else {
+                                    decoder
+                                        .decode_unique_seed_utf8(
+                                            std::marker::PhantomData::<Vec<Record>>,
+                                            black_box(fixture.text.as_bytes()),
+                                        )
+                                        .expect("seed records decode")
+                                };
+                                black_box(result);
+                            }
+                            #[cfg(feature = "jcs")]
+                            "jcs_value" => {
+                                black_box(if finite {
+                                    let limits = lexical_limits(&fixture);
+                                    JcsDecoder::with_limits(limits)
+                                        .decode_value_str(black_box(&fixture.text))
+                                        .expect("JCS array decodes")
+                                } else {
+                                    JcsDecoder::unlimited()
+                                        .decode_value_str(black_box(&fixture.text))
+                                        .expect("JCS array decodes")
+                                });
+                            }
+                            _ => unreachable!("unsupported lexical array path"),
+                        };
+                    });
+                });
+                group.finish();
+            }
+        }
+    }
+}
+
+fn lexical_limits(fixture: &ArrayFixture) -> qubit_budget::json::JsonDecodeLimits {
+    qubit_budget::json::JsonDecodeLimits::builder()
+        .input_bytes_limit(qubit_budget::ResourceLimit::new(
+            qubit_budget::json::JsonResource::InputBytes,
+            fixture.text.len(),
+        ))
+        .max_nodes(fixture.nodes)
+        .max_depth(fixture.depth)
+        .max_sequence_items(fixture.sequence_items)
+        .max_payload_bytes(fixture.text.len())
+        .build()
+}
+
+fn lexical_finite_decoder(fixture: &ArrayFixture) -> JsonDecoder<'static> {
+    JsonDecoder::with_limits(lexical_limits(fixture))
+}
+
+fn decode_lexical_value(fixture: &ArrayFixture, finite: bool) -> SafeJsonValue {
+    let mut decoder = if finite {
+        lexical_finite_decoder(fixture)
+    } else {
+        JsonDecoder::unlimited()
+    };
+    decoder.decode_value_str(&fixture.text).expect("lexical value decodes")
+}
+
+fn decode_lexical_preserve(fixture: &ArrayFixture, finite: bool) -> SafeJsonValue {
+    let mut decoder = if finite {
+        lexical_finite_decoder(fixture)
+    } else {
+        JsonDecoder::unlimited()
+    };
+    decoder
+        .decode_unique_validated_str(&fixture.text, &JsonValidatedDecodeOptions::builder().build(), |_, _| {
+            Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+        })
+        .expect("validated preserve decodes")
+}
+
+fn assert_lexical_owner(owner: &SafeJsonValue, fixture: &ArrayFixture) {
+    if fixture.shape == ArrayShape::Chain {
+        let mut current = owner.as_value();
+        for _ in 0..fixture.size {
+            current = current
+                .as_array()
+                .expect("chain node is array")
+                .first()
+                .expect("chain child exists");
+        }
+        assert_eq!(current.as_u64(), Some(0));
+    } else {
+        assert_eq!(
+            owner.as_value(),
+            &serde_json::from_str::<serde_json::Value>(&fixture.text).expect("fixture parses")
+        );
+    }
+}
+
+#[cfg(feature = "jcs")]
+fn assert_jcs_lexical_owner(owner: &SafeJsonValue, fixture: &ArrayFixture) {
+    let value = owner.as_value();
+    match fixture.shape {
+        ArrayShape::Empty => assert!(value.as_array().expect("empty fixture is array").is_empty()),
+        ArrayShape::Scalar => {
+            let values = value.as_array().expect("scalar fixture is array");
+            assert_eq!(values.len(), fixture.size);
+            assert!(
+                values
+                    .iter()
+                    .enumerate()
+                    .all(|(i, item)| item.as_f64() == Some(i as f64))
+            );
+        }
+        ArrayShape::Records => {
+            let rows = value.as_array().expect("record fixture is array");
+            assert_eq!(rows.len(), fixture.size);
+            assert!(rows.iter().enumerate().all(|(i, row)| {
+                let object = row.as_object().expect("record fixture item is object");
+                object.len() == 2
+                    && object.get("id").and_then(serde_json::Value::as_f64) == Some(i as f64)
+                    && object.get("label").and_then(serde_json::Value::as_str) == Some(format!("v{i:06}").as_str())
+            }));
+        }
+        ArrayShape::Chain => {
+            let mut current = value;
+            for _ in 0..fixture.size {
+                current = current
+                    .as_array()
+                    .expect("chain node is array")
+                    .first()
+                    .expect("chain child exists");
+            }
+            assert_eq!(current.as_f64(), Some(0.0));
+        }
+    }
+}
+
+criterion_group!(
+    benches,
+    unique_decode,
+    unique_decode_structural,
+    early_duplicate_tail,
+    lexical_arrays
+);
 criterion_main!(benches);
