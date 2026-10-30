@@ -65,6 +65,64 @@ fn test_redacted_syntax_diagnostics_do_not_reveal_unexpected_input_bytes() {
     assert!(std::error::Error::source(&error).is_none());
 }
 
+#[test]
+fn test_redacted_deserialize_without_coordinates_omits_location() {
+    let mut decoder = JsonDecoder::unlimited();
+    let error = decoder.decode_unique_str::<bool>("1").expect_err("type mismatch");
+    assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
+    assert_eq!(error.line(), None);
+    assert_eq!(error.column(), None);
+    assert_eq!(error.to_string(), "Failed to deserialize JSON value");
+    assert!(std::error::Error::source(&error).is_none());
+}
+
+#[test]
+fn test_deserialize_without_coordinates_preserves_diagnostic_policy() {
+    for policy in [DiagnosticPolicy::Redacted, DiagnosticPolicy::Detailed] {
+        let mut decoder = JsonDecoder::unlimited().with_diagnostic_policy(policy);
+        let error = decoder
+            .decode_unique_str::<bool>(r#""RJ_SECRET""#)
+            .expect_err("type mismatch");
+        assert_eq!(error.line(), None);
+        assert_eq!(error.column(), None);
+        let message = error.to_string();
+        assert!(!message.contains("line 0"));
+        assert!(!message.contains("column 0"));
+        match policy {
+            DiagnosticPolicy::Redacted => {
+                assert!(!message.contains("RJ_SECRET"));
+                assert!(!format!("{error:?}").contains("RJ_SECRET"));
+                assert!(std::error::Error::source(&error).is_none());
+            }
+            DiagnosticPolicy::Detailed => {
+                assert!(std::error::Error::source(&error).is_some());
+            }
+        }
+    }
+}
+
+#[test]
+fn test_deserialize_with_coordinates_retains_location() {
+    let mut strict = JsonDecoder::unlimited();
+    let error = strict.decode_str::<bool>("1").expect_err("type mismatch");
+    let line = error.line().expect("known line");
+    let column = error.column().expect("known column");
+    assert!(error.to_string().ends_with(&format!("at line {line} column {column}")));
+
+    let mut normalizing = NormalizingJsonDecoder::with_limits(
+        no_normalization_policy(),
+        JsonDecodeLimits::<JsonResource, usize>::default(),
+    );
+    let error = normalizing.decode_str::<bool>("1").expect_err("type mismatch");
+    let line = error.line().expect("known normalized line");
+    let column = error.column().expect("known normalized column");
+    assert!(
+        error
+            .to_string()
+            .ends_with(&format!("at normalized line {line} column {column}"))
+    );
+}
+
 /// Verifies normalizing failures use the same public kind and stage types.
 #[test]
 fn test_json_decode_error_reports_normalization_failure() {

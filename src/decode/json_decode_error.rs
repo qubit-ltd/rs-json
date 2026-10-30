@@ -679,6 +679,7 @@ where
                 ..
             } => match source {
                 Some(source) => write!(formatter, "Failed to deserialize JSON value: {source}"),
+                None if *line == 0 || *column == 0 => formatter.write_str("Failed to deserialize JSON value"),
                 None if normalized_input_bytes.is_some() => write!(
                     formatter,
                     "Failed to deserialize JSON value at normalized line {line} column {column}"
