@@ -624,7 +624,7 @@ where
         T: Serialize + ?Sized,
     {
         self.check_failure()?;
-        let (key, depth) = match &self.state {
+        let depth = match &self.state {
             CompoundState::Map {
                 keys, next_key, depth, ..
             } => {
@@ -636,19 +636,20 @@ where
                         JsonSerializationErrorKind::DuplicateObjectKey,
                     )));
                 }
-                (key.clone(), *depth)
+                *depth
             }
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
-        if let CompoundState::Map { keys, .. } = &mut self.state {
-            keys.insert(key.clone());
+        if let CompoundState::Map { keys, next_key, .. } = &mut self.state {
+            keys.insert(next_key.as_ref().expect("pending map key was checked").clone());
         }
         let child_depth = depth
             .checked_add(1)
             .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
-        if let CompoundState::Map { next_key, .. } = &mut self.state {
-            *next_key = None;
-        }
+        let key = match &mut self.state {
+            CompoundState::Map { next_key, .. } => next_key.take().expect("pending map key was checked"),
+            _ => unreachable!(),
+        };
         let child = self.serialize_child(value, child_depth)?;
         let CompoundState::Map { values, .. } = &mut self.state else {
             unreachable!()
