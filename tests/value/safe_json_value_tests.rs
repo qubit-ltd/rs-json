@@ -713,3 +713,187 @@ mod owner_lifecycle_contracts {
         assert_eq!(calls.get(), 1);
     }
 }
+
+mod wide_and_wrapped_events {
+    use qubit_json::value::SafeJsonValue;
+    use serde::Deserialize;
+    use serde::Deserializer;
+    use serde::de::Visitor;
+    use serde::de::value::Error;
+    use serde_json::Value;
+
+    #[derive(Clone, Copy)]
+    enum WrapperKind {
+        Some,
+        Newtype,
+    }
+
+    struct Wrapped<D> {
+        kind: WrapperKind,
+        inner: D,
+    }
+
+    impl<'de, D: Deserializer<'de>> Deserializer<'de> for Wrapped<D> {
+        type Error = D::Error;
+
+        fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+        where
+            V: Visitor<'de>,
+        {
+            match self.kind {
+                WrapperKind::Some => visitor.visit_some(self.inner),
+                WrapperKind::Newtype => visitor.visit_newtype_struct(self.inner),
+            }
+        }
+
+        serde::forward_to_deserialize_any! {
+            bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+            bytes byte_buf option unit unit_struct newtype_struct seq tuple tuple_struct
+            map struct enum identifier ignored_any
+        }
+    }
+
+    struct FailingDeserializer;
+
+    impl<'de> Deserializer<'de> for FailingDeserializer {
+        type Error = Error;
+
+        fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+        where
+            V: Visitor<'de>,
+        {
+            Err(serde::de::Error::custom("wrapper payload failure"))
+        }
+
+        serde::forward_to_deserialize_any! {
+            bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+            bytes byte_buf option unit unit_struct newtype_struct seq tuple tuple_struct
+            map struct enum identifier ignored_any
+        }
+    }
+
+    struct Chain {
+        remaining: usize,
+    }
+
+    impl<'de> Deserializer<'de> for Chain {
+        type Error = Error;
+
+        fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+        where
+            V: Visitor<'de>,
+        {
+            if self.remaining == 0 {
+                visitor.visit_bool(true)
+            } else {
+                let child = Self {
+                    remaining: self.remaining - 1,
+                };
+                if self.remaining.is_multiple_of(2) {
+                    visitor.visit_some(child)
+                } else {
+                    visitor.visit_newtype_struct(child)
+                }
+            }
+        }
+
+        serde::forward_to_deserialize_any! {
+            bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+            bytes byte_buf option unit unit_struct newtype_struct seq tuple tuple_struct
+            map struct enum identifier ignored_any
+        }
+    }
+
+    #[test]
+    fn test_owner_serde_bridge_accepts_wide_integer_events() {
+        use serde::de::value::I128Deserializer;
+        use serde::de::value::U128Deserializer;
+
+        for value in [
+            i128::from(i64::MIN),
+            0,
+            1,
+            i128::from(i64::MAX) + 1,
+            i128::from(u64::MAX),
+        ] {
+            let owner = SafeJsonValue::deserialize(I128Deserializer::<Error>::new(value)).unwrap();
+            let expected = if value < 0 {
+                Value::from(i64::try_from(value).unwrap())
+            } else {
+                Value::from(u64::try_from(value).unwrap())
+            };
+            assert_eq!(owner.as_value(), &expected);
+        }
+        for value in [0_u128, 1, u128::from(u64::MAX)] {
+            let owner = SafeJsonValue::deserialize(U128Deserializer::<Error>::new(value)).unwrap();
+            assert_eq!(owner.as_value(), &Value::from(u64::try_from(value).unwrap()));
+        }
+    }
+
+    #[test]
+    fn test_owner_serde_bridge_rejects_out_of_range_wide_events() {
+        use serde::de::value::I128Deserializer;
+        use serde::de::value::U128Deserializer;
+
+        for value in [i128::MIN, i128::from(i64::MIN) - 1, i128::from(u64::MAX) + 1, i128::MAX] {
+            assert!(SafeJsonValue::deserialize(I128Deserializer::<Error>::new(value)).is_err());
+        }
+        for value in [u128::from(u64::MAX) + 1, u128::MAX] {
+            assert!(SafeJsonValue::deserialize(U128Deserializer::<Error>::new(value)).is_err());
+        }
+    }
+
+    #[test]
+    fn test_owner_serde_bridge_unwraps_optional_and_newtype_payloads() {
+        use serde::de::value::BoolDeserializer;
+        use serde::de::value::I128Deserializer;
+        use serde::de::value::SeqDeserializer;
+
+        for kind in [WrapperKind::Some, WrapperKind::Newtype] {
+            let scalar = SafeJsonValue::deserialize(Wrapped {
+                kind,
+                inner: BoolDeserializer::<Error>::new(true),
+            })
+            .unwrap();
+            assert_eq!(scalar.as_value(), &Value::Bool(true));
+
+            let seq = SeqDeserializer::<_, Error>::new([1_i128, i128::from(u64::MAX)].into_iter());
+            let array = SafeJsonValue::deserialize(Wrapped { kind, inner: seq }).unwrap();
+            assert_eq!(
+                array.as_value(),
+                &Value::Array(vec![Value::from(1), Value::from(u64::MAX)])
+            );
+
+            let rejected = SafeJsonValue::deserialize(Wrapped {
+                kind,
+                inner: I128Deserializer::<Error>::new(i128::MAX),
+            });
+            assert!(rejected.is_err());
+        }
+    }
+
+    #[test]
+    fn test_owner_serde_bridge_propagates_wrapped_payload_error() {
+        for kind in [WrapperKind::Some, WrapperKind::Newtype] {
+            let error = SafeJsonValue::deserialize(Wrapped {
+                kind,
+                inner: FailingDeserializer,
+            })
+            .unwrap_err();
+            assert_eq!(error.to_string(), "wrapper payload failure");
+        }
+    }
+
+    #[test]
+    fn test_owner_serde_bridge_protects_wrapper_chain() {
+        std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let owner = SafeJsonValue::deserialize(Chain { remaining: 1024 }).unwrap();
+                assert_eq!(owner.as_value().as_bool(), Some(true));
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+}

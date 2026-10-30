@@ -15,11 +15,15 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use serde::Deserialize;
+use serde::Deserializer;
+use serde::de::Error as DeError;
 use serde::de::MapAccess;
 use serde::de::SeqAccess;
 use serde::de::Visitor;
 use serde_json::Value;
 
+use crate::internal::StrictJsonNumber;
 use crate::value::SafeJsonValue;
 use crate::value::internal::SafeValueBuilder;
 
@@ -52,6 +56,22 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
     fn visit_u64<E>(self, value: u64) -> Result<Value, E> {
         Ok(Value::Number(value.into()))
+    }
+    /// Accepts an `i128` event only when its value fits the JSON integer range.
+    fn visit_i128<E: DeError>(self, value: i128) -> Result<Value, E> {
+        StrictJsonNumber::from_i128(value).map(Value::Number).map_err(E::custom)
+    }
+    /// Accepts a `u128` event only when its value fits the JSON integer range.
+    fn visit_u128<E: DeError>(self, value: u128) -> Result<Value, E> {
+        StrictJsonNumber::from_u128(value).map(Value::Number).map_err(E::custom)
+    }
+    /// Transparently deserializes the payload while retaining stack protection.
+    fn visit_some<D: Deserializer<'de>>(self, deserializer: D) -> Result<Value, D::Error> {
+        SafeJsonValue::deserialize(deserializer).map(SafeJsonValue::into_value)
+    }
+    /// Transparently deserializes the payload while retaining stack protection.
+    fn visit_newtype_struct<D: Deserializer<'de>>(self, deserializer: D) -> Result<Value, D::Error> {
+        SafeJsonValue::deserialize(deserializer).map(SafeJsonValue::into_value)
     }
     fn visit_f64<E: serde::de::Error>(self, value: f64) -> Result<Value, E> {
         serde_json::Number::from_f64(value)

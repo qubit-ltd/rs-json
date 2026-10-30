@@ -31,6 +31,9 @@ use super::internal::values_equal;
 /// Serde interoperability uses `stacker` and still depends on the concrete
 /// serializer or deserializer, which may impose its own recursion limits. The
 /// owner does not enforce an exact heap-memory limit.
+/// Its deserializer accepts `i128` and `u128` events when their values fit the
+/// JSON integer range, maps `None` to `null`, and transparently unwraps `Some`
+/// and newtype payloads.
 ///
 /// The tree protection and the meaning of values produced by `Deserialize`
 /// are separate concerns. A direct Serde bridge cannot identify whether a
