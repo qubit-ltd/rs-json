@@ -20,6 +20,19 @@ jobs:
       fail-fast: false
       matrix:
         target: [decoder, json_decode_differential, json_budget_invariants, json_encode_invariants, json_tree_invariants, jcs_invariants, json_unique_decode_invariants]
+        profile: [baseline]
+        include:
+          - profile: baseline
+            features: ''
+            seconds: 240
+          - target: json_encode_invariants
+            profile: arbitrary-precision
+            features: arbitrary-precision
+            seconds: 210
+          - target: json_tree_invariants
+            profile: preserve-order
+            features: preserve-order
+            seconds: 210
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
@@ -34,9 +47,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: fuzz/corpus/${{ matrix.target }}
-          key: ${{ matrix.target }}-fuzz-corpus-${{ runner.os }}-${{ github.run_id }}
+          key: ${{ matrix.target }}-${{ matrix.profile }}-fuzz-corpus-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
-            ${{ matrix.target }}-fuzz-corpus-${{ runner.os }}-
+            ${{ matrix.target }}-${{ matrix.profile }}-fuzz-corpus-${{ runner.os }}-
 
       - name: Install Rust nightly
         run: rustup toolchain install nightly-2026-06-05 --profile minimal
@@ -46,20 +59,29 @@ jobs:
 
       - name: Fuzz target
         working-directory: fuzz
-        run: cargo +nightly-2026-06-05 fuzz run ${{ matrix.target }} -- -max_total_time=300 -max_len=4096
+        env:
+          FUZZ_TARGET: ${{ matrix.target }}
+          FUZZ_FEATURES: ${{ matrix.features }}
+          FUZZ_SECONDS: ${{ matrix.seconds }}
+        run: |
+          feature_args=()
+          if [[ -n "$FUZZ_FEATURES" ]]; then
+            feature_args=(--features "$FUZZ_FEATURES")
+          fi
+          cargo +nightly-2026-06-05 fuzz run "$FUZZ_TARGET" "${feature_args[@]}" -- -max_total_time="$FUZZ_SECONDS" -max_len=4096
 
       - name: Save fuzz corpus
         if: always()
         uses: actions/cache/save@v4
         with:
           path: fuzz/corpus/${{ matrix.target }}
-          key: ${{ matrix.target }}-fuzz-corpus-${{ runner.os }}-${{ github.run_id }}
+          key: ${{ matrix.target }}-${{ matrix.profile }}-fuzz-corpus-${{ runner.os }}-${{ github.run_id }}
 
       - name: Upload fuzz artifacts
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.target }}-fuzz-artifacts
+          name: ${{ matrix.target }}-${{ matrix.profile }}-fuzz-artifacts
           path: fuzz/artifacts/${{ matrix.target }}/**
           if-no-files-found: warn
           retention-days: 14
