@@ -72,7 +72,14 @@ decodes into derived types.
 
 The Rust examples in this guide and both READMEs are included by the root
 crate's [documentation example module](../src/documentation_examples.rs). Run
-them from the repository root with `cargo test --locked --doc --features jcs`.
+the default examples from the repository root with `cargo test --locked --doc`.
+JCS examples use `rust,ignore` fences because they require an optional dependency
+feature; the dependency declaration enables it with
+`qubit-json = { version = "0.12", features = ["jcs"] }`. Run those examples
+explicitly with `cargo test --locked --doc --features jcs -- --include-ignored`.
+The external-consumer fixture verifies the same examples without declaring a
+consumer-local feature:
+`cargo test --locked --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc -- --include-ignored`.
 The serde_json compatibility matrix also tests this root crate, not a downstream
 fixture: it runs eight combinations of `jcs`, `serde_json/arbitrary_precision`,
 and `serde_json/preserve_order` against baseline `1.0.135` and the latest
@@ -154,7 +161,7 @@ let error = incremental
     .expect_err("four output bytes cannot hold the complete array");
 assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
 assert_eq!(output, b"[1,2");
-# Ok::<(), qubit_json::encode::JsonEncodeError<qubit_budget::json::JsonResource>>(())
+Ok::<(), qubit_json::encode::JsonEncodeError<qubit_budget::json::JsonResource>>(())
 ```
 
 `to_vec` serializes into a temporary buffer, so a failed serialization does not
@@ -188,7 +195,7 @@ encoder.write_buffered(&mut writer, &json!({"ok": true}))?;
 writer.flush()?;
 let bytes = writer.into_inner().expect("flush already succeeded");
 assert_eq!(bytes, br#"{"ok":true}"#);
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 `write_incremental` flushes after serialization and before committing
@@ -249,13 +256,10 @@ serde_json = "1.0.135"
 The application can then canonicalize a value before passing its bytes to its
 existing signing or hashing code:
 
-```rust
-# #[cfg(feature = "jcs")]
+```rust,ignore
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
-# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
-# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(4096)
@@ -266,8 +270,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical, br#"{"a":1,"b":2}"#);
     Ok(())
 }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
 ```
 
 The feature is disabled by default. The encoder accepts `Value`, not arbitrary
@@ -316,9 +318,8 @@ that pass and `max_nodes` to bound the admitted tree. For example, a service
 that accepts a materialized value can combine finite value, output, and
 renderer limits as follows:
 
-```rust
-# #[cfg(feature = "jcs")]
-# fn main() -> Result<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>> {
+```rust,ignore
+fn main() -> Result<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>> {
 
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
 use qubit_json::encode::JcsEncoder;
@@ -331,10 +332,8 @@ let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
 let mut encoder = JcsEncoder::with_limits(limits, 8 * 1024);
 let canonical = encoder.to_vec(&serde_json::json!({"status": "ready"}))?;
 assert_eq!(canonical, br#"{"status":"ready"}"#);
-# Ok::<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>>(())
-# }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
+Ok::<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>>(())
+}
 ```
 
 These limits bound configured logical resources and renderer collection
@@ -352,15 +351,11 @@ bare `serde_json::Value`. Pass the protected tree's borrowed view to
 `JcsEncoder::to_vec`. This example sets finite input, structure, and value
 limits, then encodes the protected value:
 
-```rust
-# #[cfg(feature = "jcs")]
+```rust,ignore
 use qubit_budget::json::{JsonDecodeLimits, JsonEncodeLimits, JsonResource};
-# #[cfg(feature = "jcs")]
 use qubit_json::decode::JcsDecoder;
-# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
-# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let decode_limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(4096)
@@ -383,8 +378,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical, br#"{"a":1,"b":100000000000000000000}"#);
     Ok(())
 }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
 ```
 
 Every number, whether written as an integer, fraction, or exponent, is rounded
@@ -398,9 +391,8 @@ Duplicate detection compares decoded JSON key strings. This executable example
 shows that a Unicode escape can spell the same key, while a doubled backslash
 makes the backslash part of a different key:
 
-```rust
-# #[cfg(feature = "jcs")]
-# fn main() {
+```rust,ignore
+fn main() {
 
 use qubit_json::decode::{JcsDecodeError, JcsDecoder};
 
@@ -412,9 +404,7 @@ let value = JcsDecoder::unlimited()
     .decode_str(r#"{"x":1,"\\u0078":2}"#)
     .unwrap();
 assert_eq!(value.as_object().unwrap().len(), 2);
-# }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
+}
 ```
 
 
@@ -426,9 +416,8 @@ for deep documents. Legacy `decode_*` methods return bare
 `serde_json::Value` for compatibility; protect such a result immediately if
 you keep using that API:
 
-```rust
-# #[cfg(feature = "jcs")]
-# fn main() {
+```rust,ignore
+fn main() {
 
 use qubit_json::decode::JcsDecoder;
 use qubit_json::value::SafeJsonValue;
@@ -439,9 +428,7 @@ for depth in [128, 129] {
     let protected = SafeJsonValue::new(value);
     assert!(protected.as_value().is_array());
 }
-# }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
+}
 ```
 
 Handle JCS errors by variant: `Decode(source)` carries ordinary input,
@@ -515,7 +502,7 @@ assert_eq!(
     error.materialization_error_reason(),
     Some(qubit_json::decode::JsonMaterializationErrorReason::DuplicateKey),
 );
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 Pass `owner.as_value()` to readers while keeping the owner alive. For a tree
@@ -538,7 +525,7 @@ fn serialize_view(owner: &SafeJsonValue) -> Result<String, serde_json::Error> {
 
 let owner = SafeJsonValue::new(serde_json::json!({"a": true}));
 assert_eq!(serialize_view(&owner)?, r#"{"a":true}"#);
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 The view lifetime is bounded by the borrowed value. Constructing it is O(1)
@@ -580,7 +567,7 @@ let owner = decoder.decode_unique_validated_str(
 )?;
 assert_eq!(numbers.len(), 2);
 assert!(owner.as_value().is_object());
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 On success, the validated call returns a `SafeJsonValue`. Keep that owner
@@ -629,7 +616,7 @@ match error {
     }
     other => panic!("unexpected error: {other:?}"),
 }
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 `TokenFirst` remains strict JSON. It validates a number's complete candidate
@@ -693,7 +680,7 @@ let encoded = JsonEncoder::unlimited().to_vec(&first)?;
 let pretty_options = JsonPrettyOptions::builder().build()?;
 let pretty = format_json_tokens(&encoded, &pretty_options, None)?;
 assert!(std::str::from_utf8(&pretty)?.contains("\"ok\": true"));
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 If any projection returns an error or unwinds, drop the entire transaction;
@@ -720,7 +707,7 @@ let owner = JsonValueEncoder::new()
     .encode_in_transaction_with_private_text_limit(&raw, &mut transaction, 64)?;
 transaction.commit()?;
 assert_eq!(owner.as_value()["ok"], true);
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 The inclusive limit applies independently to each private payload; it is not
@@ -750,7 +737,7 @@ let formatted = format_json_tokens(
     None,
 )?;
 assert!(std::str::from_utf8(&formatted)?.contains("1e400"));
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 `JsonDecoder::decode_value_*` returns `SafeJsonValue` with protected owned-tree
@@ -768,7 +755,7 @@ use qubit_json::decode::JsonDecoder;
 
 let value = JsonDecoder::unlimited().decode_value_str("1.25")?;
 assert_eq!(value.as_value().as_f64(), Some(1.25));
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 Choose a finite `max_depth` for untrusted data; `None` means no configured
@@ -926,7 +913,7 @@ parser.end()?;
 assert_eq!(value, serde_json::json!([0]));
 transaction.commit()?;
 assert_eq!(budget.used_nodes(), Some(2));
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ### Duplicate object keys
@@ -1043,7 +1030,7 @@ let literal: DuplicateKeyRejectingJsonValue = literal_decoder.decode_unique_str(
 let literal = literal.into_inner();
 assert!(literal.is_object());
 assert_eq!(literal["$serde_json::private::RawValue"], "[1,2,3]");
-# Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
+Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
 ```
 
 The unique-key typed entry points materialize a strict tree before invoking the
@@ -1115,7 +1102,7 @@ JsonTreeReader::new(&mut transaction).process(&value, &mut visitor)?;
 transaction.commit()?;
 assert_eq!(visitor.0, 3);
 assert_eq!(budget.used_nodes(), Some(3));
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 `enter` runs before descendants; optional `leave` runs after them. Callbacks

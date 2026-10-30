@@ -130,6 +130,7 @@ Strict text APIs are object-based so state does not spread through stateless
 free functions:
 
 ```rust
+fn main() -> Result<(), Box<dyn std::error::Error>> {
 use qubit_budget::json::{JsonDecodeLimits, JsonResource};
 use qubit_json::decode::JsonDecoder;
 
@@ -137,7 +138,8 @@ let mut decoder = JsonDecoder::with_limits(
     JsonDecodeLimits::<JsonResource, usize>::new(),
 );
 let value: serde_json::Value = decoder.decode_utf8(br#"{"ok":true}"#)?;
-# Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
+Ok(())
+}
 ```
 
 `JsonDecoder` owns a `JsonDecodeSession`. `with_limits(limits)` is the usual

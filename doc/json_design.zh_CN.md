@@ -62,6 +62,7 @@ prepare 立即且只提交一次 raw/normalized 输入消耗；每次 document d
 严格文本接口由对象承载，避免无状态自由函数扩散：
 
 ```rust
+fn main() -> Result<(), Box<dyn std::error::Error>> {
 use qubit_budget::json::{JsonDecodeLimits, JsonResource};
 use qubit_json::decode::JsonDecoder;
 
@@ -69,9 +70,8 @@ let mut decoder = JsonDecoder::with_limits(
     JsonDecodeLimits::<qubit_budget::json::JsonResource, usize>::new(),
 );
 let value: serde_json::Value = decoder.decode_utf8(br#"{"ok":true}"#)?;
-# Ok::<(), qubit_json::decode::JsonDecodeError<
-#     qubit_budget::json::JsonResource,
-# >>(())
+Ok(())
+}
 ```
 
 `JsonDecoder` 持有一个 `JsonDecodeSession`。`with_limits(limits)` 是显式 limits 的常用构造入口，

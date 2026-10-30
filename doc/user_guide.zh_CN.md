@@ -55,7 +55,12 @@ serde_json = "1.0.135"
 ### 核心工作流
 
 本手册及两份 README 的 Rust 示例由根 crate 的[文档示例模块](../src/documentation_examples.rs)
-统一收录。在仓库根目录运行 `cargo test --locked --doc --features jcs`，即可执行这些示例。
+统一收录。普通示例可在仓库根目录运行 `cargo test --locked --doc`。
+JCS 示例使用 `rust,ignore` 围栏，因为它们依赖可选 feature；由依赖声明
+`qubit-json = { version = "0.12", features = ["jcs"] }` 启用。显式运行这些示例：
+`cargo test --locked --doc --features jcs -- --include-ignored`。外部消费者 fixture
+也会验证同一批示例，且无需消费者自行声明同名 feature：
+`cargo test --locked --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc -- --include-ignored`。
 serde_json 兼容矩阵同样测试根 crate，而非下游 fixture：以 `1.0.135` 基线和可解析到的最新版本，
 分别运行 `jcs`、`serde_json/arbitrary_precision`、`serde_json/preserve_order` 的八种组合。
 基线来自 API 边界证据：`serde_json::Map::into_values()` 从 1.0.135 开始提供。若现有
@@ -128,7 +133,7 @@ let error = incremental
     .expect_err("four output bytes cannot hold the complete array");
 assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
 assert_eq!(output, b"[1,2");
-# Ok::<(), qubit_json::encode::JsonEncodeError<qubit_budget::json::JsonResource>>(())
+Ok::<(), qubit_json::encode::JsonEncodeError<qubit_budget::json::JsonResource>>(())
 ```
 
 `to_vec` 会序列化到临时缓冲区，因此序列化失败时不会发布输出计费。缓冲模式会先完成序列化和
@@ -157,7 +162,7 @@ encoder.write_buffered(&mut writer, &json!({"ok": true}))?;
 writer.flush()?;
 let bytes = writer.into_inner().expect("flush 已成功");
 assert_eq!(bytes, br#"{"ok":true}"#);
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 `write_incremental` 在序列化完成后、提交值资源计费前执行 flush。若 flush 失败，方法返回 `Write`
@@ -205,13 +210,10 @@ serde_json = "1.0.135"
 
 应用可以先规范化，再把结果字节传给现有的签名或哈希逻辑：
 
-```rust
-# #[cfg(feature = "jcs")]
+```rust,ignore
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
-# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
-# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(4096)
@@ -222,8 +224,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical, br#"{"a":1,"b":2}"#);
     Ok(())
 }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
 ```
 
 该 feature 默认关闭。编码器接收 `Value`，不接收任意 `Serialize` 实现或原始 JSON 文本。读取原始
@@ -256,9 +256,8 @@ flush 错误。相比之下，`write_incremental` 会在提交值计费前 flush
 配置值限制后，值准入会先于渲染执行；它的遍历栈不受 `max_working_bytes` 限制。可同时设置
 `max_depth` 限制准入遍历深度、`max_nodes` 限制树的节点数，并为输出和 renderer 容量分别设限：
 
-```rust
-# #[cfg(feature = "jcs")]
-# fn main() -> Result<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>> {
+```rust,ignore
+fn main() -> Result<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>> {
 
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
 use qubit_json::encode::JcsEncoder;
@@ -271,10 +270,8 @@ let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
 let mut encoder = JcsEncoder::with_limits(limits, 8 * 1024);
 let canonical = encoder.to_vec(&serde_json::json!({"status": "ready"}))?;
 assert_eq!(canonical, br#"{"status":"ready"}"#);
-# Ok::<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>>(())
-# }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
+Ok::<(), qubit_json::encode::JcsEncodeError<qubit_budget::json::JsonResource>>(())
+}
 ```
 
 这些配置限制逻辑资源和 renderer 集合容量，不代表精确堆内存上限；输入 `Value`、准入栈、分配器
@@ -285,15 +282,11 @@ assert_eq!(canonical, br#"{"status":"ready"}"#);
 若输入来自原始 JSON 文本，使用 feature-gated 的 `JcsDecoder`，而不是先用普通 `JsonDecoder` 构造
 `Value`。下面的例子对输入、结构和值数量都设定有限预算，再将结果交给 `JcsEncoder`：
 
-```rust
-# #[cfg(feature = "jcs")]
+```rust,ignore
 use qubit_budget::json::{JsonDecodeLimits, JsonEncodeLimits, JsonResource};
-# #[cfg(feature = "jcs")]
 use qubit_json::decode::JcsDecoder;
-# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
-# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let decode_limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(4096)
@@ -316,8 +309,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical, br#"{"a":1,"b":100000000000000000000}"#);
     Ok(())
 }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
 ```
 
 数字不论输入写成整数、小数还是指数，都会按 binary64 舍入后存入 `Value`。例如
@@ -326,9 +317,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 重复键比较的是 JSON 反转义后的键字符串。下面的断言说明，Unicode 转义可以拼出相同键；双反斜杠则会让反斜杠成为键名的一部分：
 
-```rust
-# #[cfg(feature = "jcs")]
-# fn main() {
+```rust,ignore
+fn main() {
 
 use qubit_json::decode::{JcsDecodeError, JcsDecoder};
 
@@ -340,9 +330,7 @@ let value = JcsDecoder::unlimited()
     .decode_str(r#"{"x":1,"\\u0078":2}"#)
     .unwrap();
 assert_eq!(value.as_object().unwrap().len(), 2);
-# }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
+}
 ```
 
 
@@ -351,9 +339,8 @@ JCS 解码只按调用方配置的 `max_depth`（包含根值）准入，不再�
 深树建议使用直接返回 `SafeJsonValue` 的 `decode_value_*` 方法。旧 `decode_*` 方法仍返回裸
 `serde_json::Value`；若继续使用，接收深文档后应立即保护结果：
 
-```rust
-# #[cfg(feature = "jcs")]
-# fn main() {
+```rust,ignore
+fn main() {
 
 use qubit_json::decode::JcsDecoder;
 use qubit_json::value::SafeJsonValue;
@@ -364,9 +351,7 @@ for depth in [128, 129] {
     let protected = SafeJsonValue::new(value);
     assert!(protected.as_value().is_array());
 }
-# }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
+}
 ```
 
 按变体处理 JCS 错误：`Decode(source)` 包含普通输入、语法和预算错误；`DuplicateKey { line, column }`
@@ -421,7 +406,7 @@ assert_eq!(
     error.materialization_error_reason(),
     Some(qubit_json::decode::JsonMaterializationErrorReason::DuplicateKey),
 );
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 保留 owner，将 `owner.as_value()` 交给读取器即可。对于其他地方已经构造的树，
@@ -441,7 +426,7 @@ fn serialize_view(owner: &SafeJsonValue) -> Result<String, serde_json::Error> {
 
 let owner = SafeJsonValue::new(serde_json::json!({"a": true}));
 assert_eq!(serialize_view(&owner)?, r#"{"a":true}"#);
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 视图的生命周期受借用值约束，使用期间必须保留 owner。构造视图是 O(1)，不复制值树；比较、`Debug`
@@ -458,7 +443,7 @@ use qubit_json::decode::JsonDecoder;
 
 let value = JsonDecoder::unlimited().decode_value_str("1.25")?;
 assert_eq!(value.as_value().as_f64(), Some(1.25));
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ### 检查原始数字 token
@@ -492,7 +477,7 @@ let owner = decoder.decode_unique_validated_str(
 )?;
 assert_eq!(numbers.len(), 2);
 assert!(owner.as_value().is_object());
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 成功时，validated 解码会返回 `SafeJsonValue`。通过 `as_value()` 借用值树时要让 owner 保持存活；调用
@@ -529,7 +514,7 @@ match error {
     }
     other => panic!("意外错误：{other:?}"),
 }
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 `TokenFirst` 仍然只接受合法 JSON。它会先按 `[0-9eE+.-]` 收集完整数字候选再验证，因此 `1-2` 属于非法数字；
@@ -578,7 +563,7 @@ let encoded = JsonEncoder::unlimited().to_vec(&first)?;
 let pretty_options = JsonPrettyOptions::builder().build()?;
 let pretty = format_json_tokens(&encoded, &pretty_options, None)?;
 assert!(std::str::from_utf8(&pretty)?.contains("\"ok\": true"));
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 任一投影失败或 panic 后都应丢弃整笔事务，不能提交失败批次中暂存的用量。成功得到的 owner 可以继续交给
@@ -605,7 +590,7 @@ let owner = JsonValueEncoder::new()
     .encode_in_transaction_with_private_text_limit(&raw, &mut transaction, 64)?;
 transaction.commit()?;
 assert_eq!(owner.as_value()["ok"], true);
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 上限包含边界，按每个私有 payload 的 UTF-8 原文字节分别计算，不累计、不限制普通字符串，也不代表分配容量或进程总内存上限。
@@ -622,7 +607,7 @@ let formatted = format_json_tokens(
     None,
 )?;
 assert!(std::str::from_utf8(&formatted)?.contains("1e400"));
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 旧 typed `decode_*<T>` 仍按 Serde 目标类型构造，不保证任意深度的目标都能安全构造或析构。处理不可信输入时，
@@ -751,7 +736,7 @@ parser.end()?;
 assert_eq!(value, serde_json::json!([0]));
 transaction.commit()?;
 assert_eq!(budget.used_nodes(), Some(2));
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ### 重复对象键
@@ -855,7 +840,7 @@ let literal: DuplicateKeyRejectingJsonValue = literal_decoder.decode_unique_str(
 let literal = literal.into_inner();
 assert!(literal.is_object());
 assert_eq!(literal["$serde_json::private::RawValue"], "[1,2,3]");
-# Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
+Ok::<(), qubit_json::decode::JsonDecodeError<JsonResource>>(())
 ```
 
 旧 unique typed 入口先构造严格值树，再调用目标反序列化；规范构造的数字即使在 `arbitrary_precision` 下也会作为原生事件提供。
@@ -914,7 +899,7 @@ JsonTreeReader::new(&mut transaction).process(&value, &mut visitor)?;
 transaction.commit()?;
 assert_eq!(visitor.0, 3);
 assert_eq!(budget.used_nodes(), Some(3));
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 `enter` 在访问后代前调用，可选的 `leave` 在后代访问完后调用。回调收到

@@ -114,13 +114,15 @@ feature 配置变化。解码 JSON 文本时请使用 `JsonDecoder::decode_value
 如果应用需要为哈希或签名生成稳定字节，应开启 `jcs`，并把已经构造好的
 `serde_json::Value` 交给 `JcsEncoder`：
 
-```rust
-# #[cfg(feature = "jcs")]
+```toml
+[dependencies]
+qubit-json = { version = "0.12", features = ["jcs"] }
+```
+
+```rust,ignore
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
-# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
-# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(4096)
@@ -130,8 +132,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(encoder.to_vec(&value)?, br#"{"a":1,"b":2}"#);
     Ok(())
 }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
 ```
 
 `jcs` 默认关闭。规范化对象是 `Value` 数据模型，不接受任意 `Serialize` 值或原始 JSON 文本。
@@ -146,12 +146,9 @@ JCS 数值遵循 IEEE 754 双精度语义，因此 `9007199254740993` 可能输�
 `SafeJsonValue`。旧的 `decode_str`、`decode_utf8` 和 `decode_input` 仍兼容保留，返回裸
 `serde_json::Value`。
 
-```rust
-# #[cfg(feature = "jcs")]
+```rust,ignore
 use qubit_json::decode::JcsDecoder;
-# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
-# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let owner = JcsDecoder::unlimited()
         .decode_value_str(r#"{"b":2,"a":1.0}"#)?;
@@ -160,8 +157,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical, br#"{"a":1,"b":2}"#);
     Ok(())
 }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
 ```
 
 JCS 解码会把所有数字舍入为有限 binary64，并拒绝反转义后重复的对象键。有限预算示例
@@ -322,7 +317,10 @@ cargo test --locked --all-features
 
 # 使用默认 feature 和 jcs 运行文档示例
 cargo test --locked --doc
-cargo test --locked --doc --features jcs
+cargo test --locked --doc --features jcs -- --include-ignored
+
+# 验证外部消费者 crate 中的示例；其依赖启用了 jcs
+cargo test --locked --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc -- --include-ignored
 
 # 运行根 crate 的 serde_json 版本 × feature 矩阵（两个版本各八组）
 python3 .infra/ci/check-json-feature-matrix.py --case all

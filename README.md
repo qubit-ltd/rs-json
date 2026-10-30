@@ -129,13 +129,15 @@ comments, trailing commas, unquoted keys, and missing syntax remain errors.
 When an application needs stable bytes for a hash or signature, enable `jcs`
 and pass an already constructed `serde_json::Value` to `JcsEncoder`:
 
-```rust
-# #[cfg(feature = "jcs")]
+```toml
+[dependencies]
+qubit-json = { version = "0.12", features = ["jcs"] }
+```
+
+```rust,ignore
 use qubit_budget::json::{JsonEncodeLimits, JsonResource};
-# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
 
-# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_output_bytes(4096)
@@ -145,8 +147,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(encoder.to_vec(&value)?, br#"{"a":1,"b":2}"#);
     Ok(())
 }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
 ```
 
 The `jcs` feature is disabled by default. `JcsEncoder` canonicalizes the
@@ -165,12 +165,9 @@ For raw JSON text with JCS number semantics, enable `jcs` and use
 methods remain available for compatibility and return a bare
 `serde_json::Value`.
 
-```rust
-# #[cfg(feature = "jcs")]
+```rust,ignore
 use qubit_json::decode::JcsDecoder;
-# #[cfg(feature = "jcs")]
 use qubit_json::encode::JcsEncoder;
-# #[cfg(feature = "jcs")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let owner = JcsDecoder::unlimited()
         .decode_value_str(r#"{"b":2,"a":1.0}"#)?;
@@ -179,8 +176,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(canonical, br#"{"a":1,"b":2}"#);
     Ok(())
 }
-# #[cfg(not(feature = "jcs"))]
-# fn main() {}
 ```
 
 All JCS decode entry points round numbers to finite binary64 and reject keys
@@ -375,7 +370,9 @@ is `1.0.135` because `serde_json::Map::into_values()` first appears there;
 this is the lowest compatible version established by that API boundary. If an
 existing `Cargo.lock` pins an older release, run `cargo update -p serde_json`
 before using the `--locked` verification commands. The minimum does not require
-enabling `arbitrary_precision` or `preserve_order`.
+enabling `arbitrary_precision` or `preserve_order`. The `rust,ignore` examples
+require the optional JCS dependency feature; the commands below explicitly run
+them after enabling `jcs`.
 
 ```bash
 # Run unit tests and public behavior integration tests with default features
@@ -386,7 +383,10 @@ cargo test --locked --all-features
 
 # Run documentation examples with default features and with jcs
 cargo test --locked --doc
-cargo test --locked --doc --features jcs
+cargo test --locked --doc --features jcs -- --include-ignored
+
+# Verify examples from an external consumer crate; its dependency enables jcs
+cargo test --locked --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc -- --include-ignored
 
 # Run the root-crate serde_json version × feature matrix (two versions × eight combinations)
 python3 .infra/ci/check-json-feature-matrix.py --case all
