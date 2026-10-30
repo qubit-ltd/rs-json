@@ -1306,3 +1306,11 @@ run, and no candidate was created. The array-frame production implementation
 is unchanged. Reassess when no unrelated build or Miri work is active and
 system load is stable below the six-CPU capacity for repeated baseline and
 candidate runs. Status: unresolved pending a controlled measurement window.
+
+After the user requested a T4 rerun, the environment was checked again. Two
+readings 30 seconds apart showed 1/5/15-minute loads of
+`13.84/15.08/19.75` and `12.61/14.27/19.07`; the later reading still had four
+Cargo and six rustc processes active. About 22 GiB memory was available, while
+about 12 GiB of swap remained in use. No benchmark was started because the
+host remained concurrently loaded. This reconfirms the unresolved decision;
+the production implementation remains unchanged.
