@@ -169,7 +169,7 @@ impl LexicalJsonValueBuilder {
                 let Some(JsonValueFrame::Array(values)) = self.frames.pop() else {
                     unreachable!("scanner emits matched array events")
                 };
-                let mut builder = SafeValueBuilder::array();
+                let mut builder = SafeValueBuilder::array_with_capacity(values.len());
                 for value in values {
                     builder.push(value);
                 }
