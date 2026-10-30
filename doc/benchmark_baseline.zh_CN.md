@@ -635,3 +635,218 @@ builder 按帧的后进先出顺序弹出。没有新增 unsafe。
 不把它描述成优化。考虑其规模、较低的总请求流量、无 unsafe/语义变更，以及两种配置下宽形状
 47.5–73.3% 的峰值下降，按设计条件保留候选。测试逐值比较副本、比较源和副本的键迭代顺序、
 覆盖深度 8/64/256，并验证注入 unwind 时数组和对象部分结果的清理。没有墙钟阈值或 RSS 声明。
+
+
+## RJ-01/RJ-02 生产候选修改前的分配基线
+
+- HEAD：`8aa4be27bb8babde6e10fc1284a0d83eee66a5da`（T1 期间未变）。
+- Rust：`rustc 1.94.0 (4a4ef493e 2026-03-02)`；目标平台 `x86_64-unknown-linux-gnu`；Cargo `1.94.0`。
+- 主机硬件：Intel Core i5-9600K @ 3.70 GHz，6 CPU；Linux 内核 `7.0.0-38-generic`。
+- `Cargo.lock` 的 SHA-256：`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`。
+- 源码 SHA-256（按顺序）：Cargo.toml `1800a3b371d6b3626d739cbfde4d609ebe5bdbcb2131dd60313d1af5bc71bc17`；bench `a3d6d1bf3ec9c04a83bef207f791a193fe37fe326c482d9d6bb0ea11e605b2d7`；safe_value_builder `b043ec5e1e69b5be7da3eac64a0200a756e9fe42068750b7f6813855442cd9de`；json_value_serializer `4afc5f1af7f6ac4b9c704408ea48eb5d4f93f3083fc7f8ed0af2aaf233ad3cac`；json_value_compound `55dd5c054d5b4cc007b8b9fa0e829f0b9e558add4893402ba2b2173237e13d5e`；value_visitor `96fba144e005b1d1fe1d09194fc0f4537bbccbbb235be0c4cfcecf8877354fc1`。
+- 采样时记录的 dirty 文件：`Cargo.toml`、`benches/value_projection_allocations.rs`、`fuzz/src/json_unique_decode_invariants.rs`、`fuzz/tests/json_unique_decode_invariants_tests.rs`、`src/decode/json_decoder.rs`、`src/value/safe_json_value.rs`、`tests/encode/serde_compat/serde_json_compat_tests/json_private_tests.rs`。T1 未修改上列 RJ-01/RJ-02 生产源码；同一共享 worktree 中其他并行 T4/T5 工作已修改其余 dirty 文件。
+- Fixture：宽度 32/512/8192；普通序列与显式 `serialize_bytes`；短键为 `kNNNNN`；长键以 128 个 ASCII `p` 字节加唯一数字后缀构成；array 链深度 8/64/256。project 测量 `JsonValueEncoder::encode_in_transaction`；bridge 测量直接将 JSON 反序列化为 `SafeJsonValue`。fixture/input、期望值和 project transaction 均在量测前准备。受保护结果在量测期间存活；相等性校验和 transaction commit 在量测后执行，且两者均不计入量测。仅深度 256 的控制组因 `from_str` 默认递归上限无法解析，使用 `Deserializer::disable_recursion_limit`；它仍是直接 Serde 反序列化，并在窗口外校验。
+- allocation 命令每种配置连续运行三次：`cargo bench --locked --bench value_projection_allocations`；`cargo bench --locked --bench value_projection_allocations --features serde_json/preserve_order`。每次完整运行输出 24 行。首次探索运行因 serde_json 默认递归上限在 chain 深度 256 失败，未纳入；修正后该控制项改用显式无上限 deserializer。一次编译尝试还发现并修正了仅限 benchmark 的相等比较类型错误；没有因此修改生产文件。
+- Allocation 数值表示成功分配请求数/字节、realloc 请求和实时/峰值请求字节；它们是分配器请求诊断，不是 RSS。每种 feature 的三轮中，每条数据完全一致。
+
+
+两个 feature 配置下的 project 与 bridge 操作使用相同 fixture 定义。以下六次完整运行均各输出 24 条记录。
+
+### default allocation samples
+
+| Round | Shape | Size | Operation | Allocations | Requested B | Reallocations | Baseline live B | Peak live B | End live B | Peak extra B |
+| ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | sequence | 32 | project | 5 | 2944 | 3 | 3054 | 5102 | 4078 | 2048 |
+| 1 | bytes | 32 | project | 5 | 2944 | 3 | 4110 | 6158 | 5134 | 2048 |
+| 1 | object_short | 32 | project | 75 | 6928 | 0 | 6990 | 13918 | 10438 | 6928 |
+| 1 | object_short | 32 | bridge | 78 | 8496 | 3 | 7502 | 14430 | 10950 | 6928 |
+| 1 | object_long_prefix | 32 | project | 75 | 15120 | 0 | 18318 | 33438 | 25862 | 15120 |
+| 1 | object_long_prefix | 32 | bridge | 78 | 16688 | 3 | 26510 | 41630 | 34054 | 15120 |
+| 1 | sequence | 512 | project | 9 | 49024 | 7 | 18414 | 51182 | 34798 | 32768 |
+| 1 | bytes | 512 | project | 9 | 49024 | 7 | 35310 | 68078 | 51694 | 32768 |
+| 1 | object_short | 512 | project | 1193 | 113536 | 0 | 70222 | 183758 | 127438 | 113536 |
+| 1 | object_short | 512 | bridge | 1200 | 141984 | 7 | 78414 | 191950 | 135630 | 113536 |
+| 1 | object_long_prefix | 512 | project | 1193 | 244608 | 0 | 240302 | 484910 | 363054 | 244608 |
+| 1 | object_long_prefix | 512 | bridge | 1200 | 273056 | 7 | 371374 | 615982 | 494126 | 244608 |
+| 1 | sequence | 8192 | project | 16 | 1015680 | 14 | 264174 | 788462 | 526318 | 524288 |
+| 1 | bytes | 8192 | project | 16 | 1015680 | 14 | 534510 | 1058798 | 796654 | 524288 |
+| 1 | object_short | 8192 | project | 19118 | 2240784 | 3 | 1077566 | 2916942 | 2008118 | 1839376 |
+| 1 | object_short | 8192 | bridge | 19126 | 2297904 | 11 | 1208638 | 3048014 | 2139190 | 1839376 |
+| 1 | object_long_prefix | 8192 | project | 19118 | 4337936 | 3 | 3783310 | 7719838 | 5762438 | 3936528 |
+| 1 | object_long_prefix | 8192 | bridge | 19126 | 4395056 | 11 | 5880462 | 9816990 | 7859590 | 3936528 |
+| 1 | chain | 8 | project | 16 | 1280 | 0 | 2286 | 3342 | 3310 | 1056 |
+| 1 | chain | 8 | bridge | 8 | 1024 | 0 | 2414 | 3438 | 3438 | 1024 |
+| 1 | chain | 64 | project | 128 | 10240 | 0 | 4078 | 12302 | 12270 | 8224 |
+| 1 | chain | 64 | bridge | 64 | 8192 | 0 | 4334 | 12526 | 12526 | 8192 |
+| 1 | chain | 256 | project | 512 | 40960 | 0 | 10222 | 43022 | 42990 | 32800 |
+| 1 | chain | 256 | bridge | 256 | 32768 | 0 | 11246 | 44014 | 44014 | 32768 |
+| 2 | sequence | 32 | project | 5 | 2944 | 3 | 3054 | 5102 | 4078 | 2048 |
+| 2 | bytes | 32 | project | 5 | 2944 | 3 | 4110 | 6158 | 5134 | 2048 |
+| 2 | object_short | 32 | project | 75 | 6928 | 0 | 6990 | 13918 | 10438 | 6928 |
+| 2 | object_short | 32 | bridge | 78 | 8496 | 3 | 7502 | 14430 | 10950 | 6928 |
+| 2 | object_long_prefix | 32 | project | 75 | 15120 | 0 | 18318 | 33438 | 25862 | 15120 |
+| 2 | object_long_prefix | 32 | bridge | 78 | 16688 | 3 | 26510 | 41630 | 34054 | 15120 |
+| 2 | sequence | 512 | project | 9 | 49024 | 7 | 18414 | 51182 | 34798 | 32768 |
+| 2 | bytes | 512 | project | 9 | 49024 | 7 | 35310 | 68078 | 51694 | 32768 |
+| 2 | object_short | 512 | project | 1193 | 113536 | 0 | 70222 | 183758 | 127438 | 113536 |
+| 2 | object_short | 512 | bridge | 1200 | 141984 | 7 | 78414 | 191950 | 135630 | 113536 |
+| 2 | object_long_prefix | 512 | project | 1193 | 244608 | 0 | 240302 | 484910 | 363054 | 244608 |
+| 2 | object_long_prefix | 512 | bridge | 1200 | 273056 | 7 | 371374 | 615982 | 494126 | 244608 |
+| 2 | sequence | 8192 | project | 16 | 1015680 | 14 | 264174 | 788462 | 526318 | 524288 |
+| 2 | bytes | 8192 | project | 16 | 1015680 | 14 | 534510 | 1058798 | 796654 | 524288 |
+| 2 | object_short | 8192 | project | 19118 | 2240784 | 3 | 1077566 | 2916942 | 2008118 | 1839376 |
+| 2 | object_short | 8192 | bridge | 19126 | 2297904 | 11 | 1208638 | 3048014 | 2139190 | 1839376 |
+| 2 | object_long_prefix | 8192 | project | 19118 | 4337936 | 3 | 3783310 | 7719838 | 5762438 | 3936528 |
+| 2 | object_long_prefix | 8192 | bridge | 19126 | 4395056 | 11 | 5880462 | 9816990 | 7859590 | 3936528 |
+| 2 | chain | 8 | project | 16 | 1280 | 0 | 2286 | 3342 | 3310 | 1056 |
+| 2 | chain | 8 | bridge | 8 | 1024 | 0 | 2414 | 3438 | 3438 | 1024 |
+| 2 | chain | 64 | project | 128 | 10240 | 0 | 4078 | 12302 | 12270 | 8224 |
+| 2 | chain | 64 | bridge | 64 | 8192 | 0 | 4334 | 12526 | 12526 | 8192 |
+| 2 | chain | 256 | project | 512 | 40960 | 0 | 10222 | 43022 | 42990 | 32800 |
+| 2 | chain | 256 | bridge | 256 | 32768 | 0 | 11246 | 44014 | 44014 | 32768 |
+| 3 | sequence | 32 | project | 5 | 2944 | 3 | 3054 | 5102 | 4078 | 2048 |
+| 3 | bytes | 32 | project | 5 | 2944 | 3 | 4110 | 6158 | 5134 | 2048 |
+| 3 | object_short | 32 | project | 75 | 6928 | 0 | 6990 | 13918 | 10438 | 6928 |
+| 3 | object_short | 32 | bridge | 78 | 8496 | 3 | 7502 | 14430 | 10950 | 6928 |
+| 3 | object_long_prefix | 32 | project | 75 | 15120 | 0 | 18318 | 33438 | 25862 | 15120 |
+| 3 | object_long_prefix | 32 | bridge | 78 | 16688 | 3 | 26510 | 41630 | 34054 | 15120 |
+| 3 | sequence | 512 | project | 9 | 49024 | 7 | 18414 | 51182 | 34798 | 32768 |
+| 3 | bytes | 512 | project | 9 | 49024 | 7 | 35310 | 68078 | 51694 | 32768 |
+| 3 | object_short | 512 | project | 1193 | 113536 | 0 | 70222 | 183758 | 127438 | 113536 |
+| 3 | object_short | 512 | bridge | 1200 | 141984 | 7 | 78414 | 191950 | 135630 | 113536 |
+| 3 | object_long_prefix | 512 | project | 1193 | 244608 | 0 | 240302 | 484910 | 363054 | 244608 |
+| 3 | object_long_prefix | 512 | bridge | 1200 | 273056 | 7 | 371374 | 615982 | 494126 | 244608 |
+| 3 | sequence | 8192 | project | 16 | 1015680 | 14 | 264174 | 788462 | 526318 | 524288 |
+| 3 | bytes | 8192 | project | 16 | 1015680 | 14 | 534510 | 1058798 | 796654 | 524288 |
+| 3 | object_short | 8192 | project | 19118 | 2240784 | 3 | 1077566 | 2916942 | 2008118 | 1839376 |
+| 3 | object_short | 8192 | bridge | 19126 | 2297904 | 11 | 1208638 | 3048014 | 2139190 | 1839376 |
+| 3 | object_long_prefix | 8192 | project | 19118 | 4337936 | 3 | 3783310 | 7719838 | 5762438 | 3936528 |
+| 3 | object_long_prefix | 8192 | bridge | 19126 | 4395056 | 11 | 5880462 | 9816990 | 7859590 | 3936528 |
+| 3 | chain | 8 | project | 16 | 1280 | 0 | 2286 | 3342 | 3310 | 1056 |
+| 3 | chain | 8 | bridge | 8 | 1024 | 0 | 2414 | 3438 | 3438 | 1024 |
+| 3 | chain | 64 | project | 128 | 10240 | 0 | 4078 | 12302 | 12270 | 8224 |
+| 3 | chain | 64 | bridge | 64 | 8192 | 0 | 4334 | 12526 | 12526 | 8192 |
+| 3 | chain | 256 | project | 512 | 40960 | 0 | 10222 | 43022 | 42990 | 32800 |
+| 3 | chain | 256 | bridge | 256 | 32768 | 0 | 11246 | 44014 | 44014 | 32768 |
+
+### preserve_order allocation samples
+
+| Round | Shape | Size | Operation | Allocations | Requested B | Reallocations | Baseline live B | Peak live B | End live B | Peak extra B |
+| ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | sequence | 32 | project | 5 | 6624 | 3 | 4334 | 8942 | 6638 | 4608 |
+| 1 | bytes | 32 | project | 5 | 6624 | 3 | 6670 | 11278 | 8974 | 4608 |
+| 1 | object_short | 32 | project | 80 | 17380 | 4 | 10846 | 22214 | 17454 | 11368 |
+| 1 | object_short | 32 | bridge | 83 | 20068 | 7 | 11358 | 22726 | 17966 | 11368 |
+| 1 | object_long_prefix | 32 | project | 80 | 25572 | 4 | 23470 | 43030 | 34174 | 19560 |
+| 1 | object_long_prefix | 32 | bridge | 83 | 28260 | 7 | 31662 | 51222 | 42366 | 19560 |
+| 1 | sequence | 512 | project | 9 | 110304 | 7 | 38894 | 112622 | 75758 | 73728 |
+| 1 | bytes | 512 | project | 9 | 110304 | 7 | 76270 | 149998 | 113134 | 73728 |
+| 1 | object_short | 512 | project | 1127 | 284364 | 8 | 142846 | 325134 | 248334 | 182288 |
+| 1 | object_short | 512 | bridge | 1134 | 333132 | 15 | 151038 | 333326 | 256526 | 182288 |
+| 1 | object_long_prefix | 512 | project | 1127 | 415436 | 8 | 344590 | 657950 | 515614 | 313360 |
+| 1 | object_long_prefix | 512 | bridge | 1134 | 464204 | 15 | 475662 | 789022 | 646686 | 313360 |
+| 1 | sequence | 8192 | project | 16 | 2285280 | 14 | 591854 | 1771502 | 1181678 | 1179648 |
+| 1 | bytes | 8192 | project | 16 | 2285280 | 14 | 1189870 | 2369518 | 1779694 | 1179648 |
+| 1 | object_short | 8192 | project | 17779 | 5250340 | 15 | 2254846 | 5178918 | 3942414 | 2924072 |
+| 1 | object_short | 8192 | bridge | 17787 | 5348260 | 23 | 2385918 | 5309990 | 4073486 | 2924072 |
+| 1 | object_long_prefix | 8192 | project | 17779 | 7347492 | 15 | 5482510 | 10503734 | 8218654 | 5021224 |
+| 1 | object_long_prefix | 8192 | bridge | 17787 | 7445412 | 23 | 7579662 | 12600886 | 10315806 | 5021224 |
+| 1 | chain | 8 | project | 16 | 2880 | 0 | 2606 | 4982 | 4910 | 2376 |
+| 1 | chain | 8 | bridge | 8 | 2304 | 0 | 2734 | 5038 | 5038 | 2304 |
+| 1 | chain | 64 | project | 128 | 23040 | 0 | 6638 | 25142 | 25070 | 18504 |
+| 1 | chain | 64 | bridge | 64 | 18432 | 0 | 6894 | 25326 | 25326 | 18432 |
+| 1 | chain | 256 | project | 512 | 92160 | 0 | 20462 | 94262 | 94190 | 73800 |
+| 1 | chain | 256 | bridge | 256 | 73728 | 0 | 21486 | 95214 | 95214 | 73728 |
+| 2 | sequence | 32 | project | 5 | 6624 | 3 | 4334 | 8942 | 6638 | 4608 |
+| 2 | bytes | 32 | project | 5 | 6624 | 3 | 6670 | 11278 | 8974 | 4608 |
+| 2 | object_short | 32 | project | 80 | 17380 | 4 | 10846 | 22214 | 17454 | 11368 |
+| 2 | object_short | 32 | bridge | 83 | 20068 | 7 | 11358 | 22726 | 17966 | 11368 |
+| 2 | object_long_prefix | 32 | project | 80 | 25572 | 4 | 23470 | 43030 | 34174 | 19560 |
+| 2 | object_long_prefix | 32 | bridge | 83 | 28260 | 7 | 31662 | 51222 | 42366 | 19560 |
+| 2 | sequence | 512 | project | 9 | 110304 | 7 | 38894 | 112622 | 75758 | 73728 |
+| 2 | bytes | 512 | project | 9 | 110304 | 7 | 76270 | 149998 | 113134 | 73728 |
+| 2 | object_short | 512 | project | 1127 | 284364 | 8 | 142846 | 325134 | 248334 | 182288 |
+| 2 | object_short | 512 | bridge | 1134 | 333132 | 15 | 151038 | 333326 | 256526 | 182288 |
+| 2 | object_long_prefix | 512 | project | 1127 | 415436 | 8 | 344590 | 657950 | 515614 | 313360 |
+| 2 | object_long_prefix | 512 | bridge | 1134 | 464204 | 15 | 475662 | 789022 | 646686 | 313360 |
+| 2 | sequence | 8192 | project | 16 | 2285280 | 14 | 591854 | 1771502 | 1181678 | 1179648 |
+| 2 | bytes | 8192 | project | 16 | 2285280 | 14 | 1189870 | 2369518 | 1779694 | 1179648 |
+| 2 | object_short | 8192 | project | 17779 | 5250340 | 15 | 2254846 | 5178918 | 3942414 | 2924072 |
+| 2 | object_short | 8192 | bridge | 17787 | 5348260 | 23 | 2385918 | 5309990 | 4073486 | 2924072 |
+| 2 | object_long_prefix | 8192 | project | 17779 | 7347492 | 15 | 5482510 | 10503734 | 8218654 | 5021224 |
+| 2 | object_long_prefix | 8192 | bridge | 17787 | 7445412 | 23 | 7579662 | 12600886 | 10315806 | 5021224 |
+| 2 | chain | 8 | project | 16 | 2880 | 0 | 2606 | 4982 | 4910 | 2376 |
+| 2 | chain | 8 | bridge | 8 | 2304 | 0 | 2734 | 5038 | 5038 | 2304 |
+| 2 | chain | 64 | project | 128 | 23040 | 0 | 6638 | 25142 | 25070 | 18504 |
+| 2 | chain | 64 | bridge | 64 | 18432 | 0 | 6894 | 25326 | 25326 | 18432 |
+| 2 | chain | 256 | project | 512 | 92160 | 0 | 20462 | 94262 | 94190 | 73800 |
+| 2 | chain | 256 | bridge | 256 | 73728 | 0 | 21486 | 95214 | 95214 | 73728 |
+| 3 | sequence | 32 | project | 5 | 6624 | 3 | 4334 | 8942 | 6638 | 4608 |
+| 3 | bytes | 32 | project | 5 | 6624 | 3 | 6670 | 11278 | 8974 | 4608 |
+| 3 | object_short | 32 | project | 80 | 17380 | 4 | 10846 | 22214 | 17454 | 11368 |
+| 3 | object_short | 32 | bridge | 83 | 20068 | 7 | 11358 | 22726 | 17966 | 11368 |
+| 3 | object_long_prefix | 32 | project | 80 | 25572 | 4 | 23470 | 43030 | 34174 | 19560 |
+| 3 | object_long_prefix | 32 | bridge | 83 | 28260 | 7 | 31662 | 51222 | 42366 | 19560 |
+| 3 | sequence | 512 | project | 9 | 110304 | 7 | 38894 | 112622 | 75758 | 73728 |
+| 3 | bytes | 512 | project | 9 | 110304 | 7 | 76270 | 149998 | 113134 | 73728 |
+| 3 | object_short | 512 | project | 1127 | 284364 | 8 | 142846 | 325134 | 248334 | 182288 |
+| 3 | object_short | 512 | bridge | 1134 | 333132 | 15 | 151038 | 333326 | 256526 | 182288 |
+| 3 | object_long_prefix | 512 | project | 1127 | 415436 | 8 | 344590 | 657950 | 515614 | 313360 |
+| 3 | object_long_prefix | 512 | bridge | 1134 | 464204 | 15 | 475662 | 789022 | 646686 | 313360 |
+| 3 | sequence | 8192 | project | 16 | 2285280 | 14 | 591854 | 1771502 | 1181678 | 1179648 |
+| 3 | bytes | 8192 | project | 16 | 2285280 | 14 | 1189870 | 2369518 | 1779694 | 1179648 |
+| 3 | object_short | 8192 | project | 17779 | 5250340 | 15 | 2254846 | 5178918 | 3942414 | 2924072 |
+| 3 | object_short | 8192 | bridge | 17787 | 5348260 | 23 | 2385918 | 5309990 | 4073486 | 2924072 |
+| 3 | object_long_prefix | 8192 | project | 17779 | 7347492 | 15 | 5482510 | 10503734 | 8218654 | 5021224 |
+| 3 | object_long_prefix | 8192 | bridge | 17787 | 7445412 | 23 | 7579662 | 12600886 | 10315806 | 5021224 |
+| 3 | chain | 8 | project | 16 | 2880 | 0 | 2606 | 4982 | 4910 | 2376 |
+| 3 | chain | 8 | bridge | 8 | 2304 | 0 | 2734 | 5038 | 5038 | 2304 |
+| 3 | chain | 64 | project | 128 | 23040 | 0 | 6638 | 25142 | 25070 | 18504 |
+| 3 | chain | 64 | bridge | 64 | 18432 | 0 | 6894 | 25326 | 25326 | 18432 |
+| 3 | chain | 256 | project | 512 | 92160 | 0 | 20462 | 94262 | 94190 | 73800 |
+| 3 | chain | 256 | bridge | 256 | 73728 | 0 | 21486 | 95214 | 95214 | 73728 |
+
+### RJ-02 延迟前测（仅 default 配置，尝试结果）
+
+命令：`cargo bench --locked --bench decoder_bench -- safe_value_bridge`（Criterion 全量采样，每个用例 100 个样本，未使用 `--quick`）。命令完成 36 个 benchmark 用例。下表记录 Criterion 输出的中心估计、95% 置信区间及离群样本数：
+
+| Benchmark | Lower (95% CI) | Estimate | Upper (95% CI) | Outliers |
+| --- | ---: | ---: | ---: | ---: |
+| safe_value_bridge/serde/short/unique/32 | 28.403 µs | 34.276 µs | 40.419 µs | 1/100 |
+| safe_value_bridge/json_decoder/short/unique/32 | 105.62 µs | 113.63 µs | 121.94 µs | 3/100 |
+| safe_value_bridge/serde/short/duplicate_early/32 | 2.0403 µs | 2.3053 µs | 2.5988 µs | 3/100 |
+| safe_value_bridge/json_decoder/short/duplicate_early/32 | 2.8726 µs | 3.3246 µs | 3.8275 µs | 4/100 |
+| safe_value_bridge/serde/short/duplicate_tail/32 | 34.316 µs | 39.754 µs | 45.415 µs | 4/100 |
+| safe_value_bridge/json_decoder/short/duplicate_tail/32 | 92.754 µs | 107.33 µs | 122.21 µs | 3/100 |
+| safe_value_bridge/serde/long_prefix/unique/32 | 62.565 µs | 68.827 µs | 74.981 µs | 4/100 |
+| safe_value_bridge/json_decoder/long_prefix/unique/32 | 42.971 µs | 48.378 µs | 54.588 µs | 4/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_early/32 | 1.0768 µs | 1.4664 µs | 2.0863 µs | 6/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_early/32 | 2.3808 µs | 3.1282 µs | 4.0385 µs | 8/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_tail/32 | 20.688 µs | 31.342 µs | 42.731 µs | 13/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_tail/32 | 102.19 µs | 113.38 µs | 125.07 µs | 3/100 |
+| safe_value_bridge/serde/short/unique/512 | 589.77 µs | 707.75 µs | 840.34 µs | 5/100 |
+| safe_value_bridge/json_decoder/short/unique/512 | 1.6295 ms | 1.8767 ms | 2.1436 ms | 1/100 |
+| safe_value_bridge/serde/short/duplicate_early/512 | 1.1712 µs | 1.4728 µs | 1.8089 µs | 9/100 |
+| safe_value_bridge/json_decoder/short/duplicate_early/512 | 2.1705 µs | 2.5048 µs | 2.8987 µs | 2/100 |
+| safe_value_bridge/serde/short/duplicate_tail/512 | 424.90 µs | 487.92 µs | 560.31 µs | 2/100 |
+| safe_value_bridge/json_decoder/short/duplicate_tail/512 | 1.0293 ms | 1.2437 ms | 1.4786 ms | 3/100 |
+| safe_value_bridge/serde/long_prefix/unique/512 | 525.09 µs | 636.48 µs | 766.18 µs | 5/100 |
+| safe_value_bridge/json_decoder/long_prefix/unique/512 | 1.3005 ms | 1.4953 ms | 1.7058 ms | 4/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_early/512 | 1.5845 µs | 1.8823 µs | 2.1821 µs | 1/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_early/512 | 6.7938 µs | 7.6372 µs | 8.4387 µs | 2/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_tail/512 | 371.75 µs | 428.25 µs | 487.73 µs | 1/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_tail/512 | 1.4121 ms | 1.6670 ms | 1.9290 ms | 5/100 |
+| safe_value_bridge/serde/short/unique/4096 | 7.9057 ms | 8.6422 ms | 9.4354 ms | 1/100 |
+| safe_value_bridge/json_decoder/short/unique/4096 | 10.839 ms | 11.765 ms | 12.691 ms | 4/100 |
+| safe_value_bridge/serde/short/duplicate_early/4096 | 1.0311 µs | 1.1389 µs | 1.2632 µs | 4/100 |
+| safe_value_bridge/json_decoder/short/duplicate_early/4096 | 5.3698 µs | 6.0881 µs | 6.9337 µs | 2/100 |
+| safe_value_bridge/serde/short/duplicate_tail/4096 | 6.5620 ms | 7.1397 ms | 7.7525 ms | 2/100 |
+| safe_value_bridge/json_decoder/short/duplicate_tail/4096 | 5.8590 ms | 6.4975 ms | 7.1895 ms | 2/100 |
+| safe_value_bridge/serde/long_prefix/unique/4096 | 5.5580 ms | 6.4765 ms | 7.4909 ms | 6/100 |
+| safe_value_bridge/json_decoder/long_prefix/unique/4096 | 8.9081 ms | 10.509 ms | 12.302 ms | 11/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_early/4096 | 1.0592 µs | 1.1890 µs | 1.3269 µs | 1/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_early/4096 | 26.874 µs | 32.260 µs | 39.656 µs | 5/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_tail/4096 | 7.3674 ms | 8.4231 ms | 9.6464 ms | 2/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_tail/4096 | 6.9676 ms | 8.4150 ms | 9.9817 ms | 7/100 |
+
+环境：HEAD、工具链、锁文件与上文相同。运行期间共享主机有 23 个登录用户，负载峰值记录为 `47.13, 41.14, 30.70`；运行刚结束时为 `28.71, 34.10, 30.86`。同时存在其他 worktree 的 CI、Rust 编译和 Miri 进程，且部分用例报告 high-severe 离群值。因此保留这些原始观察值，但不视为可靠的 RJ-02 延迟基线。由于主机负载仍高，未运行要求的 `preserve_order` Criterion 命令。RJ-02 延迟仍未验证；不得据此决定是否采纳。任务期间完整输出保存在 `/tmp/rj-t1-criterion-default.log`。

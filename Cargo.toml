@@ -96,6 +96,10 @@ harness = false
 name = "value_clone_allocations"
 harness = false
 
+[[bench]]
+name = "value_projection_allocations"
+harness = false
+
 [profile.release]
 opt-level = 3
 lto = true

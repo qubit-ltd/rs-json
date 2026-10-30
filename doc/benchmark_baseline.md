@@ -826,3 +826,218 @@ both configurations, the candidate is retained under the design's conditions.
 The tests directly compare copied values, compare source/copy key iteration
 order, cover mixed depths 8/64/256, and exercise partial array and object
 cleanup during injected unwind. No wall-clock threshold or RSS claim is made.
+
+
+## RJ-01/RJ-02 allocation baseline before production candidates
+
+- HEAD: `8aa4be27bb8babde6e10fc1284a0d83eee66a5da` (unchanged during T1).
+- Rust: `rustc 1.94.0 (4a4ef493e 2026-03-02)`; host `x86_64-unknown-linux-gnu`; Cargo `1.94.0`.
+- Host hardware: Intel Core i5-9600K @ 3.70 GHz, 6 CPUs; Linux kernel `7.0.0-38-generic`.
+- `Cargo.lock` SHA-256: `65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`.
+- Source SHA-256 (in listed order): Cargo.toml `1800a3b371d6b3626d739cbfde4d609ebe5bdbcb2131dd60313d1af5bc71bc17`; bench `a3d6d1bf3ec9c04a83bef207f791a193fe37fe326c482d9d6bb0ea11e605b2d7`; safe_value_builder `b043ec5e1e69b5be7da3eac64a0200a756e9fe42068750b7f6813855442cd9de`; json_value_serializer `4afc5f1af7f6ac4b9c704408ea48eb5d4f93f3083fc7f8ed0af2aaf233ad3cac`; json_value_compound `55dd5c054d5b4cc007b8b9fa0e829f0b9e558add4893402ba2b2173237e13d5e`; value_visitor `96fba144e005b1d1fe1d09194fc0f4537bbccbbb235be0c4cfcecf8877354fc1`.
+- Captured dirty files: `Cargo.toml`, `benches/value_projection_allocations.rs`, `fuzz/src/json_unique_decode_invariants.rs`, `fuzz/tests/json_unique_decode_invariants_tests.rs`, `src/decode/json_decoder.rs`, `src/value/safe_json_value.rs`, `tests/encode/serde_compat/serde_json_compat_tests/json_private_tests.rs`. T1 did not edit the RJ-01/RJ-02 production source files listed above; the additional dirty files were already being edited by parallel T4/T5 work in this shared worktree.
+- Fixture: widths 32/512/8192; sequence and explicit `serialize_bytes`; short keys `kNNNNN`; long keys use 128 ASCII `p` bytes plus a unique numeric suffix; array-chain depths 8/64/256. Project measures `JsonValueEncoder::encode_in_transaction`; bridge measures direct `serde_json` deserialization to `SafeJsonValue`. Fixture/input, expected values, and project transaction are prepared before measurement. The protected result remains alive through the measurement; value equality and transaction commit happen after it. Commit and result destruction are excluded consistently. For depth 256 only, `Deserializer::disable_recursion_limit` is required because `from_str`'s default recursion limit rejects the control fixture; it remains direct Serde deserialization and is validated outside the window.
+- Allocation command, run three consecutive times per config: `cargo bench --locked --bench value_projection_allocations`; `cargo bench --locked --bench value_projection_allocations --features serde_json/preserve_order`. Each successful run emitted 24 rows. The first exploratory run failed on serde_json's default recursion limit at chain depth 256 and is excluded; the fixed run uses the explicit unbounded-depth deserializer for that control case. A compile attempt also caught and fixed a benchmark-only equality type mismatch; no production files changed.
+- Allocation values are successful allocator request counts/bytes, realloc requests, and live/peak requested bytes; these are allocator-request diagnostics, not RSS. Across all three runs per feature, each row was identical.
+
+
+The measured project and bridge operations use identical fixture definitions in each feature configuration. Each of the six complete runs below emitted 24 records.
+
+### default allocation samples
+
+| Round | Shape | Size | Operation | Allocations | Requested B | Reallocations | Baseline live B | Peak live B | End live B | Peak extra B |
+| ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | sequence | 32 | project | 5 | 2944 | 3 | 3054 | 5102 | 4078 | 2048 |
+| 1 | bytes | 32 | project | 5 | 2944 | 3 | 4110 | 6158 | 5134 | 2048 |
+| 1 | object_short | 32 | project | 75 | 6928 | 0 | 6990 | 13918 | 10438 | 6928 |
+| 1 | object_short | 32 | bridge | 78 | 8496 | 3 | 7502 | 14430 | 10950 | 6928 |
+| 1 | object_long_prefix | 32 | project | 75 | 15120 | 0 | 18318 | 33438 | 25862 | 15120 |
+| 1 | object_long_prefix | 32 | bridge | 78 | 16688 | 3 | 26510 | 41630 | 34054 | 15120 |
+| 1 | sequence | 512 | project | 9 | 49024 | 7 | 18414 | 51182 | 34798 | 32768 |
+| 1 | bytes | 512 | project | 9 | 49024 | 7 | 35310 | 68078 | 51694 | 32768 |
+| 1 | object_short | 512 | project | 1193 | 113536 | 0 | 70222 | 183758 | 127438 | 113536 |
+| 1 | object_short | 512 | bridge | 1200 | 141984 | 7 | 78414 | 191950 | 135630 | 113536 |
+| 1 | object_long_prefix | 512 | project | 1193 | 244608 | 0 | 240302 | 484910 | 363054 | 244608 |
+| 1 | object_long_prefix | 512 | bridge | 1200 | 273056 | 7 | 371374 | 615982 | 494126 | 244608 |
+| 1 | sequence | 8192 | project | 16 | 1015680 | 14 | 264174 | 788462 | 526318 | 524288 |
+| 1 | bytes | 8192 | project | 16 | 1015680 | 14 | 534510 | 1058798 | 796654 | 524288 |
+| 1 | object_short | 8192 | project | 19118 | 2240784 | 3 | 1077566 | 2916942 | 2008118 | 1839376 |
+| 1 | object_short | 8192 | bridge | 19126 | 2297904 | 11 | 1208638 | 3048014 | 2139190 | 1839376 |
+| 1 | object_long_prefix | 8192 | project | 19118 | 4337936 | 3 | 3783310 | 7719838 | 5762438 | 3936528 |
+| 1 | object_long_prefix | 8192 | bridge | 19126 | 4395056 | 11 | 5880462 | 9816990 | 7859590 | 3936528 |
+| 1 | chain | 8 | project | 16 | 1280 | 0 | 2286 | 3342 | 3310 | 1056 |
+| 1 | chain | 8 | bridge | 8 | 1024 | 0 | 2414 | 3438 | 3438 | 1024 |
+| 1 | chain | 64 | project | 128 | 10240 | 0 | 4078 | 12302 | 12270 | 8224 |
+| 1 | chain | 64 | bridge | 64 | 8192 | 0 | 4334 | 12526 | 12526 | 8192 |
+| 1 | chain | 256 | project | 512 | 40960 | 0 | 10222 | 43022 | 42990 | 32800 |
+| 1 | chain | 256 | bridge | 256 | 32768 | 0 | 11246 | 44014 | 44014 | 32768 |
+| 2 | sequence | 32 | project | 5 | 2944 | 3 | 3054 | 5102 | 4078 | 2048 |
+| 2 | bytes | 32 | project | 5 | 2944 | 3 | 4110 | 6158 | 5134 | 2048 |
+| 2 | object_short | 32 | project | 75 | 6928 | 0 | 6990 | 13918 | 10438 | 6928 |
+| 2 | object_short | 32 | bridge | 78 | 8496 | 3 | 7502 | 14430 | 10950 | 6928 |
+| 2 | object_long_prefix | 32 | project | 75 | 15120 | 0 | 18318 | 33438 | 25862 | 15120 |
+| 2 | object_long_prefix | 32 | bridge | 78 | 16688 | 3 | 26510 | 41630 | 34054 | 15120 |
+| 2 | sequence | 512 | project | 9 | 49024 | 7 | 18414 | 51182 | 34798 | 32768 |
+| 2 | bytes | 512 | project | 9 | 49024 | 7 | 35310 | 68078 | 51694 | 32768 |
+| 2 | object_short | 512 | project | 1193 | 113536 | 0 | 70222 | 183758 | 127438 | 113536 |
+| 2 | object_short | 512 | bridge | 1200 | 141984 | 7 | 78414 | 191950 | 135630 | 113536 |
+| 2 | object_long_prefix | 512 | project | 1193 | 244608 | 0 | 240302 | 484910 | 363054 | 244608 |
+| 2 | object_long_prefix | 512 | bridge | 1200 | 273056 | 7 | 371374 | 615982 | 494126 | 244608 |
+| 2 | sequence | 8192 | project | 16 | 1015680 | 14 | 264174 | 788462 | 526318 | 524288 |
+| 2 | bytes | 8192 | project | 16 | 1015680 | 14 | 534510 | 1058798 | 796654 | 524288 |
+| 2 | object_short | 8192 | project | 19118 | 2240784 | 3 | 1077566 | 2916942 | 2008118 | 1839376 |
+| 2 | object_short | 8192 | bridge | 19126 | 2297904 | 11 | 1208638 | 3048014 | 2139190 | 1839376 |
+| 2 | object_long_prefix | 8192 | project | 19118 | 4337936 | 3 | 3783310 | 7719838 | 5762438 | 3936528 |
+| 2 | object_long_prefix | 8192 | bridge | 19126 | 4395056 | 11 | 5880462 | 9816990 | 7859590 | 3936528 |
+| 2 | chain | 8 | project | 16 | 1280 | 0 | 2286 | 3342 | 3310 | 1056 |
+| 2 | chain | 8 | bridge | 8 | 1024 | 0 | 2414 | 3438 | 3438 | 1024 |
+| 2 | chain | 64 | project | 128 | 10240 | 0 | 4078 | 12302 | 12270 | 8224 |
+| 2 | chain | 64 | bridge | 64 | 8192 | 0 | 4334 | 12526 | 12526 | 8192 |
+| 2 | chain | 256 | project | 512 | 40960 | 0 | 10222 | 43022 | 42990 | 32800 |
+| 2 | chain | 256 | bridge | 256 | 32768 | 0 | 11246 | 44014 | 44014 | 32768 |
+| 3 | sequence | 32 | project | 5 | 2944 | 3 | 3054 | 5102 | 4078 | 2048 |
+| 3 | bytes | 32 | project | 5 | 2944 | 3 | 4110 | 6158 | 5134 | 2048 |
+| 3 | object_short | 32 | project | 75 | 6928 | 0 | 6990 | 13918 | 10438 | 6928 |
+| 3 | object_short | 32 | bridge | 78 | 8496 | 3 | 7502 | 14430 | 10950 | 6928 |
+| 3 | object_long_prefix | 32 | project | 75 | 15120 | 0 | 18318 | 33438 | 25862 | 15120 |
+| 3 | object_long_prefix | 32 | bridge | 78 | 16688 | 3 | 26510 | 41630 | 34054 | 15120 |
+| 3 | sequence | 512 | project | 9 | 49024 | 7 | 18414 | 51182 | 34798 | 32768 |
+| 3 | bytes | 512 | project | 9 | 49024 | 7 | 35310 | 68078 | 51694 | 32768 |
+| 3 | object_short | 512 | project | 1193 | 113536 | 0 | 70222 | 183758 | 127438 | 113536 |
+| 3 | object_short | 512 | bridge | 1200 | 141984 | 7 | 78414 | 191950 | 135630 | 113536 |
+| 3 | object_long_prefix | 512 | project | 1193 | 244608 | 0 | 240302 | 484910 | 363054 | 244608 |
+| 3 | object_long_prefix | 512 | bridge | 1200 | 273056 | 7 | 371374 | 615982 | 494126 | 244608 |
+| 3 | sequence | 8192 | project | 16 | 1015680 | 14 | 264174 | 788462 | 526318 | 524288 |
+| 3 | bytes | 8192 | project | 16 | 1015680 | 14 | 534510 | 1058798 | 796654 | 524288 |
+| 3 | object_short | 8192 | project | 19118 | 2240784 | 3 | 1077566 | 2916942 | 2008118 | 1839376 |
+| 3 | object_short | 8192 | bridge | 19126 | 2297904 | 11 | 1208638 | 3048014 | 2139190 | 1839376 |
+| 3 | object_long_prefix | 8192 | project | 19118 | 4337936 | 3 | 3783310 | 7719838 | 5762438 | 3936528 |
+| 3 | object_long_prefix | 8192 | bridge | 19126 | 4395056 | 11 | 5880462 | 9816990 | 7859590 | 3936528 |
+| 3 | chain | 8 | project | 16 | 1280 | 0 | 2286 | 3342 | 3310 | 1056 |
+| 3 | chain | 8 | bridge | 8 | 1024 | 0 | 2414 | 3438 | 3438 | 1024 |
+| 3 | chain | 64 | project | 128 | 10240 | 0 | 4078 | 12302 | 12270 | 8224 |
+| 3 | chain | 64 | bridge | 64 | 8192 | 0 | 4334 | 12526 | 12526 | 8192 |
+| 3 | chain | 256 | project | 512 | 40960 | 0 | 10222 | 43022 | 42990 | 32800 |
+| 3 | chain | 256 | bridge | 256 | 32768 | 0 | 11246 | 44014 | 44014 | 32768 |
+
+### preserve_order allocation samples
+
+| Round | Shape | Size | Operation | Allocations | Requested B | Reallocations | Baseline live B | Peak live B | End live B | Peak extra B |
+| ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | sequence | 32 | project | 5 | 6624 | 3 | 4334 | 8942 | 6638 | 4608 |
+| 1 | bytes | 32 | project | 5 | 6624 | 3 | 6670 | 11278 | 8974 | 4608 |
+| 1 | object_short | 32 | project | 80 | 17380 | 4 | 10846 | 22214 | 17454 | 11368 |
+| 1 | object_short | 32 | bridge | 83 | 20068 | 7 | 11358 | 22726 | 17966 | 11368 |
+| 1 | object_long_prefix | 32 | project | 80 | 25572 | 4 | 23470 | 43030 | 34174 | 19560 |
+| 1 | object_long_prefix | 32 | bridge | 83 | 28260 | 7 | 31662 | 51222 | 42366 | 19560 |
+| 1 | sequence | 512 | project | 9 | 110304 | 7 | 38894 | 112622 | 75758 | 73728 |
+| 1 | bytes | 512 | project | 9 | 110304 | 7 | 76270 | 149998 | 113134 | 73728 |
+| 1 | object_short | 512 | project | 1127 | 284364 | 8 | 142846 | 325134 | 248334 | 182288 |
+| 1 | object_short | 512 | bridge | 1134 | 333132 | 15 | 151038 | 333326 | 256526 | 182288 |
+| 1 | object_long_prefix | 512 | project | 1127 | 415436 | 8 | 344590 | 657950 | 515614 | 313360 |
+| 1 | object_long_prefix | 512 | bridge | 1134 | 464204 | 15 | 475662 | 789022 | 646686 | 313360 |
+| 1 | sequence | 8192 | project | 16 | 2285280 | 14 | 591854 | 1771502 | 1181678 | 1179648 |
+| 1 | bytes | 8192 | project | 16 | 2285280 | 14 | 1189870 | 2369518 | 1779694 | 1179648 |
+| 1 | object_short | 8192 | project | 17779 | 5250340 | 15 | 2254846 | 5178918 | 3942414 | 2924072 |
+| 1 | object_short | 8192 | bridge | 17787 | 5348260 | 23 | 2385918 | 5309990 | 4073486 | 2924072 |
+| 1 | object_long_prefix | 8192 | project | 17779 | 7347492 | 15 | 5482510 | 10503734 | 8218654 | 5021224 |
+| 1 | object_long_prefix | 8192 | bridge | 17787 | 7445412 | 23 | 7579662 | 12600886 | 10315806 | 5021224 |
+| 1 | chain | 8 | project | 16 | 2880 | 0 | 2606 | 4982 | 4910 | 2376 |
+| 1 | chain | 8 | bridge | 8 | 2304 | 0 | 2734 | 5038 | 5038 | 2304 |
+| 1 | chain | 64 | project | 128 | 23040 | 0 | 6638 | 25142 | 25070 | 18504 |
+| 1 | chain | 64 | bridge | 64 | 18432 | 0 | 6894 | 25326 | 25326 | 18432 |
+| 1 | chain | 256 | project | 512 | 92160 | 0 | 20462 | 94262 | 94190 | 73800 |
+| 1 | chain | 256 | bridge | 256 | 73728 | 0 | 21486 | 95214 | 95214 | 73728 |
+| 2 | sequence | 32 | project | 5 | 6624 | 3 | 4334 | 8942 | 6638 | 4608 |
+| 2 | bytes | 32 | project | 5 | 6624 | 3 | 6670 | 11278 | 8974 | 4608 |
+| 2 | object_short | 32 | project | 80 | 17380 | 4 | 10846 | 22214 | 17454 | 11368 |
+| 2 | object_short | 32 | bridge | 83 | 20068 | 7 | 11358 | 22726 | 17966 | 11368 |
+| 2 | object_long_prefix | 32 | project | 80 | 25572 | 4 | 23470 | 43030 | 34174 | 19560 |
+| 2 | object_long_prefix | 32 | bridge | 83 | 28260 | 7 | 31662 | 51222 | 42366 | 19560 |
+| 2 | sequence | 512 | project | 9 | 110304 | 7 | 38894 | 112622 | 75758 | 73728 |
+| 2 | bytes | 512 | project | 9 | 110304 | 7 | 76270 | 149998 | 113134 | 73728 |
+| 2 | object_short | 512 | project | 1127 | 284364 | 8 | 142846 | 325134 | 248334 | 182288 |
+| 2 | object_short | 512 | bridge | 1134 | 333132 | 15 | 151038 | 333326 | 256526 | 182288 |
+| 2 | object_long_prefix | 512 | project | 1127 | 415436 | 8 | 344590 | 657950 | 515614 | 313360 |
+| 2 | object_long_prefix | 512 | bridge | 1134 | 464204 | 15 | 475662 | 789022 | 646686 | 313360 |
+| 2 | sequence | 8192 | project | 16 | 2285280 | 14 | 591854 | 1771502 | 1181678 | 1179648 |
+| 2 | bytes | 8192 | project | 16 | 2285280 | 14 | 1189870 | 2369518 | 1779694 | 1179648 |
+| 2 | object_short | 8192 | project | 17779 | 5250340 | 15 | 2254846 | 5178918 | 3942414 | 2924072 |
+| 2 | object_short | 8192 | bridge | 17787 | 5348260 | 23 | 2385918 | 5309990 | 4073486 | 2924072 |
+| 2 | object_long_prefix | 8192 | project | 17779 | 7347492 | 15 | 5482510 | 10503734 | 8218654 | 5021224 |
+| 2 | object_long_prefix | 8192 | bridge | 17787 | 7445412 | 23 | 7579662 | 12600886 | 10315806 | 5021224 |
+| 2 | chain | 8 | project | 16 | 2880 | 0 | 2606 | 4982 | 4910 | 2376 |
+| 2 | chain | 8 | bridge | 8 | 2304 | 0 | 2734 | 5038 | 5038 | 2304 |
+| 2 | chain | 64 | project | 128 | 23040 | 0 | 6638 | 25142 | 25070 | 18504 |
+| 2 | chain | 64 | bridge | 64 | 18432 | 0 | 6894 | 25326 | 25326 | 18432 |
+| 2 | chain | 256 | project | 512 | 92160 | 0 | 20462 | 94262 | 94190 | 73800 |
+| 2 | chain | 256 | bridge | 256 | 73728 | 0 | 21486 | 95214 | 95214 | 73728 |
+| 3 | sequence | 32 | project | 5 | 6624 | 3 | 4334 | 8942 | 6638 | 4608 |
+| 3 | bytes | 32 | project | 5 | 6624 | 3 | 6670 | 11278 | 8974 | 4608 |
+| 3 | object_short | 32 | project | 80 | 17380 | 4 | 10846 | 22214 | 17454 | 11368 |
+| 3 | object_short | 32 | bridge | 83 | 20068 | 7 | 11358 | 22726 | 17966 | 11368 |
+| 3 | object_long_prefix | 32 | project | 80 | 25572 | 4 | 23470 | 43030 | 34174 | 19560 |
+| 3 | object_long_prefix | 32 | bridge | 83 | 28260 | 7 | 31662 | 51222 | 42366 | 19560 |
+| 3 | sequence | 512 | project | 9 | 110304 | 7 | 38894 | 112622 | 75758 | 73728 |
+| 3 | bytes | 512 | project | 9 | 110304 | 7 | 76270 | 149998 | 113134 | 73728 |
+| 3 | object_short | 512 | project | 1127 | 284364 | 8 | 142846 | 325134 | 248334 | 182288 |
+| 3 | object_short | 512 | bridge | 1134 | 333132 | 15 | 151038 | 333326 | 256526 | 182288 |
+| 3 | object_long_prefix | 512 | project | 1127 | 415436 | 8 | 344590 | 657950 | 515614 | 313360 |
+| 3 | object_long_prefix | 512 | bridge | 1134 | 464204 | 15 | 475662 | 789022 | 646686 | 313360 |
+| 3 | sequence | 8192 | project | 16 | 2285280 | 14 | 591854 | 1771502 | 1181678 | 1179648 |
+| 3 | bytes | 8192 | project | 16 | 2285280 | 14 | 1189870 | 2369518 | 1779694 | 1179648 |
+| 3 | object_short | 8192 | project | 17779 | 5250340 | 15 | 2254846 | 5178918 | 3942414 | 2924072 |
+| 3 | object_short | 8192 | bridge | 17787 | 5348260 | 23 | 2385918 | 5309990 | 4073486 | 2924072 |
+| 3 | object_long_prefix | 8192 | project | 17779 | 7347492 | 15 | 5482510 | 10503734 | 8218654 | 5021224 |
+| 3 | object_long_prefix | 8192 | bridge | 17787 | 7445412 | 23 | 7579662 | 12600886 | 10315806 | 5021224 |
+| 3 | chain | 8 | project | 16 | 2880 | 0 | 2606 | 4982 | 4910 | 2376 |
+| 3 | chain | 8 | bridge | 8 | 2304 | 0 | 2734 | 5038 | 5038 | 2304 |
+| 3 | chain | 64 | project | 128 | 23040 | 0 | 6638 | 25142 | 25070 | 18504 |
+| 3 | chain | 64 | bridge | 64 | 18432 | 0 | 6894 | 25326 | 25326 | 18432 |
+| 3 | chain | 256 | project | 512 | 92160 | 0 | 20462 | 94262 | 94190 | 73800 |
+| 3 | chain | 256 | bridge | 256 | 73728 | 0 | 21486 | 95214 | 95214 | 73728 |
+
+### RJ-02 latency baseline attempt (default feature only)
+
+Command: `cargo bench --locked --bench decoder_bench -- safe_value_bridge` (full Criterion sampling; 100 samples per case, no `--quick`). The command completed all 36 benchmark cases. The table records Criterion's center estimate and 95% confidence interval as emitted, plus outlier counts:
+
+| Benchmark | Lower (95% CI) | Estimate | Upper (95% CI) | Outliers |
+| --- | ---: | ---: | ---: | ---: |
+| safe_value_bridge/serde/short/unique/32 | 28.403 µs | 34.276 µs | 40.419 µs | 1/100 |
+| safe_value_bridge/json_decoder/short/unique/32 | 105.62 µs | 113.63 µs | 121.94 µs | 3/100 |
+| safe_value_bridge/serde/short/duplicate_early/32 | 2.0403 µs | 2.3053 µs | 2.5988 µs | 3/100 |
+| safe_value_bridge/json_decoder/short/duplicate_early/32 | 2.8726 µs | 3.3246 µs | 3.8275 µs | 4/100 |
+| safe_value_bridge/serde/short/duplicate_tail/32 | 34.316 µs | 39.754 µs | 45.415 µs | 4/100 |
+| safe_value_bridge/json_decoder/short/duplicate_tail/32 | 92.754 µs | 107.33 µs | 122.21 µs | 3/100 |
+| safe_value_bridge/serde/long_prefix/unique/32 | 62.565 µs | 68.827 µs | 74.981 µs | 4/100 |
+| safe_value_bridge/json_decoder/long_prefix/unique/32 | 42.971 µs | 48.378 µs | 54.588 µs | 4/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_early/32 | 1.0768 µs | 1.4664 µs | 2.0863 µs | 6/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_early/32 | 2.3808 µs | 3.1282 µs | 4.0385 µs | 8/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_tail/32 | 20.688 µs | 31.342 µs | 42.731 µs | 13/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_tail/32 | 102.19 µs | 113.38 µs | 125.07 µs | 3/100 |
+| safe_value_bridge/serde/short/unique/512 | 589.77 µs | 707.75 µs | 840.34 µs | 5/100 |
+| safe_value_bridge/json_decoder/short/unique/512 | 1.6295 ms | 1.8767 ms | 2.1436 ms | 1/100 |
+| safe_value_bridge/serde/short/duplicate_early/512 | 1.1712 µs | 1.4728 µs | 1.8089 µs | 9/100 |
+| safe_value_bridge/json_decoder/short/duplicate_early/512 | 2.1705 µs | 2.5048 µs | 2.8987 µs | 2/100 |
+| safe_value_bridge/serde/short/duplicate_tail/512 | 424.90 µs | 487.92 µs | 560.31 µs | 2/100 |
+| safe_value_bridge/json_decoder/short/duplicate_tail/512 | 1.0293 ms | 1.2437 ms | 1.4786 ms | 3/100 |
+| safe_value_bridge/serde/long_prefix/unique/512 | 525.09 µs | 636.48 µs | 766.18 µs | 5/100 |
+| safe_value_bridge/json_decoder/long_prefix/unique/512 | 1.3005 ms | 1.4953 ms | 1.7058 ms | 4/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_early/512 | 1.5845 µs | 1.8823 µs | 2.1821 µs | 1/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_early/512 | 6.7938 µs | 7.6372 µs | 8.4387 µs | 2/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_tail/512 | 371.75 µs | 428.25 µs | 487.73 µs | 1/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_tail/512 | 1.4121 ms | 1.6670 ms | 1.9290 ms | 5/100 |
+| safe_value_bridge/serde/short/unique/4096 | 7.9057 ms | 8.6422 ms | 9.4354 ms | 1/100 |
+| safe_value_bridge/json_decoder/short/unique/4096 | 10.839 ms | 11.765 ms | 12.691 ms | 4/100 |
+| safe_value_bridge/serde/short/duplicate_early/4096 | 1.0311 µs | 1.1389 µs | 1.2632 µs | 4/100 |
+| safe_value_bridge/json_decoder/short/duplicate_early/4096 | 5.3698 µs | 6.0881 µs | 6.9337 µs | 2/100 |
+| safe_value_bridge/serde/short/duplicate_tail/4096 | 6.5620 ms | 7.1397 ms | 7.7525 ms | 2/100 |
+| safe_value_bridge/json_decoder/short/duplicate_tail/4096 | 5.8590 ms | 6.4975 ms | 7.1895 ms | 2/100 |
+| safe_value_bridge/serde/long_prefix/unique/4096 | 5.5580 ms | 6.4765 ms | 7.4909 ms | 6/100 |
+| safe_value_bridge/json_decoder/long_prefix/unique/4096 | 8.9081 ms | 10.509 ms | 12.302 ms | 11/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_early/4096 | 1.0592 µs | 1.1890 µs | 1.3269 µs | 1/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_early/4096 | 26.874 µs | 32.260 µs | 39.656 µs | 5/100 |
+| safe_value_bridge/serde/long_prefix/duplicate_tail/4096 | 7.3674 ms | 8.4231 ms | 9.6464 ms | 2/100 |
+| safe_value_bridge/json_decoder/long_prefix/duplicate_tail/4096 | 6.9676 ms | 8.4150 ms | 9.9817 ms | 7/100 |
+
+Environment: same HEAD/toolchain/lockfile as above. During the run, the shared host had 23 logged-in users and load averages reached `47.13, 41.14, 30.70`; immediately after completion they were `28.71, 34.10, 30.86`. Other worktree CI, Rust compiler, and Miri processes were active, and several cases had high-severe outliers. Therefore these values are preserved as raw observations but are not a reliable RJ-02 latency baseline. The required `preserve_order` Criterion command was not run because host load remained high. RJ-02 latency remains unverified; do not use these measurements to decide adoption. Full raw output was retained during this task at `/tmp/rj-t1-criterion-default.log`.
