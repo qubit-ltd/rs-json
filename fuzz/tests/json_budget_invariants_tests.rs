@@ -125,6 +125,15 @@ fn test_budget_fuzz_entry_keeps_invalid_and_noncanonical_payload_paths() {
 }
 
 #[test]
+fn test_budget_reference_handles_numeric_storage_and_strict_domain() {
+    for payload in [b"1.5".as_slice(), b"1e2", b"-0", b"18446744073709551616", b"1e400"] {
+        let mut input = vec![0_u8; CONTROL_BYTES];
+        input.extend_from_slice(payload);
+        assert_json_budget_fuzz_input(&input);
+    }
+}
+
+#[test]
 fn test_budget_reference_boundaries_match_each_resource() {
     let input = br#"["x",{"k":2}]"#;
     let exact = [13, 3, 4, 2, 1, 1, 1, 1, 3];

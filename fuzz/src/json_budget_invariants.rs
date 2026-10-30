@@ -21,6 +21,7 @@ use serde::de::IgnoredAny;
 use serde_json::Value;
 
 use crate::input_limit::bounded_input;
+use crate::json_number_contract::numbers_fit_contract;
 use crate::json_reference::parse_literal_value;
 
 /// Number of control bytes before a budget fuzz payload.
@@ -84,7 +85,7 @@ pub fn assert_json_budget_fuzz_input(data: &[u8]) {
         return;
     };
     let canonical = serde_json::to_vec(&value).expect("JSON Value serialization succeeds");
-    if canonical.len() > 4096 {
+    if canonical.len() > 4096 || !numbers_fit_contract(&canonical) {
         return;
     }
     let usage = reference_usage(&value, canonical.len());

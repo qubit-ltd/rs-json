@@ -33,3 +33,15 @@ fn test_tree_invariants_preserves_insertion_order_across_siblings() {
     input.extend_from_slice(br#"{"z":{"secret":"a","keep":1},"a":{"secret":"b","keep":2},"secret":"root"}"#);
     assert_json_tree_invariants(&input);
 }
+
+#[test]
+fn test_tree_reference_keeps_numbers_and_private_key_objects_distinct() {
+    for payload in [
+        br#"{"secret":"x","keep":[1.5,1e2,-0,{"$serde_json::private::Number":"1.5"}]}"#.as_slice(),
+        br#"{"$serde_json::private::RawValue":"null","keep":18446744073709551616}"#,
+    ] {
+        let mut input = vec![0_u8];
+        input.extend_from_slice(payload);
+        assert_json_tree_invariants(&input);
+    }
+}

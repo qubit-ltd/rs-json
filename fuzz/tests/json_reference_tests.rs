@@ -10,6 +10,7 @@
 use qubit_json::encode::JcsEncoder;
 use qubit_json_fuzz::json_reference::parse_literal_value;
 use qubit_json_fuzz::json_reference::roundtrip_literal_value;
+use serde_json::Number;
 use serde_json::Value;
 
 /// Ordinary JSON values retain the reference parser's scalar and container
@@ -82,7 +83,76 @@ fn test_jcs_encoder_preserves_private_raw_value_key_objects() {
 /// The literal reference must still reject invalid syntax and Unicode.
 #[test]
 fn test_reference_rejects_invalid_json() {
-    for input in [br#""\uD800""#.as_slice(), b"[1,]", b"null true", b"1e9999"] {
+    for input in [br#""\uD800""#.as_slice(), b"[1,]", b"null true"] {
         assert!(parse_literal_value(input).is_err(), "input: {input:?}");
     }
+}
+
+/// Numbers retain their token provenance across the feature-specific parser.
+#[test]
+fn test_literal_reference_preserves_numeric_token_provenance() {
+    for token in ["1.5", "1e2", "-0", "-9223372036854775808", "18446744073709551615"] {
+        let expected: Number = serde_json::from_str(token).expect("number token parses");
+        let actual = parse_literal_value(token.as_bytes()).expect("literal number parses");
+        assert_eq!(actual, Value::Number(expected), "{token}");
+        assert_eq!(
+            roundtrip_literal_value(&actual).expect("number roundtrip"),
+            actual,
+            "{token}"
+        );
+        if token == "-0" {
+            assert!(actual.as_f64().expect("negative zero is numeric").is_sign_negative());
+        }
+    }
+}
+
+/// Number and RawValue private-looking keys remain ordinary object data.
+#[test]
+fn test_literal_reference_preserves_private_keys_with_numeric_children() {
+    for key in ["$serde_json::private::Number", "$serde_json::private::RawValue"] {
+        let input = format!(r#"{{"{key}":"1.5","child":[1.5,{{"{key}":"1e2"}}]}}"#);
+        let actual = parse_literal_value(input.as_bytes()).expect("literal object parses");
+        assert_eq!(actual[key], Value::String("1.5".to_owned()));
+        assert!(actual["child"][0].is_number());
+        assert_eq!(actual["child"][1][key], Value::String("1e2".to_owned()));
+        assert_eq!(roundtrip_literal_value(&actual).expect("object roundtrip"), actual);
+    }
+}
+
+/// Recursive reference parsing keeps the established 127-container boundary.
+#[test]
+fn test_literal_reference_keeps_container_depth_boundary() {
+    for (open, close) in [("[", "]"), (r#"{"x":"#, "}")] {
+        for depth in [127, 128] {
+            let input = format!("{}0{}", open.repeat(depth), close.repeat(depth));
+            assert_eq!(parse_literal_value(input.as_bytes()).is_ok(), depth == 127);
+        }
+    }
+}
+
+/// Duplicate decoded keys retain serde_json map overwrite behavior.
+#[test]
+fn test_literal_reference_retains_decoded_duplicate_key_overwrite() {
+    let actual = parse_literal_value(br#"{"x":1,"\u0078":2}"#).expect("duplicate keys parse");
+    assert_eq!(actual.as_object().expect("object result").len(), 1);
+    assert_eq!(actual["x"], Value::from(2));
+}
+
+/// Arbitrary precision preserves numbers outside the default Number domain.
+#[cfg(feature = "arbitrary-precision")]
+#[test]
+fn test_literal_reference_keeps_arbitrary_precision_numeric_storage() {
+    for token in ["18446744073709551616", "1e400", "1e9999"] {
+        let expected: Number = serde_json::from_str(token).expect("arbitrary number parses");
+        let actual = parse_literal_value(token.as_bytes()).expect("literal number parses");
+        assert_eq!(actual, Value::Number(expected));
+        assert_eq!(roundtrip_literal_value(&actual).expect("number roundtrip"), actual);
+    }
+}
+
+/// The default Number parser rejects values outside its numeric domain.
+#[cfg(not(feature = "arbitrary-precision"))]
+#[test]
+fn test_literal_reference_rejects_out_of_domain_exponent() {
+    assert!(parse_literal_value(b"1e9999").is_err());
 }

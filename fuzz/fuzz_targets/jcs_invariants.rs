@@ -37,7 +37,7 @@ fuzz_target!(|data: &[u8]| {
     let Ok(value) = parse_literal_value(input) else {
         return;
     };
-    if !within_depth(&value) {
+    if !within_reference_domain(&value) {
         return;
     }
 
@@ -89,8 +89,9 @@ fuzz_target!(|data: &[u8]| {
     }
 });
 
-/// Returns whether every value lies within the configured structural depth.
-fn within_depth(root: &Value) -> bool {
+/// Limits successful comparisons to bounded depth and finite binary64 values.
+/// These are oracle preconditions, not JSON syntax restrictions.
+fn within_reference_domain(root: &Value) -> bool {
     let mut pending = vec![(root, 1_usize)];
     while let Some((value, depth)) = pending.pop() {
         if depth > MAX_DEPTH {
@@ -99,7 +100,12 @@ fn within_depth(root: &Value) -> bool {
         match value {
             Value::Array(values) => pending.extend(values.iter().map(|child| (child, depth + 1))),
             Value::Object(entries) => pending.extend(entries.values().map(|child| (child, depth + 1))),
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+            Value::Number(number) => {
+                if !number.as_f64().is_some_and(f64::is_finite) {
+                    return false;
+                }
+            }
+            Value::Null | Value::Bool(_) | Value::String(_) => {}
         }
     }
     true

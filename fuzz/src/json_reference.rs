@@ -10,7 +10,8 @@
 use std::fmt;
 
 use serde::Deserialize;
-use serde::Deserializer;
+use serde::Deserializer as _;
+use serde::de::DeserializeSeed;
 use serde::de::Error;
 use serde::de::MapAccess;
 use serde::de::SeqAccess;
@@ -18,13 +19,23 @@ use serde::de::Visitor;
 use serde_json::Map;
 use serde_json::Number;
 use serde_json::Value;
+use serde_json::value::RawValue;
+
+/// Maximum number of nested containers accepted by this bounded fuzz oracle.
+const MAX_REFERENCE_CONTAINER_DEPTH: usize = 127;
 
 /// Parses complete JSON bytes without interpreting private Serde object keys.
+///
+/// Object keys always remain literal data, while numbers follow the active
+/// serde_json feature configuration. The bounded oracle accepts at most 127
+/// containers; callers should keep fuzz inputs finite and small.
 ///
 /// Returns a serde_json error for invalid syntax, invalid strings or numbers,
 /// trailing input, or inputs beyond the reference parser's recursion limit.
 pub fn parse_literal_value(input: &[u8]) -> Result<Value, serde_json::Error> {
-    let LiteralValue(value) = serde_json::from_slice(input)?;
+    let mut parser = serde_json::Deserializer::from_slice(input);
+    let value = LiteralValueSeed { container_depth: 0 }.deserialize(&mut parser)?;
+    parser.end()?;
     Ok(value)
 }
 
@@ -34,19 +45,42 @@ pub fn roundtrip_literal_value(value: &Value) -> Result<Value, serde_json::Error
     parse_literal_value(&encoded)
 }
 
-/// Recursively requests ordinary JSON values from serde_json's deserializer.
-struct LiteralValue(Value);
+/// Parses one raw value while preserving the distinction between numbers and
+/// objects that use serde_json's private protocol-looking keys.
+struct LiteralValueSeed {
+    container_depth: usize,
+}
 
-impl<'de> Deserialize<'de> for LiteralValue {
-    /// Uses the same syntax parser while bypassing Value's private map
-    /// protocol.
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(LiteralValueVisitor).map(Self)
+impl<'de> DeserializeSeed<'de> for LiteralValueSeed {
+    type Value = Value;
+
+    fn deserialize<D: serde::Deserializer<'de>>(self, deserializer: D) -> Result<Value, D::Error> {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        let text = raw.get().trim();
+        let first = text.as_bytes().first().copied();
+        if first.is_some_and(|byte| matches!(byte, b'-' | b'0'..=b'9')) {
+            return serde_json::from_str::<Number>(text)
+                .map(Value::Number)
+                .map_err(D::Error::custom);
+        }
+        if matches!(first, Some(b'[' | b'{')) && self.container_depth >= MAX_REFERENCE_CONTAINER_DEPTH {
+            return Err(D::Error::custom("literal reference container depth exceeded"));
+        }
+        let mut parser = serde_json::Deserializer::from_str(text);
+        let value = parser
+            .deserialize_any(LiteralValueVisitor {
+                container_depth: self.container_depth,
+            })
+            .map_err(D::Error::custom)?;
+        parser.end().map_err(D::Error::custom)?;
+        Ok(value)
     }
 }
 
 /// Builds a Value tree without treating any object key as a protocol token.
-struct LiteralValueVisitor;
+struct LiteralValueVisitor {
+    container_depth: usize,
+}
 
 impl<'de> Visitor<'de> for LiteralValueVisitor {
     type Value = Value;
@@ -91,7 +125,9 @@ impl<'de> Visitor<'de> for LiteralValueVisitor {
     /// Recursively parses array elements using the literal-key visitor.
     fn visit_seq<A: SeqAccess<'de>>(self, mut sequence: A) -> Result<Value, A::Error> {
         let mut values = Vec::new();
-        while let Some(LiteralValue(value)) = sequence.next_element()? {
+        while let Some(value) = sequence.next_element_seed(LiteralValueSeed {
+            container_depth: self.container_depth + 1,
+        })? {
             values.push(value);
         }
         Ok(Value::Array(values))
@@ -100,7 +136,10 @@ impl<'de> Visitor<'de> for LiteralValueVisitor {
     /// Preserves every object key, including private protocol-looking strings.
     fn visit_map<A: MapAccess<'de>>(self, mut object: A) -> Result<Value, A::Error> {
         let mut values = Map::new();
-        while let Some((key, LiteralValue(value))) = object.next_entry::<String, LiteralValue>()? {
+        while let Some(key) = object.next_key::<String>()? {
+            let value = object.next_value_seed(LiteralValueSeed {
+                container_depth: self.container_depth + 1,
+            })?;
             values.insert(key, value);
         }
         Ok(Value::Object(values))
