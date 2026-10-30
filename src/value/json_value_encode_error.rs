@@ -21,6 +21,54 @@ use crate::encode::JsonSerializationErrorKind;
 use crate::encode::JsonSerializerStateError;
 
 /// Failure while projecting a Serde value into a budgeted JSON tree.
+///
+/// The error distinguishes resource budget rejection, strict JSON
+/// serialization failure, and private text payloads that exceed their
+/// configured limit. Because this type is non-exhaustive, matches outside this
+/// crate must include a fallback arm. After any failure, discard the entire
+/// caller-owned resource transaction; do not treat its partial measurements as
+/// a successful projection.
+///
+/// `None` from a serialization query does not indicate success. It means that
+/// the error is not a serialization failure.
+///
+/// # Type Parameters
+///
+/// * `R` is the resource identifier type used by the budget.
+/// * `Q` is the resource quantity type and must implement [`ResourceQuantity`].
+///
+/// # Examples
+///
+/// ```
+/// use qubit_budget::json::JsonResource;
+/// use qubit_budget::json::JsonValueBudget;
+/// use qubit_budget::json::JsonValueLimits;
+/// use qubit_json::value::JsonValueEncodeError;
+/// use qubit_json::value::JsonValueEncoder;
+/// use serde_json::value::RawValue;
+///
+/// let limits = JsonValueLimits::<JsonResource, usize>::new();
+/// let mut budget = JsonValueBudget::new(limits);
+/// let mut transaction = budget.transaction();
+/// let raw = RawValue::from_string("null".to_owned()).unwrap();
+/// let error = JsonValueEncoder::new()
+///     .encode_in_transaction_with_private_text_limit(&raw, &mut transaction, 0)
+///     .unwrap_err();
+/// let classification = match &error {
+///     JsonValueEncodeError::Budget(_) => "budget",
+///     JsonValueEncodeError::Serialization(_) => "serialization",
+///     JsonValueEncodeError::PrivateTextLimitExceeded { maximum } => {
+///         assert_eq!(*maximum, 0);
+///         "private text limit"
+///     }
+///     _ => "other",
+/// };
+/// assert_eq!(classification, "private text limit");
+/// assert!(error.serialization_error().is_none());
+/// assert!(error.kind().is_none());
+/// assert!(error.category().is_none());
+/// drop(transaction);
+/// ```
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum JsonValueEncodeError<R, Q>
@@ -44,6 +92,13 @@ where
     Q: ResourceQuantity,
 {
     /// Returns the underlying serialization error when Serde projection failed.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some` for [`Self::Serialization`]. Returns `None` for
+    /// [`Self::Budget`] and [`Self::PrivateTextLimitExceeded`]; `None` means
+    /// the failure is not a serialization error, not that projection
+    /// succeeded.
     pub const fn serialization_error(&self) -> Option<&JsonSerializationError> {
         match self {
             Self::Serialization(error) => Some(error),
@@ -53,6 +108,12 @@ where
     }
 
     /// Returns the stable serialization failure kind, if applicable.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some` for [`Self::Serialization`]. Returns `None` for
+    /// [`Self::Budget`] and [`Self::PrivateTextLimitExceeded`]; `None` means
+    /// the failure has no serialization kind, not that projection succeeded.
     pub const fn kind(&self) -> Option<JsonSerializationErrorKind> {
         match self {
             Self::Serialization(error) => Some(error.kind()),
@@ -62,6 +123,13 @@ where
     }
 
     /// Returns the broad serialization category, if applicable.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some` for [`Self::Serialization`]. Returns `None` for
+    /// [`Self::Budget`] and [`Self::PrivateTextLimitExceeded`]; `None` means
+    /// the failure has no serialization category, not that projection
+    /// succeeded.
     pub const fn category(&self) -> Option<JsonSerializationErrorCategory> {
         match self {
             Self::Serialization(error) => Some(error.category()),
