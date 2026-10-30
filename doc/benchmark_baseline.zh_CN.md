@@ -932,3 +932,16 @@ value visitor `96fba144e005b1d1fe1d09194fc0f4537bbccbbb235be0c4cfcecf8877354fc1`
 `src/value/safe_json_value.rs`、
 `tests/encode/serde_compat/serde_json_compat_tests/json_private_tests.rs`、
 `tests/value/json_value_encoder_tests.rs`。
+
+### RJ-02 对象桥接决策（2026-10-30）
+
+上文已有 `default` 与 `serde_json/preserve_order` 两种配置各三轮的分配前测。
+但延迟前测不可用：已完成的 default Criterion 运行受到严重共享主机负载影响，
+并出现 high-severe 离群值；要求的 `preserve_order` 延迟运行未采集。上文保留的
+default 原始输出仅是不可用于判断的尝试，不是可靠延迟基线。
+
+因此，本轮未采用或核查 RJ-02 生产候选性能。当前不对候选可能改善或退化延迟、
+分配行为作结论。只有在低干扰环境取得两种配置可靠的 `safe_value_bridge` 延迟
+前测后，才重新考虑该候选。对象桥接 focused tests 仍验证行为，包括
+`{"a":0,"a":[}` 会在读取畸形重复值之前报告重复键 data error；这属于正确性
+结果，不是性能证据。

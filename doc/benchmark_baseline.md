@@ -1127,3 +1127,21 @@ dirty-file metadata was: `doc/benchmark_baseline.md`,
 `src/value/safe_json_value.rs`,
 `tests/encode/serde_compat/serde_json_compat_tests/json_private_tests.rs`, and
 `tests/value/json_value_encoder_tests.rs`.
+
+### RJ-02 object-bridge decision (2026-10-30)
+
+The allocation pre-measurement above is available for both `default` and
+`serde_json/preserve_order`, with three identical rounds per configuration.
+However, the latency pre-measurement is not reliable: the completed default
+Criterion run had severe shared-host load and high-severe outliers, and the
+required `preserve_order` latency run was not collected. The raw default output
+is retained above as an unreliable attempt, not as a usable latency baseline.
+
+Accordingly, the RJ-02 production candidate was not adopted or performance
+checked in this round. No conclusion is made that it would improve or regress
+latency or allocation behavior. Reconsider it only after collecting reliable
+`safe_value_bridge` latency pre-measurements for both configurations in a
+low-interference environment. The focused object-bridge tests still verify
+behavior, including that `{"a":0,"a":[}` reports the duplicate-key data
+error before attempting to read the malformed duplicate value; this is a
+correctness result, not performance evidence.

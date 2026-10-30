@@ -48,6 +48,17 @@ fn test_safe_value_bridge_rejects_duplicates_at_both_object_positions() {
 }
 
 #[test]
+fn test_safe_value_bridge_rejects_duplicate_before_reading_its_value() {
+    let error = serde_json::from_str::<SafeJsonValue>(r#"{"a":0,"a":[}"#)
+        .expect_err("duplicate key must be rejected before its malformed value");
+    assert!(error.is_data(), "duplicates must retain the data error category");
+    assert!(
+        error.to_string().contains("duplicate JSON object key"),
+        "duplicate diagnostic must take precedence over malformed value syntax"
+    );
+}
+
+#[test]
 fn test_safe_value_bridge_preserves_object_entry_order() {
     let input = r#"{"z":1,"a":2,"m":3}"#;
     let expected: serde_json::Value = serde_json::from_str(input).expect("reference object must decode");
