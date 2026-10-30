@@ -10,6 +10,7 @@
 use qubit_budget::json::JsonEncodeLimits;
 use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
+use serde_json::Number;
 use serde_json::value::RawValue;
 
 use crate::encode::json_encode_test_support::encode;
@@ -30,7 +31,7 @@ fn test_private_serde_json_shapes_encode_through_budget() {
 #[test]
 fn test_real_number_uses_scalar_classification() {
     const NUMBER_TEXT: &str = "18446744073709551615";
-    let number = u64::MAX;
+    let number = Number::from(u64::MAX);
     let limits = JsonEncodeLimits::<JsonResource, usize>::builder()
         .max_nodes(1)
         .max_map_entries(0)
@@ -43,6 +44,7 @@ fn test_real_number_uses_scalar_classification() {
     let output = encode(&number, &mut session).expect("integer scalar must not consume map limits");
 
     assert_eq!(output, NUMBER_TEXT.as_bytes());
+    assert_eq!(session.value_budget().used_nodes(), Some(1));
 }
 
 /// Ensures a real RawValue is budgeted as its represented JSON structure.
