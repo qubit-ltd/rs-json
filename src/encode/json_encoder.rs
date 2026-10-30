@@ -182,7 +182,12 @@ where
     /// # Errors
     ///
     /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects the value
-    /// or output, or a serialization error when Serde rejects `value`.
+    /// or output,
+    /// [`JsonEncodeErrorKind::InvalidRawJson`](super::JsonEncodeErrorKind::InvalidRawJson)
+    /// when a `RawValue` or private raw payload fails this encoder's strict
+    /// JSON admission, or a serialization error when Serde rejects `value`.
+    /// Inspect [`JsonEncodeError::syntax_error`] for the structured syntax
+    /// reason.
     pub fn to_vec<T>(&mut self, value: &T) -> Result<Vec<u8>, JsonEncodeError<R, Q>>
     where
         T: Serialize + ?Sized,
@@ -246,7 +251,12 @@ where
     /// # Errors
     ///
     /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget) when accounting rejects the value
-    /// or output, or a serialization/writer error on failure.
+    /// or output,
+    /// [`JsonEncodeErrorKind::InvalidRawJson`](super::JsonEncodeErrorKind::InvalidRawJson)
+    /// when a `RawValue` or private raw payload fails this encoder's strict
+    /// JSON admission, a serialization error when Serde rejects `value`, or
+    /// a writer error when writing fails. Inspect
+    /// [`JsonEncodeError::syntax_error`] for the structured syntax reason.
     pub fn write_buffered<O, T>(&mut self, writer: &mut O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         O: ByteOutput + ?Sized,
@@ -290,10 +300,15 @@ where
     /// # Errors
     ///
     /// Returns [`JsonEncodeErrorKind::Budget`](super::JsonEncodeErrorKind::Budget)
-    /// when accounting rejects value resources or output bytes, or a
-    /// serialization/writer error on failure. Accepted output prefixes remain
-    /// written and charged when a later operation fails; value-resource charges
-    /// commit only after the complete operation succeeds.
+    /// when accounting rejects value resources or output bytes,
+    /// [`JsonEncodeErrorKind::InvalidRawJson`](super::JsonEncodeErrorKind::InvalidRawJson) when a
+    /// `RawValue` or private raw payload fails this encoder's strict JSON
+    /// admission, a serialization error when Serde rejects `value`, or a
+    /// writer error when writing or flushing fails. Inspect
+    /// [`JsonEncodeError::syntax_error`] for the structured syntax reason.
+    /// Accepted output prefixes remain written and charged when a later
+    /// operation fails; value-resource charges commit only after the complete
+    /// operation succeeds.
     pub fn write_incremental<O, T>(&mut self, writer: &mut O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         O: ByteOutput + ?Sized,
