@@ -46,9 +46,12 @@ validated 解码的 `Preserve` 策略）将 `-0` 表示为浮点负零。`ExactS
 | --- | --- | --- | --- |
 | typed `decode_input_with_number_model`，默认 `Integer64` | 按 `i64`/`u64` 准入，再由 Serde 构造 `T` | 拒绝 | 按有限 `f64` 准入，再由 Serde 构造 `T` |
 | typed `decode_input_with_number_model`，有限 fallback | 按 `i64`/`u64` 准入，再由 Serde 构造 `T` | 可转为有限 `f64` 时准入；实际表示由 `T` 和启用的 feature 决定 | 按有限 `f64` 准入，再由 Serde 构造 `T` |
-| validated 拥有型解码，默认 `Integer64` | 物化为 `i64`/`u64` | 拒绝 | 物化为有限 `f64` |
-| validated 拥有型解码，有限 fallback | 物化为 `i64`/`u64` | 物化为有限 `f64`，可能舍入 | 物化为有限 `f64` |
+| validated 拥有型解码配合 `Preserve`，默认 `Integer64` | 物化为 `i64`/`u64` | 拒绝 | 物化为有限 `f64` |
+| validated 拥有型解码配合 `Preserve`，有限 fallback | 物化为 `i64`/`u64` | 物化为有限 `f64`，可能舍入 | 物化为有限 `f64` |
 | `JcsDecoder` | 转为 `f64` | 转为有限 `f64`，可能舍入 | 有限 `f64` |
+
+表中 validated 结果以 `JsonNumberPolicy::Preserve` 为前提。使用
+`ExactSafeInteger` 时，`1.00e2` 会物化为整数 `100`，而 `0.1` 会被拒绝；不能据此推断所有策略都会产生 `f64`。
 
 例如 `18446744073709551617` 超出 `u64`：默认模型拒绝，fallback 则允许准入。validated 解码配合
 `Preserve` 会将其物化为舍入后的有限 binary64 值 `18446744073709551616`。typed 输入路径将最终表示交给 Serde；

@@ -60,9 +60,13 @@ or by ordinary slice methods.
 | --- | --- | --- | --- |
 | Typed `decode_input_with_number_model`, default `Integer64` | Admitted as `i64`/`u64`; Serde constructs `T` | Rejected | Admitted as finite `f64`; Serde constructs `T` |
 | Typed `decode_input_with_number_model`, finite fallback | Admitted as `i64`/`u64`; Serde constructs `T` | Admitted if convertible to finite `f64`; Serde constructs `T` according to `T` and active features | Admitted as finite `f64`; Serde constructs `T` |
-| Validated owned-value decoding, default `Integer64` | Materialized as `i64`/`u64` | Rejected | Materialized as finite `f64` |
-| Validated owned-value decoding, finite fallback | Materialized as `i64`/`u64` | Materialized as finite `f64`, with possible rounding | Materialized as finite `f64` |
+| Validated owned-value decoding with `Preserve`, default `Integer64` | Materialized as `i64`/`u64` | Rejected | Materialized as finite `f64` |
+| Validated owned-value decoding with `Preserve`, finite fallback | Materialized as `i64`/`u64` | Materialized as finite `f64`, with possible rounding | Materialized as finite `f64` |
 | `JcsDecoder` | Converted to `f64` | Converted to finite `f64`, with possible rounding | Finite `f64` |
+
+The validated rows assume `JsonNumberPolicy::Preserve`. With
+`ExactSafeInteger`, `1.00e2` is materialized as integer `100`, while `0.1` is
+rejected; the table does not imply that every policy produces `f64`.
 
 For example, `18446744073709551617` is outside `u64`: the default model
 rejects it, while fallback admits it. Validated decoding with `Preserve`

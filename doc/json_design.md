@@ -55,7 +55,10 @@ The intermediate tree uses the strict `Integer64` number model: negative
 integers become `i64`, non-negative integers become `u64`, and fractional or
 exponential numbers become finite `f64`. Deserializing that tree exposes
 native integer and floating-point Serde events, including when
-`arbitrary_precision` is enabled. Object keys are compared after JSON
+`arbitrary_precision` is enabled. The integer-token representation has one
+exception: `-0` is constructed as floating-point negative zero and is exposed
+to the target as a native floating-point event. This does not preserve the
+original token spelling. Object keys are compared after JSON
 unescaping, without Unicode normalization. The shared builder has no separate
 fixed container cap: configured root-inclusive `max_depth` controls depth
 admission. The legacy `DepthLimit { limit }` reason remains for source
@@ -205,6 +208,11 @@ not relax the finite rule for decimal or exponent tokens. Validated `Preserve`
 materializes fallback integers as finite `f64`, possibly rounded. The typed
 input path delegates representation to `T` and active `serde_json` features;
 with `arbitrary_precision`, a preserved wide integer can fail strict re-encoding.
+These representation statements apply to controlled owned-value construction,
+including unique-value decoding and validated `Preserve`: `-0` is floating-point
+negative zero there, while `ExactSafeInteger` converts it to integer `0`. Typed
+targets retain their own representation according to the target type and active
+Serde features.
 Fallback is available only on decode entry points that explicitly expose model
 selection; normalizing and ordinary slice entry points do not automatically
 enable it. Strict encoding has separate range checks and does not inherit decode fallback. The feature-gated `JcsDecoder` uses a separate binary64 model,

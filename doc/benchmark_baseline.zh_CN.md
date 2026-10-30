@@ -955,7 +955,7 @@ default 原始输出仅是不可用于判断的尝试，不是可靠延迟基线
 元素数为 1/32/512/4096 的标量数组、记录数为 32/512/4096 的记录数组，以及深度为 8/64/256/4096 的单子链。
 深链使用 `SafeJsonValue`；计数窗口结束前保留结果，形状检查逐层迭代，不使用递归 clone、Debug 或析构。
 
-覆盖 `decode_value`、保留数字拼写的 validated decode、标量和记录的 unique typed/seed，以及启用 `jcs` 时的
+覆盖 `decode_value`、采用 `JsonNumberPolicy::Preserve` 的 validated decode、标量和记录的 unique typed/seed，以及启用 `jcs` 时的
 `JcsDecoder::decode_value_str`。每条适用路径分别使用 unlimited 和足够容纳相同输入的 finite 预算；预算以源字节数、
 根计为一的深度、节点数和序列项数设置。typed 路径不覆盖深链。`unique_decode_bench` 的 `lexical_arrays` 组
 重用相同夹具和路径，不启用分配计数器；计时闭包统一包含 decoder 创建和结果销毁。

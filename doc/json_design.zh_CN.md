@@ -90,6 +90,7 @@ seed）。该路径先执行普通严格词法准入，并暂存源文档的 val
 
 中间树使用严格的 `Integer64` 数字模型：负整数构造为 `i64`，非负整数为 `u64`，小数或指数数字为有限
 `f64`。从该树反序列化会发出原生整数和浮点 Serde 事件，即使启用了 `arbitrary_precision` 也是如此。
+整数 token 表示有一个例外：`-0` 构造为浮点负零，并以原生浮点事件交给目标；这不保证保留原始 token 拼写。
 对象键按 JSON 反转义后的字符串查重，不做 Unicode 规范化。共享 builder 没有独立固定容器上限；包含根值的
 配置项 `max_depth` 控制深度准入。历史 `DepthLimit { limit }` 原因因源码兼容而保留；当前配置深度超限会作为预算错误返回。
 临时树与最终目标可能同时驻留内存，词法资源预算不是精确的堆内存上限。对象按
@@ -139,6 +140,8 @@ fallback；规范化与普通切片入口不会自动启用。严格编码有独
 binary64 模型，将所有数字（包括整数范围内的值）转为 `f64`，并在物化时拒绝对象内重复键。普通两种模型都先准入
 原始 `NumberBytes`，再校验范围，因此预算错误优先。crate 自身不启用 serde_json `arbitrary_precision`；但若其他依赖启用该 feature，仍会处理精确的私有 `Number` struct 协议。普通 map 即使有同名键也仍是对象。
 模型对照和配置示例见 [JSON 数字契约](number_contract.zh_CN.md)。
+
+上述表示说明适用于受控拥有型值构造，包括唯一值解码和 validated `Preserve`：`-0` 表示为浮点负零；`ExactSafeInteger` 则将其转换为整数 `0`。typed 目标的最终表示仍由目标类型及启用的 Serde feature 决定。
 
 `JcsDecoder` 复用词法准入、session 与事务：第一遍完整扫描并计量，第二遍通过词法事件同步构造 Value，
 不收集整份事件数组。事件 builder 在插入前按反转义后的键字符串检查重复项，不执行 Unicode 规范化。
