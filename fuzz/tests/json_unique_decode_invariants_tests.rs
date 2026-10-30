@@ -16,6 +16,7 @@ use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use qubit_json_fuzz::json_unique_decode_invariants::assert_protected_decode_invariants;
 use qubit_json_fuzz::json_unique_decode_invariants::assert_unique_decode_invariants;
 use qubit_json_fuzz::json_unique_decode_invariants::assert_validated_admission_invariants;
+use serde::de::DeserializeSeed;
 
 #[test]
 fn test_unique_number_feature_regression() {
@@ -149,4 +150,69 @@ fn test_unique_decode_invariants_classify_fixed_failures() {
 
     let oversized_integer = vec![b'1'; 62];
     assert_unique_decode_invariants(&oversized_integer, oversized_integer.len());
+}
+
+struct FailingSeed;
+
+impl<'de> DeserializeSeed<'de> for FailingSeed {
+    type Value = ();
+
+    fn deserialize<D: serde::Deserializer<'de>>(self, _deserializer: D) -> Result<(), D::Error> {
+        Err(serde::de::Error::custom("intentional seed failure"))
+    }
+}
+
+#[test]
+fn test_failed_seed_session_reuse() {
+    let first = b"true";
+    let second = b"null";
+    let total_input = first.len() + second.len();
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(total_input)
+        .max_nodes(usize::MAX)
+        .build();
+    let mut decoder = JsonDecoder::with_limits(limits);
+    let failed = decoder.decode_unique_seed_utf8(FailingSeed, first);
+    assert_eq!(
+        failed.expect_err("the injected seed must fail").kind(),
+        JsonDecodeErrorKind::Deserialize
+    );
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
+    assert_eq!(
+        decoder.session().input_budget().map(|budget| budget.used()),
+        Some(first.len())
+    );
+    let before_second_nodes = decoder.session().value_budget().used_nodes();
+    let value = decoder
+        .decode_unique_utf8::<serde_json::Value>(second)
+        .expect("a failed seed must leave the session reusable");
+    assert_eq!(value, serde_json::Value::Null);
+    assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
+    assert_eq!(before_second_nodes, Some(0));
+    assert_eq!(
+        decoder.session().input_budget().map(|budget| budget.used()),
+        Some(total_input)
+    );
+
+    let one_input = second.len();
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
+        .max_input_bytes(one_input)
+        .max_nodes(usize::MAX)
+        .build();
+    let mut exhausted = JsonDecoder::with_limits(limits);
+    exhausted
+        .decode_unique_utf8::<serde_json::Value>(second)
+        .expect("the first input exactly fits the session budget");
+    let first_nodes = exhausted.session().value_budget().used_nodes();
+    assert_eq!(first_nodes, Some(1));
+    let rejection = exhausted
+        .decode_unique_utf8::<serde_json::Value>(second)
+        .expect_err("the next input must use the remaining cumulative budget");
+    assert_eq!(rejection.kind(), JsonDecodeErrorKind::Budget);
+    assert_eq!(exhausted.session().value_budget().used_nodes(), first_nodes);
+    assert_eq!(
+        exhausted.session().input_budget().map(|budget| budget.used()),
+        Some(one_input),
+        "rejected input must not reset or exceed cumulative input accounting",
+    );
 }
