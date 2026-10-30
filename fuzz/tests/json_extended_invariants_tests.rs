@@ -112,3 +112,28 @@ fn test_formatter_reference_is_one_way_for_wide_numbers() {
     assert_eq!(formatted, b"1e400");
     assert_token_format_invariants(b"1e400");
 }
+
+#[test]
+fn test_formatter_syntax_oracle_covers_wide_numbers_and_literal_keys() {
+    let samples: &[&[u8]] = &[
+        b"18446744073709551616",
+        br#"{"nested":[1e400]}"#,
+        br#"{"x":1,"x":2}"#,
+        br#"{"$serde_json::private::RawValue":"null"}"#,
+    ];
+    for sample in samples {
+        assert_token_format_invariants(sample);
+    }
+}
+
+#[test]
+fn test_formatter_rejects_malformed_json_documents() {
+    let options = JsonPrettyOptions::builder().build().unwrap();
+    for sample in [b"{} {}".as_slice(), b"[1,]", br#""\q""#, b"01", b"1e+"] {
+        assert!(
+            format_json_tokens(sample, &options, Some(131_072)).is_err(),
+            "formatter must reject malformed JSON: {:?}",
+            std::str::from_utf8(sample).unwrap_or("<invalid UTF-8>"),
+        );
+    }
+}

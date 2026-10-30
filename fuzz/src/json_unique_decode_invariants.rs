@@ -34,6 +34,7 @@ use serde_json::Value;
 
 use crate::json_number_contract::numbers_fit_contract;
 use crate::json_reference::parse_literal_value;
+use crate::json_syntax_reference::validate_json_syntax;
 use crate::unique_decode_reference::parse_unique_literal_value;
 
 const MAX_REFERENCE_OPENING_DELIMITERS: usize = 64;
@@ -530,6 +531,10 @@ pub fn assert_token_format_invariants(input: &[u8]) {
         assert!(writer.is_empty(), "planning failures must not write a prefix");
         return;
     };
+    if is_within_reference_domain(input) {
+        validate_json_syntax(input).expect("formatter accepted malformed source JSON");
+        validate_json_syntax(&output).expect("formatter produced malformed JSON");
+    }
     let mut writer = Vec::new();
     write_json_tokens(&mut writer, input, &options, Some(MAX_OUTPUT))
         .expect("the same valid plan must write successfully");
