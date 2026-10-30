@@ -66,14 +66,13 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
         .max_payload_bytes(4096)
         .build();
     let mut decoder = JsonDecoder::with_limits(limits);
-    let value: serde_json::Value =
-        decoder.decode_utf8(br#"{"id":18446744073709551615,"ok":true}"#)?;
-    assert_eq!(value["id"], serde_json::json!(u64::MAX));
+    let owner = decoder.decode_value_utf8(br#"{"id":18446744073709551615,"ok":true}"#)?;
+    assert_eq!(owner.as_value()["id"], serde_json::json!(u64::MAX));
 
     let small_limits = limits.into_builder().max_input_bytes(8).build();
     let mut small_decoder = JsonDecoder::with_limits(small_limits);
     let error = small_decoder
-        .decode_utf8::<serde_json::Value>(br#"{"ok":true}"#)
+        .decode_value_utf8(br#"{"ok":true}"#)
         .expect_err("the request body must exceed eight bytes");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     Ok(())
@@ -87,11 +86,14 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 `qubit-json` 不提供 HTTP body 聚合 API。需要查看下游 HTTP 接入方式时，可参考
 [`rs-web` controller 示例](https://github.com/qubit-ltd/rs-web/blob/main/examples/controller_crud.rs)；该链接是可能随下游仓库变化的参考示例。更多输入方式见[用户手册的 `decode_input` 章节](doc/user_guide.zh_CN.md#进阶用法)。
 
-准入预算和对象/数组检查针对源 JSON，Serde 目标可能构造出不同形态的值。启用 `raw_value` 时，普通
-`serde_json::Value` 会特殊处理首个 `$serde_json::private::RawValue` 键；需要保留字面对象时，请先阅读
-[用户手册的重复键章节](doc/user_guide.zh_CN.md#重复对象键)并选择合适的目标类型。
-直接反序列化 `SafeJsonValue` 也无法识别私有数字 map；启用 `arbitrary_precision` 后，数字形态可能随
-feature 配置变化。解码 JSON 文本时请使用 `JsonDecoder::decode_value_*`，详见[受保护值指南](doc/user_guide.zh_CN.md#受保护值验证解码与排版)。
+`decode_value_utf8` 返回受保护的 `SafeJsonValue` owner，可通过 `as_value()` 借用值树。此入口拒绝重复对象键。
+owner 负责保护解码树的析构，但不能代替应用在 HTTP body 聚合前设置大小限制，也不承诺精确堆内存上限。
+
+准入预算和对象/数组检查针对源 JSON，generic Serde 目标可能构造出不同形态的值。例如，启用
+`raw_value` 时，普通 `serde_json::Value` 会特殊处理首个 `$serde_json::private::RawValue` 键。直接反序列化
+`SafeJsonValue` 也无法识别私有数字 map；启用 `arbitrary_precision` 后，数字形态可能随 feature 配置变化。
+这些私有协议行为适用于 generic Serde 目标，不适用于 `decode_value_utf8`。需要保留字面对象时，请阅读
+[用户手册的重复键章节](doc/user_guide.zh_CN.md#重复对象键)。
 
 ## 选择解码边界
 

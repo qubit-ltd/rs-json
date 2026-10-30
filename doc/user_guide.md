@@ -110,13 +110,13 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
     let mut decoder = JsonDecoder::with_limits(limits);
 
     let request_body = br#"{"id":18446744073709551615,"ok":true}"#;
-    let value: serde_json::Value = decoder.decode_utf8(request_body)?;
-    assert_eq!(value["id"], serde_json::json!(u64::MAX));
+    let owner = decoder.decode_value_utf8(request_body)?;
+    assert_eq!(owner.as_value()["id"], serde_json::json!(u64::MAX));
 
     let small_limits = limits.into_builder().max_input_bytes(8).build();
     let mut small_decoder = JsonDecoder::with_limits(small_limits);
     let error = small_decoder
-        .decode_utf8::<serde_json::Value>(br#"{"ok":true}"#)
+        .decode_value_utf8(br#"{"ok":true}"#)
         .expect_err("the request body must exceed eight bytes");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     assert_eq!(error.raw_input_bytes(), 11);
@@ -124,7 +124,10 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 }
 ```
 
-The observable success result is an admitted `serde_json::Value`. The failure
+The observable success result is a protected `SafeJsonValue` owner; `as_value()`
+borrows its tree. This entry point rejects duplicate object keys. The owner
+protects cleanup of the decoded tree, but does not replace an application limit
+on the HTTP body before aggregation or promise an exact heap limit. The failure
 branch returns `JsonDecodeErrorKind::Budget` and reports 11 observed input bytes.
 That accessor reports bytes observed by this call, not the amount committed to
 the cumulative input budget. In this slice example, the over-limit input charge
@@ -135,7 +138,10 @@ input can likewise retain charges for an accepted prefix. Value-resource usage
 is staged until the complete operation succeeds. HTTP adapters can use stable
 error categories without matching private parser details.
 
-For output, create `JsonEncoder::with_limits(JsonEncodeLimits::...)` and call
+The `RawValue` and `Number` private-protocol projection behaviors described in
+the Serde sections below apply to generic Serde targets; they do not describe
+this `decode_value_utf8` text path. For output, create
+`JsonEncoder::with_limits(JsonEncodeLimits::...)` and call
 `to_vec`, `write_buffered`, or `write_incremental`:
 
 ```rust

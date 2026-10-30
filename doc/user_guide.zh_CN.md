@@ -89,13 +89,13 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
     let mut decoder = JsonDecoder::with_limits(limits);
 
     let request_body = br#"{"id":18446744073709551615,"ok":true}"#;
-    let value: serde_json::Value = decoder.decode_utf8(request_body)?;
-    assert_eq!(value["id"], serde_json::json!(u64::MAX));
+    let owner = decoder.decode_value_utf8(request_body)?;
+    assert_eq!(owner.as_value()["id"], serde_json::json!(u64::MAX));
 
     let small_limits = limits.into_builder().max_input_bytes(8).build();
     let mut small_decoder = JsonDecoder::with_limits(small_limits);
     let error = small_decoder
-        .decode_utf8::<serde_json::Value>(br#"{"ok":true}"#)
+        .decode_value_utf8(br#"{"ok":true}"#)
         .expect_err("the request body must exceed eight bytes");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     assert_eq!(error.raw_input_bytes(), 11);
@@ -103,11 +103,13 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
 }
 ```
 
-成功分支会得到已经通过资源准入的 `serde_json::Value`。失败分支返回 `JsonDecodeErrorKind::Budget`，并报告本次观察到的 11 个输入字节。这个 accessor
+成功分支会得到受保护的 `SafeJsonValue` owner，可通过 `as_value()` 借用值树；此入口拒绝重复对象键。owner
+负责保护解码树的析构，但不能代替应用在 HTTP body 聚合前设置大小限制，也不承诺精确堆内存上限。失败分支返回 `JsonDecodeErrorKind::Budget`，并报告本次观察到的 11 个输入字节。这个 accessor
 描述本次调用观察到的字节数，不表示它们已提交到累计预算。切片输入超限时，被拒绝的那次输入计费不会生效，且本次输入消费会原子拒绝。
 输入已成功计费后，后续语法或目标解码失败仍保留这部分输入用量；流式读取中此前已接受的输入前缀也会保留计费。值资源暂存到完整操作成功才提交。HTTP 适配层可以依据稳定错误类别生成响应。
 
-输出侧使用 `JsonEncoder::with_limits(JsonEncodeLimits::...)`，再调用 `to_vec`、`write_buffered` 或
+下文关于 `RawValue` 和 `Number` 私有协议投影的说明适用于 generic Serde 目标，不描述这里的
+`decode_value_utf8` 文本入口。输出侧使用 `JsonEncoder::with_limits(JsonEncodeLimits::...)`，再调用 `to_vec`、`write_buffered` 或
 `write_incremental`：
 
 ```rust

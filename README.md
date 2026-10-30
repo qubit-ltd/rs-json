@@ -71,14 +71,13 @@ fn main() -> Result<(), JsonDecodeError<JsonResource>> {
         .max_payload_bytes(4096)
         .build();
     let mut decoder = JsonDecoder::with_limits(limits);
-    let value: serde_json::Value =
-        decoder.decode_utf8(br#"{"id":18446744073709551615,"ok":true}"#)?;
-    assert_eq!(value["id"], serde_json::json!(u64::MAX));
+    let owner = decoder.decode_value_utf8(br#"{"id":18446744073709551615,"ok":true}"#)?;
+    assert_eq!(owner.as_value()["id"], serde_json::json!(u64::MAX));
 
     let small_limits = limits.into_builder().max_input_bytes(8).build();
     let mut small_decoder = JsonDecoder::with_limits(small_limits);
     let error = small_decoder
-        .decode_utf8::<serde_json::Value>(br#"{"ok":true}"#)
+        .decode_value_utf8(br#"{"ok":true}"#)
         .expect_err("the request body must exceed eight bytes");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     Ok(())
@@ -97,14 +96,20 @@ admission, see the [`rs-web` controller example](https://github.com/qubit-ltd/rs
 This is a changeable downstream reference; the [user guide](doc/user_guide.md#advanced-usage)
 explains `decode_input`.
 
-Admission limits and object/array checks describe the source JSON. A Serde
-target may construct a different value; ordinary `serde_json::Value` can
-reinterpret a first `$serde_json::private::RawValue` key when `raw_value` is
-enabled. See the [user guide's duplicate-key section](doc/user_guide.md#duplicate-object-keys)
-before relying on literal object preservation.
-Direct `SafeJsonValue` deserialization also cannot identify private number maps;
-with `arbitrary_precision`, numeric shapes can differ by feature configuration.
-Use `JsonDecoder::decode_value_*` when decoding JSON text; see the [protected value guide](doc/user_guide.md#protected-values-validated-decoding-and-formatting).
+`decode_value_utf8` returns a protected `SafeJsonValue` owner; use `as_value()`
+to borrow its tree. This entry point rejects duplicate object keys. The owner
+protects cleanup of the decoded tree, but it does not replace an application
+limit on the HTTP body before aggregation or promise an exact heap limit.
+
+Admission limits and object/array checks describe the source JSON. A generic
+Serde target may construct a different value; for example, ordinary
+`serde_json::Value` can reinterpret a first `$serde_json::private::RawValue`
+key when `raw_value` is enabled. Direct `SafeJsonValue` deserialization also
+cannot identify private number maps; with `arbitrary_precision`, numeric shapes
+can differ by feature configuration. These private-protocol behaviors apply to
+generic Serde targets, not `decode_value_utf8`. See the [user guide's
+duplicate-key section](doc/user_guide.md#duplicate-object-keys) before relying
+on literal object preservation.
 
 ## Choose the decoding boundary
 
