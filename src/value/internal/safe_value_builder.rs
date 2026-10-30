@@ -25,6 +25,13 @@ impl SafeValueBuilder {
         }
     }
 
+    /// Starts an empty array builder with a caller-bounded allocation hint.
+    pub(crate) fn array_with_capacity(capacity: usize) -> Self {
+        Self {
+            value: Some(Value::Array(Vec::with_capacity(capacity))),
+        }
+    }
+
     /// Starts an empty object builder.
     pub(crate) fn object() -> Self {
         Self {

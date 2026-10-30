@@ -89,7 +89,7 @@ where
         Self {
             context,
             state: CompoundState::Sequence {
-                values: Vec::with_capacity(capacity),
+                values: SafeValueBuilder::array_with_capacity(capacity),
                 depth,
                 count: 0,
                 kind,
@@ -158,7 +158,7 @@ where
             context,
             state: CompoundState::TupleVariant {
                 variant: variant.to_owned(),
-                values: Vec::with_capacity(capacity),
+                values: SafeValueBuilder::array_with_capacity(capacity),
                 depth,
                 count: 0,
             },
@@ -340,12 +340,8 @@ where
         result.map_err(|error| self.fail(error))
     }
 
-    fn finish_sequence(values: Vec<SafeJsonValue>) -> SafeJsonValue {
-        let mut builder = SafeValueBuilder::array();
-        for value in values {
-            builder.push(value);
-        }
-        SafeJsonValue::new(builder.finish())
+    fn finish_sequence(values: SafeValueBuilder) -> SafeJsonValue {
+        SafeJsonValue::new(values.finish())
     }
 
     fn finish_object(values: Vec<(String, SafeJsonValue)>) -> SafeJsonValue {

@@ -273,7 +273,8 @@ where
     /// element.
     fn serialize_bytes(self, bytes: &[u8]) -> Result<Self::Ok, Self::Error> {
         self.enter(JsonContainerKind::Sequence)?;
-        let mut values = Vec::with_capacity(preallocated_capacity(Some(bytes.len())));
+        let capacity = preallocated_capacity(Some(bytes.len()));
+        let mut values = SafeValueBuilder::array_with_capacity(capacity);
         for (index, byte) in bytes.iter().enumerate() {
             let count = index
                 .checked_add(1)
@@ -291,11 +292,7 @@ where
             })?;
             values.push(SafeJsonValue::new(Value::Number(number)));
         }
-        let mut builder = SafeValueBuilder::array();
-        for value in values {
-            builder.push(value);
-        }
-        Ok(SafeJsonValue::new(builder.finish()))
+        Ok(SafeJsonValue::new(values.finish()))
     }
 
     /// Serializes `None` as JSON null.

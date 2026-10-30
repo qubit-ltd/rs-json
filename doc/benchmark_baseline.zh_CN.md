@@ -850,3 +850,85 @@ builder 按帧的后进先出顺序弹出。没有新增 unsafe。
 | safe_value_bridge/json_decoder/long_prefix/duplicate_tail/4096 | 6.9676 ms | 8.4150 ms | 9.9817 ms | 7/100 |
 
 环境：HEAD、工具链、锁文件与上文相同。运行期间共享主机有 23 个登录用户，负载峰值记录为 `47.13, 41.14, 30.70`；运行刚结束时为 `28.71, 34.10, 30.86`。同时存在其他 worktree 的 CI、Rust 编译和 Miri 进程，且部分用例报告 high-severe 离群值。因此保留这些原始观察值，但不视为可靠的 RJ-02 延迟基线。由于主机负载仍高，未运行要求的 `preserve_order` Criterion 命令。RJ-02 延迟仍未验证；不得据此决定是否采纳。任务期间完整输出保存在 `/tmp/rj-t1-criterion-default.log`。
+### RJ-01 受保护数组直接累积后测（2026-10-30）
+
+T1 后，普通序列、元组变体和显式 `serialize_bytes` 均改为直接使用
+`SafeValueBuilder` 累积。六次后测沿用上文的命令、fixture、进程请求计数窗口
+和字段：default 连续三轮，再以 `serde_json/preserve_order` 连续三轮。每种配置
+的 24 条记录在三轮中完全相同。两种配置下，宽度 8192 的 sequence 与 bytes
+项目 `peak_extra_bytes` 均下降 50.0%。深度控制组没有增加；chain project
+控制值下降，bridge 控制值不变。上述分配器请求测量不是 RSS。
+
+以下原始记录列出改动涉及的数组 fixture 和全部深度控制指标；未改动的 bridge
+控制项也列出以便核对完整控制结果。每组三轮相同，表中展示第 1 轮。
+
+| 轮次 | 形状 | 大小 | 操作 | 配置 | 分配次数 | 请求字节 | 重分配次数 | 基线存活字节 | 峰值存活字节 | 结束存活字节 | 额外峰值字节 |
+| ---: | --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | sequence | 8192 | project | default | 4 | 491,520 | 3 | 264,488 | 526,632 | 526,632 | 262,144 |
+| 1 | bytes | 8192 | project | default | 4 | 491,520 | 3 | 534,824 | 796,968 | 796,968 | 262,144 |
+| 1 | chain | 8 | project | default | 8 | 256 | 0 | 2,600 | 2,856 | 2,856 | 256 |
+| 1 | chain | 8 | bridge | default | 8 | 1,024 | 0 | 2,728 | 3,752 | 3,752 | 1,024 |
+| 1 | chain | 64 | project | default | 64 | 2,048 | 0 | 4,392 | 6,440 | 6,440 | 2,048 |
+| 1 | chain | 64 | bridge | default | 64 | 8,192 | 0 | 4,648 | 12,840 | 12,840 | 8,192 |
+| 1 | chain | 256 | project | default | 256 | 8,192 | 0 | 10,536 | 18,728 | 18,728 | 8,192 |
+| 1 | chain | 256 | bridge | default | 256 | 32,768 | 0 | 11,560 | 44,328 | 44,328 | 32,768 |
+| 1 | sequence | 8192 | project | preserve_order | 4 | 1,105,920 | 3 | 592,168 | 1,181,992 | 1,181,992 | 589,824 |
+| 1 | bytes | 8192 | project | preserve_order | 4 | 1,105,920 | 3 | 1,190,184 | 1,780,008 | 1,780,008 | 589,824 |
+| 1 | chain | 8 | project | preserve_order | 8 | 576 | 0 | 2,920 | 3,496 | 3,496 | 576 |
+| 1 | chain | 8 | bridge | preserve_order | 8 | 2,304 | 0 | 3,048 | 5,352 | 5,352 | 2,304 |
+| 1 | chain | 64 | project | preserve_order | 64 | 4,608 | 0 | 6,952 | 11,560 | 11,560 | 4,608 |
+| 1 | chain | 64 | bridge | preserve_order | 64 | 18,432 | 0 | 7,208 | 25,640 | 25,640 | 18,432 |
+| 1 | chain | 256 | project | preserve_order | 256 | 18,432 | 0 | 20,776 | 39,208 | 39,208 | 18,432 |
+| 1 | chain | 256 | bridge | preserve_order | 256 | 73,728 | 0 | 21,800 | 95,528 | 95,528 | 73,728 |
+
+`peak_extra_bytes` 的 T1 到 T2 精确变化如下：
+
+| 配置 | 形状 / 操作 | T1 字节 | T2 字节 | 变化 |
+| --- | --- | ---: | ---: | ---: |
+| default | sequence / project，8192 | 524,288 | 262,144 | -50.0% |
+| default | bytes / project，8192 | 524,288 | 262,144 | -50.0% |
+| preserve_order | sequence / project，8192 | 1,179,648 | 589,824 | -50.0% |
+| preserve_order | bytes / project，8192 | 1,179,648 | 589,824 | -50.0% |
+| default | chain / project，深度 8 | 1,056 | 256 | -75.8% |
+| default | chain / project，深度 64 | 8,224 | 2,048 | -75.1% |
+| default | chain / project，深度 256 | 32,800 | 8,192 | -75.0% |
+| default | chain / bridge，深度 8 | 1,024 | 1,024 | 0.0% |
+| default | chain / bridge，深度 64 | 8,192 | 8,192 | 0.0% |
+| default | chain / bridge，深度 256 | 32,768 | 32,768 | 0.0% |
+| preserve_order | chain / project，深度 8 | 2,376 | 576 | -75.8% |
+| preserve_order | chain / project，深度 64 | 18,504 | 4,608 | -75.1% |
+| preserve_order | chain / project，深度 256 | 73,800 | 18,432 | -75.0% |
+| preserve_order | chain / bridge，深度 8 | 2,304 | 2,304 | 0.0% |
+| preserve_order | chain / bridge，深度 64 | 18,432 | 18,432 | 0.0% |
+| preserve_order | chain / bridge，深度 256 | 73,728 | 73,728 | 0.0% |
+
+候选在两种 map 配置下均达到 RJ-01 分配门槛，所有深度控制项也未退化。T2
+保留 `SafeValueBuilder::array_with_capacity` 以及受保护的 sequence/tuple-variant
+累积，供后续任务衔接；没有修改 RJ-02 针对的 map visitor。
+
+后测身份：HEAD `029c4dd0678d5506a3a9b7cd09ded9f96654bcab`；`rustc 1.94.0
+(4a4ef493e 2026-03-02)`；Cargo `1.94.0`；Cargo.lock SHA-256
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`。
+benchmark 输出的源码哈希：Cargo.toml
+`1800a3b371d6b3626d739cbfde4d609ebe5bdbcb2131dd60313d1af5bc71bc17`；bench
+`a3d6d1bf3ec9c04a83bef207f791a193fe37fe326c482d9d6bb0ea11e605b2d7`；
+SafeValueBuilder
+`eb1d7c7b07ab42e5dc5fd2518986b0f5621eef1446324d8922a2cdb133933d87`；serializer
+`7c3664d1f4283743d77bb2279514f22b0660a361cf135099ae6d821f51f12e9c`；compound
+`fc2aea2915fbb961140fd75e583124a882e41d236d01ad25c873f529523cbca0`；未改动的
+value visitor `96fba144e005b1d1fe1d09194fc0f4537bbccbbb235be0c4cfcecf8877354fc1`。
+其他 T2 源码哈希：compound state
+`662d5e25e1e10744fab968cd097a7e3908311f20b721da51ce653d83267d08a4`；encoder tests
+`0b628733f2cddd7c81168b05d4847a7163c4d07fd8b9fbadc6f6a603bd1a2121`；owner tests
+`5ba9817fb210ee75c060cd04ded29bb9106df7058542072e429fef41dd928edb`。
+测量时 worktree 还包含与 T2 无关的 T4/T5 编辑。benchmark dirty-file metadata
+为：`doc/benchmark_baseline.md`、`doc/benchmark_baseline.zh_CN.md`、
+`fuzz/src/json_unique_decode_invariants.rs`、
+`fuzz/tests/json_unique_decode_invariants_tests.rs`、`src/decode/json_decoder.rs`、
+`src/tests/j3/owner_tests.rs`、`src/value/internal/safe_value_builder.rs`、
+`src/value/json_value_encoder/internal/compound_state.rs`、
+`src/value/json_value_encoder/internal/json_value_compound.rs`、
+`src/value/json_value_encoder/internal/json_value_serializer.rs`、
+`src/value/safe_json_value.rs`、
+`tests/encode/serde_compat/serde_json_compat_tests/json_private_tests.rs`、
+`tests/value/json_value_encoder_tests.rs`。

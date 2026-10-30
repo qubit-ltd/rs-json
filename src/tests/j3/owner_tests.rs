@@ -13,6 +13,7 @@ use crate::lexical::JsonLexicalEvent;
 use crate::lexical::JsonNumberModel;
 use crate::value::SafeJsonValue;
 use crate::value::internal::LexicalJsonValueBuilder;
+use crate::value::internal::SafeValueBuilder;
 
 #[test]
 fn test_owner_drop_uses_allocation_free_fallback_when_reserve_fails() {
@@ -105,6 +106,25 @@ fn test_owner_serde_unwind_drops_partial_array_iteratively() {
         SafeJsonValue::deserialize(&mut deserializer)
     }));
     assert!(result.is_err());
+    SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
+}
+
+#[test]
+fn test_array_accumulator_unwind_drops_inserted_deep_child_iteratively() {
+    let mut child = Value::Null;
+    for _ in 0..128 {
+        child = Value::Array(vec![child]);
+    }
+
+    SafeJsonValue::panic_after_guarded_inserts_for_test(0);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut values = SafeValueBuilder::array_with_capacity(1);
+        values.push(SafeJsonValue::new(child));
+    }));
+    assert!(
+        result.is_err(),
+        "the guarded array insertion hook must fire"
+    );
     SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
 }
 

@@ -1567,7 +1567,7 @@ mod migrated_projection {
         where
             S: serde::Serializer,
         {
-            serializer.serialize_bytes(&[1, 255])
+            serializer.serialize_bytes(&[0, 255])
         }
     }
 
@@ -1969,9 +1969,49 @@ mod migrated_projection {
         let projected = JsonValueEncoder::new()
             .encode_in_transaction(&ByteSlice, &mut transaction)
             .unwrap();
-        assert_eq!(projected.as_value(), &serde_json::json!([1, 255]));
+        assert_eq!(projected.as_value(), &serde_json::json!([0, 255]));
         assert_eq!(transaction.used_nodes(), Some(3));
         assert_eq!(transaction.used_payload_bytes(), Some(4));
+    }
+
+    #[test]
+    fn test_projection_bytes_budget_failure_does_not_commit_values() {
+        let limits = JsonValueLimits::<JsonResource, usize>::builder()
+            .max_nodes(2)
+            .build();
+        let mut budget = JsonValueBudget::new(limits);
+        {
+            let mut transaction = budget.transaction();
+            let result = JsonValueEncoder::new()
+                .encode_in_transaction(&ByteSlice, &mut transaction);
+            assert!(result.is_err(), "two byte elements require three nodes");
+        }
+        assert_eq!(budget.used_nodes(), Some(0));
+    }
+
+    #[test]
+    fn test_projection_array_compound_shapes_match_serde_json() {
+        #[derive(Serialize)]
+        enum Variant {
+            Pair(u8, bool),
+        }
+
+        let sequence = [0_u8, 255];
+        let tuple = (0_u8, 255_u8);
+        let variant = Variant::Pair(0, true);
+        let encoder = JsonValueEncoder::new();
+        assert_eq!(
+            encoder.encode(&sequence).unwrap(),
+            serde_json::to_value(sequence).unwrap()
+        );
+        assert_eq!(
+            encoder.encode(&tuple).unwrap(),
+            serde_json::to_value(tuple).unwrap()
+        );
+        assert_eq!(
+            encoder.encode(&variant).unwrap(),
+            serde_json::to_value(variant).unwrap()
+        );
     }
 
     #[test]

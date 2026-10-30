@@ -1041,3 +1041,89 @@ Command: `cargo bench --locked --bench decoder_bench -- safe_value_bridge` (full
 | safe_value_bridge/json_decoder/long_prefix/duplicate_tail/4096 | 6.9676 ms | 8.4150 ms | 9.9817 ms | 7/100 |
 
 Environment: same HEAD/toolchain/lockfile as above. During the run, the shared host had 23 logged-in users and load averages reached `47.13, 41.14, 30.70`; immediately after completion they were `28.71, 34.10, 30.86`. Other worktree CI, Rust compiler, and Miri processes were active, and several cases had high-severe outliers. Therefore these values are preserved as raw observations but are not a reliable RJ-02 latency baseline. The required `preserve_order` Criterion command was not run because host load remained high. RJ-02 latency remains unverified; do not use these measurements to decide adoption. Full raw output was retained during this task at `/tmp/rj-t1-criterion-default.log`.
+### RJ-01 protected-array accumulation post-measurement (2026-10-30)
+
+After T1, sequence, tuple-variant, and explicit `serialize_bytes` accumulation
+use `SafeValueBuilder` directly. The six post runs used the same commands,
+fixtures, request-counter window, and fields as the pre-measurement section
+above: three default runs followed by three `serde_json/preserve_order` runs.
+All 24 output records were identical within each configuration and across its
+three rounds. The two width-8192 project fixtures each reduced
+`peak_extra_bytes` by 50.0% in both configurations. The depth controls did not
+increase; chain project controls decreased and bridge controls were unchanged.
+These allocator-request measurements are not RSS.
+
+The following raw rows show all measurement fields for the changed array
+fixtures and the depth controls. The unchanged bridge rows are included to
+show the complete control result. Round 1 represents three identical rounds.
+
+| Round | Shape | Size | Operation | Feature | Allocations | Requested B | Reallocations | Baseline live B | Peak live B | End live B | Peak extra B |
+| ---: | --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | sequence | 8192 | project | default | 4 | 491,520 | 3 | 264,488 | 526,632 | 526,632 | 262,144 |
+| 1 | bytes | 8192 | project | default | 4 | 491,520 | 3 | 534,824 | 796,968 | 796,968 | 262,144 |
+| 1 | chain | 8 | project | default | 8 | 256 | 0 | 2,600 | 2,856 | 2,856 | 256 |
+| 1 | chain | 8 | bridge | default | 8 | 1,024 | 0 | 2,728 | 3,752 | 3,752 | 1,024 |
+| 1 | chain | 64 | project | default | 64 | 2,048 | 0 | 4,392 | 6,440 | 6,440 | 2,048 |
+| 1 | chain | 64 | bridge | default | 64 | 8,192 | 0 | 4,648 | 12,840 | 12,840 | 8,192 |
+| 1 | chain | 256 | project | default | 256 | 8,192 | 0 | 10,536 | 18,728 | 18,728 | 8,192 |
+| 1 | chain | 256 | bridge | default | 256 | 32,768 | 0 | 11,560 | 44,328 | 44,328 | 32,768 |
+| 1 | sequence | 8192 | project | preserve_order | 4 | 1,105,920 | 3 | 592,168 | 1,181,992 | 1,181,992 | 589,824 |
+| 1 | bytes | 8192 | project | preserve_order | 4 | 1,105,920 | 3 | 1,190,184 | 1,780,008 | 1,780,008 | 589,824 |
+| 1 | chain | 8 | project | preserve_order | 8 | 576 | 0 | 2,920 | 3,496 | 3,496 | 576 |
+| 1 | chain | 8 | bridge | preserve_order | 8 | 2,304 | 0 | 3,048 | 5,352 | 5,352 | 2,304 |
+| 1 | chain | 64 | project | preserve_order | 64 | 4,608 | 0 | 6,952 | 11,560 | 11,560 | 4,608 |
+| 1 | chain | 64 | bridge | preserve_order | 64 | 18,432 | 0 | 7,208 | 25,640 | 25,640 | 18,432 |
+| 1 | chain | 256 | project | preserve_order | 256 | 18,432 | 0 | 20,776 | 39,208 | 39,208 | 18,432 |
+| 1 | chain | 256 | bridge | preserve_order | 256 | 73,728 | 0 | 21,800 | 95,528 | 95,528 | 73,728 |
+
+For exact `peak_extra_bytes` comparisons, T1 to T2 was:
+
+| Feature | Shape / operation | T1 B | T2 B | Change |
+| --- | --- | ---: | ---: | ---: |
+| default | sequence / project, 8192 | 524,288 | 262,144 | -50.0% |
+| default | bytes / project, 8192 | 524,288 | 262,144 | -50.0% |
+| preserve_order | sequence / project, 8192 | 1,179,648 | 589,824 | -50.0% |
+| preserve_order | bytes / project, 8192 | 1,179,648 | 589,824 | -50.0% |
+| default | chain / project, depth 8 | 1,056 | 256 | -75.8% |
+| default | chain / project, depth 64 | 8,224 | 2,048 | -75.1% |
+| default | chain / project, depth 256 | 32,800 | 8,192 | -75.0% |
+| default | chain / bridge, depth 8 | 1,024 | 1,024 | 0.0% |
+| default | chain / bridge, depth 64 | 8,192 | 8,192 | 0.0% |
+| default | chain / bridge, depth 256 | 32,768 | 32,768 | 0.0% |
+| preserve_order | chain / project, depth 8 | 2,376 | 576 | -75.8% |
+| preserve_order | chain / project, depth 64 | 18,504 | 4,608 | -75.1% |
+| preserve_order | chain / project, depth 256 | 73,800 | 18,432 | -75.0% |
+| preserve_order | chain / bridge, depth 8 | 2,304 | 2,304 | 0.0% |
+| preserve_order | chain / bridge, depth 64 | 18,432 | 18,432 | 0.0% |
+| preserve_order | chain / bridge, depth 256 | 73,728 | 73,728 | 0.0% |
+
+The candidate meets the RJ-01 allocation gate in both map configurations and
+all depth controls. T2 leaves `SafeValueBuilder::array_with_capacity` and
+guarded sequence/tuple-variant accumulation in place for the next task; it
+does not alter the map visitor targeted by RJ-02.
+
+Post-measurement identity: HEAD `029c4dd0678d5506a3a9b7cd09ded9f96654bcab`;
+`rustc 1.94.0 (4a4ef493e 2026-03-02)`; Cargo `1.94.0`; Cargo.lock SHA-256
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a`.
+The source hashes emitted by the benchmark were: Cargo.toml
+`1800a3b371d6b3626d739cbfde4d609ebe5bdbcb2131dd60313d1af5bc71bc17`;
+benchmark `a3d6d1bf3ec9c04a83bef207f791a193fe37fe326c482d9d6bb0ea11e605b2d7`;
+SafeValueBuilder `eb1d7c7b07ab42e5dc5fd2518986b0f5621eef1446324d8922a2cdb133933d87`;
+serializer `7c3664d1f4283743d77bb2279514f22b0660a361cf135099ae6d821f51f12e9c`;
+compound `fc2aea2915fbb961140fd75e583124a882e41d236d01ad25c873f529523cbca0`;
+and unchanged value visitor `96fba144e005b1d1fe1d09194fc0f4537bbccbbb235be0c4cfcecf8877354fc1`.
+Additional T2 source hashes: compound state
+`662d5e25e1e10744fab968cd097a7e3908311f20b721da51ce653d83267d08a4`;
+encoder tests `0b628733f2cddd7c81168b05d4847a7163c4d07fd8b9fbadc6f6a603bd1a2121`;
+owner tests `5ba9817fb210ee75c060cd04ded29bb9106df7058542072e429fef41dd928edb`.
+The measured worktree also contained unrelated T4/T5 edits. The benchmark's
+dirty-file metadata was: `doc/benchmark_baseline.md`,
+`doc/benchmark_baseline.zh_CN.md`, `fuzz/src/json_unique_decode_invariants.rs`,
+`fuzz/tests/json_unique_decode_invariants_tests.rs`, `src/decode/json_decoder.rs`,
+`src/tests/j3/owner_tests.rs`, `src/value/internal/safe_value_builder.rs`,
+`src/value/json_value_encoder/internal/compound_state.rs`,
+`src/value/json_value_encoder/internal/json_value_compound.rs`,
+`src/value/json_value_encoder/internal/json_value_serializer.rs`,
+`src/value/safe_json_value.rs`,
+`tests/encode/serde_compat/serde_json_compat_tests/json_private_tests.rs`, and
+`tests/value/json_value_encoder_tests.rs`.

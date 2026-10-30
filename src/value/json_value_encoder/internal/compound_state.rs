@@ -13,14 +13,15 @@ use qubit_budget::json::JsonContainerKind;
 
 use crate::internal::JsonPrivateProtocolState;
 use crate::value::SafeJsonValue;
+use crate::value::internal::SafeValueBuilder;
 
 /// Tracks partial compound values, protocol payloads, and their nesting
 /// context.
 pub(in crate::value::json_value_encoder) enum CompoundState {
     /// Ordered sequence children remain protected until finalization succeeds.
     Sequence {
-        /// Guarded children accumulated for this sequence.
-        values: Vec<SafeJsonValue>,
+        /// Children accumulated in a protected array owner.
+        values: SafeValueBuilder,
         /// Depth of this sequence container; its children are encoded at `depth
         /// + 1`.
         depth: usize,
@@ -46,8 +47,8 @@ pub(in crate::value::json_value_encoder) enum CompoundState {
     TupleVariant {
         /// Variant name used by the encoded representation.
         variant: String,
-        /// Guarded children retained until the variant succeeds.
-        values: Vec<SafeJsonValue>,
+        /// Children retained in a protected array owner until success.
+        values: SafeValueBuilder,
         /// Depth of the outer enum-variant object. The inner container is at
         /// `depth + 1`, and its children are encoded at `depth + 2`.
         depth: usize,
