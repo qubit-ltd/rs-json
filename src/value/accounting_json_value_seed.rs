@@ -65,6 +65,7 @@ use super::internal::JsonValueVisitor;
 /// let mut transaction = budget.transaction();
 /// let mut deserializer = serde_json::Deserializer::from_str(r#"{"ok":true}"#);
 /// let value = AccountingJsonValueSeed::new(&mut transaction).deserialize(&mut deserializer)?;
+/// deserializer.end()?;
 /// assert_eq!(value["ok"], true);
 /// transaction.commit()?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
