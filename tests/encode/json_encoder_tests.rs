@@ -549,7 +549,7 @@ impl Write for PrefixWriter {
     }
 }
 
-/// Asserts a budget error occurs before traversal reaches a source tail.
+/// Asserts online budget rejection at the expected source progress.
 fn assert_online_rejection<T>(
     value: &T,
     limits: JsonTestLimits,
@@ -560,7 +560,8 @@ fn assert_online_rejection<T>(
     T: Serialize + ?Sized,
 {
     let mut session = limits.encode_session();
-    let error = encode(value, &mut session).expect_err("the first value must be rejected online");
+    let error =
+        encode(value, &mut session).expect_err("the configured budget must reject serialization");
     let error = error.into_budget_error().expect("expected a budget error");
     assert_eq!(
         error
@@ -777,9 +778,10 @@ fn test_encode_output_budget_rejection_rolls_back_borrowed_budgets() {
     assert_eq!(value.used_nodes(), Some(0));
 }
 
-/// Verifies a known map length is checked before its entries are traversed.
+/// Verifies a known-length map rejects the second entry after the source
+/// advances past the first entry; the length hint does not pre-admit entries.
 #[test]
-fn test_encode_known_map_limit_stops_before_source_tail() {
+fn test_encode_known_map_limit_rejects_second_entry() {
     let serialized_tail = Cell::new(0);
     let value = MapThenTail {
         key: &"first",
