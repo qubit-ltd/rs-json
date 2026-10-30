@@ -121,10 +121,7 @@ fn test_array_accumulator_unwind_drops_inserted_deep_child_iteratively() {
         let mut values = SafeValueBuilder::array_with_capacity(1);
         values.push(SafeJsonValue::new(child));
     }));
-    assert!(
-        result.is_err(),
-        "the guarded array insertion hook must fire"
-    );
+    assert!(result.is_err(), "the guarded array insertion hook must fire");
     SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
 }
 

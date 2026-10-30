@@ -1976,14 +1976,11 @@ mod migrated_projection {
 
     #[test]
     fn test_projection_bytes_budget_failure_does_not_commit_values() {
-        let limits = JsonValueLimits::<JsonResource, usize>::builder()
-            .max_nodes(2)
-            .build();
+        let limits = JsonValueLimits::<JsonResource, usize>::builder().max_nodes(2).build();
         let mut budget = JsonValueBudget::new(limits);
         {
             let mut transaction = budget.transaction();
-            let result = JsonValueEncoder::new()
-                .encode_in_transaction(&ByteSlice, &mut transaction);
+            let result = JsonValueEncoder::new().encode_in_transaction(&ByteSlice, &mut transaction);
             assert!(result.is_err(), "two byte elements require three nodes");
         }
         assert_eq!(budget.used_nodes(), Some(0));
@@ -2004,10 +2001,7 @@ mod migrated_projection {
             encoder.encode(&sequence).unwrap(),
             serde_json::to_value(sequence).unwrap()
         );
-        assert_eq!(
-            encoder.encode(&tuple).unwrap(),
-            serde_json::to_value(tuple).unwrap()
-        );
+        assert_eq!(encoder.encode(&tuple).unwrap(), serde_json::to_value(tuple).unwrap());
         assert_eq!(
             encoder.encode(&variant).unwrap(),
             serde_json::to_value(variant).unwrap()

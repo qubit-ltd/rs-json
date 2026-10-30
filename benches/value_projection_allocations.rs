@@ -42,10 +42,7 @@ fn git_output(args: &[&str]) -> String {
         .args(args)
         .output()
         .expect("git must be available when running the benchmark");
-    assert!(
-        output.status.success(),
-        "git command must succeed: {args:?}"
-    );
+    assert!(output.status.success(), "git command must succeed: {args:?}");
     String::from_utf8(output.stdout)
         .expect("git output must be UTF-8")
         .trim()
@@ -87,32 +84,27 @@ fn object_fixture(width: usize, long_key: bool) -> Value {
     Value::Object(entries.collect())
 }
 
-/// Measures direct SafeJsonValue deserialization, then validates outside the window.
+/// Measures direct SafeJsonValue deserialization, then validates outside the
+/// window.
 fn bridge(input: &str, expected: &Value, shape: &str, size: usize, feature: &str, revision: &str) {
     let (owner, measurement) = allocation_counter::measure(|| {
         if shape == "chain" && size > 128 {
             let mut deserializer = serde_json::Deserializer::from_str(input);
             deserializer.disable_recursion_limit();
-            let owner = SafeJsonValue::deserialize(&mut deserializer)
-                .expect("deep bridge fixture must deserialize");
-            deserializer
-                .end()
-                .expect("deep bridge fixture must be fully consumed");
+            let owner = SafeJsonValue::deserialize(&mut deserializer).expect("deep bridge fixture must deserialize");
+            deserializer.end().expect("deep bridge fixture must be fully consumed");
             owner
         } else {
             serde_json::from_str::<SafeJsonValue>(input).expect("bridge fixture must deserialize")
         }
     });
-    assert_eq!(
-        owner.as_value(),
-        expected,
-        "{shape}/{size} bridge changed the value"
-    );
+    assert_eq!(owner.as_value(), expected, "{shape}/{size} bridge changed the value");
     emit(shape, size, "bridge", feature, revision, measurement);
     std::hint::black_box(owner);
 }
 
-/// Measures transaction-aware projection, then validates and commits outside the window.
+/// Measures transaction-aware projection, then validates and commits outside
+/// the window.
 fn project<T: Serialize + ?Sized>(
     source: &T,
     expected: &Value,
@@ -133,9 +125,7 @@ fn project<T: Serialize + ?Sized>(
         expected,
         "{shape}/{size} projection changed the value"
     );
-    transaction
-        .commit()
-        .expect("projection transaction must commit");
+    transaction.commit().expect("projection transaction must commit");
     emit(shape, size, "project", feature, revision, measurement);
     std::hint::black_box(owner);
 }
@@ -177,10 +167,7 @@ fn main() {
         ])
         .output()
         .expect("sha256sum must be available when running the benchmark");
-    assert!(
-        source_hashes.status.success(),
-        "source checksum must succeed"
-    );
+    assert!(source_hashes.status.success(), "source checksum must succeed");
     println!("VALUE_PROJECTION_META,feature,{feature}");
     println!("VALUE_PROJECTION_META,head,{revision}");
     println!("VALUE_PROJECTION_META,rustc,{}", rustc_version());
@@ -188,19 +175,13 @@ fn main() {
         .arg("Cargo.lock")
         .output()
         .expect("sha256sum must be available when running the benchmark");
-    assert!(
-        lock_hash.status.success(),
-        "Cargo.lock checksum must succeed"
-    );
+    assert!(lock_hash.status.success(), "Cargo.lock checksum must succeed");
     let lock_hash = String::from_utf8(lock_hash.stdout).expect("sha256sum output must be UTF-8");
     println!(
         "VALUE_PROJECTION_META,cargo_lock_sha256,{}",
         lock_hash.split_whitespace().next().unwrap_or("unknown")
     );
-    println!(
-        "VALUE_PROJECTION_META,dirty_files,{}",
-        dirty_files.replace('\n', " | ")
-    );
+    println!("VALUE_PROJECTION_META,dirty_files,{}", dirty_files.replace('\n', " | "));
     println!(
         "VALUE_PROJECTION_META,source_sha256,{}",
         String::from_utf8(source_hashes.stdout)
@@ -214,37 +195,14 @@ fn main() {
     for width in WIDTHS {
         let sequence = Value::Array((0..width).map(|index| Value::from(index as u64)).collect());
         project(&sequence, &sequence, "sequence", width, feature, &revision);
-        let bytes = (0..width)
-            .map(|index| (index % 256) as u8)
-            .collect::<Vec<_>>();
+        let bytes = (0..width).map(|index| (index % 256) as u8).collect::<Vec<_>>();
         let bytes_expected = Value::Array(bytes.iter().map(|byte| Value::from(*byte)).collect());
-        project(
-            &Bytes(&bytes),
-            &bytes_expected,
-            "bytes",
-            width,
-            feature,
-            &revision,
-        );
+        project(&Bytes(&bytes), &bytes_expected, "bytes", width, feature, &revision);
 
         let short_object = object_fixture(width, false);
-        project(
-            &short_object,
-            &short_object,
-            "object_short",
-            width,
-            feature,
-            &revision,
-        );
+        project(&short_object, &short_object, "object_short", width, feature, &revision);
         let short_text = serde_json::to_string(&short_object).expect("short object must serialize");
-        bridge(
-            &short_text,
-            &short_object,
-            "object_short",
-            width,
-            feature,
-            &revision,
-        );
+        bridge(&short_text, &short_object, "object_short", width, feature, &revision);
 
         let long_object = object_fixture(width, true);
         project(
