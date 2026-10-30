@@ -38,6 +38,8 @@ use crate::internal::JsonPrivateProtocolState;
 use crate::value::SafeJsonValue;
 use crate::value::internal::SafeValueBuilder;
 
+/// Shared staged transaction and sticky first-failure state for one projection.
+/// Compounds borrow this context and never commit it themselves.
 type ContextCell<'context, 'transaction, 'budget, R, Q> =
     &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
 
@@ -52,6 +54,8 @@ pub(in crate::value::json_value_encoder) struct JsonValueCompound<'context, 'tra
 where
     Q: ResourceQuantity,
 {
+    /// Shared staged transaction and first-failure state; this compound does
+    /// not own the right to commit the transaction.
     context: ContextCell<'context, 'transaction, 'budget, R, Q>,
     /// Active compound shape and its guarded, not-yet-committed children.
     state: CompoundState,
@@ -202,6 +206,23 @@ where
         }
     }
 
+    /// Creates an accumulator for a recognized private protocol.
+    ///
+    /// `kind` and `state` must describe the same protocol; the state must be
+    /// Pending after the protocol field count has been validated. This only
+    /// creates the payload accumulator. It does not parse the payload, admit
+    /// the resulting tree, or commit the shared transaction.
+    ///
+    /// # Parameters
+    ///
+    /// * `context` - Shared staged transaction and sticky failure state.
+    /// * `depth` - Depth at which the materialized private value is admitted.
+    /// * `kind` - Recognized private protocol kind.
+    /// * `state` - Pending protocol state for that kind.
+    ///
+    /// # Returns
+    ///
+    /// An empty accumulator awaiting the protocol payload.
     pub(in crate::value::json_value_encoder) fn private(
         context: ContextCell<'context, 'transaction, 'budget, R, Q>,
         depth: usize,
@@ -315,11 +336,13 @@ where
         result.map_err(|error| self.fail(error))
     }
 
-    /// Validates and stores one field of the recognized private protocol.
+    /// Collects one field of the recognized private protocol and retains
+    /// failures in the shared context.
     ///
-    /// Private text is checked against the configured per-payload byte limit
-    /// before the payload string is appended to its buffer. Protocol shape or
-    /// payload errors become sticky.
+    /// The private text serializer checks the UTF-8 source-byte length against
+    /// the configured temporary payload limit before appending text. Complete
+    /// JSON syntax and number materialization are checked when the compound is
+    /// finished; successful collection alone does not validate the payload.
     fn set_private_field<T>(
         &mut self,
         kind: JsonPrivateProtocolKind,
@@ -404,6 +427,11 @@ where
     }
 }
 
+/// Advances the private protocol through begin, payload collection, and
+/// complete. Only text payloads are accepted. The supplied callback checks
+/// UTF-8 source bytes against the temporary text limit before appending them.
+/// This helper does not parse the complete JSON payload or record a sticky
+/// shared error; its caller owns first-error recording.
 fn set_private_payload<T>(
     text: &mut Option<String>,
     state: &mut JsonPrivateProtocolState,

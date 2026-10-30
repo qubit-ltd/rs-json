@@ -25,6 +25,8 @@ use crate::encode::JsonSerializationError;
 use crate::encode::JsonSerializationErrorKind;
 use crate::internal::JsonMapKey;
 
+/// Shared projection context borrowed for admission checks and retained errors.
+/// This key serializer has no independent transaction commit authority.
 type ContextCell<'context, 'transaction, 'budget, R, Q> =
     &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
 
@@ -34,6 +36,8 @@ pub(in crate::value::json_value_encoder) struct JsonValueMapKeySerializer<'conte
 where
     Q: qubit_budget::ResourceQuantity,
 {
+    /// Borrowed shared projection context; key checks do not commit its
+    /// transaction.
     context: ContextCell<'context, 'transaction, 'budget, R, Q>,
 }
 
@@ -42,23 +46,78 @@ where
     R: Clone,
     Q: qubit_budget::ResourceQuantity,
 {
+    /// Borrows the projection's shared context for prospective key checks.
+    ///
+    /// The serializer does not own or commit the shared transaction.
+    ///
+    /// # Parameters
+    ///
+    /// * `context` - Shared staged accounting and sticky failure state.
+    ///
+    /// # Returns
+    ///
+    /// A key serializer borrowing that context.
     pub(in crate::value::json_value_encoder) fn new(
         context: ContextCell<'context, 'transaction, 'budget, R, Q>,
     ) -> Self {
         Self { context }
     }
 
+    /// Checks whether a prospective key measurement can be admitted.
+    ///
+    /// This check retains a rejected measurement as a shared failure, but does
+    /// not publish key accounting; the enclosing compound performs the final
+    /// key charge.
+    ///
+    /// # Parameters
+    ///
+    /// * `bytes` - UTF-8 byte length of the prospective key.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the key measurement is admissible.
+    ///
+    /// # Errors
+    ///
+    /// Returns the retained serialization error when admission is rejected
+    /// or an earlier projection failure exists.
     fn check_key(&self, bytes: usize) -> Result<(), JsonSerializationError> {
         self.context
             .borrow_mut()
             .check_admit(qubit_budget::json::JsonMeasurement::Key { bytes })
     }
 
+    /// Checks an already-owned key before returning it to the compound.
+    ///
+    /// The String allocation has already occurred; this check only controls
+    /// admission and does not charge the key.
+    ///
+    /// # Returns
+    ///
+    /// The key string when its prospective measurement is admissible.
+    ///
+    /// # Errors
+    ///
+    /// Returns the retained serialization error when admission is rejected or
+    /// an earlier projection failure exists.
     fn finish_key(self, value: String) -> Result<String, JsonSerializationError> {
         self.check_key(value.len())?;
         Ok(value)
     }
 
+    /// Checks a borrowed key before copying it into an owned String.
+    ///
+    /// The copy is made only after the prospective measurement is admitted;
+    /// final key accounting remains the enclosing compound's responsibility.
+    ///
+    /// # Returns
+    ///
+    /// An owned copy of the key when its prospective measurement is admissible.
+    ///
+    /// # Errors
+    ///
+    /// Returns the retained serialization error when admission is rejected or
+    /// an earlier projection failure exists.
     fn finish_key_str(self, value: &str) -> Result<String, JsonSerializationError> {
         self.check_key(value.len())?;
         Ok(value.to_owned())
