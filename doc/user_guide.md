@@ -889,6 +889,46 @@ duplicate keys but does not apply a resource budget.
 Use `decode_object_str`/`decode_object_utf8` or the corresponding array methods
 when the boundary also requires a specific top-level container.
 
+The seed stages measurements incrementally in the caller's transaction; it
+never commits or rolls back that transaction. Any deserialization error may
+leave partial charges staged, and a non-budget error does not necessarily make
+the transaction uncommittable. After an error, drop the whole transaction and
+start a new one before retrying; this also discards any earlier work staged in
+that transaction. A successful call consumes one value, not necessarily a
+complete document. Check for end of input and complete any required application
+validation before committing. If either check fails, drop the transaction.
+
+The following example drops the transaction after a syntax error, then checks
+that the successful retry consumed the complete input before committing:
+
+```rust
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::value::AccountingJsonValueSeed;
+use serde::de::DeserializeSeed;
+
+let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+    .max_nodes(10)
+    .build()
+    .budget();
+{
+    let mut transaction = budget.transaction();
+    let mut parser = serde_json::Deserializer::from_str("[0,");
+    assert!(AccountingJsonValueSeed::new(&mut transaction)
+        .deserialize(&mut parser).is_err());
+    // Drop the whole failed transaction here.
+}
+assert_eq!(budget.used_nodes(), Some(0));
+let mut transaction = budget.transaction();
+let mut parser = serde_json::Deserializer::from_str("[0]");
+let value = AccountingJsonValueSeed::new(&mut transaction).deserialize(&mut parser)?;
+parser.end()?;
+assert_eq!(value, serde_json::json!([0]));
+transaction.commit()?;
+assert_eq!(budget.used_nodes(), Some(2));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ### Duplicate object keys
 
 Strict admission does not add a global unique-key rule. Duplicate-key behavior

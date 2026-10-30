@@ -360,6 +360,52 @@ fn test_accounting_json_value_seed_handles_option_newtype_and_numeric_errors() {
     );
 }
 
+#[test]
+fn test_accounting_seed_discards_partial_usage_after_syntax_failure() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(10)
+        .build()
+        .budget();
+    {
+        let mut transaction = budget.transaction();
+        let mut parser = Deserializer::from_str("[0,");
+        let error = AccountingJsonValueSeed::new(&mut transaction)
+            .deserialize(&mut parser)
+            .expect_err("the incomplete array must fail on syntax");
+        assert!(error.is_eof(), "failure must not be a budget rejection");
+        assert_eq!(transaction.used_nodes(), Some(2));
+    }
+    assert_eq!(budget.used_nodes(), Some(0));
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str("[0]");
+    let value = AccountingJsonValueSeed::new(&mut transaction)
+        .deserialize(&mut parser)
+        .unwrap();
+    parser.end().unwrap();
+    assert_eq!(value, json!([0]));
+    transaction.commit().unwrap();
+    assert_eq!(budget.used_nodes(), Some(2));
+}
+
+#[test]
+fn test_accounting_seed_discards_usage_after_document_end_failure() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(10)
+        .build()
+        .budget();
+    {
+        let mut transaction = budget.transaction();
+        let mut parser = Deserializer::from_str("[0] true");
+        let value = AccountingJsonValueSeed::new(&mut transaction)
+            .deserialize(&mut parser)
+            .unwrap();
+        assert_eq!(value, json!([0]));
+        assert!(parser.end().is_err(), "the complete document contains trailing data");
+        assert_eq!(transaction.used_nodes(), Some(2));
+    }
+    assert_eq!(budget.used_nodes(), Some(0));
+}
+
 /// Dispatches a boolean through the visitor's newtype delegation branch.
 struct NewtypeDeserializer;
 

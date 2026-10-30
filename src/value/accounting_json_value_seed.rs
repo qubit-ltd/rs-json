@@ -29,6 +29,18 @@ use super::internal::JsonValueVisitor;
 /// ordinary [`serde::Deserialize`] implementation, where the original input
 /// bytes are unavailable.
 ///
+/// This seed stages measurements incrementally in the caller's transaction; it
+/// does not commit or roll back that transaction. Any deserialization failure
+/// may leave partial staged charges, and non-budget errors do not necessarily
+/// poison the transaction. Drop the entire transaction after an error and start
+/// a new transaction before retrying. This also discards earlier work staged in
+/// that transaction.
+///
+/// Successful seed deserialization consumes one value, not necessarily a
+/// complete document. Complete the deserializer's end-of-input check and any
+/// required application validation before committing. If either fails, drop the
+/// transaction.
+///
 /// Do not pass this seed to [`crate::decode::JsonDecoder::decode_seed_str`] or
 /// [`crate::decode::JsonDecoder::decode_seed_utf8`] or
 /// [`crate::decode::JsonDecoder::decode_unique_seed_utf8`] when its transaction
@@ -109,7 +121,12 @@ where
     /// # Errors
     ///
     /// Returns the deserializer's error when the input cannot be represented
-    /// as a JSON value or when the transaction rejects a resource charge.
+    /// as a JSON value or when the transaction rejects a resource charge. An
+    /// error may leave partial charges staged, and a non-budget error does not
+    /// necessarily poison the transaction. The caller must drop the entire
+    /// transaction after an error, including when the deserializer's later
+    /// end-of-input check or application validation fails; this seed does not
+    /// roll back or commit caller-owned transaction state.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,

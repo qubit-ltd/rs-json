@@ -722,6 +722,38 @@ fn main() -> Result<(), JsonDecodeError> {
 会拒绝重复键，但本身不施加资源预算。
 如果边界还要求特定的顶层容器，请使用 `decode_object_str`、`decode_object_utf8` 或对应的数组方法。
 
+seed 会在调用方事务中增量暂存计量，本身不提交或回滚事务。任何反序列化错误都可能留下部分暂存计量；非预算错误不一定使事务进入不可提交状态。错误后应丢弃整个事务，重新创建事务再重试，事务内此前暂存的其他工作也会一起放弃。seed 成功只表示读取了一个值；还必须通过输入结束检查及所需领域校验，才能提交。后续检查失败同样应丢弃事务。
+
+下面的示例在语法错误后丢弃事务，并在重试成功后检查输入完整结束，再提交计量：
+
+```rust
+use qubit_budget::json::JsonResource;
+use qubit_budget::json::JsonValueLimits;
+use qubit_json::value::AccountingJsonValueSeed;
+use serde::de::DeserializeSeed;
+
+let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+    .max_nodes(10)
+    .build()
+    .budget();
+{
+    let mut transaction = budget.transaction();
+    let mut parser = serde_json::Deserializer::from_str("[0,");
+    assert!(AccountingJsonValueSeed::new(&mut transaction)
+        .deserialize(&mut parser).is_err());
+    // Drop the whole failed transaction here.
+}
+assert_eq!(budget.used_nodes(), Some(0));
+let mut transaction = budget.transaction();
+let mut parser = serde_json::Deserializer::from_str("[0]");
+let value = AccountingJsonValueSeed::new(&mut transaction).deserialize(&mut parser)?;
+parser.end()?;
+assert_eq!(value, serde_json::json!([0]));
+transaction.commit()?;
+assert_eq!(budget.used_nodes(), Some(2));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ### 重复对象键
 
 严格准入不会额外施加全局键唯一规则。重复键如何处理取决于 Serde 目标类型：
