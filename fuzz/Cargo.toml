@@ -7,6 +7,10 @@ edition = "2024"
 [package.metadata]
 cargo-fuzz = true
 
+[features]
+arbitrary-precision = ["serde_json/arbitrary_precision"]
+preserve-order = ["serde_json/preserve_order"]
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(fuzzing)"] }
 

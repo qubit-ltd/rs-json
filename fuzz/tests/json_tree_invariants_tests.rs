@@ -26,3 +26,10 @@ fn test_tree_invariants_accepts_input_with_control_header_only() {
     assert_json_tree_invariants(&[0]);
     assert_json_tree_invariants(&[1]);
 }
+
+#[test]
+fn test_tree_invariants_preserves_insertion_order_across_siblings() {
+    let mut input = vec![0_u8];
+    input.extend_from_slice(br#"{"z":{"secret":"a","keep":1},"a":{"secret":"b","keep":2},"secret":"root"}"#);
+    assert_json_tree_invariants(&input);
+}

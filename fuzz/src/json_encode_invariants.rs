@@ -14,13 +14,17 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
+use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
+use qubit_json::encode::JsonSerializationErrorKind;
 use qubit_json::value::JsonValueEncoder;
 use serde_json::Value;
 
 use crate::input_limit::bounded_input;
 use crate::json_encode_output::FuzzOutput;
 use crate::json_encode_output::OutputMode;
+use crate::json_number_contract::normalize_reference_value;
+#[cfg(not(feature = "arbitrary-precision"))]
 use crate::json_reference::parse_literal_value;
 
 /// Number of control bytes preceding a JSON encode fuzz payload.
@@ -125,7 +129,14 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
     let Ok(value) = serde_json::from_slice::<Value>(payload) else {
         return;
     };
-    assert_transaction_projection_invariants(&value);
+    let normalized = match normalize_reference_value(&value) {
+        Ok(normalized) => normalized,
+        Err(expected_error) => {
+            assert_unsupported_number_rejection(&value, expected_error);
+            return;
+        }
+    };
+    assert_transaction_projection_invariants(&value, &normalized);
 
     let mut baseline_encoder = JsonEncoder::new(encode_limits(usize::MAX, usize::MAX, usize::MAX));
     let baseline_encoded = baseline_encoder
@@ -209,8 +220,19 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
     assert_eq!(encoded.is_ok(), limits_fit);
 
     if let (Ok(encoded), Ok(()), Ok(())) = (encoded, buffered, incremental) {
-        let decoded = parse_literal_value(&encoded).expect("successful budget-aware encoding must produce JSON");
-        assert_eq!(decoded, value);
+        #[cfg(feature = "arbitrary-precision")]
+        {
+            let decoded: Value =
+                serde_json::from_slice(&encoded).expect("successful budget-aware encoding must produce JSON");
+            let decoded = normalize_reference_value(&decoded)
+                .expect("encoded supported numbers normalize under the product contract");
+            assert_eq!(decoded, normalized);
+        }
+        #[cfg(not(feature = "arbitrary-precision"))]
+        {
+            let decoded = parse_literal_value(&encoded).expect("successful budget-aware encoding must produce JSON");
+            assert_eq!(decoded, normalized);
+        }
         assert_eq!(encoded.as_slice(), baseline_encoded.as_slice());
         assert_eq!(buffered_output.as_slice(), baseline_encoded.as_slice());
         assert_eq!(incremental_output.as_slice(), baseline_encoded.as_slice());
@@ -234,8 +256,8 @@ pub fn assert_json_encode_invariants(data: &[u8]) {
 }
 
 /// Checks explicit commit and rollback behavior for value projection.
-pub fn assert_transaction_projection_invariants(value: &Value) {
-    let (nodes, payload) = reference_usage(value);
+pub fn assert_transaction_projection_invariants(value: &Value, normalized: &Value) {
+    let (nodes, payload) = reference_usage(normalized);
     let encoder = JsonValueEncoder::new();
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .max_nodes(nodes)
@@ -311,6 +333,45 @@ pub fn assert_transaction_projection_invariants(value: &Value) {
     }
     assert_eq!(short_budget.used_nodes(), Some(0));
     assert_eq!(short_budget.used_payload_bytes(), Some(0));
+}
+
+fn assert_unsupported_number_rejection(value: &Value, expected: JsonSerializationErrorKind) {
+    let projected = JsonValueEncoder::new().encode(value);
+    assert_eq!(projected.unwrap_err().kind(), expected);
+
+    let projection_limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(usize::MAX)
+        .max_payload_bytes(usize::MAX)
+        .build();
+    let mut projection_budget = JsonValueBudget::new(projection_limits);
+    {
+        let mut transaction = projection_budget.transaction();
+        let projected = JsonValueEncoder::new().encode_in_transaction(value, &mut transaction);
+        assert_eq!(projected.unwrap_err().kind(), Some(expected));
+    }
+    assert_eq!(projection_budget.used_nodes(), Some(0));
+    assert_eq!(projection_budget.used_payload_bytes(), Some(0));
+
+    let mut encoder = JsonEncoder::new(encode_limits(usize::MAX, usize::MAX, usize::MAX));
+    let encoded = encoder.to_vec(value);
+    let error = encoded.unwrap_err();
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
+    assert_eq!(error.serialization_error().unwrap().kind(), expected);
+    let session = encoder.into_session();
+    assert_eq!(session.output_budget().unwrap().used(), 0);
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
+    assert_eq!(session.value_budget().used_payload_bytes(), Some(0));
+
+    let mut encoder = JsonEncoder::new(encode_limits(usize::MAX, usize::MAX, usize::MAX));
+    let mut output = Vec::new();
+    let encoded = encoder.write_buffered(&mut output, value);
+    let error = encoded.unwrap_err();
+    assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
+    assert_eq!(error.serialization_error().unwrap().kind(), expected);
+    assert!(output.is_empty(), "rejected number must publish no buffered output");
+    let session = encoder.into_session();
+    assert_eq!(session.value_budget().used_nodes(), Some(0));
+    assert_eq!(session.value_budget().used_payload_bytes(), Some(0));
 }
 
 fn select_control_limit(control: &[u8; CONTROL_BYTES], offset: usize, baseline: usize) -> usize {

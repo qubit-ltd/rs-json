@@ -187,6 +187,14 @@ fn test_protocol_fuzz_harness_covers_fixed_protocol_matrix() {
 }
 
 #[test]
+fn test_protocol_harness_covers_number_lexeme_edges() {
+    for selector in [0_u8, 1, 2, 3, 4, 5, 6] {
+        let input = [1, 0, 1, 1, 0, 0, selector, 0, 0];
+        assert_json_serde_protocol_invariants(&input);
+    }
+}
+
+#[test]
 fn test_budget_selectors_cover_zero_exact_and_one_over_for_each_resource() {
     for payload_selector in [0_u8, 1] {
         for selector in [0_u8, 2, 3] {

@@ -10,6 +10,8 @@
 use qubit_json_fuzz::json_encode_invariants::assert_json_encode_invariants;
 use qubit_json_fuzz::json_encode_invariants::select_encode_limit;
 use qubit_json_fuzz::json_encode_invariants::split_encode_input;
+#[cfg(feature = "arbitrary-precision")]
+use serde_json::Value;
 
 #[test]
 fn test_limit_modes_include_zero_and_exact_boundaries() {
@@ -86,6 +88,34 @@ fn test_shared_harness_covers_payload_and_writer_invariants() {
     for prefix in [0_u8, 1, 4] {
         let mut input = vec![2, 0, 2, 0, 2, 0, 2, prefix, 0];
         input.extend_from_slice(b"null");
+        assert_json_encode_invariants(&input);
+    }
+}
+
+#[test]
+fn test_number_lexeme_regressions_reach_encode_harness() {
+    let payloads: &[&[u8]] = &[
+        b"-0",
+        b"1.000",
+        b"1e2",
+        b"1e400",
+        b"18446744073709551616",
+        b"-9223372036854775809",
+        br#"{"n":1e2,"a":[-0,1.000]}"#,
+    ];
+    for payload in payloads {
+        let mut input = vec![2, 0, 2, 0, 2, 0, 0, 255, 15];
+        input.extend_from_slice(payload);
+        assert_json_encode_invariants(&input);
+    }
+
+    #[cfg(feature = "arbitrary-precision")]
+    for payload in ["1e400", "18446744073709551616", "-9223372036854775809"] {
+        let value: Value = serde_json::from_str(payload)
+            .expect("arbitrary_precision must retain syntactically valid out-of-range numbers");
+        assert!(value.is_number());
+        let mut input = vec![2, 0, 2, 0, 2, 0, 0, 255, 15];
+        input.extend_from_slice(payload.as_bytes());
         assert_json_encode_invariants(&input);
     }
 }

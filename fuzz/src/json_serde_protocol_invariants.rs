@@ -28,6 +28,8 @@ use serde::ser::SerializeStruct;
 use crate::json_encode_invariants::split_encode_input;
 use crate::json_encode_output::FuzzOutput;
 use crate::json_encode_output::OutputMode;
+use crate::json_number_contract::normalize_reference_value;
+use crate::json_number_contract::parse_strict_reference_number;
 
 const RAW_NAME: &str = concat!("$", "serde_json", ":", ":private::RawValue");
 const NUMBER_NAME: &str = concat!("$", "serde_json", ":", ":private::Number");
@@ -297,6 +299,18 @@ fn selected_payload(control: &[u8; 9]) -> &'static str {
     }
 }
 
+fn reference_payload(
+    control: &[u8; 9],
+    payload: &'static str,
+) -> Result<serde_json::Value, JsonSerializationErrorKind> {
+    if control[0] & 1 != 0 {
+        return parse_strict_reference_number(payload).map(serde_json::Value::Number);
+    }
+    let value =
+        serde_json::from_str::<serde_json::Value>(payload).map_err(|_| JsonSerializationErrorKind::InvalidRawValue)?;
+    normalize_reference_value(&value).map_err(|_| JsonSerializationErrorKind::InvalidRawValue)
+}
+
 fn independent_oracle(control: &[u8; 9], payload: &'static str) -> Option<serde_json::Value> {
     if !matches!(control[1] % 4, 0 | 3) || control[2] % 3 != 1 || control[3] % 9 != 1 || !control[5].is_multiple_of(4) {
         return None;
@@ -313,7 +327,7 @@ fn independent_oracle(control: &[u8; 9], payload: &'static str) -> Option<serde_
             }
         }
     }
-    serde_json::from_str(payload).ok()
+    reference_payload(control, payload).ok()
 }
 
 fn expected_value_error(control: &[u8; 9], payload: &'static str) -> Option<JsonSerializationErrorKind> {
@@ -343,15 +357,8 @@ fn expected_value_error(control: &[u8; 9], payload: &'static str) -> Option<Json
     if control[3] % 9 > 1 {
         return Some(invalid_state());
     }
-    if serde_json::from_str::<serde_json::Value>(payload).is_err() {
-        if control[0] & 1 != 0 && matches!(payload, "1e400" | "-1e400") {
-            return Some(JsonSerializationErrorKind::NonFiniteFloat);
-        }
-        return Some(if control[0] & 1 == 0 {
-            JsonSerializationErrorKind::InvalidRawValue
-        } else {
-            JsonSerializationErrorKind::InvalidNumberRepresentation
-        });
+    if let Err(error) = reference_payload(control, payload) {
+        return Some(error);
     }
     if control[3] % 9 > 1 {
         return Some(invalid_state());
@@ -376,7 +383,7 @@ fn expected_encode_error(
             fail_selector == 0 || fail_selector > payload.chars().count().div_ceil(chunks)
         });
     if value_error == Some(JsonSerializationErrorKind::InvalidRawValue)
-        || (raw_payload_reached && serde_json::from_str::<serde_json::Value>(payload).is_err())
+        || (raw_payload_reached && reference_payload(control, payload).is_err())
     {
         JsonEncodeErrorKind::InvalidRawJson
     } else {
