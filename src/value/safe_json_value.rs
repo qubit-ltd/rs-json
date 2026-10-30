@@ -45,6 +45,12 @@ use super::internal::values_equal;
 /// its numeric meaning is important, use [`JsonDecoder::decode_value_str`]
 /// (or the corresponding byte and reader methods) instead.
 ///
+/// Direct deserialization also rejects duplicate object keys after decoding
+/// their string escapes. It does not normalize Unicode. In contrast,
+/// [`Self::new`] takes an existing [`serde_json::Value`] as-is: if an upstream
+/// deserializer has already merged duplicate keys, this type cannot recover
+/// them.
+///
 /// [`JsonDecoder::decode_value_str`]: crate::decode::JsonDecoder::decode_value_str
 ///
 /// # Examples
@@ -59,6 +65,7 @@ use super::internal::values_equal;
 /// assert_eq!(owner.as_value()["items"][0], 1);
 /// let shallow_raw = copy.into_value();
 /// assert!(shallow_raw.is_object());
+/// assert!(serde_json::from_str::<SafeJsonValue>(r#"{"a":1,"\u0061":2}"#).is_err());
 /// ```
 pub struct SafeJsonValue {
     /// The root is optional so protected operations can take it before cleanup.

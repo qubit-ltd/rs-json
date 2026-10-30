@@ -175,6 +175,29 @@ where
     /// complete and before its configured representation range is checked. It
     /// receives the typed path and borrowed source spelling; its first error
     /// stops scanning immediately. Object keys must be unique after decoding.
+    /// Side effects performed by the callback are not rolled back if later
+    /// syntax, delimiter, or budget validation fails. The string and input
+    /// forms of this method have the same callback contract.
+    ///
+    /// ```
+    /// use std::cell::Cell;
+    /// use std::convert::Infallible;
+    /// use qubit_json::decode::JsonDecoder;
+    /// use qubit_json::decode::JsonNumberPolicy;
+    /// use qubit_json::decode::JsonValidatedDecodeOptions;
+    ///
+    /// let calls = Cell::new(0);
+    /// let result = JsonDecoder::unlimited().decode_unique_validated_str(
+    ///     "[1,]",
+    ///     &JsonValidatedDecodeOptions::builder().build(),
+    ///     |_, _| {
+    ///         calls.set(calls.get() + 1);
+    ///         Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
+    ///     },
+    /// );
+    /// assert!(result.is_err());
+    /// assert_eq!(calls.get(), 1);
+    /// ```
     ///
     /// # Parameters
     ///
@@ -203,7 +226,8 @@ where
             .decode_unique_validated_utf8(input, options, number_policy, self.diagnostic_policy)
     }
 
-    /// UTF-8 string form of [`Self::decode_unique_validated_utf8`].
+    /// UTF-8 string form of [`Self::decode_unique_validated_utf8`], with the
+    /// same callback side-effect contract documented there.
     ///
     /// # Parameters
     ///
@@ -235,6 +259,8 @@ where
     ///
     /// Accepted input bytes remain charged if the callback or later validation
     /// fails; value charges commit only after the complete document succeeds.
+    /// Callback side effects are not rolled back on failure, as documented for
+    /// [`Self::decode_unique_validated_utf8`].
     ///
     /// # Parameters
     ///
