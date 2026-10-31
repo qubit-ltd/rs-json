@@ -26,7 +26,7 @@ done
 cargo test --locked --doc
 cargo test --locked --doc --features jcs -- --include-ignored
 cargo test --locked --manifest-path fuzz/Cargo.toml --lib --tests
-cargo test --locked --manifest-path fuzz/Cargo.toml --features arbitrary-precision --lib --test json_reference_tests --test json_budget_invariants_tests --test json_tree_invariants_tests --test unique_decode_reference_tests --test json_unique_decode_invariants_tests
-cargo test --locked --manifest-path fuzz/Cargo.toml --features preserve-order --lib --test json_reference_tests --test json_budget_invariants_tests --test json_tree_invariants_tests --test unique_decode_reference_tests --test json_unique_decode_invariants_tests
-cargo test --locked --manifest-path fuzz/Cargo.toml --features arbitrary-precision,preserve-order --lib --test json_reference_tests --test json_budget_invariants_tests --test json_tree_invariants_tests --test unique_decode_reference_tests --test json_unique_decode_invariants_tests
+cargo test --locked --manifest-path fuzz/Cargo.toml --features arbitrary-precision --lib --test json_reference_tests --test json_budget_invariants_tests --test json_tree_invariants_tests --test unique_decode_reference_tests --test json_unique_decode_invariants_tests --test json_encode_invariants_tests
+cargo test --locked --manifest-path fuzz/Cargo.toml --features preserve-order --lib --test json_reference_tests --test json_budget_invariants_tests --test json_tree_invariants_tests --test unique_decode_reference_tests --test json_unique_decode_invariants_tests --test json_encode_invariants_tests
+cargo test --locked --manifest-path fuzz/Cargo.toml --features arbitrary-precision,preserve-order --lib --test json_reference_tests --test json_budget_invariants_tests --test json_tree_invariants_tests --test unique_decode_reference_tests --test json_unique_decode_invariants_tests --test json_encode_invariants_tests
 python3 .infra/ci/check-json-feature-matrix.py --case all
