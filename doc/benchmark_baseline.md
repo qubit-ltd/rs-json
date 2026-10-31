@@ -1314,3 +1314,23 @@ Cargo and six rustc processes active. About 22 GiB memory was available, while
 about 12 GiB of swap remained in use. No benchmark was started because the
 host remained concurrently loaded. This reconfirms the unresolved decision;
 the production implementation remains unchanged.
+
+### 2026-10-31 implementation recheck
+
+The implementation run rechecked the environment before compiling or sampling.
+Three readings, 35–40 seconds apart, reported 1/5/15-minute loads of
+`6.96/5.79/3.36` at 07:57:38, `10.03/6.62/3.74` at 07:58:18, and
+`10.53/7.03/3.98` at 07:58:53 local time. The host had six online CPUs and
+the `powersave` governor. About 22 GiB was available and about 11 GiB of swap
+was in use. The later readings showed active Rust compilation in other
+worktrees and a fuzzing process; QEMU and other shared-host workloads were also
+active. Since load remained above the six-CPU capacity and unrelated heavy work
+was running, the comparability gate failed. No allocation preflight, baseline
+benchmark, candidate build, candidate test, or Criterion sample was run in
+this implementation attempt. The worktree began at `1bebf725b1d7cbcba82365c04b0a15fb6793bc27`;
+`Cargo.lock` SHA-256 was
+`65c8972b1699dab45b55ef05f55906c87ffcb2a5547effe34fe1c5046ec2c39a` and the
+toolchain was Rust/Cargo 1.94.0. The production array-frame code remains at
+baseline. RSJSON-002 remains unresolved pending a controlled window with no
+unrelated heavy jobs and stable load below six CPUs throughout the repeated
+baseline/candidate comparison. No new measurement artifacts were generated.
