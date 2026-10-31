@@ -35,6 +35,9 @@ where
 
     /// Number of members that would exist after admitting this child.
     pub(super) prospective: usize,
+
+    /// Whether duplicate decoded object keys are rejected before their values.
+    pub(super) reject_duplicate_keys: bool,
 }
 
 impl<'de, R, Q> DeserializeSeed<'de> for JsonValueChildSeed<'_, '_, R, Q>
@@ -53,6 +56,10 @@ where
         self.transaction
             .check_container_count(self.kind, self.prospective)
             .map_err(D::Error::custom)?;
-        deserializer.deserialize_any(JsonValueVisitor::new(self.transaction, self.depth))
+        deserializer.deserialize_any(JsonValueVisitor::new(
+            self.transaction,
+            self.depth,
+            self.reject_duplicate_keys,
+        ))
     }
 }

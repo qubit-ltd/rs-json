@@ -705,8 +705,10 @@ fn main() -> Result<(), JsonDecodeError> {
 当输入由另一个 Serde 反序列化器持有时，可以使用 `AccountingJsonValueSeed`。它会核算解码事件，并按构造后
 `Number` 的紧凑显示字节数执行 `NumberBytes` 限制，但无法测量原始数字 token，也无法执行文本级整数范围检查。
 例如，默认数字表示会把 3 字节的 `1e2` 构造成 `100.0`，因此上限 3 时拒绝、上限 5 时通过。详见
-[数字契约](number_contract.zh_CN.md)。需要限制原始文本时应使用 `JsonDecoder`。`DuplicateKeyRejectingJsonValueSeed`
-会拒绝重复键，但本身不施加资源预算。
+[数字契约](number_contract.zh_CN.md)。需要限制原始文本时应使用 `JsonDecoder`。调用
+`AccountingJsonValueSeed::new(&mut transaction).reject_duplicate_keys()` 可将增量计量与重复键拒绝组合使用。
+容器和键预算先于重复检测；检测到重复键后不会请求其 value。默认 seed 仍采用后值覆盖前值。该选项不会还原原始数字
+token，也不会改变底层 Serde 事件模型。出现任何错误后都应丢弃整个事务。
 如果边界还要求特定的顶层容器，请使用 `decode_object_str`、`decode_object_utf8` 或对应的数组方法。
 
 seed 会在调用方事务中增量暂存计量，本身不提交或回滚事务。任何反序列化错误都可能留下部分暂存计量；非预算错误不一定使事务进入不可提交状态。错误后应丢弃整个事务，重新创建事务再重试，事务内此前暂存的其他工作也会一起放弃。seed 成功只表示读取了一个值；还必须通过输入结束检查及所需领域校验，才能提交。后续检查失败同样应丢弃事务。
@@ -738,6 +740,29 @@ parser.end()?;
 assert_eq!(value, serde_json::json!([0]));
 transaction.commit()?;
 assert_eq!(budget.used_nodes(), Some(2));
+Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+禁止重复键时也应保持相同的事务边界：
+
+```rust
+use qubit_budget::json::{JsonResource, JsonValueLimits};
+use qubit_json::value::AccountingJsonValueSeed;
+use serde::de::DeserializeSeed;
+
+let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+    .max_nodes(32)
+    .max_depth(8)
+    .build()
+    .budget();
+let mut transaction = budget.transaction();
+let mut parser = serde_json::Deserializer::from_str(r#"{"ok":true}"#);
+let value = AccountingJsonValueSeed::new(&mut transaction)
+    .reject_duplicate_keys()
+    .deserialize(&mut parser)?;
+parser.end()?;
+assert_eq!(value["ok"], true);
+transaction.commit()?;
 Ok::<(), Box<dyn std::error::Error>>(())
 ```
 

@@ -191,7 +191,7 @@ Serde 桥接。该保护覆盖桥接层自身的递归遍历；具体 serializer
 
 `AccountingJsonValueSeed` 是从 Serde 解码事件构造 `serde_json::Value` 的公开 seed。调用方将其绑定到
 `JsonValueTransaction`；它适用于原始 JSON 字节不可用而仍需对物化 value 记账的场景。词法
-准入与该 seed 的职责不同：前者验证 JSON 文本，后者观察已解码值。seed 看不到原始数字 lexeme，文本级 `NumberBytes` 保证须由 `JsonDecoder` 或采用 JCS 契约的 `JcsDecoder` 提供。seed 收到的原生整数事件仍会按有符号/无符号 64 位并集检查；缺少 token 来源时，map 事件按对象处理，不猜测它是否模拟 Number 协议。
+准入与该 seed 的职责不同：前者验证 JSON 文本，后者观察已解码值。seed 看不到原始数字 lexeme，文本级 `NumberBytes` 保证须由 `JsonDecoder` 或采用 JCS 契约的 `JcsDecoder` 提供。seed 收到的原生整数事件仍会按有符号/无符号 64 位并集检查；缺少 token 来源时，map 事件按对象处理，不猜测它是否模拟 Number 协议。默认重复键采用后值覆盖前值；选择 `AccountingJsonValueSeed::reject_duplicate_keys()` 后，同一选项会经对象和数组子值传播。容器与键预算先于重复检测，且不会请求重复键对应的 value。该选项不会还原原始数字 token，也不改变 Serde 事件模型。
 
 `JsonValidatedDecodeError` 区分普通解码失败、调用方数字策略拒绝、精确安全整数转换失败和附加 validated 限额失败。策略诊断保留源字节偏移，但不会格式化调用方提供的不透明错误内容。`JsonValueEncodeError` 则在把 Serde 值投影到调用方 transaction 时，区分预算拒绝与严格 JSON 序列化失败。
 

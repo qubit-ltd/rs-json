@@ -153,6 +153,359 @@ fn test_accounting_json_value_seed_counts_duplicate_object_entries() {
     );
 }
 
+#[test]
+fn test_accounting_seed_rejects_duplicate_keys_at_every_container_path() {
+    for source in [
+        r#"{"a":1,"a":2}"#,
+        r#"{"outer":{"a":1,"a":2}}"#,
+        r#"[{"a":1,"a":2}]"#,
+        r#"{"a":1,"\u0061":2}"#,
+    ] {
+        let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+            .max_nodes(32)
+            .build()
+            .budget();
+        {
+            let mut transaction = budget.transaction();
+            let mut parser = Deserializer::from_str(source);
+            let error = AccountingJsonValueSeed::new(&mut transaction)
+                .reject_duplicate_keys()
+                .deserialize(&mut parser)
+                .expect_err("duplicate keys must fail in every nested container");
+            assert!(error.to_string().starts_with("duplicate JSON object key"));
+        }
+        assert_eq!(budget.used_nodes(), Some(0));
+    }
+}
+
+#[test]
+fn test_accounting_seed_rejects_duplicate_before_decoding_second_value() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"sensitive-key":0,"sensitive-key":INVALID}"#);
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("duplicate rejection must precede malformed second value");
+    let message = error.to_string();
+    assert!(message.starts_with("duplicate JSON object key"), "{message}");
+    assert!(!message.contains("sensitive-key"), "{message}");
+    assert!(!message.contains("INVALID"), "{message}");
+}
+
+#[test]
+fn test_accounting_seed_default_keeps_last_value() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"a":1,"a":2}"#);
+    let value = AccountingJsonValueSeed::new(&mut transaction)
+        .deserialize(&mut parser)
+        .expect("default seed remains compatible");
+    parser.end().unwrap();
+    assert_eq!(value, json!({"a": 2}));
+    transaction.commit().unwrap();
+}
+
+#[test]
+fn test_accounting_seed_duplicate_state_is_local_to_each_object() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"[{"a":0},{"a":1}]"#);
+    let value = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect("equal keys in distinct objects are allowed");
+    assert_eq!(value, json!([{"a": 0}, {"a": 1}]));
+    parser.end().unwrap();
+    transaction.commit().unwrap();
+}
+
+#[test]
+fn test_accounting_seed_checks_map_budget_before_duplicate_detection() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_map_entries(1)
+        .build()
+        .budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"a":0,"a":1}"#);
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("the second entry exceeds the map limit before duplicate detection");
+    assert!(error.to_string().contains("MapEntries"), "{error}");
+    assert!(!error.to_string().contains("duplicate JSON object key"));
+}
+
+#[test]
+fn test_accounting_seed_checks_key_payload_budget_before_duplicate_detection() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_payload_bytes(1)
+        .build()
+        .budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"a":null,"a":null}"#);
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("the second key exceeds payload before duplicate detection");
+    assert!(error.to_string().contains("PayloadBytes"), "{error}");
+}
+
+#[test]
+fn test_accounting_seed_rejects_oversized_key_during_key_decode() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_key_bytes(1)
+        .build()
+        .budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"aa":0,"aa":1}"#);
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("the first oversized key must fail during key admission");
+    assert!(error.to_string().contains("KeyBytes"), "{error}");
+}
+
+#[test]
+fn test_accounting_seed_drops_failed_transaction_and_allows_retry() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(32)
+        .build()
+        .budget();
+    {
+        let mut transaction = budget.transaction();
+        let mut parser = Deserializer::from_str(r#"{"a":0,"a":INVALID}"#);
+        AccountingJsonValueSeed::new(&mut transaction)
+            .reject_duplicate_keys()
+            .deserialize(&mut parser)
+            .expect_err("duplicate must fail");
+    }
+    assert_eq!(budget.used_nodes(), Some(0));
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"ok":true}"#);
+    let value = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect("a fresh transaction can retry");
+    parser.end().unwrap();
+    assert_eq!(value, json!({"ok": true}));
+    transaction.commit().unwrap();
+    assert_eq!(budget.used_nodes(), Some(2));
+}
+
+#[test]
+fn test_accounting_seed_reject_option_preserves_private_number_marker_object() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"$serde_json::private::Number":"1e400"}"#);
+    let value = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect("map-shaped private marker events remain ordinary objects");
+    assert_eq!(value, json!({"$serde_json::private::Number": "1e400"}));
+    transaction.commit().unwrap();
+}
+
+#[test]
+fn test_accounting_seed_reject_option_supports_u64_and_u8_quantities() {
+    let mut budget = JsonValueLimits::<JsonResource, u64>::builder()
+        .max_nodes(8)
+        .build()
+        .budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"ok":true}"#);
+    let value = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect("u64 quantities must admit ordinary objects");
+    parser.end().unwrap();
+    assert_eq!(value, json!({"ok": true}));
+    transaction.commit().unwrap();
+    assert_eq!(budget.used_nodes(), Some(2));
+
+    let mut budget = JsonValueLimits::<JsonResource, u64>::builder().build().budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"a":0,"a":1}"#);
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("u64 quantities must retain duplicate rejection");
+    assert!(error.to_string().starts_with("duplicate JSON object key"));
+
+    let mut budget = JsonValueLimits::<JsonResource, u8>::builder().max_nodes(8).budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"ok":true}"#);
+    let value = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect("u8 quantities must admit ordinary objects");
+    parser.end().unwrap();
+    assert_eq!(value, json!({"ok": true}));
+    transaction.commit().unwrap();
+    assert_eq!(budget.used_nodes(), Some(2));
+
+    let mut budget = JsonValueLimits::<JsonResource, u8>::builder().budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"{"a":0,"a":1}"#);
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("u8 quantities must retain duplicate rejection");
+    assert!(error.to_string().starts_with("duplicate JSON object key"));
+}
+
+#[test]
+fn test_accounting_seed_reject_option_preserves_sequence_item_admission() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_sequence_items(1)
+        .build()
+        .budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#"[{"a":0},{"a":1}]"#);
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("the second array child exceeds SequenceItems before descent");
+    assert!(error.to_string().contains("SequenceItems"), "{error}");
+}
+
+#[test]
+fn test_accounting_seed_reject_option_preserves_depth_budget() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_depth(1)
+        .build()
+        .budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str("[[0]]");
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("nested containers must still be rejected by Depth");
+    assert!(error.to_string().contains("Depth"), "{error}");
+}
+
+#[test]
+fn test_accounting_seed_reject_option_preserves_node_budget() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(2)
+        .build()
+        .budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str("[0,1]");
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("the third node must still be rejected");
+    assert!(error.to_string().contains("Nodes"), "{error}");
+}
+
+#[test]
+fn test_accounting_seed_reject_option_preserves_string_byte_budget() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_string_bytes(1)
+        .build()
+        .budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str(r#""ab""#);
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("the two-byte string must still exceed StringBytes");
+    assert!(error.to_string().contains("StringBytes"), "{error}");
+}
+
+#[test]
+fn test_accounting_seed_reject_option_preserves_number_byte_budget() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_number_bytes(1)
+        .build()
+        .budget();
+    let mut transaction = budget.transaction();
+    let mut parser = Deserializer::from_str("10");
+    let error = AccountingJsonValueSeed::new(&mut transaction)
+        .reject_duplicate_keys()
+        .deserialize(&mut parser)
+        .expect_err("the two-byte number must still exceed NumberBytes");
+    assert!(error.to_string().contains("NumberBytes"), "{error}");
+}
+
+#[test]
+fn test_accounting_seed_reject_option_preserves_numeric_event_contract() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut transaction = budget.transaction();
+
+    assert_eq!(
+        AccountingJsonValueSeed::new(&mut transaction)
+            .reject_duplicate_keys()
+            .deserialize(value::I128Deserializer::<value::Error>::new(i64::MIN.into()))
+            .expect("i64 minimum remains representable"),
+        json!(i64::MIN),
+    );
+    assert_eq!(
+        AccountingJsonValueSeed::new(&mut transaction)
+            .reject_duplicate_keys()
+            .deserialize(value::U128Deserializer::<value::Error>::new(u64::MAX.into()))
+            .expect("u64 maximum remains representable"),
+        json!(u64::MAX),
+    );
+
+    for (error, label) in [
+        (
+            AccountingJsonValueSeed::new(&mut transaction)
+                .reject_duplicate_keys()
+                .deserialize(value::I128Deserializer::<value::Error>::new(i64::MIN as i128 - 1))
+                .expect_err("i128 below i64 minimum must be rejected"),
+            "i128 below i64 minimum",
+        ),
+        (
+            AccountingJsonValueSeed::new(&mut transaction)
+                .reject_duplicate_keys()
+                .deserialize(value::I128Deserializer::<value::Error>::new(u64::MAX as i128 + 1))
+                .expect_err("i128 above u64 maximum must be rejected"),
+            "i128 above u64 maximum",
+        ),
+        (
+            AccountingJsonValueSeed::new(&mut transaction)
+                .reject_duplicate_keys()
+                .deserialize(value::U128Deserializer::<value::Error>::new(u128::MAX))
+                .expect_err("u128 above u64 maximum must be rejected"),
+            "u128 above u64 maximum",
+        ),
+    ] {
+        assert!(
+            error.to_string().starts_with("JSON integer is outside"),
+            "{label}: {error}"
+        );
+    }
+
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let error = AccountingJsonValueSeed::new(&mut transaction)
+            .reject_duplicate_keys()
+            .deserialize(value::F64Deserializer::<value::Error>::new(value))
+            .expect_err("non-finite float must not become a JSON number");
+        assert!(error.to_string().starts_with("non-finite float"), "{error}");
+    }
+}
+
+#[test]
+fn test_accounting_seed_discards_transaction_after_document_end_failure() {
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(10)
+        .build()
+        .budget();
+    {
+        let mut transaction = budget.transaction();
+        let mut parser = Deserializer::from_str(r#"{"a":0} true"#);
+        let value = AccountingJsonValueSeed::new(&mut transaction)
+            .reject_duplicate_keys()
+            .deserialize(&mut parser)
+            .expect("the seed consumes the first value");
+        assert_eq!(value, json!({"a": 0}));
+        assert!(parser.end().is_err(), "the trailing value must fail end-of-input");
+    }
+    assert_eq!(budget.used_nodes(), Some(0));
+}
+
 /// Exercises scalar and optional serde visitor branches that JSON text does
 /// not necessarily dispatch to consistently across serde_json versions.
 #[test]

@@ -29,6 +29,11 @@ use super::internal::JsonValueVisitor;
 /// ordinary [`serde::Deserialize`] implementation, where the original input
 /// bytes are unavailable.
 ///
+/// Duplicate object keys use last-key-wins behavior by default. Call
+/// [`Self::reject_duplicate_keys`] to reject duplicates throughout the value;
+/// container and key budget checks still take precedence, and a duplicate's
+/// value is not requested from the deserializer.
+///
 /// This seed stages measurements incrementally in the caller's transaction; it
 /// does not commit or roll back that transaction. Any deserialization failure
 /// may leave partial staged charges, and non-budget errors do not necessarily
@@ -64,7 +69,9 @@ use super::internal::JsonValueVisitor;
 /// let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::default());
 /// let mut transaction = budget.transaction();
 /// let mut deserializer = serde_json::Deserializer::from_str(r#"{"ok":true}"#);
-/// let value = AccountingJsonValueSeed::new(&mut transaction).deserialize(&mut deserializer)?;
+/// let value = AccountingJsonValueSeed::new(&mut transaction)
+///     .reject_duplicate_keys()
+///     .deserialize(&mut deserializer)?;
 /// deserializer.end()?;
 /// assert_eq!(value["ok"], true);
 /// transaction.commit()?;
@@ -76,6 +83,9 @@ where
 {
     /// Transaction receiving the decoded value's staged resource charges.
     transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
+
+    /// Whether duplicate decoded object keys are rejected before their values.
+    reject_duplicate_keys: bool,
 }
 
 impl<'transaction, 'budget, R, Q> AccountingJsonValueSeed<'transaction, 'budget, R, Q>
@@ -96,7 +106,29 @@ where
     #[inline(always)]
     #[must_use]
     pub fn new(transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>) -> Self {
-        Self { transaction }
+        Self {
+            transaction,
+            reject_duplicate_keys: false,
+        }
+    }
+
+    /// Rejects duplicate decoded object keys throughout the constructed value.
+    ///
+    /// Keys are compared after decoding, without Unicode normalization.
+    /// Existing container and key budget checks run before duplicate
+    /// detection. A duplicate is rejected before its value is requested
+    /// from the deserializer.
+    ///
+    /// # Returns
+    ///
+    /// This seed configured to reject duplicate object keys. After any error,
+    /// discard the entire transaction; this method does not change commit
+    /// rules.
+    #[must_use]
+    #[inline]
+    pub fn reject_duplicate_keys(mut self) -> Self {
+        self.reject_duplicate_keys = true;
+        self
     }
 }
 
@@ -132,6 +164,6 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_any(JsonValueVisitor::new(self.transaction, 1))
+        deserializer.deserialize_any(JsonValueVisitor::new(self.transaction, 1, self.reject_duplicate_keys))
     }
 }

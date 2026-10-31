@@ -329,6 +329,12 @@ required. Native integer events are still checked against the signed/unsigned
 64-bit union. A map event cannot be distinguished from a private Number payload
 without token provenance, so it remains an ordinary object.
 
+Duplicate keys use last-key-wins behavior by default. The opt-in
+`AccountingJsonValueSeed::reject_duplicate_keys()` carries the same decoded-key
+check through object and array children. Container and key budget admission
+precedes duplicate detection, and the duplicate value is not requested. This
+does not recover original number tokens or change Serde's event model.
+
 `JsonValidatedDecodeError` distinguishes decode failures, caller number-policy
 rejections, exact-safe-integer conversion failures, and additional validated
 limits. Policy diagnostics retain the source byte offset without formatting

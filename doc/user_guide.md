@@ -877,8 +877,13 @@ constructed `Number`, but cannot measure the original number token or enforce
 text-level integer range. For example, with the default number representation, the
 three-byte token `1e2` becomes `100.0`: a limit of 3 rejects it and a limit of 5
 accepts it. See the [number contract](number_contract.md). Use `JsonDecoder` when
-you need limits on the original text. `DuplicateKeyRejectingJsonValueSeed` rejects
-duplicate keys but does not apply a resource budget.
+you need limits on the original text. `AccountingJsonValueSeed::new(&mut
+transaction).reject_duplicate_keys()` combines incremental accounting with
+duplicate-key rejection. Container and key budgets are checked before duplicate
+detection; the duplicate value is not requested. The default seed retains
+last-key-wins behavior. This option does not recover original number tokens or
+change the underlying Serde event model. Drop the entire transaction after any
+error.
 Use `decode_object_str`/`decode_object_utf8` or the corresponding array methods
 when the boundary also requires a specific top-level container.
 
@@ -919,6 +924,29 @@ parser.end()?;
 assert_eq!(value, serde_json::json!([0]));
 transaction.commit()?;
 assert_eq!(budget.used_nodes(), Some(2));
+Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Use the same transaction boundary when duplicate keys are forbidden:
+
+```rust
+use qubit_budget::json::{JsonResource, JsonValueLimits};
+use qubit_json::value::AccountingJsonValueSeed;
+use serde::de::DeserializeSeed;
+
+let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+    .max_nodes(32)
+    .max_depth(8)
+    .build()
+    .budget();
+let mut transaction = budget.transaction();
+let mut parser = serde_json::Deserializer::from_str(r#"{"ok":true}"#);
+let value = AccountingJsonValueSeed::new(&mut transaction)
+    .reject_duplicate_keys()
+    .deserialize(&mut parser)?;
+parser.end()?;
+assert_eq!(value["ok"], true);
+transaction.commit()?;
 Ok::<(), Box<dyn std::error::Error>>(())
 ```
 

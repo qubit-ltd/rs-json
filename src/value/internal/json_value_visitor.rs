@@ -44,6 +44,9 @@ where
 
     /// Root-inclusive depth of the value currently being visited.
     depth: usize,
+
+    /// Whether duplicate decoded object keys are rejected before their values.
+    reject_duplicate_keys: bool,
 }
 
 impl<'transaction, 'budget, R, Q> JsonValueVisitor<'transaction, 'budget, R, Q>
@@ -56,8 +59,13 @@ where
     pub(in crate::value) fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
         depth: usize,
+        reject_duplicate_keys: bool,
     ) -> Self {
-        Self { transaction, depth }
+        Self {
+            transaction,
+            depth,
+            reject_duplicate_keys,
+        }
     }
 
     /// Stages one complete JSON measurement.
@@ -82,7 +90,11 @@ where
 
     /// Creates a child visitor borrowing the same transaction.
     fn child<'child>(&'child mut self) -> JsonValueVisitor<'child, 'budget, R, Q> {
-        JsonValueVisitor::new(self.transaction, self.depth.saturating_add(1))
+        JsonValueVisitor::new(
+            self.transaction,
+            self.depth.saturating_add(1),
+            self.reject_duplicate_keys,
+        )
     }
 
     /// Creates a child seed that checks a container limit before decoding.
@@ -96,6 +108,7 @@ where
             depth: self.depth.saturating_add(1),
             kind,
             prospective,
+            reject_duplicate_keys: self.reject_duplicate_keys,
         }
     }
 }
@@ -287,6 +300,9 @@ where
             else {
                 break;
             };
+            if self.reject_duplicate_keys && values.contains_key(&key) {
+                return Err(A::Error::custom("duplicate JSON object key"));
+            }
             let value = map.next_value_seed(self.child())?;
             entries = next;
             values.insert(key, value);
