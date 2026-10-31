@@ -560,8 +560,7 @@ fn assert_online_rejection<T>(
     T: Serialize + ?Sized,
 {
     let mut session = limits.encode_session();
-    let error =
-        encode(value, &mut session).expect_err("the configured budget must reject serialization");
+    let error = encode(value, &mut session).expect_err("the configured budget must reject serialization");
     let error = error.into_budget_error().expect("expected a budget error");
     assert_eq!(
         error
