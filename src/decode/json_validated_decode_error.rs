@@ -137,8 +137,12 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Decode { error, context } => write!(f, "JSON decode failed ({context:?}): {error}"),
-            Self::Policy { offset, .. } => write!(f, "JSON number policy rejected token at byte {offset}"),
+            Self::Decode { error, context } => {
+                write!(f, "JSON decode failed ({context:?}): {error}")
+            }
+            Self::Policy { offset, .. } => {
+                write!(f, "JSON number policy rejected token at byte {offset}")
+            }
             Self::ExactSafeInteger { source, offset } => {
                 write!(f, "exact safe integer conversion failed at byte {offset}: {source:?}")
             }

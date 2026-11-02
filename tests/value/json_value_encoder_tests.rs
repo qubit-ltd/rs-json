@@ -1237,8 +1237,12 @@ fn test_projection_budget_failures_preserve_resource_and_roll_back() {
                 .encode_in_transaction(&SerializerProbe(probe), &mut transaction)
                 .expect_err("the configured resource must reject projection");
             match error {
-                JsonValueEncodeError::Budget(source) => assert_eq!(source.resource(), &resource, "probe {probe}"),
-                other => panic!("expected original budget failure for probe {probe}, got {other:?}"),
+                JsonValueEncodeError::Budget(source) => {
+                    assert_eq!(source.resource(), &resource, "probe {probe}")
+                }
+                other => {
+                    panic!("expected original budget failure for probe {probe}, got {other:?}")
+                }
             }
         }
         // A failed projection must leave the committed budget reusable.

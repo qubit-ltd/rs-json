@@ -59,7 +59,9 @@ pub(crate) fn assert_decoded(decoded: &Decoded, path: DecodePath, fixture: &Fixt
     match (decoded, expected) {
         (Decoded::Config(actual), Expected::Config(expected)) => assert_eq!(actual, expected),
         (Decoded::Metadata(actual), Expected::Metadata(expected)) => assert_eq!(actual, expected),
-        (Decoded::WireEnvelope(actual), Expected::WireEnvelope(expected)) => assert_eq!(actual, expected),
+        (Decoded::WireEnvelope(actual), Expected::WireEnvelope(expected)) => {
+            assert_eq!(actual, expected)
+        }
         (Decoded::Value(actual) | Decoded::UniqueValue(actual), _) => {
             let expected: Value = from_str(&fixture.text).expect("successful source fixture must parse");
             assert_eq!(actual, &expected);
