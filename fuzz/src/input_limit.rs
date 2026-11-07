@@ -21,7 +21,6 @@ pub const MAX_FUZZ_INPUT_BYTES: usize = 4_096;
 /// Returns Some(input) when the input length is at most
 /// [`MAX_FUZZ_INPUT_BYTES`]; returns None for oversized inputs rather than
 /// silently dropping an unobserved suffix.
-#[must_use]
 #[inline]
 pub fn bounded_input(input: &[u8]) -> Option<&[u8]> {
     (input.len() <= MAX_FUZZ_INPUT_BYTES).then_some(input)

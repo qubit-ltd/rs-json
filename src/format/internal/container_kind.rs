@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+/// Identifies the JSON container whose formatting state is being tracked.
+///
+/// Arrays format child values, while objects alternate between keys and values.
 #[derive(Clone, Copy)]
 pub(in crate::format) enum ContainerKind {
     /// An array whose children are separated and indented as values.

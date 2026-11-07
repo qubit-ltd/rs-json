@@ -79,7 +79,8 @@ fn test_display_budget_kind_checks_collected_string() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let error = encode(&DisplayValue("display"), &mut session).expect_err("display text exceeds the string budget");
+    let error = encode(&DisplayValue("display"), &mut session)
+        .expect_err("display text exceeds the string budget");
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert_eq!(
@@ -100,7 +101,8 @@ fn test_display_preview_charges_string_once_after_collection() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let output = encode(&ChunkedValue, &mut session).expect("both chunks fit the complete string budget");
+    let output =
+        encode(&ChunkedValue, &mut session).expect("both chunks fit the complete string budget");
 
     assert_eq!(output, "\"é🙂\"".as_bytes());
     assert_eq!(session.value_budget().used_nodes(), Some(1));
@@ -116,7 +118,8 @@ fn test_display_preview_admits_empty_string_once() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let output = encode(&DisplayValue(""), &mut session).expect("empty text fits zero payload bytes");
+    let output =
+        encode(&DisplayValue(""), &mut session).expect("empty text fits zero payload bytes");
 
     assert_eq!(output, b"\"\"");
     assert_eq!(session.value_budget().used_nodes(), Some(1));
@@ -149,11 +152,15 @@ fn test_display_preview_rejects_prospective_utf8_overflow() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let error = encode(&ChunkedValue, &mut session).expect_err("six UTF-8 bytes exceed the five-byte limit");
+    let error = encode(&ChunkedValue, &mut session)
+        .expect_err("six UTF-8 bytes exceed the five-byte limit");
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert_eq!(
-        error.budget_error().expect("budget error is retained").resource(),
+        error
+            .budget_error()
+            .expect("budget error is retained")
+            .resource(),
         &JsonResource::StringBytes,
     );
     assert_eq!(session.value_budget().used_nodes(), Some(0));
@@ -183,11 +190,15 @@ fn test_display_preview_checks_output_lower_bound_before_growth() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let error = encode(&ChunkedValue, &mut session).expect_err("the three-byte payload exceeds output capacity");
+    let error = encode(&ChunkedValue, &mut session)
+        .expect_err("the three-byte payload exceeds output capacity");
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert_eq!(
-        error.budget_error().expect("budget error is retained").resource(),
+        error
+            .budget_error()
+            .expect("budget error is retained")
+            .resource(),
         &JsonResource::OutputBytes,
     );
 }

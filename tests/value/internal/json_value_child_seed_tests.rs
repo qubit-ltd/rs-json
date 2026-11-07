@@ -24,7 +24,9 @@ use serde::forward_to_deserialize_any;
 use serde_json::Deserializer;
 use serde_json::json;
 
+/// Counts how often a unit value is requested from its deserializer.
 struct TrackedUnit {
+    /// Stores the number of calls shared with the test assertion.
     calls: Rc<Cell<usize>>,
 }
 
@@ -59,7 +61,8 @@ impl<'de> SerdeDeserializer<'de> for TrackedUnit {
 fn test_json_value_child_seed_checks_prospective_array_item() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
         .structure_limits(
-            StructureLimits::builder().sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, 1)),
+            StructureLimits::builder()
+                .sequence_items_limit(ResourceLimit::new(JsonResource::SequenceItems, 1)),
         )
         .build();
     let mut budget = limits.budget();
@@ -109,7 +112,9 @@ fn test_json_value_child_seed_rejects_before_child_deserialization() {
             );
         } else {
             assert_eq!(result.unwrap(), json!([null, null]));
-            transaction.commit().expect("both admitted children must commit");
+            transaction
+                .commit()
+                .expect("both admitted children must commit");
         }
     }
 }

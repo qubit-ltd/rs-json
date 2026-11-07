@@ -22,8 +22,33 @@ use crate::value::safe_json_serde::serialize_value;
 ///
 /// The borrow keeps the protected tree owned by its parent throughout the
 /// recursive Serde call.
-pub(in crate::value) struct Nested<'a>(pub(in crate::value) &'a Value);
+pub(in crate::value) struct Nested<'a>(
+    /// Borrows the child value that the parent serializer must serialize.
+    pub(in crate::value) &'a Value,
+);
 impl Serialize for Nested<'_> {
+    /// Delegates serialization to the guarded recursive serializer.
+    ///
+    /// This preserves the serializer's error type while applying the same
+    /// protected handling to nested values.
+    ///
+    /// # Type Parameters
+    ///
+    /// - `S`: The caller's Serde serializer.
+    ///
+    /// # Parameters
+    ///
+    /// - `serializer`: The serializer used for this nested value.
+    ///
+    /// # Returns
+    ///
+    /// The serialized representation produced by the recursive serializer.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error produced by `serializer` if nested serialization
+    /// fails.
+    #[inline]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

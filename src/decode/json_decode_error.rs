@@ -78,7 +78,11 @@ where
     ///
     /// A read failure containing the I/O category and, under detailed
     /// diagnostics, the original error.
-    pub(crate) fn read(source: io::Error, raw_input_bytes: usize, diagnostic_policy: DiagnosticPolicy) -> Self {
+    pub(crate) fn read(
+        source: io::Error,
+        raw_input_bytes: usize,
+        diagnostic_policy: DiagnosticPolicy,
+    ) -> Self {
         let kind = source.kind();
         let source = (diagnostic_policy == DiagnosticPolicy::Detailed).then(|| Arc::new(source));
         Self {
@@ -274,8 +278,8 @@ where
     ) -> Self {
         let line = source.line();
         let column = source.column();
-        let source =
-            (diagnostic_policy == DiagnosticPolicy::Detailed).then(|| Arc::new(source) as Arc<dyn Error + Send + Sync>);
+        let source = (diagnostic_policy == DiagnosticPolicy::Detailed)
+            .then(|| Arc::new(source) as Arc<dyn Error + Send + Sync>);
         Self {
             diagnostic_policy,
             materialization_reason: None,
@@ -290,6 +294,19 @@ where
     }
 
     /// Creates a unique-key materialization failure with a safe subreason.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - Serde error produced while constructing the unique-key
+    ///   tree.
+    /// * `reason` - Safe materialization failure category.
+    /// * `raw_input_bytes` - Original input length in bytes.
+    /// * `diagnostic_policy` - Policy controlling retained input details.
+    ///
+    /// # Returns
+    ///
+    /// A deserialization failure annotated with the safe materialization
+    /// reason.
     pub(crate) fn materialization(
         source: JsonError,
         reason: JsonMaterializationErrorReason,
@@ -315,7 +332,9 @@ where
             JsonDecodeErrorSource::EmptyInput { .. } => JsonDecodeErrorKind::EmptyInput,
             JsonDecodeErrorSource::InvalidUtf8 { .. } => JsonDecodeErrorKind::InvalidUtf8,
             JsonDecodeErrorSource::InvalidJson { .. } => JsonDecodeErrorKind::InvalidJson,
-            JsonDecodeErrorSource::UnexpectedTopLevel { .. } => JsonDecodeErrorKind::UnexpectedTopLevel,
+            JsonDecodeErrorSource::UnexpectedTopLevel { .. } => {
+                JsonDecodeErrorKind::UnexpectedTopLevel
+            }
             JsonDecodeErrorSource::Deserialize { .. } => JsonDecodeErrorKind::Deserialize,
         }
     }
@@ -361,7 +380,8 @@ where
     #[inline(always)]
     pub const fn stage(&self) -> JsonDecodeStage {
         match self.failure {
-            JsonDecodeErrorSource::Budget { stage, .. } | JsonDecodeErrorSource::EmptyInput { stage, .. } => stage,
+            JsonDecodeErrorSource::Budget { stage, .. }
+            | JsonDecodeErrorSource::EmptyInput { stage, .. } => stage,
             JsonDecodeErrorSource::Read { .. } => JsonDecodeStage::Input,
             JsonDecodeErrorSource::InvalidUtf8 { .. } => JsonDecodeStage::DecodeText,
             JsonDecodeErrorSource::InvalidJson { .. } => JsonDecodeStage::Parse,
@@ -397,13 +417,27 @@ where
     #[inline(always)]
     pub const fn raw_input_bytes(&self) -> usize {
         match self.failure {
-            JsonDecodeErrorSource::Read { raw_input_bytes, .. }
-            | JsonDecodeErrorSource::Budget { raw_input_bytes, .. }
-            | JsonDecodeErrorSource::EmptyInput { raw_input_bytes, .. }
-            | JsonDecodeErrorSource::InvalidUtf8 { raw_input_bytes, .. }
-            | JsonDecodeErrorSource::InvalidJson { raw_input_bytes, .. }
-            | JsonDecodeErrorSource::UnexpectedTopLevel { raw_input_bytes, .. }
-            | JsonDecodeErrorSource::Deserialize { raw_input_bytes, .. } => raw_input_bytes,
+            JsonDecodeErrorSource::Read {
+                raw_input_bytes, ..
+            }
+            | JsonDecodeErrorSource::Budget {
+                raw_input_bytes, ..
+            }
+            | JsonDecodeErrorSource::EmptyInput {
+                raw_input_bytes, ..
+            }
+            | JsonDecodeErrorSource::InvalidUtf8 {
+                raw_input_bytes, ..
+            }
+            | JsonDecodeErrorSource::InvalidJson {
+                raw_input_bytes, ..
+            }
+            | JsonDecodeErrorSource::UnexpectedTopLevel {
+                raw_input_bytes, ..
+            }
+            | JsonDecodeErrorSource::Deserialize {
+                raw_input_bytes, ..
+            } => raw_input_bytes,
         }
     }
 
@@ -421,19 +455,24 @@ where
     pub const fn normalized_input_bytes(&self) -> Option<usize> {
         match self.failure {
             JsonDecodeErrorSource::Budget {
-                normalized_input_bytes, ..
+                normalized_input_bytes,
+                ..
             }
             | JsonDecodeErrorSource::EmptyInput {
-                normalized_input_bytes, ..
+                normalized_input_bytes,
+                ..
             }
             | JsonDecodeErrorSource::InvalidJson {
-                normalized_input_bytes, ..
+                normalized_input_bytes,
+                ..
             }
             | JsonDecodeErrorSource::UnexpectedTopLevel {
-                normalized_input_bytes, ..
+                normalized_input_bytes,
+                ..
             }
             | JsonDecodeErrorSource::Deserialize {
-                normalized_input_bytes, ..
+                normalized_input_bytes,
+                ..
             } => normalized_input_bytes,
             JsonDecodeErrorSource::InvalidUtf8 { .. } | JsonDecodeErrorSource::Read { .. } => None,
         }
@@ -462,7 +501,8 @@ where
     pub fn read_error(&self) -> Option<&io::Error> {
         match &self.failure {
             JsonDecodeErrorSource::Read {
-                source: Some(source), ..
+                source: Some(source),
+                ..
             } => Some(source.as_ref()),
             _ => None,
         }
@@ -630,6 +670,18 @@ where
     Q: Copy + fmt::Debug,
 {
     /// Formats structured diagnostics retained under the active policy.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination that receives the debug representation.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the structured diagnostic has been written.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter error if writing the diagnostic fails.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("JsonDecodeError")
@@ -646,6 +698,18 @@ where
     Q: ResourceQuantity,
 {
     /// Formats a privacy-safe or detailed message according to the policy.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination that receives the display message.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the policy-appropriate message has been written.
+    ///
+    /// # Errors
+    ///
+    /// Returns the formatter error if writing the message fails.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.failure {
             JsonDecodeErrorSource::Read { kind, .. } => {
@@ -654,7 +718,9 @@ where
             JsonDecodeErrorSource::Budget { source, .. } => {
                 write!(formatter, "JSON resource budget rejected input: {source}")
             }
-            JsonDecodeErrorSource::EmptyInput { .. } => formatter.write_str("JSON input is empty after normalization"),
+            JsonDecodeErrorSource::EmptyInput { .. } => {
+                formatter.write_str("JSON input is empty after normalization")
+            }
             JsonDecodeErrorSource::InvalidUtf8 { source, .. } => match source {
                 Some(source) => write!(formatter, "Failed to decode JSON input as UTF-8: {source}"),
                 None => formatter.write_str("Failed to decode JSON input as UTF-8"),
@@ -665,7 +731,9 @@ where
                 }
                 None => write!(formatter, "Failed to parse JSON: {syntax}"),
             },
-            JsonDecodeErrorSource::UnexpectedTopLevel { expected, actual, .. } => {
+            JsonDecodeErrorSource::UnexpectedTopLevel {
+                expected, actual, ..
+            } => {
                 write!(
                     formatter,
                     "Unexpected JSON top-level type: expected {expected}, got {actual}"
@@ -679,7 +747,9 @@ where
                 ..
             } => match source {
                 Some(source) => write!(formatter, "Failed to deserialize JSON value: {source}"),
-                None if *line == 0 || *column == 0 => formatter.write_str("Failed to deserialize JSON value"),
+                None if *line == 0 || *column == 0 => {
+                    formatter.write_str("Failed to deserialize JSON value")
+                }
                 None if normalized_input_bytes.is_some() => write!(
                     formatter,
                     "Failed to deserialize JSON value at normalized line {line} column {column}"
@@ -700,20 +770,29 @@ where
 {
     /// Returns budget sources unconditionally and input-derived sources only
     /// when detailed diagnostics retained them.
+    ///
+    /// # Returns
+    ///
+    /// The retained source error, or `None` when this failure has no source or
+    /// input-derived diagnostics were redacted.
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.failure {
             JsonDecodeErrorSource::Read {
-                source: Some(source), ..
+                source: Some(source),
+                ..
             } => Some(source.as_ref()),
             JsonDecodeErrorSource::Budget { source, .. } => Some(source),
             JsonDecodeErrorSource::InvalidUtf8 {
-                source: Some(source), ..
+                source: Some(source),
+                ..
             } => Some(source),
             JsonDecodeErrorSource::InvalidJson {
-                source: Some(source), ..
+                source: Some(source),
+                ..
             } => Some(source.as_ref()),
             JsonDecodeErrorSource::Deserialize {
-                source: Some(source), ..
+                source: Some(source),
+                ..
             } => Some(source.as_ref()),
             _ => None,
         }

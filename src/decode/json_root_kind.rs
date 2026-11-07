@@ -127,6 +127,7 @@ impl fmt::Display for JsonRootKind {
 }
 
 impl FromStr for JsonRootKind {
+    /// The static diagnostic returned when the input is not a known kind name.
     type Err = &'static str;
 
     /// Parses a top-level kind name without ASCII case sensitivity.

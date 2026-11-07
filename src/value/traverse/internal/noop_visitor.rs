@@ -22,6 +22,11 @@ impl JsonTreeVisitor for NoopVisitor {
     type Error = Infallible;
 
     /// Accepts an entered node.
+    ///
+    /// # Parameters
+    ///
+    /// * `_value` - The admitted JSON node; it is ignored by this visitor.
+    /// * `_context` - The node's traversal location and depth; it is ignored.
     #[inline(always)]
     fn enter(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Ok(())

@@ -195,12 +195,22 @@ impl SafeJsonValue {
 }
 
 impl Clone for SafeJsonValue {
+    /// Copies the complete JSON tree through the owner's guarded traversal.
     fn clone(&self) -> Self {
         Self::copy_from(self.as_value())
     }
 }
 
 impl PartialEq for SafeJsonValue {
+    /// Compares two complete JSON trees without recursive descent.
+    ///
+    /// # Parameters
+    ///
+    /// * `other` - JSON owner whose tree is compared with this owner's tree.
+    ///
+    /// # Returns
+    ///
+    /// `true` when both trees contain equal JSON values.
     fn eq(&self, other: &Self) -> bool {
         values_equal(self.as_value(), other.as_value())
     }
@@ -209,12 +219,22 @@ impl PartialEq for SafeJsonValue {
 impl Eq for SafeJsonValue {}
 
 impl fmt::Debug for SafeJsonValue {
+    /// Formats the complete JSON tree through the owner's stack-safe formatter.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Formatter that receives the tree's debug representation.
+    ///
+    /// # Returns
+    ///
+    /// The formatter's result, including any formatting error.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         debug_value(self.as_value(), formatter)
     }
 }
 
 impl Drop for SafeJsonValue {
+    /// Destroys the owned tree iteratively, with an allocation-free fallback.
     fn drop(&mut self) {
         if let Some(mut root) = self.root.take() {
             drop_tree(&mut root);
@@ -223,6 +243,11 @@ impl Drop for SafeJsonValue {
 }
 
 /// Drops a value tree iteratively, falling back to allocation-free traversal.
+///
+/// # Parameters
+///
+/// * `root` - Root value whose descendants must be destroyed without recursive
+///   container drops.
 pub(super) fn drop_tree(root: &mut Value) {
     let mut pending = Vec::new();
     if !try_reserve_drop_work(&mut pending, 1) {
@@ -263,6 +288,15 @@ pub(super) fn drop_tree(root: &mut Value) {
 
 /// Attempts to grow the explicit cleanup stack without panicking on allocation
 /// failure.
+///
+/// # Parameters
+///
+/// * `pending` - Cleanup stack whose capacity is to be increased.
+/// * `additional` - Minimum additional number of elements to reserve.
+///
+/// # Returns
+///
+/// `true` if the requested capacity is available; otherwise, `false`.
 fn try_reserve_drop_work(pending: &mut Vec<Value>, additional: usize) -> bool {
     #[cfg(test)]
     if FAIL_DROP_RESERVE_AFTER.with(|remaining| match remaining.get() {
@@ -326,6 +360,10 @@ pub(super) fn maybe_panic_after_guarded_insert() {
 }
 
 /// Cleans a tree without allocating by repeatedly removing leaves in place.
+///
+/// # Parameters
+///
+/// * `root` - Root value to clean in place using only shallow leaf drops.
 fn drop_tree_slow(root: &mut Value) {
     loop {
         let mut current = std::ptr::from_mut(root);

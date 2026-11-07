@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::collections::BTreeMap;
+
 #[cfg(feature = "arbitrary_precision")]
 use qubit_budget::ResourceLimit;
 use qubit_budget::json::JsonDecodeLimits;
@@ -16,6 +18,7 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
+use qubit_json::decode::DiagnosticPolicy;
 use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 #[cfg(feature = "arbitrary_precision")]
@@ -32,9 +35,12 @@ use serde::de::DeserializeSeed;
 use serde::de::value::I128Deserializer;
 use serde::de::value::U128Deserializer;
 use serde::ser::SerializeMap;
+use serde_json::Error;
 use serde_json::Number;
 use serde_json::Value;
+use serde_json::from_str;
 use serde_json::from_value;
+use serde_json::json;
 use serde_json::to_vec;
 
 /// Emits a single scalar map key for cross-encoder contract checks.
@@ -115,7 +121,7 @@ fn test_unique_key_values_preserve_raw_marker_objects() {
 #[test]
 fn test_unique_key_values_reject_nested_decoded_duplicate_keys() {
     let error = JsonDecoder::unlimited()
-        .with_diagnostic_policy(qubit_json::decode::DiagnosticPolicy::Detailed)
+        .with_diagnostic_policy(DiagnosticPolicy::Detailed)
         .decode_unique_str::<DuplicateKeyRejectingJsonValue>(r#"{"items":[{"amount":1.5,"\u0061mount":2.5}]}"#)
         .expect_err("decoded duplicate keys must still be rejected");
     assert!(error.to_string().contains("duplicate JSON object key"));
@@ -125,7 +131,7 @@ fn test_unique_key_values_reject_nested_decoded_duplicate_keys() {
 
 #[test]
 fn test_unique_decoder_supports_typed_containers_and_enum() {
-    let value: std::collections::BTreeMap<u64, Vec<Option<f64>>> = JsonDecoder::unlimited()
+    let value: BTreeMap<u64, Vec<Option<f64>>> = JsonDecoder::unlimited()
         .decode_unique_str(r#"{"42":[1.5,null,-0]}"#)
         .expect("typed map keys and options must decode");
     assert_eq!(value[&42][0], Some(1.5));
@@ -161,7 +167,7 @@ fn test_real_number_zero_exponents_and_underflow() {
         ("5e-324", f64::from_bits(1)),
         ("-5e-324", -f64::from_bits(1)),
     ] {
-        let number: Number = serde_json::from_str(text).expect(text);
+        let number: Number = from_str(text).expect(text);
         let value = JsonValueEncoder::new().encode(&number).expect(text);
         assert_eq!(value.as_f64().expect(text).to_bits(), expected.to_bits(), "{text}");
 
@@ -224,8 +230,8 @@ fn test_json_value_encoder_f32_values_remain_strictly_encodable() {
 #[test]
 fn test_tree_number_measurement_uses_the_stored_representation() {
     for text in ["-0", "1.5", "18446744073709551615"] {
-        let value: Value = serde_json::from_str(text).unwrap();
-        let expected = serde_json::to_vec(value.as_number().unwrap()).unwrap().len();
+        let value: Value = from_str(text).unwrap();
+        let expected = to_vec(value.as_number().unwrap()).unwrap().len();
         let limits = JsonValueLimits::<JsonResource, usize>::builder()
             .max_number_bytes(expected)
             .build();
@@ -238,7 +244,7 @@ fn test_tree_number_measurement_uses_the_stored_representation() {
 #[test]
 fn test_value_encoder_keeps_marker_named_objects_as_objects() {
     let value = JsonValueEncoder::new()
-        .encode(&serde_json::json!({"$serde_json::private::Number": "1.5"}))
+        .encode(&json!({"$serde_json::private::Number": "1.5"}))
         .unwrap();
     assert!(value.is_object());
 }
@@ -283,18 +289,18 @@ fn test_seed_entry_points_enforce_the_64_bit_integer_union() {
     let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::default());
     let mut transaction = budget.transaction();
     let accepted = AccountingJsonValueSeed::new(&mut transaction)
-        .deserialize(U128Deserializer::<serde_json::Error>::new(u64::MAX as u128))
+        .deserialize(U128Deserializer::<Error>::new(u64::MAX as u128))
         .unwrap();
     assert_eq!(accepted.as_u64(), Some(u64::MAX));
     assert!(
         AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(U128Deserializer::<serde_json::Error>::new(u128::MAX))
+            .deserialize(U128Deserializer::<Error>::new(u128::MAX))
             .is_err()
     );
 
     assert!(
         DuplicateKeyRejectingJsonValueSeed::new()
-            .deserialize(I128Deserializer::<serde_json::Error>::new(i64::MIN as i128 - 1))
+            .deserialize(I128Deserializer::<Error>::new(i64::MIN as i128 - 1))
             .is_err()
     );
 }
@@ -303,8 +309,8 @@ fn test_seed_entry_points_enforce_the_64_bit_integer_union() {
 #[test]
 fn test_arbitrary_precision_tree_numbers_are_counted_without_float_conversion() {
     for text in ["340282366920938463463374607431768211455", "1e400"] {
-        let value: Value = serde_json::from_str(text).unwrap();
-        let expected = serde_json::to_vec(value.as_number().unwrap()).unwrap().len();
+        let value: Value = from_str(text).unwrap();
+        let expected = to_vec(value.as_number().unwrap()).unwrap().len();
         let exact_limits = JsonValueLimits::<JsonResource, usize>::builder()
             .max_number_bytes(expected)
             .max_nodes(4)
@@ -336,7 +342,7 @@ fn test_arbitrary_precision_tree_numbers_are_counted_without_float_conversion() 
 #[test]
 fn test_arbitrary_precision_real_numbers_still_enforce_strict_ranges() {
     for text in ["1e400", "18446744073709551616"] {
-        let number: Number = serde_json::from_str(text).expect("arbitrary-precision Number must parse");
+        let number: Number = from_str(text).expect("arbitrary-precision Number must parse");
         let error = JsonEncoder::unlimited()
             .to_vec(&number)
             .expect_err("ordinary encoding must reject values outside the strict range");
@@ -347,7 +353,7 @@ fn test_arbitrary_precision_real_numbers_still_enforce_strict_ranges() {
 #[cfg(feature = "arbitrary_precision")]
 #[test]
 fn test_arbitrary_precision_real_number_bytes_are_budgeted() {
-    let number: Number = serde_json::from_str("0e10").expect("the number must parse");
+    let number: Number = from_str("0e10").expect("the number must parse");
     let limits = JsonEncodeLimits::builder()
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 256_usize))
         .value_limits(

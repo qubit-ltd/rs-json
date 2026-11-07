@@ -78,7 +78,10 @@ pub fn assert_jcs_decode_invariants(input: &[u8], max_nodes: usize, max_depth: u
         Err(_) => {
             assert!(
                 constrained_result.is_err(),
-                "a document rejected by the baseline must not be accepted under stricter node limits",
+                concat!(
+                    "a document rejected by the baseline must not be accepted ",
+                    "under stricter node limits",
+                ),
             );
             assert_eq!(constrained.session().value_budget().used_nodes(), Some(0));
         }

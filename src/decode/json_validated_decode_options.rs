@@ -58,21 +58,21 @@ impl JsonValidatedDecodeOptions {
     /// # Returns
     ///
     /// A builder whose optional root kind and additional limits are unset.
-    #[must_use]
     #[inline]
     pub fn builder() -> JsonValidatedDecodeOptionsBuilder {
         JsonValidatedDecodeOptionsBuilder::default()
     }
+
     /// Returns the optional required root kind. `None` accepts any root kind.
     ///
     /// # Returns
     ///
     /// The required root kind, or `None` when no root-kind restriction applies.
-    #[must_use]
     #[inline]
     pub const fn root_kind(&self) -> Option<JsonRootKind> {
         self.root_kind
     }
+
     /// Returns the token admission order used by validated decoding.
     ///
     /// # Returns
@@ -84,6 +84,7 @@ impl JsonValidatedDecodeOptions {
     pub const fn admission_policy(&self) -> JsonValidatedAdmissionPolicy {
         self.admission_policy
     }
+
     /// Returns the selected number model.
     ///
     /// # Returns
@@ -94,17 +95,18 @@ impl JsonValidatedDecodeOptions {
     pub const fn number_model(&self) -> JsonDecodeNumberModel {
         self.number_model
     }
+
     /// Returns the optional per-document value-and-key node limit. `None`
     /// disables this additional limit; `Some(0)` permits no nodes.
     ///
     /// # Returns
     ///
     /// The configured combined node limit, or `None` when it is disabled.
-    #[must_use]
     #[inline]
     pub const fn max_value_and_key_nodes(&self) -> Option<usize> {
         self.max_value_and_key_nodes
     }
+
     /// Returns the optional per-token source-string byte limit. It excludes
     /// the quotes and includes escape spelling bytes. `None` disables this
     /// additional limit; `Some(0)` permits only empty string token contents.
@@ -112,7 +114,6 @@ impl JsonValidatedDecodeOptions {
     /// # Returns
     ///
     /// The configured per-token source-byte limit, or `None` when disabled.
-    #[must_use]
     #[inline]
     pub const fn max_encoded_string_bytes(&self) -> Option<usize> {
         self.max_encoded_string_bytes

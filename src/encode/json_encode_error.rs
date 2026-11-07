@@ -58,6 +58,10 @@ where
     Q: Copy + fmt::Debug,
 {
     /// Creates a resource-accounting failure.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - The measured budget error that rejected the encoding work.
     pub(crate) const fn budget(source: MeasuredBudgetError<R, Q>) -> Self {
         Self {
             failure: JsonEncodeFailure::Budget(source),
@@ -65,6 +69,10 @@ where
     }
 
     /// Creates a failure for invalid `RawValue` JSON text.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - The syntax error describing the invalid raw JSON text.
     pub(crate) const fn invalid_raw_json(source: JsonSyntaxError) -> Self {
         Self {
             failure: JsonEncodeFailure::InvalidRawJson(source),
@@ -72,6 +80,10 @@ where
     }
 
     /// Creates a privacy-safe Serde serialization failure.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - The serialization error retained without exposing values.
     pub(crate) const fn serialization(source: JsonSerializationError) -> Self {
         Self {
             failure: JsonEncodeFailure::Serialize(source),
@@ -79,6 +91,10 @@ where
     }
 
     /// Creates a destination-writer failure.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - The I/O error returned by the destination writer.
     pub(crate) fn write(source: IoError) -> Self {
         Self {
             failure: JsonEncodeFailure::Write(source),
@@ -231,6 +247,10 @@ where
     Q: Copy + fmt::Debug,
 {
     /// Converts a measured-budget failure into an encoding failure.
+    ///
+    /// # Parameters
+    ///
+    /// * `source` - The measured budget failure to retain.
     #[inline(always)]
     fn from(source: MeasuredBudgetError<R, Q>) -> Self {
         Self::budget(source)
@@ -243,6 +263,10 @@ where
     Q: Copy + fmt::Debug + fmt::Display,
 {
     /// Formats the retained source without exposing encoder internals.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - The destination formatter for the display message.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.failure {
             JsonEncodeFailure::Budget(source) => fmt::Display::fmt(source, formatter),

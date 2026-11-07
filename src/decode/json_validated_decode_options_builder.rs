@@ -34,6 +34,7 @@ use super::JsonValidatedDecodeOptions;
 /// assert_eq!(value.as_value()["id"].as_i64(), Some(42));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[must_use = "the builder must be used to configure decode options"]
 #[derive(Debug, Clone, Default)]
 pub struct JsonValidatedDecodeOptionsBuilder {
     /// Required root kind, when configured.
@@ -124,6 +125,7 @@ impl JsonValidatedDecodeOptionsBuilder {
     /// # Returns
     ///
     /// The options snapshot containing all configured settings.
+    #[must_use]
     pub fn build(self) -> JsonValidatedDecodeOptions {
         JsonValidatedDecodeOptions {
             root_kind: self.root_kind,

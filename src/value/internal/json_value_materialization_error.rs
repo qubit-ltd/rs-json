@@ -18,5 +18,8 @@ pub(crate) enum JsonValueMaterializationError {
         offset: usize,
     },
     /// An admitted number could not be represented under the selected model.
-    InvalidNumber { offset: usize },
+    InvalidNumber {
+        /// Byte offset of the number token's first byte.
+        offset: usize,
+    },
 }

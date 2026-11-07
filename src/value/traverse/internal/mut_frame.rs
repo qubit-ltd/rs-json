@@ -86,7 +86,11 @@ impl MutFrame {
     /// frame and all cursors and descendant frames derived from it are dropped.
     /// Any ancestor frame must stay suspended while this frame is active.
     #[inline(always)]
-    pub(in crate::value::traverse) unsafe fn child(location: OwnedLocation, depth: usize, value: &mut Value) -> Self {
+    pub(in crate::value::traverse) unsafe fn child(
+        location: OwnedLocation,
+        depth: usize,
+        value: &mut Value,
+    ) -> Self {
         Self {
             location,
             depth,
@@ -126,13 +130,35 @@ impl MutFrame {
 
     /// Visits this frame's node without exposing its pointer to the caller.
     ///
+    /// # Type Parameters
+    ///
+    /// * `V` - Mutable visitor that processes the node and chooses whether
+    ///   traversal descends into its children.
+    ///
+    /// # Parameters
+    ///
+    /// * `visitor` - Callback implementation invoked with this node and its
+    ///   traversal context.
+    ///
+    /// # Returns
+    ///
+    /// The visitor's traversal decision when the callback succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Returns the visitor's associated error unchanged when its callback
+    /// fails.
+    ///
     /// # Safety
     ///
     /// Call only for an unentered frame with no cursor and no active
     /// descendants. Ancestor frames must remain suspended, and this node must
     /// remain inside the exclusively borrowed root for the duration of the
     /// callback. The callback borrow must end before a child cursor is created.
-    pub(in crate::value::traverse) unsafe fn visit<V>(&mut self, visitor: &mut V) -> Result<JsonTreeControl, V::Error>
+    pub(in crate::value::traverse) unsafe fn visit<V>(
+        &mut self,
+        visitor: &mut V,
+    ) -> Result<JsonTreeControl, V::Error>
     where
         V: JsonTreeMutVisitor,
     {

@@ -17,6 +17,16 @@ use super::json_output_accounting::JsonOutputAccounting;
 use crate::encode::JsonEncodeError;
 
 /// Accumulates JSON bytes only while the configured output budget permits it.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity tracked by the shared output accounting.
+/// * `Q` - Unsigned quantity type used for output limits; it must implement
+///   [`ResourceQuantity`].
+///
+/// # Lifetime Parameters
+///
+/// * `'a` - Borrow lifetime shared with the operation's output accounting.
 pub(in crate::encode) struct JsonOutputBuffer<'a, R, Q>
 where
     Q: ResourceQuantity,
@@ -86,7 +96,10 @@ where
             return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         if result.is_err() {
-            let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
+            let error = self
+                .accounting
+                .borrow_mut()
+                .take_serialization_error_or_custom();
             return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         Ok(self.bytes)
@@ -103,6 +116,11 @@ where
     /// The buffer does not charge the output budget. Its caller consumes the
     /// complete length only after successful serialization, so a failed Vec or
     /// buffered-writer encode leaves output usage unchanged.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Complete byte slice to append if it fits the buffer's
+    ///   remaining output capacity.
     ///
     /// # Returns
     ///

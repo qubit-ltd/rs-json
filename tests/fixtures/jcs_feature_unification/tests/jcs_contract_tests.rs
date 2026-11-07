@@ -173,15 +173,19 @@ fn test_number_contract_and_all_entry_points_are_stable() {
 fn test_object_marker_nesting_duplicate_keys_and_canonical_bytes() {
     let marker = r#"{"$serde_json::private::Number":"12345678901234567890"}"#;
     assert!(JcsDecoder::unlimited().decode_str(marker).unwrap().is_object());
-    assert!(JcsDecoder::unlimited()
-        .decode_str(r#"{"a":{"$serde_json::private::Number":"2"},"s":"ordinary"}"#)
-        .unwrap()
-        .is_object());
+    assert!(
+        JcsDecoder::unlimited()
+            .decode_str(r#"{"a":{"$serde_json::private::Number":"2"},"s":"ordinary"}"#)
+            .unwrap()
+            .is_object()
+    );
     assert!(matches!(
         JcsDecoder::unlimited().decode_str(r#"{"a":{"x":1,"x":2}}"#),
         Err(JcsDecodeError::DuplicateKey { .. })
     ));
-    let value = JcsDecoder::unlimited().decode_str(r#"{"😀":1,"":2,"é":"ok"}"#).unwrap();
+    let value = JcsDecoder::unlimited()
+        .decode_str(r#"{"😀":1,"":2,"é":"ok"}"#)
+        .unwrap();
     assert_eq!(
         JcsEncoder::unlimited().to_vec(&value).unwrap(),
         r#"{"é":"ok","😀":1,"":2}"#.as_bytes(),

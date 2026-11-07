@@ -22,6 +22,13 @@ use crate::encode::JsonSerializationErrorKind;
 ///
 /// Collectors borrow this cell so a formatting or budget error is retained by
 /// the same [`JsonValueEncodeContext`] used by the caller's serializer.
+///
+/// # Type Parameters
+///
+/// - `'context` is the borrow lifetime of the shared context cell.
+/// - `'transaction` and `'budget` are the lifetimes used by the borrowed
+///   encoding context.
+/// - `R` and `Q` are the context's resource and quantity types.
 type ContextCell<'context, 'transaction, 'budget, R, Q> =
     &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
 
@@ -33,8 +40,20 @@ type ContextCell<'context, 'transaction, 'budget, R, Q> =
 /// string collection is charged by [`super::JsonValueSerializer::string`],
 /// while the key path charges its collected text. The shared context retains
 /// the first failure, including one caused by a rejected chunk.
-pub(in crate::value::json_value_encoder) struct JsonValueDisplayCollector<'context, 'transaction, 'budget, R, Q>
-where
+///
+/// # Type Parameters
+///
+/// - `'context` is the borrow lifetime of the shared encoding context.
+/// - `'transaction` and `'budget` are the lifetimes used by that context.
+/// - `R` and `Q` are its resource and quantity types; `Q` must implement
+///   [`ResourceQuantity`].
+pub(in crate::value::json_value_encoder) struct JsonValueDisplayCollector<
+    'context,
+    'transaction,
+    'budget,
+    R,
+    Q,
+> where
     Q: ResourceQuantity,
 {
     /// Shared transaction state and sticky first failure.
@@ -45,7 +64,8 @@ where
     text: String,
 }
 
-impl<'context, 'transaction, 'budget, R, Q> JsonValueDisplayCollector<'context, 'transaction, 'budget, R, Q>
+impl<'context, 'transaction, 'budget, R, Q>
+    JsonValueDisplayCollector<'context, 'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
@@ -54,6 +74,17 @@ where
     ///
     /// The context is shared with the caller so any rejected measurement
     /// becomes the projection's sticky first failure.
+    ///
+    /// # Parameters
+    ///
+    /// - `context` is the caller's shared projection context.
+    /// - `kind` selects whether prospective text bytes are measured as a string
+    ///   or as a map key.
+    ///
+    /// # Returns
+    ///
+    /// An empty collector borrowing `context` and using the selected
+    /// measurement kind.
     pub(in crate::value::json_value_encoder) fn new(
         context: ContextCell<'context, 'transaction, 'budget, R, Q>,
         kind: JsonValueDisplayKind,
@@ -70,6 +101,10 @@ where
     /// This only extracts text: it does not commit admission or charge the
     /// transaction. [`super::JsonValueSerializer::string`] and the key
     /// serializer perform that accounting.
+    ///
+    /// # Returns
+    ///
+    /// The text accumulated from writes that passed their budget checks.
     pub(in crate::value::json_value_encoder) fn into_string(self) -> String {
         self.text
     }
@@ -78,6 +113,15 @@ where
     ///
     /// String measurements include their serialization depth; key
     /// measurements use the key byte count and have no string depth.
+    ///
+    /// # Parameters
+    ///
+    /// - `bytes` is the prospective cumulative UTF-8 byte length.
+    ///
+    /// # Returns
+    ///
+    /// A string measurement with the configured depth, or a key measurement,
+    /// both using `bytes`.
     fn measurement(&self, bytes: usize) -> JsonMeasurement {
         match self.kind {
             JsonValueDisplayKind::String { depth } => JsonMeasurement::String { depth, bytes },
@@ -99,15 +143,28 @@ where
     /// then reports `fmt::Error`, the caller must preserve that retained first
     /// failure rather than replacing it with a generic formatting error.
     ///
-    /// Returns `fmt::Error` when byte-length arithmetic overflows or the
-    /// prospective measurement is rejected.
+    ///
+    /// # Parameters
+    ///
+    /// - `chunk` is the next UTF-8 text fragment to measure and retain.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the chunk is admitted and retained, or `Err(fmt::Error)`
+    /// when byte-length arithmetic overflows or the prospective measurement
+    /// is rejected.
     fn write_str(&mut self, chunk: &str) -> fmt::Result {
         let Some(next) = self.text.len().checked_add(chunk.len()) else {
-            let error = JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed);
+            let error =
+                JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed);
             let _ = self.context.borrow_mut().record_serialization_error(error);
             return Err(fmt::Error);
         };
-        let result = { self.context.borrow_mut().check_admit(self.measurement(next)) };
+        let result = {
+            self.context
+                .borrow_mut()
+                .check_admit(self.measurement(next))
+        };
         if result.is_err() {
             return Err(fmt::Error);
         }

@@ -94,6 +94,11 @@ pub fn format_json_tokens(
 /// input size, nesting depth, or exact heap usage. `None` disables the output
 /// limit.
 ///
+/// # Type Parameters
+///
+/// * `O` - Output type implementing [`ByteOutput`]; dynamically sized output
+///   types are supported through the `?Sized` bound.
+///
 /// # Parameters
 ///
 /// * `output` - Destination that receives formatted bytes; it is not flushed.
@@ -161,7 +166,27 @@ pub fn write_json_tokens<O: ByteOutput + ?Sized>(
 /// continues; after a successful scan this function reports `OutputLimit`.
 /// Checked arithmetic, invalid planner state, or failed reservations can
 /// instead report `Capacity`.
-fn make_plan(input: &[u8], options: &JsonPrettyOptions, maximum: Option<usize>) -> Result<Plan, JsonPrettyError> {
+///
+/// # Parameters
+///
+/// * `input` - Complete JSON document whose source spans will be retained.
+/// * `options` - Formatting choices used to plan indentation and the final
+///   newline.
+/// * `maximum` - Optional limit applied to planned output bytes.
+///
+/// # Returns
+///
+/// The validated action plan and its full output length.
+///
+/// # Errors
+///
+/// Returns the mapped syntax or capacity error, or `OutputLimit` after a
+/// successful scan when the full output exceeds `maximum`.
+fn make_plan(
+    input: &[u8],
+    options: &JsonPrettyOptions,
+    maximum: Option<usize>,
+) -> Result<Plan, JsonPrettyError> {
     let mut planner = Planner {
         input,
         options,
@@ -188,7 +213,11 @@ fn make_plan(input: &[u8], options: &JsonPrettyOptions, maximum: Option<usize>) 
         planner.byte(b'\n')?;
     }
     if maximum.is_some_and(|maximum| planner.length > maximum) {
-        return Err(JsonPrettyError::new(JsonPrettyErrorKind::OutputLimit, None, None));
+        return Err(JsonPrettyError::new(
+            JsonPrettyErrorKind::OutputLimit,
+            None,
+            None,
+        ));
     }
     Ok(Plan {
         actions: planner.actions,
@@ -200,6 +229,12 @@ fn make_plan(input: &[u8], options: &JsonPrettyOptions, maximum: Option<usize>) 
 ///
 /// The caller reserves the full planned length first; actions then copy source
 /// spans or emit literal bytes and spaces without further fallible allocation.
+///
+/// # Parameters
+///
+/// * `input` - Original bytes referenced by span actions.
+/// * `actions` - Validated actions describing the formatted output.
+/// * `output` - Destination vector with capacity reserved for the full plan.
 fn render_vec(input: &[u8], actions: &[Action], output: &mut Vec<u8>) {
     const SPACES: [u8; 256] = [b' '; 256];
     for action in actions {
@@ -219,14 +254,30 @@ fn render_vec(input: &[u8], actions: &[Action], output: &mut Vec<u8>) {
 }
 
 /// Maps scanner failures to the formatter's public error categories.
-fn map_scan_error(error: JsonLexicalScanError<JsonPrettyError, JsonResource, usize>) -> JsonPrettyError {
+///
+/// # Parameters
+///
+/// * `error` - Scanner failure retaining its lexical or consumer context.
+///
+/// # Returns
+///
+/// The corresponding formatter error category, preserving available syntax
+/// offsets and causes.
+#[must_use]
+fn map_scan_error(
+    error: JsonLexicalScanError<JsonPrettyError, JsonResource, usize>,
+) -> JsonPrettyError {
     match error {
-        JsonLexicalScanError::Lexical(crate::lexical::JsonLexicalError::Syntax(failure)) => JsonPrettyError::new(
-            JsonPrettyErrorKind::Syntax,
-            Some(failure.offset),
-            Some(Box::new(failure)),
-        ),
-        JsonLexicalScanError::Lexical(_) => JsonPrettyError::new(JsonPrettyErrorKind::Syntax, None, None),
+        JsonLexicalScanError::Lexical(crate::lexical::JsonLexicalError::Syntax(failure)) => {
+            JsonPrettyError::new(
+                JsonPrettyErrorKind::Syntax,
+                Some(failure.offset),
+                Some(Box::new(failure)),
+            )
+        }
+        JsonLexicalScanError::Lexical(_) => {
+            JsonPrettyError::new(JsonPrettyErrorKind::Syntax, None, None)
+        }
         JsonLexicalScanError::Consumer(error) => error,
         JsonLexicalScanError::EncodedStringLimit { offset, .. } => {
             JsonPrettyError::new(JsonPrettyErrorKind::Syntax, Some(offset), None)
@@ -235,10 +286,30 @@ fn map_scan_error(error: JsonLexicalScanError<JsonPrettyError, JsonResource, usi
 }
 /// Creates a `Capacity` error, retaining an allocation error as its source when
 /// present.
+///
+/// # Parameters
+///
+/// * `source` - Optional allocation or reservation failure explaining the
+///   capacity error.
+///
+/// # Returns
+///
+/// A formatter error with kind `Capacity` and the optional cause.
+#[must_use]
 pub(super) fn capacity_error(source: Option<Box<dyn Error + Send + Sync>>) -> JsonPrettyError {
     JsonPrettyError::new(JsonPrettyErrorKind::Capacity, None, source)
 }
 /// Wraps an output write failure as an `Io` error.
+///
+/// # Parameters
+///
+/// * `error` - The underlying output failure to retain as the error source.
+///
+/// # Returns
+///
+/// A formatter error with kind `Io` and the original write failure as its
+/// source.
+#[must_use]
 fn io_error(error: std::io::Error) -> JsonPrettyError {
     JsonPrettyError::new(JsonPrettyErrorKind::Io, None, Some(Box::new(error)))
 }

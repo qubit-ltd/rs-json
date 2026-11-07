@@ -27,13 +27,35 @@ use crate::internal::JsonMapKey;
 
 /// Shared projection context borrowed for admission checks and retained errors.
 /// This key serializer has no independent transaction commit authority.
+///
+/// # Type Parameters
+///
+/// * `'context` - Lifetime for borrowing the context cell.
+/// * `'transaction` - Lifetime of the enclosing projection transaction.
+/// * `'budget` - Lifetime of the resource budget.
+/// * `R` - Resource type tracked by the projection.
+/// * `Q` - Resource quantity type accepted by the budget API.
 type ContextCell<'context, 'transaction, 'budget, R, Q> =
     &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
 
 /// Converts supported scalar map keys into JSON object key strings.
+///
+/// # Type Parameters
+///
+/// * `'context` - Lifetime of the borrowed shared projection context.
+/// * `'transaction` - Lifetime of the enclosing projection transaction.
+/// * `'budget` - Lifetime of the resource budget used by the projection.
+/// * `R` - Resource type tracked by the projection; it must be cloneable when
+///   constructing the serializer.
+/// * `Q` - Resource quantity type accepted by the budget API.
 #[derive(Clone, Copy)]
-pub(in crate::value::json_value_encoder) struct JsonValueMapKeySerializer<'context, 'transaction, 'budget, R, Q>
-where
+pub(in crate::value::json_value_encoder) struct JsonValueMapKeySerializer<
+    'context,
+    'transaction,
+    'budget,
+    R,
+    Q,
+> where
     Q: qubit_budget::ResourceQuantity,
 {
     /// Borrowed shared projection context; key checks do not commit its
@@ -41,7 +63,8 @@ where
     context: ContextCell<'context, 'transaction, 'budget, R, Q>,
 }
 
-impl<'context, 'transaction, 'budget, R, Q> JsonValueMapKeySerializer<'context, 'transaction, 'budget, R, Q>
+impl<'context, 'transaction, 'budget, R, Q>
+    JsonValueMapKeySerializer<'context, 'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: qubit_budget::ResourceQuantity,
@@ -92,6 +115,10 @@ where
     /// The String allocation has already occurred; this check only controls
     /// admission and does not charge the key.
     ///
+    /// # Parameters
+    ///
+    /// * `value` - Owned key text whose UTF-8 byte length is checked.
+    ///
     /// # Returns
     ///
     /// The key string when its prospective measurement is admissible.
@@ -109,6 +136,10 @@ where
     ///
     /// The copy is made only after the prospective measurement is admitted;
     /// final key accounting remains the enclosing compound's responsibility.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Key text whose UTF-8 byte length is checked before copying.
     ///
     /// # Returns
     ///
@@ -156,14 +187,23 @@ where
     R: Clone,
     Q: qubit_budget::ResourceQuantity,
 {
+    /// The completed JSON object key text.
     type Ok = String;
+    /// The retained JSON serialization failure.
     type Error = JsonSerializationError;
+    /// Sequences cannot be represented as JSON object keys.
     type SerializeSeq = Impossible<String, JsonSerializationError>;
+    /// Tuples cannot be represented as JSON object keys.
     type SerializeTuple = Impossible<String, JsonSerializationError>;
+    /// Tuple structs cannot be represented as JSON object keys.
     type SerializeTupleStruct = Impossible<String, JsonSerializationError>;
+    /// Tuple variants cannot be represented as JSON object keys.
     type SerializeTupleVariant = Impossible<String, JsonSerializationError>;
+    /// Maps cannot be represented as JSON object keys.
     type SerializeMap = Impossible<String, JsonSerializationError>;
+    /// Structs cannot be represented as JSON object keys.
     type SerializeStruct = Impossible<String, JsonSerializationError>;
+    /// Struct variants cannot be represented as JSON object keys.
     type SerializeStructVariant = Impossible<String, JsonSerializationError>;
 
     /// Serializes a Boolean key through its JSON text.
@@ -256,12 +296,13 @@ where
     /// projection failure is retained.
     fn serialize_f32(self, value: f32) -> Result<String, Self::Error> {
         if !value.is_finite() {
-            return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
+            return Err(JsonSerializationError::new(
+                JsonSerializationErrorKind::NonFiniteFloat,
+            ));
         }
-        self.finish_key(
-            to_string(&value)
-                .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))?,
-        )
+        self.finish_key(to_string(&value).map_err(|_| {
+            JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation)
+        })?)
     }
 
     /// Serializes a finite 64-bit floating-point key.
@@ -284,7 +325,9 @@ where
         self.finish_key(
             Number::from_f64(value)
                 .map(|number| number.to_string())
-                .ok_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat))?,
+                .ok_or_else(|| {
+                    JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat)
+                })?,
         )
     }
 
@@ -475,7 +518,11 @@ where
     /// Returns the wrapped serializer's error when that key shape is
     /// unsupported or invalid.
     #[inline]
-    fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<String, Self::Error>
+    fn serialize_newtype_struct<T>(
+        self,
+        _name: &'static str,
+        value: &T,
+    ) -> Result<String, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -641,7 +688,11 @@ where
     /// # Errors
     ///
     /// Returns `UnsupportedMapKey { kind: Struct }`.
-    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
         Err(unsupported_key(JsonMapKeyKind::Struct))
     }
 

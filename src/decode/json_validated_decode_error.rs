@@ -28,6 +28,17 @@ use super::JsonValidatedLimit;
 /// redaction boundary; callers must choose safe policy error contents and
 /// logging behavior themselves.
 ///
+/// # Type Parameters
+///
+/// * `E` - Error returned by the caller's number policy; it must implement
+///   [`Error`] when this value is used as an error source.
+/// * `R` - Resource identity carried by the underlying decode error; defaults
+///   to [`JsonResource`], and must implement [`fmt::Debug`] for formatting.
+/// * `Q` - Resource quantity accepted by [`ResourceQuantity`], which limits
+///   quantities to supported unsigned integer types; defaults to `usize`.
+///
+/// # Examples
+///
 /// ```
 /// use qubit_json::decode::{
 ///     DiagnosticPolicy, JsonDecoder, JsonNumberPolicy,
@@ -51,6 +62,7 @@ use super::JsonValidatedLimit;
 /// assert!(source.to_string().contains(sentinel));
 /// assert!(matches!(error, JsonValidatedDecodeError::Policy { .. }));
 /// ```
+#[must_use]
 #[non_exhaustive]
 pub enum JsonValidatedDecodeError<E, R = JsonResource, Q = usize>
 where
@@ -101,6 +113,19 @@ where
     R: fmt::Debug,
     Q: ResourceQuantity,
 {
+    /// Formats this error for debugging while omitting caller policy details.
+    ///
+    /// The `Policy` variant's source is intentionally excluded so its
+    /// potentially sensitive contents do not appear in debug output.
+    ///
+    /// # Parameters
+    ///
+    /// * `f` - Formatter that receives the safe debug representation.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after formatting, or the formatter's error if writing
+    /// fails.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Decode { error, context } => f
@@ -108,7 +133,10 @@ where
                 .field("error", error)
                 .field("context", context)
                 .finish(),
-            Self::Policy { offset, .. } => f.debug_struct("Policy").field("offset", offset).finish_non_exhaustive(),
+            Self::Policy { offset, .. } => f
+                .debug_struct("Policy")
+                .field("offset", offset)
+                .finish_non_exhaustive(),
             Self::ExactSafeInteger { source, offset } => f
                 .debug_struct("ExactSafeInteger")
                 .field("source", source)
@@ -135,6 +163,19 @@ where
     R: fmt::Debug,
     Q: ResourceQuantity,
 {
+    /// Formats the failure category and safe location details for users.
+    ///
+    /// Caller policy error contents are intentionally omitted from the
+    /// formatted message.
+    ///
+    /// # Parameters
+    ///
+    /// * `f` - Formatter that receives the failure category and location.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after formatting, or the formatter's error if writing
+    /// fails.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Decode { error, context } => {
@@ -144,7 +185,10 @@ where
                 write!(f, "JSON number policy rejected token at byte {offset}")
             }
             Self::ExactSafeInteger { source, offset } => {
-                write!(f, "exact safe integer conversion failed at byte {offset}: {source:?}")
+                write!(
+                    f,
+                    "exact safe integer conversion failed at byte {offset}: {source:?}"
+                )
             }
             Self::Limit {
                 limit,
@@ -165,6 +209,16 @@ where
     R: fmt::Debug + 'static,
     Q: ResourceQuantity + 'static,
 {
+    /// Returns the underlying decoding or policy error when one is available.
+    ///
+    /// The caller's policy error remains accessible as a source even though
+    /// this type omits its contents from `Display` and `Debug` output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped decoding or policy error for those variants, the
+    /// exact-safe-integer conversion error for that variant, or `None` when
+    /// the failure has no underlying error.
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Decode { error, .. } => Some(error),

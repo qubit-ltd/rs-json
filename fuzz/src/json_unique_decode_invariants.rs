@@ -8,8 +8,10 @@
 //! Assertions shared by deterministic tests and the unique-key JSON fuzz
 //! target.
 
+use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::fmt;
+use std::fmt::Debug;
 
 use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonResource;
@@ -18,6 +20,7 @@ use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecoder;
 use qubit_json::decode::JsonMaterializationErrorReason;
 use qubit_json::decode::JsonNumberPolicy;
+use qubit_json::decode::JsonPathSegment;
 use qubit_json::decode::JsonValidatedAdmissionPolicy;
 use qubit_json::decode::JsonValidatedDecodeError;
 use qubit_json::decode::JsonValidatedDecodeOptions;
@@ -26,10 +29,16 @@ use qubit_json::format::format_json_tokens;
 use qubit_json::format::write_json_tokens;
 use qubit_json::value::DuplicateKeyRejectingJsonValue;
 use qubit_json::value::DuplicateKeyRejectingJsonValueSeed;
+use qubit_json::value::SafeJsonValue;
+use serde::Deserialize;
+use serde::Deserializer;
+use serde::de::Error as DeError;
 use serde::de::MapAccess;
 use serde::de::SeqAccess;
 use serde::de::Visitor;
+use serde_json::Number;
 use serde_json::Value;
+use serde_json::from_slice;
 
 use crate::internal::deserialize_reference_value;
 use crate::json_number_contract::numbers_fit_contract;
@@ -43,10 +52,7 @@ const REDACTED_DUPLICATE_FIXTURE: &[u8] =
     b"{\"unique-decode-sensitive-marker-7f3a\":1,\"unique-decode-sensitive-marker-7f3a\":2}";
 const SENSITIVE_MARKER: &str = "unique-decode-sensitive-marker-7f3a";
 type ValidatedLimitResult = (
-    Result<
-        qubit_json::value::SafeJsonValue,
-        qubit_json::decode::JsonValidatedDecodeError<std::convert::Infallible, JsonResource, usize>,
-    >,
+    Result<SafeJsonValue, JsonValidatedDecodeError<Infallible, JsonResource, usize>>,
     JsonDecoder<'static, JsonResource, usize>,
 );
 type DecodeErrorSignature = (
@@ -125,7 +131,7 @@ pub fn assert_validated_admission_invariants(input: &[u8]) {
         return;
     }
     for maximum in [None, Some(input.len() % 17)] {
-        let mut first: Option<Option<qubit_json::value::SafeJsonValue>> = None;
+        let mut first: Option<Option<SafeJsonValue>> = None;
         for policy in [
             JsonValidatedAdmissionPolicy::Immediate,
             JsonValidatedAdmissionPolicy::TokenFirst,
@@ -142,7 +148,7 @@ pub fn assert_validated_admission_invariants(input: &[u8]) {
                     .checked_add(token.raw().len())
                     .expect("token range must not overflow");
                 assert_eq!(input.get(token.offset()..end), Some(token.raw().as_bytes()));
-                Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+                Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
             });
             assert_input_accounted(&decoder, input.len());
             if result.is_err() {
@@ -190,14 +196,13 @@ pub fn assert_protected_decode_invariants(input: &[u8]) {
     let mut protected = JsonDecoder::with_limits(decode_limits(input, usize::MAX));
     let actual = protected.decode_value_utf8(input);
     if let Ok(actual) = actual {
-        let options = qubit_json::decode::JsonValidatedDecodeOptions::builder().build();
+        let options = JsonValidatedDecodeOptions::builder().build();
         let mut validated = JsonDecoder::with_limits(decode_limits(input, usize::MAX));
         let mut events = Vec::new();
-        let checked =
-            validated.decode_unique_validated_utf8::<std::convert::Infallible, _>(input, &options, |path, token| {
-                events.push((path.to_vec(), token.raw().to_owned(), token.offset()));
-                Ok(qubit_json::decode::JsonNumberPolicy::Preserve)
-            });
+        let checked = validated.decode_unique_validated_utf8::<Infallible, _>(input, &options, |path, token| {
+            events.push((path.to_vec(), token.raw().to_owned(), token.offset()));
+            Ok(JsonNumberPolicy::Preserve)
+        });
         let checked = checked.expect("Preserve validation must accept protected-path successes");
         if is_within_reference_domain(input) {
             assert_values_equal(actual.as_value(), checked.as_value());
@@ -210,7 +215,6 @@ pub fn assert_protected_decode_invariants(input: &[u8]) {
             );
         }
         if input == br#"[1,{"x":2},3]"# {
-            use qubit_json::decode::JsonPathSegment;
             assert_eq!(
                 events.iter().map(|event| event.0.clone()).collect::<Vec<_>>(),
                 vec![
@@ -226,7 +230,6 @@ pub fn assert_protected_decode_invariants(input: &[u8]) {
             );
         }
         if input == br#"{"a\u0062":[4,5]}"# {
-            use qubit_json::decode::JsonPathSegment;
             assert_eq!(
                 events.iter().map(|event| event.0.clone()).collect::<Vec<_>>(),
                 vec![
@@ -247,13 +250,12 @@ pub fn assert_protected_decode_invariants(input: &[u8]) {
             protected.session().input_budget().map(|budget| budget.used()),
             Some(input.len())
         );
-        let options = qubit_json::decode::JsonValidatedDecodeOptions::builder().build();
+        let options = JsonValidatedDecodeOptions::builder().build();
         let mut validated = JsonDecoder::with_limits(decode_limits(input, usize::MAX));
-        let result = validated.decode_unique_validated_utf8::<std::convert::Infallible, _>(input, &options, |_, _| {
-            Ok(JsonNumberPolicy::Preserve)
-        });
+        let result = validated
+            .decode_unique_validated_utf8::<Infallible, _>(input, &options, |_, _| Ok(JsonNumberPolicy::Preserve));
         assert!(
-            matches!(result, Err(qubit_json::decode::JsonValidatedDecodeError::Decode { .. })),
+            matches!(result, Err(JsonValidatedDecodeError::Decode { .. })),
             "Preserve validation must report a decode failure for protected-path failures"
         );
         // The two entry points can fail at different stages, so compare only
@@ -282,12 +284,8 @@ pub fn assert_protected_decode_invariants(input: &[u8]) {
 
 /// Compares every validated number callback with a source-ordered Serde
 /// reference tree on the bounded shallow-input domain.
-fn assert_number_events_match_reference(
-    input: &[u8],
-    events: &[(Vec<qubit_json::decode::JsonPathSegment>, String, usize)],
-) {
-    let reference: ReferenceJsonValue =
-        serde_json::from_slice(input).expect("protected success must parse as reference JSON");
+fn assert_number_events_match_reference(input: &[u8], events: &[(Vec<JsonPathSegment>, String, usize)]) {
+    let reference: ReferenceJsonValue = from_slice(input).expect("protected success must parse as reference JSON");
     let mut expected = Vec::new();
     collect_reference_numbers(&reference, &mut Vec::new(), &mut expected);
     assert_eq!(
@@ -311,19 +309,21 @@ fn assert_number_events_match_reference(
     }
 }
 
+/// Retains object entry order so number callback paths can be checked against
+/// the source-ordered Serde reference tree.
 enum ReferenceJsonValue {
     Null,
     Bool,
-    Number(serde_json::Number),
+    Number(Number),
     String,
     Array(Vec<Self>),
     Object(Vec<(String, Self)>),
 }
 
-impl<'de> serde::Deserialize<'de> for ReferenceJsonValue {
+impl<'de> Deserialize<'de> for ReferenceJsonValue {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         struct ReferenceVisitor;
 
@@ -354,8 +354,8 @@ impl<'de> serde::Deserialize<'de> for ReferenceJsonValue {
                 Ok(ReferenceJsonValue::Number(value.into()))
             }
 
-            fn visit_f64<E: serde::de::Error>(self, value: f64) -> Result<Self::Value, E> {
-                serde_json::Number::from_f64(value)
+            fn visit_f64<E: DeError>(self, value: f64) -> Result<Self::Value, E> {
+                Number::from_f64(value)
                     .map(ReferenceJsonValue::Number)
                     .ok_or_else(|| E::custom("non-finite reference number"))
             }
@@ -391,11 +391,9 @@ impl<'de> serde::Deserialize<'de> for ReferenceJsonValue {
 
 fn collect_reference_numbers(
     value: &ReferenceJsonValue,
-    path: &mut Vec<qubit_json::decode::JsonPathSegment>,
-    output: &mut Vec<(Vec<qubit_json::decode::JsonPathSegment>, serde_json::Number)>,
+    path: &mut Vec<JsonPathSegment>,
+    output: &mut Vec<(Vec<JsonPathSegment>, Number)>,
 ) {
-    use qubit_json::decode::JsonPathSegment;
-
     match value {
         ReferenceJsonValue::Number(number) => output.push((path.clone(), number.clone())),
         ReferenceJsonValue::Array(values) => {
@@ -419,12 +417,12 @@ fn collect_reference_numbers(
 /// Applies an independent checked-i128 decimal oracle to the supported
 /// reference domain; enormous coefficients or exponents are explicitly skipped.
 fn assert_exact_integer_oracle(input: &[u8]) {
-    let options = qubit_json::decode::JsonValidatedDecodeOptions::builder().build();
+    let options = JsonValidatedDecodeOptions::builder().build();
     let mut decoder = JsonDecoder::with_limits(decode_limits(input, usize::MAX));
     let mut in_reference_domain = true;
     let mut all_exact = true;
     let mut expected_values = Vec::new();
-    let result = decoder.decode_unique_validated_utf8::<std::convert::Infallible, _>(input, &options, |path, token| {
+    let result = decoder.decode_unique_validated_utf8::<Infallible, _>(input, &options, |path, token| {
         match reference_exact_integer(token.raw()) {
             Some(Some(value)) => expected_values.push((path.to_vec(), value)),
             Some(None) => all_exact = false,
@@ -440,7 +438,7 @@ fn assert_exact_integer_oracle(input: &[u8]) {
         );
         if let Ok(owner) = &result {
             for (path, expected) in expected_values {
-                let actual = value_at_path(owner.as_value(), &path).and_then(serde_json::Value::as_i64);
+                let actual = value_at_path(owner.as_value(), &path).and_then(Value::as_i64);
                 assert_eq!(actual, Some(expected), "exact-safe-integer result at {path:?}");
             }
         }
@@ -455,16 +453,11 @@ fn assert_exact_integer_oracle(input: &[u8]) {
 }
 
 /// Looks up a value using a typed path without recursively traversing the tree.
-fn value_at_path<'value>(
-    mut value: &'value serde_json::Value,
-    path: &[qubit_json::decode::JsonPathSegment],
-) -> Option<&'value serde_json::Value> {
+fn value_at_path<'value>(mut value: &'value Value, path: &[JsonPathSegment]) -> Option<&'value Value> {
     for segment in path {
         value = match (segment, value) {
-            (qubit_json::decode::JsonPathSegment::Key(key), serde_json::Value::Object(object)) => object.get(key)?,
-            (qubit_json::decode::JsonPathSegment::Index(index), serde_json::Value::Array(array)) => {
-                array.get(*index)?
-            }
+            (JsonPathSegment::Key(key), Value::Object(object)) => object.get(key)?,
+            (JsonPathSegment::Index(index), Value::Array(array)) => array.get(*index)?,
             _ => return None,
         };
     }
@@ -550,16 +543,15 @@ pub fn assert_token_format_invariants(input: &[u8]) {
 /// Checks validated node and source-string limits independently, including
 /// decoded object keys and quote-excluded encoded byte lengths.
 pub fn assert_validated_limit_invariants() {
-    let decode = |input: &[u8], options: &qubit_json::decode::JsonValidatedDecodeOptions| {
+    let decode = |input: &[u8], options: &JsonValidatedDecodeOptions| {
         let mut decoder = JsonDecoder::with_limits(decode_limits(input, usize::MAX));
-        let result = decoder.decode_unique_validated_utf8::<std::convert::Infallible, _>(input, options, |_, _| {
-            Ok(JsonNumberPolicy::Preserve)
-        });
+        let result = decoder
+            .decode_unique_validated_utf8::<Infallible, _>(input, options, |_, _| Ok(JsonNumberPolicy::Preserve));
         (result, decoder)
     };
 
     let string = br#""ab""#;
-    let accepted = qubit_json::decode::JsonValidatedDecodeOptions::builder()
+    let accepted = JsonValidatedDecodeOptions::builder()
         .max_value_and_key_nodes(1)
         .max_encoded_string_bytes(2)
         .build();
@@ -567,15 +559,13 @@ pub fn assert_validated_limit_invariants() {
         decode(string, &accepted).0.is_ok(),
         "root string uses one node and two token bytes"
     );
-    let no_nodes = qubit_json::decode::JsonValidatedDecodeOptions::builder()
-        .max_value_and_key_nodes(0)
-        .build();
+    let no_nodes = JsonValidatedDecodeOptions::builder().max_value_and_key_nodes(0).build();
     assert_limit_failure(
         &decode(string, &no_nodes),
         string,
         "node limit is enforced independently",
     );
-    let short_string = qubit_json::decode::JsonValidatedDecodeOptions::builder()
+    let short_string = JsonValidatedDecodeOptions::builder()
         .max_encoded_string_bytes(1)
         .build();
     assert_limit_failure(
@@ -585,7 +575,7 @@ pub fn assert_validated_limit_invariants() {
     );
 
     let object = br#"{"k":"v"}"#;
-    let object_limit = qubit_json::decode::JsonValidatedDecodeOptions::builder()
+    let object_limit = JsonValidatedDecodeOptions::builder()
         .max_value_and_key_nodes(3)
         .max_encoded_string_bytes(1)
         .build();
@@ -593,9 +583,7 @@ pub fn assert_validated_limit_invariants() {
         decode(object, &object_limit).0.is_ok(),
         "object, key, and value each consume one node"
     );
-    let missing_key_node = qubit_json::decode::JsonValidatedDecodeOptions::builder()
-        .max_value_and_key_nodes(2)
-        .build();
+    let missing_key_node = JsonValidatedDecodeOptions::builder().max_value_and_key_nodes(2).build();
     assert_limit_failure(
         &decode(object, &missing_key_node),
         object,
@@ -603,14 +591,14 @@ pub fn assert_validated_limit_invariants() {
     );
 
     let escaped = br#""\u0061""#;
-    let encoded_length = qubit_json::decode::JsonValidatedDecodeOptions::builder()
+    let encoded_length = JsonValidatedDecodeOptions::builder()
         .max_encoded_string_bytes(6)
         .build();
     assert!(
         decode(escaped, &encoded_length).0.is_ok(),
         "string limit counts source token bytes"
     );
-    let decoded_length = qubit_json::decode::JsonValidatedDecodeOptions::builder()
+    let decoded_length = JsonValidatedDecodeOptions::builder()
         .max_encoded_string_bytes(1)
         .build();
     assert_limit_failure(
@@ -690,7 +678,7 @@ fn error_signature<T>(result: &Result<T, JsonDecodeError>) -> Option<DecodeError
 
 fn assert_results_equivalent<T>(left: &Result<T, JsonDecodeError>, right: &Result<T, JsonDecodeError>)
 where
-    T: PartialEq + std::fmt::Debug,
+    T: PartialEq + Debug,
 {
     assert_eq!(error_signature(left), error_signature(right));
     assert_eq!(left.as_ref().ok(), right.as_ref().ok());

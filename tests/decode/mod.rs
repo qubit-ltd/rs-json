@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+mod control_character_escaper_tests;
 mod decoder_api_tests;
 mod diagnostic_policy_tests;
 mod internal;

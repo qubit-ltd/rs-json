@@ -10,4 +10,9 @@
 use crate::encode::JsonEncodeErrorSource;
 
 /// Crate-private name for the public owned-source representation.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity attached to budget failures.
+/// * `Q` - Quantity representation attached to budget failures.
 pub(in crate::encode) type JsonEncodeFailure<R, Q> = JsonEncodeErrorSource<R, Q>;

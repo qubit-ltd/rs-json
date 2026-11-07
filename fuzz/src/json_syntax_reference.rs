@@ -17,6 +17,7 @@
 use serde_json::value::RawValue;
 
 /// Checks complete JSON syntax without materializing numbers or objects.
+#[inline]
 pub fn validate_json_syntax(input: &[u8]) -> Result<(), serde_json::Error> {
     let _: &RawValue = serde_json::from_slice(input)?;
     Ok(())

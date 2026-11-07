@@ -58,6 +58,7 @@ impl fmt::Display for JcsEncodeErrorKind {
 }
 
 impl FromStr for JcsEncodeErrorKind {
+    /// Static diagnostic returned when the input names an unknown category.
     type Err = &'static str;
 
     /// Parses a category name without ASCII case sensitivity.

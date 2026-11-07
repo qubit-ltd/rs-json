@@ -53,7 +53,8 @@ fn test_deeply_nested_input_fails_by_limit_without_stack_overflow() {
             .value_limits(
                 JsonValueLimits::<JsonResource, usize>::builder()
                     .structure_limits(
-                        StructureLimits::builder().depth_limit(ResourceLimit::new(JsonResource::Depth, 128)),
+                        StructureLimits::builder()
+                            .depth_limit(ResourceLimit::new(JsonResource::Depth, 128)),
                     )
                     .build(),
             )
@@ -68,8 +69,20 @@ fn test_deeply_nested_input_fails_by_limit_without_stack_overflow() {
 #[test]
 fn test_json_decode_reports_structured_syntax_locations() {
     let cases = [
-        (b"".as_slice(), 0, 1, 1, JsonSyntaxErrorReason::UnexpectedEnd),
-        (br#"{"a" 1}"#.as_slice(), 5, 1, 6, JsonSyntaxErrorReason::ExpectedColon),
+        (
+            b"".as_slice(),
+            0,
+            1,
+            1,
+            JsonSyntaxErrorReason::UnexpectedEnd,
+        ),
+        (
+            br#"{"a" 1}"#.as_slice(),
+            5,
+            1,
+            6,
+            JsonSyntaxErrorReason::ExpectedColon,
+        ),
         (
             br#"[1 2]"#.as_slice(),
             3,
@@ -84,8 +97,20 @@ fn test_json_decode_reports_structured_syntax_locations() {
             8,
             JsonSyntaxErrorReason::ExpectedCommaOrObjectEnd,
         ),
-        (br#""\x""#.as_slice(), 2, 1, 3, JsonSyntaxErrorReason::InvalidEscape),
-        (br#"01"#.as_slice(), 1, 1, 2, JsonSyntaxErrorReason::InvalidNumber),
+        (
+            br#""\x""#.as_slice(),
+            2,
+            1,
+            3,
+            JsonSyntaxErrorReason::InvalidEscape,
+        ),
+        (
+            br#"01"#.as_slice(),
+            1,
+            1,
+            2,
+            JsonSyntaxErrorReason::InvalidNumber,
+        ),
         (
             br#"true false"#.as_slice(),
             5,
@@ -95,11 +120,15 @@ fn test_json_decode_reports_structured_syntax_locations() {
         ),
     ];
     for (input, offset, line, column, reason) in cases {
-        let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+        let session = JsonDecodeSession::from_limits(
+            JsonDecodeLimits::<JsonResource, usize>::builder().build(),
+        );
         let error = JsonDecoder::new(session)
             .decode_utf8::<serde_json::Value>(input)
             .expect_err("input should be rejected");
-        let error = error.syntax_error().expect("expected structured syntax error");
+        let error = error
+            .syntax_error()
+            .expect("expected structured syntax error");
         assert_eq!(error.offset(), offset);
         assert_eq!(error.line(), line);
         assert_eq!(error.column(), column);
@@ -110,11 +139,14 @@ fn test_json_decode_reports_structured_syntax_locations() {
 #[test]
 fn test_json_decode_counts_unicode_columns_and_crlf_lines() {
     let input = "{\r\n  \"中\" 1}".as_bytes();
-    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session =
+        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     let error = JsonDecoder::new(session)
         .decode_utf8::<serde_json::Value>(input)
         .expect_err("missing colon should be rejected");
-    let error = error.syntax_error().expect("expected structured syntax error");
+    let error = error
+        .syntax_error()
+        .expect("expected structured syntax error");
     assert_eq!(error.line(), 2);
     assert_eq!(error.column(), 7);
     assert_eq!(error.reason(), JsonSyntaxErrorReason::ExpectedColon);
@@ -262,7 +294,10 @@ fn test_point_limit_fails_before_seed_and_keeps_work_charged() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
-                .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)))
+                .structure_limits(
+                    StructureLimits::builder()
+                        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 1)),
+                )
                 .string_bytes_limit(ResourceLimit::new(JsonResource::StringBytes, 1))
                 .build(),
         )
@@ -282,7 +317,8 @@ fn test_decoder_supports_usize_quantities() {
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .structure_limits(
-                    StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 4_usize)),
+                    StructureLimits::builder()
+                        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 4_usize)),
                 )
                 .build(),
         )

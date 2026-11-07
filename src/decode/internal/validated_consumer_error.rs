@@ -16,6 +16,10 @@ use crate::value::internal::JsonValueMaterializationError;
 ///
 /// Keeping policy, exact-number, admission-limit, and materialization failures
 /// distinct lets the engine preserve their existing public error mapping.
+///
+/// # Type Parameters
+///
+/// * `E` is the error type returned by the caller-supplied number policy.
 pub(super) enum ValidatedConsumerError<E> {
     /// The caller policy rejected a number token.
     Policy {

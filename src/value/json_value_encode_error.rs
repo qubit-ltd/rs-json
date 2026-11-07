@@ -69,6 +69,7 @@ use crate::encode::JsonSerializerStateError;
 /// assert!(error.category().is_none());
 /// drop(transaction);
 /// ```
+#[must_use]
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum JsonValueEncodeError<R, Q>
@@ -76,9 +77,15 @@ where
     Q: ResourceQuantity,
 {
     /// The caller's resource transaction rejected a value.
-    Budget(MeasuredBudgetError<R, Q>),
+    Budget(
+        /// The measured resource or quantity that caused admission to fail.
+        MeasuredBudgetError<R, Q>,
+    ),
     /// The Serde value could not be represented as strict JSON.
-    Serialization(JsonSerializationError),
+    Serialization(
+        /// The privacy-safe strict JSON serialization failure.
+        JsonSerializationError,
+    ),
     /// A private RawValue or Number payload exceeded its configured UTF-8 text
     /// limit.
     PrivateTextLimitExceeded {
@@ -99,6 +106,7 @@ where
     /// [`Self::Budget`] and [`Self::PrivateTextLimitExceeded`]; `None` means
     /// the failure is not a serialization error, not that projection
     /// succeeded.
+    #[inline]
     pub const fn serialization_error(&self) -> Option<&JsonSerializationError> {
         match self {
             Self::Serialization(error) => Some(error),
@@ -114,6 +122,7 @@ where
     /// Returns `Some` for [`Self::Serialization`]. Returns `None` for
     /// [`Self::Budget`] and [`Self::PrivateTextLimitExceeded`]; `None` means
     /// the failure has no serialization kind, not that projection succeeded.
+    #[inline]
     pub const fn kind(&self) -> Option<JsonSerializationErrorKind> {
         match self {
             Self::Serialization(error) => Some(error.kind()),
@@ -130,6 +139,7 @@ where
     /// [`Self::Budget`] and [`Self::PrivateTextLimitExceeded`]; `None` means
     /// the failure has no serialization category, not that projection
     /// succeeded.
+    #[inline]
     pub const fn category(&self) -> Option<JsonSerializationErrorCategory> {
         match self {
             Self::Serialization(error) => Some(error.category()),
@@ -139,26 +149,35 @@ where
     }
 
     /// Reports whether the serialization failure concerns a JSON number.
+    #[must_use]
+    #[inline]
     pub const fn is_number_error(&self) -> bool {
         matches!(self, Self::Serialization(error) if error.is_number_error())
     }
 
     /// Reports whether the serialization failure concerns an object key.
+    #[must_use]
+    #[inline]
     pub const fn is_map_key_error(&self) -> bool {
         matches!(self, Self::Serialization(error) if error.is_map_key_error())
     }
 
     /// Reports whether the serialization failure concerns a raw JSON value.
+    #[must_use]
+    #[inline]
     pub const fn is_raw_value_error(&self) -> bool {
         matches!(self, Self::Serialization(error) if error.is_raw_value_error())
     }
 
     /// Reports whether Serde violated a serializer protocol contract.
+    #[must_use]
+    #[inline]
     pub const fn is_serializer_contract_error(&self) -> bool {
         matches!(self, Self::Serialization(error) if error.is_serializer_contract_error())
     }
 
     /// Returns the rejected integer signedness, if applicable.
+    #[inline]
     pub const fn integer_signedness(&self) -> Option<JsonIntegerSignedness> {
         match self {
             Self::Serialization(error) => error.integer_signedness(),
@@ -168,6 +187,7 @@ where
     }
 
     /// Returns the unsupported map-key category, if applicable.
+    #[inline]
     pub const fn map_key_kind(&self) -> Option<JsonMapKeyKind> {
         match self {
             Self::Serialization(error) => error.map_key_kind(),
@@ -177,6 +197,7 @@ where
     }
 
     /// Returns the collection whose length overflowed, if applicable.
+    #[inline]
     pub const fn collection_kind(&self) -> Option<JsonCollectionKind> {
         match self {
             Self::Serialization(error) => error.collection_kind(),
@@ -186,6 +207,7 @@ where
     }
 
     /// Returns the serializer protocol state failure, if applicable.
+    #[inline]
     pub const fn serializer_state_error(&self) -> Option<JsonSerializerStateError> {
         match self {
             Self::Serialization(error) => error.serializer_state_error(),
@@ -199,6 +221,11 @@ impl<R, Q> fmt::Display for JsonValueEncodeError<R, Q>
 where
     Q: ResourceQuantity,
 {
+    /// Formats the failure without exposing private payload contents.
+    ///
+    /// # Parameters
+    ///
+    /// * `f` is the formatter that receives the privacy-safe failure message.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Budget(_) => f.write_str("JSON value budget rejected serialization"),
@@ -215,6 +242,7 @@ where
     R: fmt::Debug + 'static,
     Q: ResourceQuantity + 'static,
 {
+    /// Returns the underlying budget or serialization cause, when present.
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Budget(error) => Some(error),

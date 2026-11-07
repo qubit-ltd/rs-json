@@ -62,6 +62,14 @@ impl DuplicateKeyRejectingJsonValue {
 impl<'de> Deserialize<'de> for DuplicateKeyRejectingJsonValue {
     /// Deserializes JSON recursively while rejecting duplicate object keys.
     ///
+    /// # Type Parameters
+    ///
+    /// * `D` is the deserializer that supplies the JSON data and error type.
+    ///
+    /// # Parameters
+    ///
+    /// * `deserializer` supplies the JSON data to validate and materialize.
+    ///
     /// # Errors
     ///
     /// Returns the deserializer's error if the input is invalid or an object

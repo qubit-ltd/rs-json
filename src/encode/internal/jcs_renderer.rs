@@ -31,6 +31,10 @@ impl JcsRenderer {
     /// `max_working_bytes`. Serialization errors include failures from the
     /// writer as well as errors encoding JSON strings and numbers.
     ///
+    /// # Type Parameters
+    ///
+    /// * `W` - Writer implementation that receives the canonical bytes.
+    ///
     /// # Parameters
     ///
     /// * `value` - JSON value whose canonical representation is rendered.
@@ -62,7 +66,9 @@ impl JcsRenderer {
                     match value {
                         Value::Array(values) => {
                             if let Some(first) = values.first() {
-                                memory.reserve_stack(&mut stack, 1).map_err(map_reserve_error)?;
+                                memory
+                                    .reserve_stack(&mut stack, 1)
+                                    .map_err(map_reserve_error)?;
                                 write(writer, b"[")?;
                                 stack.push(JcsRendererFrame::Array { values, next: 1 });
                                 current = Some(first);
@@ -82,7 +88,9 @@ impl JcsRenderer {
                                 write(writer, b"{")?;
                                 write(writer, b"}")?;
                             } else {
-                                memory.reserve_stack(&mut stack, 1).map_err(map_reserve_error)?;
+                                memory
+                                    .reserve_stack(&mut stack, 1)
+                                    .map_err(map_reserve_error)?;
                                 write(writer, b"{")?;
                                 let (key, child) = entries[0];
                                 stack.push(JcsRendererFrame::Object { entries, next: 1 });
@@ -94,10 +102,12 @@ impl JcsRenderer {
                         }
                         Value::Number(number) => {
                             validate_number(number)?;
-                            serde_json_canonicalizer::to_writer(value, writer).map_err(JcsRendererError::Serialize)?;
+                            serde_json_canonicalizer::to_writer(value, writer)
+                                .map_err(JcsRendererError::Serialize)?;
                         }
                         Value::Null | Value::Bool(_) | Value::String(_) => {
-                            serde_json_canonicalizer::to_writer(value, writer).map_err(JcsRendererError::Serialize)?;
+                            serde_json_canonicalizer::to_writer(value, writer)
+                                .map_err(JcsRendererError::Serialize)?;
                         }
                     }
                     continue;
@@ -120,7 +130,8 @@ impl JcsRenderer {
                         }
                         let (key, child) = entries[*next];
                         *next += 1;
-                        serde_json_canonicalizer::to_writer(&key, writer).map_err(JcsRendererError::Serialize)?;
+                        serde_json_canonicalizer::to_writer(&key, writer)
+                            .map_err(JcsRendererError::Serialize)?;
                         write(writer, b":")?;
                         current = Some(child);
                     }
@@ -130,7 +141,9 @@ impl JcsRenderer {
                     }
                     JcsRendererFrame::Object { .. } => {
                         if let Some(JcsRendererFrame::Object { entries, .. }) = stack.pop() {
-                            memory.release_object_entries(&entries).map_err(map_reserve_error)?;
+                            memory
+                                .release_object_entries(&entries)
+                                .map_err(map_reserve_error)?;
                             write(writer, b"}")?;
                         }
                     }
@@ -193,6 +206,10 @@ fn compare_utf16(left: &str, right: &str) -> Ordering {
 
 /// Writes all bytes and converts I/O failures to the renderer's serialization
 /// error.
+///
+/// # Type Parameters
+///
+/// * `W` - Writer implementation that receives the bytes.
 ///
 /// # Parameters
 ///

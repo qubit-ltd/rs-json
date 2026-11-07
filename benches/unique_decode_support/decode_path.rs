@@ -42,7 +42,10 @@ pub(crate) fn assert_decoded(decoded: &Decoded, path: DecodePath, fixture: &Fixt
     let target_matches = match path {
         DecodePath::UniqueValue => matches!(decoded, Decoded::UniqueValue(_)),
         DecodePath::OrdinaryValue | DecodePath::SerdeValue => matches!(decoded, Decoded::Value(_)),
-        DecodePath::UniqueTyped | DecodePath::UniqueSeed | DecodePath::OrdinaryTyped | DecodePath::SerdeTyped => {
+        DecodePath::UniqueTyped
+        | DecodePath::UniqueSeed
+        | DecodePath::OrdinaryTyped
+        | DecodePath::SerdeTyped => {
             matches!(
                 (fixture.shape, decoded),
                 (Shape::Config, Decoded::Config(_))
@@ -51,7 +54,10 @@ pub(crate) fn assert_decoded(decoded: &Decoded, path: DecodePath, fixture: &Fixt
             )
         }
     };
-    assert!(target_matches, "decoder path must produce the expected owned target");
+    assert!(
+        target_matches,
+        "decoder path must produce the expected owned target"
+    );
     let expected = fixture
         .expected
         .as_ref()
@@ -63,7 +69,8 @@ pub(crate) fn assert_decoded(decoded: &Decoded, path: DecodePath, fixture: &Fixt
             assert_eq!(actual, expected)
         }
         (Decoded::Value(actual) | Decoded::UniqueValue(actual), _) => {
-            let expected: Value = from_str(&fixture.text).expect("successful source fixture must parse");
+            let expected: Value =
+                from_str(&fixture.text).expect("successful source fixture must parse");
             assert_eq!(actual, &expected);
         }
         _ => panic!("decoded target must match the full expected fixture"),
@@ -186,7 +193,12 @@ pub(crate) fn decode_reject_once(
 }
 
 #[allow(dead_code)] // Used by the Criterion target for setup-free batch preflight.
-pub(crate) fn decode_batch(path: DecodePath, fixture: &Fixture, finite: bool, batch: usize) -> [Decoded; 8] {
+pub(crate) fn decode_batch(
+    path: DecodePath,
+    fixture: &Fixture,
+    finite: bool,
+    batch: usize,
+) -> [Decoded; 8] {
     if path.is_direct_serde() {
         return std::array::from_fn(|_| decode_direct_serde(path, fixture));
     }
@@ -204,11 +216,18 @@ pub(crate) fn decode_batch_with_decoder(
     decoder: &mut JsonDecoder<'static>,
     batch: usize,
 ) -> [Decoded; 8] {
-    assert_eq!(batch, 8, "reused benchmark batches contain exactly eight inputs");
+    assert_eq!(
+        batch, 8,
+        "reused benchmark batches contain exactly eight inputs"
+    );
     std::array::from_fn(|_| decode_with_decoder(path, fixture, decoder))
 }
 
-pub(crate) fn decode_with_decoder(path: DecodePath, fixture: &Fixture, decoder: &mut JsonDecoder<'static>) -> Decoded {
+pub(crate) fn decode_with_decoder(
+    path: DecodePath,
+    fixture: &Fixture,
+    decoder: &mut JsonDecoder<'static>,
+) -> Decoded {
     if path.is_direct_serde() {
         return decode_direct_serde(path, fixture);
     }
@@ -225,9 +244,10 @@ pub(crate) fn decode_with_decoder(path: DecodePath, fixture: &Fixture, decoder: 
                 .decode_str::<serde_json::Value>(input)
                 .expect("ordinary value fixture must decode"),
         ),
-        (DecodePath::SerdeValue, _) => {
-            Decoded::Value(serde_json::from_str::<serde_json::Value>(input).expect("serde value fixture must decode"))
-        }
+        (DecodePath::SerdeValue, _) => Decoded::Value(
+            serde_json::from_str::<serde_json::Value>(input)
+                .expect("serde value fixture must decode"),
+        ),
         (DecodePath::UniqueTyped, Shape::Config) => Decoded::Config(
             decoder
                 .decode_unique_str::<Config>(input)
@@ -273,33 +293,34 @@ pub(crate) fn decode_with_decoder(path: DecodePath, fixture: &Fixture, decoder: 
                 .decode_str::<WireEnvelope>(input)
                 .expect("ordinary wire fixture must decode"),
         ),
-        (DecodePath::SerdeTyped, Shape::Config) => {
-            Decoded::Config(serde_json::from_str::<Config>(input).expect("serde config fixture must decode"))
-        }
-        (DecodePath::SerdeTyped, Shape::Metadata) => {
-            Decoded::Metadata(serde_json::from_str::<Metadata>(input).expect("serde metadata fixture must decode"))
-        }
-        (DecodePath::SerdeTyped, Shape::WireEnvelope) => {
-            Decoded::WireEnvelope(serde_json::from_str::<WireEnvelope>(input).expect("serde wire fixture must decode"))
-        }
+        (DecodePath::SerdeTyped, Shape::Config) => Decoded::Config(
+            serde_json::from_str::<Config>(input).expect("serde config fixture must decode"),
+        ),
+        (DecodePath::SerdeTyped, Shape::Metadata) => Decoded::Metadata(
+            serde_json::from_str::<Metadata>(input).expect("serde metadata fixture must decode"),
+        ),
+        (DecodePath::SerdeTyped, Shape::WireEnvelope) => Decoded::WireEnvelope(
+            serde_json::from_str::<WireEnvelope>(input).expect("serde wire fixture must decode"),
+        ),
     }
 }
 
 fn decode_direct_serde(path: DecodePath, fixture: &Fixture) -> Decoded {
     let input = black_box(fixture.text.as_str());
     match (path, fixture.shape) {
-        (DecodePath::SerdeValue, _) => {
-            Decoded::Value(serde_json::from_str::<serde_json::Value>(input).expect("serde value fixture must decode"))
-        }
-        (DecodePath::SerdeTyped, Shape::Config) => {
-            Decoded::Config(serde_json::from_str::<Config>(input).expect("serde config fixture must decode"))
-        }
-        (DecodePath::SerdeTyped, Shape::Metadata) => {
-            Decoded::Metadata(serde_json::from_str::<Metadata>(input).expect("serde metadata fixture must decode"))
-        }
-        (DecodePath::SerdeTyped, Shape::WireEnvelope) => {
-            Decoded::WireEnvelope(serde_json::from_str::<WireEnvelope>(input).expect("serde wire fixture must decode"))
-        }
+        (DecodePath::SerdeValue, _) => Decoded::Value(
+            serde_json::from_str::<serde_json::Value>(input)
+                .expect("serde value fixture must decode"),
+        ),
+        (DecodePath::SerdeTyped, Shape::Config) => Decoded::Config(
+            serde_json::from_str::<Config>(input).expect("serde config fixture must decode"),
+        ),
+        (DecodePath::SerdeTyped, Shape::Metadata) => Decoded::Metadata(
+            serde_json::from_str::<Metadata>(input).expect("serde metadata fixture must decode"),
+        ),
+        (DecodePath::SerdeTyped, Shape::WireEnvelope) => Decoded::WireEnvelope(
+            serde_json::from_str::<WireEnvelope>(input).expect("serde wire fixture must decode"),
+        ),
         _ => panic!("direct serde helper only accepts serde decode paths"),
     }
 }

@@ -17,11 +17,20 @@ use crate::encode::JsonSerializationError;
 #[derive(Debug)]
 pub(in crate::encode) enum JcsRendererError {
     /// The renderer exceeded its configured working-memory budget.
-    WorkingMemory(JcsWorkingMemoryError),
+    WorkingMemory(
+        /// Configured and requested auxiliary-memory byte counts.
+        JcsWorkingMemoryError,
+    ),
     /// Canonical JSON serialization or output writing failed.
-    Serialize(Error),
+    Serialize(
+        /// The underlying serialization or writer failure.
+        Error,
+    ),
     /// A privacy-safe number classification retained from the current value.
-    Number(JsonSerializationError),
+    Number(
+        /// Stable classification that does not retain the number's text.
+        JsonSerializationError,
+    ),
     /// An auxiliary allocation could not be completed.
     Allocation,
 }

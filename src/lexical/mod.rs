@@ -15,6 +15,7 @@ mod json_lexical_error_reason;
 mod json_lexical_event;
 mod json_lexical_failure;
 mod json_lexical_scan_error;
+mod json_lexical_scan_point;
 mod json_lexical_scanner;
 mod json_number_model;
 

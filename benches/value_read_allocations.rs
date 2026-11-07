@@ -27,7 +27,10 @@ struct Sink {
 
 impl fmt::Write for Sink {
     fn write_str(&mut self, text: &str) -> fmt::Result {
-        if self.limit.is_some_and(|limit| self.bytes + text.len() > limit) {
+        if self
+            .limit
+            .is_some_and(|limit| self.bytes + text.len() > limit)
+        {
             return Err(fmt::Error);
         }
         self.bytes += text.len();
@@ -39,7 +42,13 @@ fn tree(shape: &str, width: usize, changed: Option<usize>) -> Value {
     match shape {
         "array" => Value::Array(
             (0..width)
-                .map(|index| Value::from(if changed == Some(index) { -1 } else { index as i64 }))
+                .map(|index| {
+                    Value::from(if changed == Some(index) {
+                        -1
+                    } else {
+                        index as i64
+                    })
+                })
                 .collect(),
         ),
         "object" => {
@@ -47,7 +56,11 @@ fn tree(shape: &str, width: usize, changed: Option<usize>) -> Value {
             for index in 0..width {
                 entries.insert(
                     format!("key-{index:05}"),
-                    Value::from(if changed == Some(index) { -1 } else { index as i64 }),
+                    Value::from(if changed == Some(index) {
+                        -1
+                    } else {
+                        index as i64
+                    }),
                 );
             }
             Value::Object(entries)
@@ -64,13 +77,23 @@ fn deep_tree(depth: usize) -> Value {
     value
 }
 
-fn report<F>(shape: &str, width: usize, depth: usize, representation: &str, operation: &str, outcome: &str, mut run: F)
-where
+fn report<F>(
+    shape: &str,
+    width: usize,
+    depth: usize,
+    representation: &str,
+    operation: &str,
+    outcome: &str,
+    mut run: F,
+) where
     F: FnMut() -> bool,
 {
     let actual = run();
     let expected = outcome == "success";
-    assert_eq!(actual, expected, "benchmark case {shape}/{operation}/{outcome}");
+    assert_eq!(
+        actual, expected,
+        "benchmark case {shape}/{operation}/{outcome}"
+    );
     let _ = std::hint::black_box(actual);
     let (actual, measurement) = allocation_counter::measure(run);
     assert_eq!(
@@ -79,7 +102,9 @@ where
     );
     println!(
         "VALUE_READ_ALLOC,{shape},{width},{depth},{representation},{operation},{outcome},{},{},{}",
-        measurement.allocation_count, measurement.allocated_request_bytes, measurement.reallocation_count
+        measurement.allocation_count,
+        measurement.allocated_request_bytes,
+        measurement.reallocation_count
     );
 }
 
@@ -102,8 +127,8 @@ fn main() {
             let first_view = JsonValueRef::new(first.as_value());
             let last_view = JsonValueRef::new(last.as_value());
 
-            for (representation, compare) in [("owner", 0_u8), ("view", 1_u8)] {
-                let (left_value, equal_value, first_value, last_value) = if compare == 0 {
+            for (representation, is_view) in [("owner", false), ("view", true)] {
+                let (left_value, equal_value, first_value, last_value) = if !is_view {
                     (&left, &equal, &first, &last)
                 } else {
                     // The view wrapper keeps the same references alive for each measured call.
@@ -117,17 +142,35 @@ fn main() {
                     report(shape, width, 0, representation, "equal", "success", || {
                         left_view == equal_view
                     });
-                    report(shape, width, 0, representation, "first_difference", "failure", || {
-                        left_view == first_view
-                    });
-                    report(shape, width, 0, representation, "last_difference", "failure", || {
-                        left_view == last_view
-                    });
-                    let mut sink = Sink { bytes: 0, limit: None };
+                    report(
+                        shape,
+                        width,
+                        0,
+                        representation,
+                        "first_difference",
+                        "failure",
+                        || left_view == first_view,
+                    );
+                    report(
+                        shape,
+                        width,
+                        0,
+                        representation,
+                        "last_difference",
+                        "failure",
+                        || left_view == last_view,
+                    );
+                    let mut sink = Sink {
+                        bytes: 0,
+                        limit: None,
+                    };
                     let debug = fmt::write(&mut sink, format_args!("{left_view:?}")).is_ok();
                     assert!(debug);
                     report(shape, width, 0, representation, "debug", "success", || {
-                        let mut sink = Sink { bytes: 0, limit: None };
+                        let mut sink = Sink {
+                            bytes: 0,
+                            limit: None,
+                        };
                         fmt::write(&mut sink, format_args!("{left_view:?}")).is_ok()
                     });
                     report(shape, width, 0, representation, "debug", "failure", || {
@@ -142,14 +185,29 @@ fn main() {
                 report(shape, width, 0, representation, "equal", "success", || {
                     left_value == equal_value
                 });
-                report(shape, width, 0, representation, "first_difference", "failure", || {
-                    left_value == first_value
-                });
-                report(shape, width, 0, representation, "last_difference", "failure", || {
-                    left_value == last_value
-                });
+                report(
+                    shape,
+                    width,
+                    0,
+                    representation,
+                    "first_difference",
+                    "failure",
+                    || left_value == first_value,
+                );
+                report(
+                    shape,
+                    width,
+                    0,
+                    representation,
+                    "last_difference",
+                    "failure",
+                    || left_value == last_value,
+                );
                 report(shape, width, 0, representation, "debug", "success", || {
-                    let mut sink = Sink { bytes: 0, limit: None };
+                    let mut sink = Sink {
+                        bytes: 0,
+                        limit: None,
+                    };
                     fmt::write(&mut sink, format_args!("{left_value:?}")).is_ok()
                 });
                 report(shape, width, 0, representation, "debug", "failure", || {
@@ -174,17 +232,27 @@ fn main() {
                     left_view == equal_view
                 });
                 report("deep", 0, depth, representation, "debug", "success", || {
-                    let mut sink = Sink { bytes: 0, limit: None };
+                    let mut sink = Sink {
+                        bytes: 0,
+                        limit: None,
+                    };
                     fmt::write(&mut sink, format_args!("{left_view:?}")).is_ok()
                 });
             } else {
-                report("deep", 0, depth, representation, "equal", "success", || left == equal);
+                report("deep", 0, depth, representation, "equal", "success", || {
+                    left == equal
+                });
                 report("deep", 0, depth, representation, "debug", "success", || {
-                    let mut sink = Sink { bytes: 0, limit: None };
+                    let mut sink = Sink {
+                        bytes: 0,
+                        limit: None,
+                    };
                     fmt::write(&mut sink, format_args!("{left:?}")).is_ok()
                 });
             }
         }
     }
-    println!("Note: allocated_request_bytes is total requested allocation volume, not peak live memory.");
+    println!(
+        "Note: allocated_request_bytes is total requested allocation volume, not peak live memory."
+    );
 }

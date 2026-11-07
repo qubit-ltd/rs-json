@@ -8,6 +8,15 @@
 //! Contexts for immediate validated decode failures.
 
 /// Grammar location where a validated decode failure occurred.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::JsonDecodeContext;
+///
+/// let context = JsonDecodeContext::ObjectKey;
+/// assert_eq!(context, JsonDecodeContext::ObjectKey);
+/// ```
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonDecodeContext {

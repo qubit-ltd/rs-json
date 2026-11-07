@@ -40,6 +40,8 @@ pub struct JsonPrettyOptionsBuilder {
 }
 
 impl Default for JsonPrettyOptionsBuilder {
+    /// Creates a builder with two-space indentation and no output cap or final
+    /// newline.
     fn default() -> Self {
         Self {
             indent_width: 2,

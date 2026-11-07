@@ -14,6 +14,11 @@ use crate::lexical::JsonLexicalConsumer;
 use crate::lexical::JsonLexicalEvent;
 
 /// Accumulates output operations while the scanner validates the whole input.
+///
+/// # Type Parameters
+///
+/// * `'a` - Lifetime of the input bytes and formatting options borrowed during
+///   planning.
 pub(in crate::format) struct Planner<'a> {
     /// Source bytes referenced by planned span actions.
     pub(in crate::format) input: &'a [u8],
@@ -32,8 +37,38 @@ pub(in crate::format) struct Planner<'a> {
 }
 
 impl Planner<'_> {
+    /// Plans one literal byte.
+    ///
+    /// # Parameters
+    ///
+    /// * `byte` - Literal output byte to retain if it falls within the limit.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after accounting for the byte.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Capacity` if length accounting or action allocation fails.
+    #[inline]
+    pub(in crate::format) fn byte(&mut self, byte: u8) -> Result<(), JsonPrettyError> {
+        self.push(Action::Byte(byte), 1)
+    }
+
     /// Adds to the full output length, returning `Capacity` if it cannot be
     /// represented.
+    ///
+    /// # Parameters
+    ///
+    /// * `amount` - Number of output bytes to add to the full planned length.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after updating the full planned length.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Capacity` if the accumulated length overflows.
     fn add_len(&mut self, amount: usize) -> Result<(), JsonPrettyError> {
         self.length = self
             .length
@@ -66,18 +101,28 @@ impl Planner<'_> {
         if self.maximum.is_some_and(|maximum| self.length > maximum) {
             return Ok(());
         }
-        self.actions
-            .try_reserve(1)
-            .map_err(|error| crate::format::json_token_formatter::capacity_error(Some(Box::new(error))))?;
+        self.actions.try_reserve(1).map_err(|error| {
+            crate::format::json_token_formatter::capacity_error(Some(Box::new(error)))
+        })?;
         self.actions.push(action);
         Ok(())
     }
-    /// Plans one literal byte.
-    pub(in crate::format) fn byte(&mut self, byte: u8) -> Result<(), JsonPrettyError> {
-        self.push(Action::Byte(byte), 1)
-    }
     /// Plans a checked source range; invalid or overflowing ranges are capacity
     /// errors.
+    ///
+    /// # Parameters
+    ///
+    /// * `offset` - Zero-based byte offset into the original input.
+    /// * `length` - Number of source bytes to include.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after planning the checked source range.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Capacity` if the range overflows, extends past the input, or
+    /// cannot be accounted for.
     fn span(&mut self, offset: usize, length: usize) -> Result<(), JsonPrettyError> {
         let end = offset
             .checked_add(length)
@@ -87,6 +132,18 @@ impl Planner<'_> {
     }
     /// Plans indentation for the requested nesting level, subject to configured
     /// caps.
+    ///
+    /// # Parameters
+    ///
+    /// * `levels` - Current nesting level used to compute the indentation.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after planning the indentation bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Capacity` if indentation arithmetic or action allocation fails.
     fn spaces(&mut self, levels: usize) -> Result<(), JsonPrettyError> {
         let shown = self
             .options
@@ -104,6 +161,15 @@ impl Planner<'_> {
     }
     /// Plans punctuation and indentation before the next value in the current
     /// container.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after accounting for the next value's prefix.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Capacity` if the container state is invalid or output planning
+    /// cannot be represented or retained.
     fn prepare_value(&mut self) -> Result<(), JsonPrettyError> {
         let Some(frame) = self.stack.last_mut() else {
             return Ok(());
@@ -132,6 +198,20 @@ impl Planner<'_> {
         }
     }
     /// Plans an object key and updates the frame to expect its value.
+    ///
+    /// # Parameters
+    ///
+    /// * `offset` - Zero-based byte offset of the key in the original input.
+    /// * `length` - Number of source bytes occupied by the key token.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after planning the key and marking its value pending.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Capacity` if there is no object frame, its state is invalid, or
+    /// output planning cannot be represented or retained.
     fn key(&mut self, offset: usize, length: usize) -> Result<(), JsonPrettyError> {
         let Some(frame) = self.stack.last_mut() else {
             return Err(crate::format::json_token_formatter::capacity_error(None));
@@ -153,11 +233,25 @@ impl Planner<'_> {
         self.span(offset, length)
     }
     /// Plans an opening delimiter and pushes a new container frame.
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - Container kind associated with the opening delimiter.
+    /// * `offset` - Zero-based byte offset of the delimiter in the input.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after planning the delimiter and opening a frame.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Capacity` if the delimiter range is invalid or planner storage
+    /// cannot be reserved.
     fn begin(&mut self, kind: ContainerKind, offset: usize) -> Result<(), JsonPrettyError> {
         self.span(offset, 1)?;
-        self.stack
-            .try_reserve(1)
-            .map_err(|error| crate::format::json_token_formatter::capacity_error(Some(Box::new(error))))?;
+        self.stack.try_reserve(1).map_err(|error| {
+            crate::format::json_token_formatter::capacity_error(Some(Box::new(error)))
+        })?;
         self.stack.push(Container {
             kind,
             count: 0,
@@ -166,6 +260,20 @@ impl Planner<'_> {
         Ok(())
     }
     /// Validates and plans a closing delimiter, popping the matching frame.
+    ///
+    /// # Parameters
+    ///
+    /// * `offset` - Zero-based byte offset of the closing delimiter.
+    /// * `expected` - Container kind required to match the open frame.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after planning the delimiter and closing its frame.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Capacity` if no matching frame exists or the closing state is
+    /// invalid.
     fn end(&mut self, offset: usize, expected: ContainerKind) -> Result<(), JsonPrettyError> {
         let frame = self
             .stack
@@ -173,7 +281,8 @@ impl Planner<'_> {
             .ok_or_else(|| crate::format::json_token_formatter::capacity_error(None))?;
         if !matches!(
             (frame.kind, expected),
-            (ContainerKind::Array, ContainerKind::Array) | (ContainerKind::Object, ContainerKind::Object)
+            (ContainerKind::Array, ContainerKind::Array)
+                | (ContainerKind::Object, ContainerKind::Object)
         ) || frame.awaiting_value
         {
             return Err(crate::format::json_token_formatter::capacity_error(None));
@@ -188,16 +297,74 @@ impl Planner<'_> {
 }
 
 impl<'input> JsonLexicalConsumer<'input> for Planner<'_> {
+    /// Error used to abort scanning when planner state or length is invalid.
     type Error = JsonPrettyError;
+
+    /// Prepares the current container before the scanner processes a value.
+    ///
+    /// # Parameters
+    ///
+    /// * `_depth` - Root-inclusive nesting depth supplied by the scanner.
+    /// * `_offset` - Zero-based byte offset where the value begins.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` when the planner accepts the current container state.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Capacity` if the current container state or resulting output
+    /// accounting is invalid.
     fn before_value(&mut self, _depth: usize, _offset: usize) -> Result<(), Self::Error> {
         self.prepare_value()
     }
+
+    /// Accepts the scanner's pre-key callback; key formatting occurs when its
+    /// corresponding key event is received.
+    ///
+    /// # Parameters
+    ///
+    /// * `_offset` - Zero-based byte offset where the key begins.
+    ///
+    /// # Returns
+    ///
+    /// Always returns `Ok(())`; this callback defers key processing to `event`.
+    #[inline]
     fn before_key(&mut self, _offset: usize) -> Result<(), Self::Error> {
         Ok(())
     }
+
+    /// Accepts the pre-number callback; the number span is planned on its
+    /// event.
+    ///
+    /// # Parameters
+    ///
+    /// * `_token` - Number spelling borrowed from the scanned input.
+    /// * `_offset` - Zero-based byte offset where the number begins.
+    ///
+    /// # Returns
+    ///
+    /// Always returns `Ok(())`; this callback defers span planning to `event`.
+    #[inline]
     fn before_number(&mut self, _token: &'input str, _offset: usize) -> Result<(), Self::Error> {
         Ok(())
     }
+
+    /// Converts each scanner event into the corresponding output operation.
+    ///
+    /// # Parameters
+    ///
+    /// * `event` - Recognized token or container delimiter with its input
+    ///   offset.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after planning the operation represented by the event.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Capacity` if event state is invalid or its output operation
+    /// cannot be represented or retained.
     fn event(&mut self, event: JsonLexicalEvent<'input>) -> Result<(), Self::Error> {
         match event {
             JsonLexicalEvent::BeginArray { offset } => self.begin(ContainerKind::Array, offset),
@@ -205,11 +372,12 @@ impl<'input> JsonLexicalConsumer<'input> for Planner<'_> {
             JsonLexicalEvent::EndArray { offset } => self.end(offset, ContainerKind::Array),
             JsonLexicalEvent::EndObject { offset } => self.end(offset, ContainerKind::Object),
             JsonLexicalEvent::Key { token, offset } => self.key(offset, token.len()),
-            JsonLexicalEvent::String { token, offset } | JsonLexicalEvent::Number { token, offset } => {
-                self.span(offset, token.len())
-            }
+            JsonLexicalEvent::String { token, offset }
+            | JsonLexicalEvent::Number { token, offset } => self.span(offset, token.len()),
             JsonLexicalEvent::Null { offset } => self.span(offset, 4),
-            JsonLexicalEvent::Boolean { value, offset } => self.span(offset, if value { 4 } else { 5 }),
+            JsonLexicalEvent::Boolean { value, offset } => {
+                self.span(offset, if value { 4 } else { 5 })
+            }
         }
     }
 }
@@ -230,7 +398,9 @@ mod tests {
 
     #[test]
     fn test_planner_rejects_invalid_spans_and_unmatched_end() {
-        let options = JsonPrettyOptions::builder().build().expect("valid defaults");
+        let options = JsonPrettyOptions::builder()
+            .build()
+            .expect("valid defaults");
         let mut planner = Planner {
             input: b"[]",
             options: &options,
@@ -241,21 +411,29 @@ mod tests {
         };
         for (offset, length) in [(usize::MAX, 2), (1, 2)] {
             assert_eq!(
-                planner.span(offset, length).expect_err("invalid span").kind(),
+                planner
+                    .span(offset, length)
+                    .expect_err("invalid span")
+                    .kind(),
                 JsonPrettyErrorKind::Capacity
             );
             assert!(planner.actions.is_empty());
             assert_eq!(planner.length, 0);
         }
         assert_eq!(
-            planner.end(1, ContainerKind::Array).expect_err("missing frame").kind(),
+            planner
+                .end(1, ContainerKind::Array)
+                .expect_err("missing frame")
+                .kind(),
             JsonPrettyErrorKind::Capacity
         );
     }
 
     #[test]
     fn test_planner_container_counts_do_not_wrap() {
-        let options = JsonPrettyOptions::builder().build().expect("valid defaults");
+        let options = JsonPrettyOptions::builder()
+            .build()
+            .expect("valid defaults");
         for kind in [ContainerKind::Array, ContainerKind::Object] {
             let mut planner = Planner {
                 input: b"[]",
@@ -304,7 +482,9 @@ mod tests {
             (planner.actions.len(), planner.actions.capacity())
         }
 
-        let options = JsonPrettyOptions::builder().build().expect("valid defaults");
+        let options = JsonPrettyOptions::builder()
+            .build()
+            .expect("valid defaults");
         let mut zero_limit_planner = Planner {
             input: b"0",
             options: &options,
@@ -316,7 +496,11 @@ mod tests {
         zero_limit_planner
             .push(crate::format::internal::Action::Byte(b'0'), 1)
             .expect("crossing the limit does not stop scanning");
-        assert_eq!(zero_limit_planner.actions.len(), 0, "zero limit retains no actions");
+        assert_eq!(
+            zero_limit_planner.actions.len(),
+            0,
+            "zero limit retains no actions"
+        );
         assert_eq!(
             zero_limit_planner.actions.capacity(),
             0,

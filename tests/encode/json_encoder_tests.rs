@@ -21,6 +21,7 @@ use qubit_budget::json::JsonEncodeSession;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
+use qubit_io::ByteOutput;
 use qubit_io::Output;
 use qubit_json::encode::JsonEncodeErrorKind;
 use qubit_json::encode::JsonEncoder;
@@ -50,8 +51,15 @@ struct OnlyOutput(std::rc::Rc<std::cell::RefCell<Vec<u8>>>);
 impl Output for OnlyOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(&mut self, bytes: &[u8], index: usize, count: usize) -> io::Result<usize> {
-        self.0.borrow_mut().extend_from_slice(&bytes[index..index + count]);
+    unsafe fn write_unchecked(
+        &mut self,
+        bytes: &[u8],
+        index: usize,
+        count: usize,
+    ) -> io::Result<usize> {
+        self.0
+            .borrow_mut()
+            .extend_from_slice(&bytes[index..index + count]);
         Ok(count)
     }
 
@@ -103,8 +111,12 @@ fn test_json_text_encoder_enforces_64_bit_integer_range() {
             .expect("an i128 value inside i64 range must encode"),
         i64::MIN.to_string().as_bytes(),
     );
-    let signed = encoder.to_vec(&i128::MAX).expect_err("wide signed integer must fail");
-    let unsigned = encoder.to_vec(&u128::MAX).expect_err("wide unsigned integer must fail");
+    let signed = encoder
+        .to_vec(&i128::MAX)
+        .expect_err("wide signed integer must fail");
+    let unsigned = encoder
+        .to_vec(&u128::MAX)
+        .expect_err("wide unsigned integer must fail");
     assert_eq!(signed.kind(), JsonEncodeErrorKind::Serialize);
     assert_eq!(
         signed
@@ -560,7 +572,8 @@ fn assert_online_rejection<T>(
     T: Serialize + ?Sized,
 {
     let mut session = limits.encode_session();
-    let error = encode(value, &mut session).expect_err("the configured budget must reject serialization");
+    let error =
+        encode(value, &mut session).expect_err("the configured budget must reject serialization");
     let error = error.into_budget_error().expect("expected a budget error");
     assert_eq!(
         error
@@ -579,7 +592,10 @@ fn test_write_buffered_failure_does_not_touch_external_writer() {
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 3))
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
-                .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)))
+                .structure_limits(
+                    StructureLimits::builder()
+                        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+                )
                 .build(),
         )
         .build();
@@ -604,8 +620,10 @@ fn test_write_buffered_failure_does_not_touch_external_writer() {
 /// Verifies a RawValue is traversed once and emitted without metadata charges.
 #[test]
 fn test_encode_counts_raw_value_once() {
-    let raw = RawValue::from_string(String::from(r#"{"k":"v"}"#)).expect("the fixture must be valid raw JSON");
-    let session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let raw = RawValue::from_string(String::from(r#"{"k":"v"}"#))
+        .expect("the fixture must be valid raw JSON");
+    let session =
+        JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
 
     let output = JsonEncoder::new(session)
         .to_vec(raw.as_ref())
@@ -627,12 +645,15 @@ fn test_encode_budget_modes_emit_identical_output() {
         JsonTestLimits::new(),
         JsonTestLimits::new().max_output_bytes(expected.len()),
         JsonTestLimits::new().max_nodes(16),
-        JsonTestLimits::new().max_output_bytes(expected.len()).max_nodes(16),
+        JsonTestLimits::new()
+            .max_output_bytes(expected.len())
+            .max_nodes(16),
     ];
 
     for limits in modes {
         let mut session = limits.encode_session();
-        let actual = encode(&value, &mut session).expect("the configured mode must accept the fixture");
+        let actual =
+            encode(&value, &mut session).expect("the configured mode must accept the fixture");
         assert_eq!(actual, expected);
     }
 }
@@ -640,11 +661,12 @@ fn test_encode_budget_modes_emit_identical_output() {
 /// Verifies a custom Serde failure does not commit its buffered prefix.
 #[test]
 fn test_write_buffered_serde_failure_does_not_touch_external_writer() {
-    let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let mut session =
+        JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let mut output = Vec::new();
 
-    let error =
-        write_buffered(&mut output, &FailsAfterPrefix, &mut session).expect_err("the custom serializer must fail");
+    let error = write_buffered(&mut output, &FailsAfterPrefix, &mut session)
+        .expect_err("the custom serializer must fail");
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
     assert!(output.is_empty());
@@ -671,9 +693,14 @@ fn test_json_text_encoder_redacts_custom_serde_diagnostic() {
     let error = JsonEncoder::unlimited()
         .to_vec(&SecretFailure)
         .expect_err("the injected serializer must fail");
-    let source = error.serialization_error().expect("expected a serialization error");
+    let source = error
+        .serialization_error()
+        .expect("expected a serialization error");
 
-    assert_eq!(source.kind(), JsonSerializationErrorKind::CustomSerialization);
+    assert_eq!(
+        source.kind(),
+        JsonSerializationErrorKind::CustomSerialization
+    );
     assert!(!error.to_string().contains(SECRET));
     assert!(!format!("{error:?}").contains(SECRET));
     assert!(!source.to_string().contains(SECRET));
@@ -733,7 +760,10 @@ fn test_json_text_encoder_classifies_display_formatting_failure() {
         .into_serialization_error()
         .expect("expected a serialization error");
 
-    assert_eq!(error.kind(), JsonSerializationErrorKind::DisplayFormattingFailed,);
+    assert_eq!(
+        error.kind(),
+        JsonSerializationErrorKind::DisplayFormattingFailed,
+    );
     assert!(error.is_serializer_contract_error());
 }
 
@@ -743,12 +773,15 @@ fn test_encode_serde_failure_rolls_back_borrowed_budgets() {
     let mut output = ResourceBudget::new(JsonResource::OutputBytes, 16);
     let mut value = JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
-            .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)))
+            .structure_limits(
+                StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+            )
             .build(),
     );
     {
         let mut session = JsonEncodeSession::borrowing_output(&mut output, &mut value);
-        let error = encode(&FailsAfterPrefix, &mut session).expect_err("the custom serializer must fail");
+        let error =
+            encode(&FailsAfterPrefix, &mut session).expect_err("the custom serializer must fail");
 
         assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
     }
@@ -763,13 +796,15 @@ fn test_encode_output_budget_rejection_rolls_back_borrowed_budgets() {
     let mut output = ResourceBudget::new(JsonResource::OutputBytes, 3);
     let mut value = JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
-            .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)))
+            .structure_limits(
+                StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+            )
             .build(),
     );
     {
         let mut session = JsonEncodeSession::borrowing_output(&mut output, &mut value);
-        let error =
-            encode(&[1_u8, 2_u8], &mut session).expect_err("the complete output must exceed the configured limit");
+        let error = encode(&[1_u8, 2_u8], &mut session)
+            .expect_err("the complete output must exceed the configured limit");
 
         assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     }
@@ -829,7 +864,8 @@ fn test_encode_output_limit_stops_before_source_tail() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let error = encode(&value, &mut session).expect_err("the output budget must reject the long sequence");
+    let error =
+        encode(&value, &mut session).expect_err("the output budget must reject the long sequence");
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert!(serialized.get() < value.len);
@@ -841,7 +877,9 @@ fn test_write_buffered_io_failure_can_leave_partial_output() {
     let mut output = ResourceBudget::new(JsonResource::OutputBytes, 16);
     let mut value = JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
-            .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)))
+            .structure_limits(
+                StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+            )
             .build(),
     );
     let mut writer = PrefixWriter {
@@ -867,11 +905,14 @@ fn test_write_incremental_matches_encode() {
     let value = json!({"items": [1, true, "text"]});
     let mut expected_session =
         JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
-    let expected = encode(&value, &mut expected_session).expect("transactional encoding should succeed");
-    let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let expected =
+        encode(&value, &mut expected_session).expect("transactional encoding should succeed");
+    let mut session =
+        JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
     let mut output = Vec::new();
 
-    write_incremental(&mut output, &value, &mut session).expect("incremental encoding should succeed");
+    write_incremental(&mut output, &value, &mut session)
+        .expect("incremental encoding should succeed");
 
     assert_eq!(output, expected);
 }
@@ -883,7 +924,10 @@ fn test_write_incremental_preserves_partial_output_on_budget_error() {
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 4))
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
-                .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)))
+                .structure_limits(
+                    StructureLimits::builder()
+                        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+                )
                 .build(),
         )
         .build();
@@ -911,7 +955,9 @@ fn test_write_incremental_preserves_partial_output_on_io_error() {
     let mut output = ResourceBudget::new(JsonResource::OutputBytes, 16);
     let mut value = JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
-            .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)))
+            .structure_limits(
+                StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+            )
             .build(),
     );
     let mut writer = PrefixWriter {
@@ -934,7 +980,8 @@ fn test_write_incremental_preserves_partial_output_on_io_error() {
 /// Maps a destination `WriteZero` contract violation to a typed write error.
 #[test]
 fn test_write_incremental_rejects_zero_length_destination_write() {
-    let mut session = JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
+    let mut session =
+        JsonEncodeSession::from_limits(JsonEncodeLimits::<JsonResource, usize>::builder().build());
 
     let error = write_incremental(ZeroWriter, &true, &mut session)
         .expect_err("a destination must not accept zero bytes for non-empty output");
@@ -973,7 +1020,10 @@ fn test_write_incremental_preserves_partial_output_on_serde_error() {
         .output_bytes_limit(ResourceLimit::new(JsonResource::OutputBytes, 16))
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
-                .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)))
+                .structure_limits(
+                    StructureLimits::builder()
+                        .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+                )
                 .build(),
         )
         .build();
@@ -1002,7 +1052,9 @@ fn test_write_incremental_panic_rolls_back_value_budget() {
     let mut output = ResourceBudget::new(JsonResource::OutputBytes, 16);
     let mut value = JsonValueBudget::new(
         JsonValueLimits::<JsonResource, usize>::builder()
-            .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)))
+            .structure_limits(
+                StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+            )
             .build(),
     );
     let mut writer = Vec::new();
@@ -1028,7 +1080,8 @@ fn test_write_buffered_reuses_session_after_failed_attempt() {
             .value_limits(
                 JsonValueLimits::<JsonResource, usize>::builder()
                     .structure_limits(
-                        StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
+                        StructureLimits::builder()
+                            .nodes_limit(ResourceLimit::new(JsonResource::Nodes, 16)),
                     )
                     .build(),
             )
@@ -1075,7 +1128,8 @@ fn test_encode_node_limit_stops_before_source_tail() {
     };
     let mut session = JsonTestLimits::new().max_nodes(3).encode_session();
 
-    let error = encode(&value, &mut session).expect_err("the node budget must reject the long sequence");
+    let error =
+        encode(&value, &mut session).expect_err("the node budget must reject the long sequence");
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert!(serialized.get() < value.len);
@@ -1094,7 +1148,8 @@ fn test_encode_depth_limit_checks_complete_source_depth() {
     };
     let mut session = JsonTestLimits::new().max_depth(4).encode_session();
 
-    let error = encode(&value, &mut session).expect_err("the depth budget must reject recursive serialization");
+    let error = encode(&value, &mut session)
+        .expect_err("the depth budget must reject recursive serialization");
 
     assert_eq!(error.kind(), JsonEncodeErrorKind::Budget);
     assert!(serialized.get() < SOURCE_DEPTH);
@@ -1177,12 +1232,12 @@ fn test_encode_unknown_map_limit_stops_before_source_tail() {
     );
 }
 
-use qubit_io::ByteOutput;
-
 #[test]
 fn test_encoder_accepts_dyn_byte_output() {
     let mut bytes = Vec::new();
     let output: &mut dyn ByteOutput = &mut bytes;
-    JsonEncoder::unlimited().write_buffered(output, &true).unwrap();
+    JsonEncoder::unlimited()
+        .write_buffered(output, &true)
+        .expect("a dynamic byte output must accept the encoded value");
     assert_eq!(bytes, b"true");
 }

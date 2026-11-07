@@ -87,6 +87,19 @@ impl<'a> JsonValueRef<'a> {
 }
 
 impl<'a, 'b> PartialEq<JsonValueRef<'b>> for JsonValueRef<'a> {
+    /// Compares the referenced JSON trees without requiring matching borrow
+    /// lifetimes.
+    ///
+    /// Equality uses an explicit work stack, which may allocate for nested
+    /// values.
+    ///
+    /// # Parameters
+    ///
+    /// * `other` - View of the JSON tree to compare with this one.
+    ///
+    /// # Returns
+    ///
+    /// `true` when both referenced trees are equal; otherwise, `false`.
     fn eq(&self, other: &JsonValueRef<'b>) -> bool {
         values_equal(self.value, other.value)
     }
@@ -95,12 +108,48 @@ impl<'a, 'b> PartialEq<JsonValueRef<'b>> for JsonValueRef<'a> {
 impl Eq for JsonValueRef<'_> {}
 
 impl fmt::Debug for JsonValueRef<'_> {
+    /// Formats the referenced JSON tree using the safe recursive formatting
+    /// bridge.
+    ///
+    /// Formatting may allocate an explicit work stack for nested values.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Formatter that receives the JSON tree's debug
+    ///   representation.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when formatting succeeds, or the formatting error reported by
+    /// the formatter.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         debug_value(self.value, formatter)
     }
 }
 
 impl Serialize for JsonValueRef<'_> {
+    /// Serializes the referenced JSON tree through the stack-growing Serde
+    /// bridge.
+    ///
+    /// The bridge supports library-side recursive calls, while the serializer
+    /// may still impose its own recursion limits.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `S` - Serializer that receives the JSON tree's serialized
+    ///   representation.
+    ///
+    /// # Parameters
+    ///
+    /// * `serializer` - Serializer used to encode the borrowed JSON tree.
+    ///
+    /// # Returns
+    ///
+    /// The value produced by the serializer after encoding succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serializer's error if encoding the tree fails.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

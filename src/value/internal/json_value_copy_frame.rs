@@ -41,6 +41,10 @@ pub(crate) enum JsonValueCopyFrame<'a> {
 
 impl<'a> JsonValueCopyFrame<'a> {
     /// Creates an empty output frame over an array's borrowed entries.
+    ///
+    /// # Parameters
+    ///
+    /// * `values` - Source array entries borrowed for the frame's lifetime.
     pub(crate) fn array(values: &'a [Value]) -> Self {
         Self::Array {
             values: values.iter(),
@@ -49,6 +53,10 @@ impl<'a> JsonValueCopyFrame<'a> {
     }
 
     /// Creates an empty output frame over an object's borrowed entries.
+    ///
+    /// # Parameters
+    ///
+    /// * `values` - Source object entries borrowed for the frame's lifetime.
     pub(crate) fn object(values: &'a Map<String, Value>) -> Self {
         Self::Object {
             values: values.iter(),
@@ -58,11 +66,18 @@ impl<'a> JsonValueCopyFrame<'a> {
     }
 
     /// Returns the next child value, retaining its object key until insertion.
+    ///
+    /// # Returns
+    ///
+    /// The next borrowed child, or `None` when the source container is
+    /// exhausted. For object frames, its key remains pending until insertion.
     pub(crate) fn next_value(&mut self) -> Option<&'a Value> {
         match self {
             Self::Array { values, .. } => values.next(),
             Self::Object {
-                values, pending_key, ..
+                values,
+                pending_key,
+                ..
             } => values.next().map(|(key, value)| {
                 *pending_key = Some(key);
                 value
@@ -79,6 +94,11 @@ impl<'a> JsonValueCopyFrame<'a> {
     }
 
     /// Creates a guarded builder when this container has additional siblings.
+    ///
+    /// # Parameters
+    ///
+    /// * `builders` - Stack that receives this frame's partial container
+    ///   builder.
     pub(crate) fn start_builder(&mut self, builders: &mut Vec<SafeValueBuilder>) {
         match self {
             Self::Array { has_builder, .. } => {
@@ -94,20 +114,34 @@ impl<'a> JsonValueCopyFrame<'a> {
 
     /// Adds a completed child, returning a finished owner for a single-child
     /// container.
+    ///
+    /// # Parameters
+    ///
+    /// * `child` - Completed child value to insert into this container.
+    /// * `builders` - Active builder stack used when this frame owns a builder.
+    ///
+    /// # Returns
+    ///
+    /// `Some` with a finished container owner when this frame has no stack
+    /// builder; otherwise `None` after inserting the child into its builder.
     pub(crate) fn push_child(
         &mut self,
         child: SafeJsonValue,
         builders: &mut [SafeValueBuilder],
     ) -> Option<SafeJsonValue> {
         match self {
-            Self::Array { has_builder: true, .. } => {
+            Self::Array {
+                has_builder: true, ..
+            } => {
                 builders
                     .last_mut()
                     .expect("an active array frame has its builder")
                     .push(child);
                 None
             }
-            Self::Array { has_builder: false, .. } => {
+            Self::Array {
+                has_builder: false, ..
+            } => {
                 let mut builder = SafeValueBuilder::array();
                 builder.push(child);
                 Some(SafeJsonValue::new(builder.finish()))
@@ -148,6 +182,10 @@ impl<'a> JsonValueCopyFrame<'a> {
     }
 
     /// Finishes an empty container without creating an active builder frame.
+    ///
+    /// # Returns
+    ///
+    /// An owner of the corresponding empty JSON array or object.
     pub(crate) fn finish_empty(self) -> SafeJsonValue {
         match self {
             Self::Array { .. } => SafeJsonValue::new(SafeValueBuilder::array().finish()),
@@ -156,14 +194,34 @@ impl<'a> JsonValueCopyFrame<'a> {
     }
 
     /// Finishes a container whose builder is the last active builder.
+    ///
+    /// # Parameters
+    ///
+    /// * `builders` - Stack whose final builder belongs to this frame.
+    ///
+    /// # Returns
+    ///
+    /// An owner of the completed JSON array or object.
     pub(crate) fn finish(self, builders: &mut Vec<SafeValueBuilder>) -> SafeJsonValue {
         match self {
-            Self::Array { has_builder: true, .. } | Self::Object { has_builder: true, .. } => {}
-            Self::Array { has_builder: false, .. } | Self::Object { has_builder: false, .. } => {
+            Self::Array {
+                has_builder: true, ..
+            }
+            | Self::Object {
+                has_builder: true, ..
+            } => {}
+            Self::Array {
+                has_builder: false, ..
+            }
+            | Self::Object {
+                has_builder: false, ..
+            } => {
                 unreachable!("single-child frames finish when their child arrives")
             }
         }
-        let builder = builders.pop().expect("an active frame always has its builder");
+        let builder = builders
+            .pop()
+            .expect("an active frame always has its builder");
         SafeJsonValue::new(builder.finish())
     }
 }

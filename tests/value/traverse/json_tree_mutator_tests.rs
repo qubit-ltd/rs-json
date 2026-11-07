@@ -40,7 +40,11 @@ struct CountingVisitor {
 impl JsonTreeMutVisitor for CountingVisitor {
     type Error = std::convert::Infallible;
 
-    fn visit(&mut self, _value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(
+        &mut self,
+        _value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
         self.calls += 1;
         Ok(JsonTreeControl::Descend)
     }
@@ -52,7 +56,11 @@ struct ShrinkingVisitor;
 impl JsonTreeMutVisitor for ShrinkingVisitor {
     type Error = std::convert::Infallible;
 
-    fn visit(&mut self, value: &mut Value, context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
         if context.depth == 1 {
             *value = Value::Null;
         }
@@ -66,7 +74,11 @@ struct SkipWithExpandedReplacement;
 impl JsonTreeMutVisitor for SkipWithExpandedReplacement {
     type Error = std::convert::Infallible;
 
-    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
         *value = json!({"added": [null]});
         Ok(JsonTreeControl::SkipSubtree)
     }
@@ -85,7 +97,11 @@ struct BoundedExpansionVisitor {
 impl JsonTreeMutVisitor for BoundedExpansionVisitor {
     type Error = &'static str;
 
-    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
         if self.additions == 8 {
             return Err("expansion limit reached");
         }
@@ -98,7 +114,11 @@ impl JsonTreeMutVisitor for BoundedExpansionVisitor {
 impl JsonTreeMutVisitor for FailingVisitor {
     type Error = &'static str;
 
-    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
         self.calls += 1;
         if self.calls == 1 {
             *value = json!({"changed": [1, 2]});
@@ -141,7 +161,11 @@ impl JsonTreeMutVisitor for StructuralReplacementVisitor {
 
     /// Replaces two nested children and records descendants and siblings that
     /// must remain reachable afterward.
-    fn visit(&mut self, value: &mut Value, context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
         match context.location {
             JsonTreeLocation::ObjectValue {
                 key: "a_replace_object",
@@ -152,7 +176,9 @@ impl JsonTreeMutVisitor for StructuralReplacementVisitor {
             JsonTreeLocation::ArrayElement { index: 0 } if context.depth == 3 => {
                 *value = json!({"array replacement child": null});
             }
-            JsonTreeLocation::ObjectValue { key: "z_after_object" } => {
+            JsonTreeLocation::ObjectValue {
+                key: "z_after_object",
+            } => {
                 self.visited_object_sibling = true;
                 self.events.push("z_after_object");
             }
@@ -172,7 +198,9 @@ impl JsonTreeMutVisitor for StructuralReplacementVisitor {
             } if context.depth == 4 => {
                 self.visited_array_replacement_child = true;
             }
-            JsonTreeLocation::Root | JsonTreeLocation::ArrayElement { .. } | JsonTreeLocation::ObjectValue { .. } => {}
+            JsonTreeLocation::Root
+            | JsonTreeLocation::ArrayElement { .. }
+            | JsonTreeLocation::ObjectValue { .. } => {}
         }
         Ok(JsonTreeControl::Descend)
     }
@@ -181,7 +209,11 @@ impl JsonTreeMutVisitor for StructuralReplacementVisitor {
 impl JsonTreeMutVisitor for PanickingVisitor {
     type Error = std::convert::Infallible;
 
-    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(
+        &mut self,
+        value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
         self.calls += 1;
         if let Value::Object(entries) = value {
             entries.insert("visited".to_owned(), json!(true));
@@ -194,7 +226,9 @@ impl JsonTreeMutVisitor for PanickingVisitor {
 /// Verifies an input rejection happens before the first visitor mutation.
 #[test]
 fn test_process_rejects_input_before_mutation() {
-    let input_limits = JsonValueLimits::<JsonResource, usize>::builder().max_nodes(1).build();
+    let input_limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(1)
+        .build();
     let mut input_budget = input_limits.budget();
     let mut output_budget = measured_limits().budget();
     let mut input = input_budget.transaction();
@@ -231,7 +265,10 @@ fn test_mutator_visitor_can_bound_work_from_added_descendants() {
         .process(&mut value, &mut visitor)
         .expect_err("visitor must stop after its configured number of additions");
 
-    assert!(matches!(error, JsonTreeMutateError::Visitor("expansion limit reached")));
+    assert!(matches!(
+        error,
+        JsonTreeMutateError::Visitor("expansion limit reached")
+    ));
     assert_eq!(visitor.additions, 8);
     assert_eq!(value, json!([[[[[[[[null]]]]]]]]));
 }
@@ -393,12 +430,12 @@ fn test_process_continues_after_nested_child_structure_replacement() {
         .events
         .iter()
         .position(|event| *event == "a_replace_object")
-        .unwrap();
+        .expect("the replacement event must be recorded");
     let after = visitor
         .events
         .iter()
         .position(|event| *event == "z_after_object")
-        .unwrap();
+        .expect("the following sibling event must be recorded");
     assert!(
         replaced < after,
         "the parent cursor must resume after the replaced child"
@@ -458,12 +495,12 @@ fn test_process_retains_nested_mutations_after_output_budget_failure() {
         .events
         .iter()
         .position(|event| *event == "a_replace_object")
-        .unwrap();
+        .expect("the replacement event must be recorded");
     let after = visitor
         .events
         .iter()
         .position(|event| *event == "z_after_object")
-        .unwrap();
+        .expect("the following sibling event must be recorded");
     assert!(
         replaced < after,
         "the parent cursor must resume after the replaced child"

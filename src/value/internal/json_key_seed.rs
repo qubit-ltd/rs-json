@@ -51,6 +51,11 @@ where
     ///
     /// * `D` - Deserializer providing the object-key text.
     ///
+    /// # Parameters
+    ///
+    /// * `deserializer` - Supplies the encoded key text to decode after the
+    ///   prospective map entry passes the resource budget check.
+    ///
     /// # Errors
     ///
     /// Returns the deserializer error if the entry exceeds its budget or the

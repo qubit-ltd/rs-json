@@ -35,6 +35,10 @@ impl JsonLexemeLengthWriter {
 impl Write for JsonLexemeLengthWriter {
     /// Adds the complete input length to the counter.
     ///
+    /// # Parameters
+    ///
+    /// * `input` - The bytes whose length is added if it fits in `usize`.
+    ///
     /// # Returns
     ///
     /// The number of bytes accepted, which is always `input.len()` on success.
@@ -67,7 +71,9 @@ mod tests {
 
     #[test]
     fn test_overflow_preserves_count_and_flush_is_a_noop() {
-        let mut writer = JsonLexemeLengthWriter { len: usize::MAX - 1 };
+        let mut writer = JsonLexemeLengthWriter {
+            len: usize::MAX - 1,
+        };
         assert_eq!(writer.write(b"a").expect("last byte fits"), 1);
         assert_eq!(
             writer.write(b"b").expect_err("count must not wrap").kind(),

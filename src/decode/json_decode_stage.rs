@@ -45,6 +45,10 @@ pub enum JsonDecodeStage {
 impl fmt::Display for JsonDecodeStage {
     /// Writes the stable snake-case stage name.
     ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination that receives the stage name.
+    ///
     /// # Errors
     ///
     /// Returns the formatter's error if writing the stage name fails.
@@ -62,6 +66,7 @@ impl fmt::Display for JsonDecodeStage {
 }
 
 impl FromStr for JsonDecodeStage {
+    /// Static diagnostic returned when the input is not a known stage name.
     type Err = &'static str;
 
     /// Parses a stable stage name without ASCII case sensitivity.

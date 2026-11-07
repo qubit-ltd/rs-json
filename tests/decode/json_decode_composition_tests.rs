@@ -15,8 +15,12 @@ use qubit_budget::json::JsonDecodeLimits;
 use qubit_budget::json::JsonResource;
 use qubit_budget::json::JsonValueBudget;
 use qubit_budget::json::JsonValueLimits;
+#[cfg(feature = "jcs")]
+use qubit_json::decode::JcsDecoder;
+use qubit_json::decode::JsonDecodeErrorKind;
 use qubit_json::decode::JsonDecodeNumberModel;
 use qubit_json::decode::JsonDecoder;
+use qubit_json::decode::JsonMaterializationErrorReason;
 use qubit_json::decode::JsonNumberPolicy;
 use qubit_json::decode::JsonValidatedDecodeError;
 use qubit_json::decode::JsonValidatedDecodeOptions;
@@ -28,6 +32,9 @@ use qubit_json::format::format_json_tokens;
 use qubit_json::value::JsonValueEncoder;
 #[cfg(feature = "jcs")]
 use qubit_json::value::SafeJsonValue;
+use serde::Deserialize;
+use serde::Deserializer;
+use serde::de::DeserializeSeed;
 use serde_json::Number;
 use serde_json::Value;
 use serde_json::from_str;
@@ -36,15 +43,15 @@ use serde_json::to_vec;
 
 struct SeedCallProbe<'a>(&'a Cell<bool>);
 
-impl<'de> serde::de::DeserializeSeed<'de> for SeedCallProbe<'_> {
+impl<'de> DeserializeSeed<'de> for SeedCallProbe<'_> {
     type Value = Value;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         self.0.set(true);
-        serde::Deserialize::deserialize(deserializer)
+        Deserialize::deserialize(deserializer)
     }
 }
 
@@ -56,19 +63,19 @@ fn test_unique_seed_keeps_admission_precedence_and_reuses_after_materialization_
     let syntax_error = decoder
         .decode_unique_seed_utf8(SeedCallProbe(&called), br#"{"x":0,"x":1,"tail":]"#)
         .unwrap_err();
-    assert_eq!(
-        syntax_error.kind(),
-        qubit_json::decode::JsonDecodeErrorKind::InvalidJson
-    );
+    assert_eq!(syntax_error.kind(), JsonDecodeErrorKind::InvalidJson);
     assert_eq!(syntax_error.materialization_error_reason(), None);
-    assert!(!called.get(), "seed must not run before full lexical admission");
+    assert!(
+        !called.get(),
+        "seed must not run before full lexical admission"
+    );
 
     let duplicate_error = decoder
         .decode_unique_seed_utf8(SeedCallProbe(&called), br#"{"x":0,"x":1,"tail":null}"#)
         .unwrap_err();
     assert_eq!(
         duplicate_error.materialization_error_reason(),
-        Some(qubit_json::decode::JsonMaterializationErrorReason::DuplicateKey)
+        Some(JsonMaterializationErrorReason::DuplicateKey)
     );
     assert!(
         !called.get(),
@@ -82,8 +89,11 @@ fn test_unique_seed_keeps_admission_precedence_and_reuses_after_materialization_
     let budget_error = budget_decoder
         .decode_unique_seed_utf8(SeedCallProbe(&called), br#"{"x":0,"x":1,"later":123}"#)
         .unwrap_err();
-    assert_eq!(budget_error.kind(), qubit_json::decode::JsonDecodeErrorKind::Budget);
-    assert!(!called.get(), "later admission failure must precede seed invocation");
+    assert_eq!(budget_error.kind(), JsonDecodeErrorKind::Budget);
+    assert!(
+        !called.get(),
+        "later admission failure must precede seed invocation"
+    );
 
     assert_eq!(
         decoder
@@ -91,7 +101,10 @@ fn test_unique_seed_keeps_admission_precedence_and_reuses_after_materialization_
             .unwrap(),
         Value::Bool(true)
     );
-    assert!(called.get(), "a later successful decode must invoke the seed");
+    assert!(
+        called.get(),
+        "a later successful decode must invoke the seed"
+    );
 }
 
 #[test]
@@ -110,20 +123,29 @@ fn test_failed_policy_keeps_input_charge_and_next_document_commits_exact_values(
     assert!(matches!(failed, JsonValidatedDecodeError::Policy { .. }));
     assert_eq!(decoder.session().input_budget().unwrap().used(), 3);
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
-    assert_eq!(decoder.session().value_budget().used_payload_bytes(), Some(0));
+    assert_eq!(
+        decoder.session().value_budget().used_payload_bytes(),
+        Some(0)
+    );
 
     let owner = decoder.decode_value_str("[\"é\"]").unwrap();
     assert_eq!(owner.as_value(), &json!(["é"]));
     assert_eq!(decoder.session().input_budget().unwrap().used(), 9);
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
-    assert_eq!(decoder.session().value_budget().used_payload_bytes(), Some(2));
+    assert_eq!(
+        decoder.session().value_budget().used_payload_bytes(),
+        Some(2)
+    );
 }
 
 #[test]
 fn test_typed_fallback_keeps_duplicate_map_semantics() {
-    let mut input = std::io::Cursor::new(br#"{"wide":18446744073709551616,"x":1,"x":2}"#.to_vec());
+    let mut input = Cursor::new(br#"{"wide":18446744073709551616,"x":1,"x":2}"#.to_vec());
     let value: Value = JsonDecoder::unlimited()
-        .decode_input_with_number_model(&mut input, JsonDecodeNumberModel::Integer64WithFiniteFallback)
+        .decode_input_with_number_model(
+            &mut input,
+            JsonDecodeNumberModel::Integer64WithFiniteFallback,
+        )
         .unwrap();
     assert_eq!(value["x"], json!(2));
     assert!(value["wide"].as_f64().unwrap().is_finite());
@@ -135,7 +157,10 @@ fn test_typed_fallback_matches_active_serde_representation() {
     let expected: Value = from_str(source).unwrap();
     let mut input = Cursor::new(source.as_bytes());
     let actual: Value = JsonDecoder::unlimited()
-        .decode_input_with_number_model(&mut input, JsonDecodeNumberModel::Integer64WithFiniteFallback)
+        .decode_input_with_number_model(
+            &mut input,
+            JsonDecodeNumberModel::Integer64WithFiniteFallback,
+        )
         .unwrap();
     assert_eq!(actual.to_string(), expected.to_string());
     assert_eq!(actual.is_f64(), expected.is_f64());
@@ -164,7 +189,9 @@ fn test_validated_fallback_materializes_encodable_f64() {
         .number_model(JsonDecodeNumberModel::Integer64WithFiniteFallback)
         .build();
     let actual = JsonDecoder::unlimited()
-        .decode_unique_validated_str(source, &options, |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve))
+        .decode_unique_validated_str(source, &options, |_, _| {
+            Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
+        })
         .unwrap();
     let expected = Value::Number(Number::from_f64(source.parse::<f64>().unwrap()).unwrap());
     assert!(actual.as_value().is_f64());
@@ -178,7 +205,10 @@ fn test_validated_fallback_materializes_encodable_f64() {
 #[test]
 fn test_guarded_value_composes_with_encoder_and_token_formatter() {
     let source = json!({"ok": true, "items": [1, 2]});
-    let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().max_nodes(5).build());
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(5)
+        .build();
+    let mut budget = JsonValueBudget::new(limits);
     let mut transaction = budget.transaction();
     let owner = JsonValueEncoder::new()
         .encode_in_transaction(&source, &mut transaction)
@@ -202,16 +232,18 @@ fn test_value_decoder_owner_composes_with_text_encoder_and_formatter() {
     let options = JsonPrettyOptions::builder().build().unwrap();
     let pretty = format_json_tokens(&encoded, &options, None).unwrap();
     let reparsed = JsonDecoder::unlimited().decode_value_utf8(&pretty).unwrap();
-    assert!(owner == reparsed);
+    assert_eq!(owner, reparsed);
 }
 
 #[cfg(feature = "jcs")]
 #[test]
 fn test_ordinary_integer_jcs_binary64_and_pretty_tokens_remain_separate() {
-    let ordinary = JsonDecoder::unlimited().decode_value_str("9007199254740993").unwrap();
+    let ordinary = JsonDecoder::unlimited()
+        .decode_value_str("9007199254740993")
+        .unwrap();
     assert_eq!(ordinary.as_value().as_u64(), Some(9_007_199_254_740_993));
 
-    let jcs = qubit_json::decode::JcsDecoder::unlimited()
+    let jcs = JcsDecoder::unlimited()
         .decode_str("9007199254740993")
         .unwrap();
     assert_eq!(jcs.as_f64(), Some(9_007_199_254_740_992.0));

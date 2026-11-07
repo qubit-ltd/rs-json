@@ -18,23 +18,49 @@ pub(in crate::value::json_value_encoder) struct RawValueConsumer<'builder> {
     pub(in crate::value::json_value_encoder) builder: &'builder mut LexicalJsonValueBuilder,
 }
 
+/// Connects lexical scanner callbacks to the guarded value builder.
+///
+/// The pre-event checks are intentionally no-ops because this builder validates
+/// and records the corresponding data when it receives each event. Event
+/// failures are returned to the scanner unchanged.
 impl<'input> JsonLexicalConsumer<'input> for RawValueConsumer<'_> {
+    /// Reports materialization failures produced while accepting lexical
+    /// events.
     type Error = JsonValueMaterializationError;
 
     /// No extra work is needed before a value or key; events drive
     /// construction.
-    fn before_value(&mut self, _: usize, _: usize) -> Result<(), Self::Error> {
+    ///
+    /// # Parameters
+    ///
+    /// * `depth` — root-inclusive nesting depth supplied by the scanner.
+    /// * `offset` — zero-based byte offset of the value in the input.
+    fn before_value(&mut self, _depth: usize, _offset: usize) -> Result<(), Self::Error> {
         Ok(())
     }
     /// Keys are validated and retained when their lexical event arrives.
-    fn before_key(&mut self, _: usize) -> Result<(), Self::Error> {
+    ///
+    /// # Parameters
+    ///
+    /// * `offset` — zero-based byte offset of the key token in the input.
+    fn before_key(&mut self, _offset: usize) -> Result<(), Self::Error> {
         Ok(())
     }
     /// Number tokens are admitted by the builder when their event arrives.
-    fn before_number(&mut self, _: &'input str, _: usize) -> Result<(), Self::Error> {
+    ///
+    /// # Parameters
+    ///
+    /// * `token` — number spelling borrowed from the input for `'input`.
+    /// * `offset` — zero-based byte offset of the number token in the input.
+    fn before_number(&mut self, _token: &'input str, _offset: usize) -> Result<(), Self::Error> {
         Ok(())
     }
     /// Forwards exactly one scanner event; builder errors propagate unchanged.
+    ///
+    /// # Parameters
+    ///
+    /// * `event` — recognized lexical event with token borrows tied to
+    ///   `'input`.
     fn event(&mut self, event: JsonLexicalEvent<'input>) -> Result<(), Self::Error> {
         self.builder.try_accept(event)
     }

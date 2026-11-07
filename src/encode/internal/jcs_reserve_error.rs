@@ -14,7 +14,10 @@ use crate::encode::JcsWorkingMemoryError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum JcsReserveError {
     /// The requested capacity would exceed the configured working-memory limit.
-    Limit(JcsWorkingMemoryError),
+    Limit(
+        #[doc = "The reason the requested capacity exceeded the configured limit."]
+        JcsWorkingMemoryError,
+    ),
     /// The allocator could not reserve the requested capacity.
     Allocation,
 }

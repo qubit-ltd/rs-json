@@ -51,7 +51,9 @@ fn test_budget_tracker_exposes_and_transfers_budget_state() {
 /// Verifies failed accounting rolls back and reset clears prior admissions.
 #[test]
 fn test_budget_tracker_rolls_back_rejection_and_resets() {
-    let limits = JsonValueLimits::<JsonResource, usize>::builder().max_nodes(1).build();
+    let limits = JsonValueLimits::<JsonResource, usize>::builder()
+        .max_nodes(1)
+        .build();
     let mut tracker = JsonTreeBudgetTracker::new(limits);
 
     tracker.account(&json!(true)).expect("one node should fit");

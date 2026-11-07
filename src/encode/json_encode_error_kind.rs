@@ -41,6 +41,10 @@ pub enum JsonEncodeErrorKind {
 
 impl fmt::Display for JsonEncodeErrorKind {
     /// Writes the stable snake-case category name.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination receiving the category name.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Budget => "budget",
@@ -52,9 +56,14 @@ impl fmt::Display for JsonEncodeErrorKind {
 }
 
 impl FromStr for JsonEncodeErrorKind {
+    /// Static message returned when parsing an unrecognized category name.
     type Err = &'static str;
 
     /// Parses a stable category name without ASCII case sensitivity.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Case-insensitive snake-case category name.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.eq_ignore_ascii_case("budget") {
             Ok(Self::Budget)

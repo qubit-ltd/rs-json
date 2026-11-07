@@ -21,10 +21,19 @@ pub(crate) struct JsonTestLimits {
 
 impl JsonTestLimits {
     /// Creates a test configuration with every limit disabled.
+    #[must_use]
+    #[inline]
     pub(crate) fn new() -> Self {
         Self {
             limits: JsonEncodeLimits::<JsonResource, usize>::builder(),
         }
+    }
+
+    /// Creates fresh encode accounting from this test configuration.
+    #[must_use]
+    #[inline]
+    pub(crate) fn encode_session(&self) -> JsonEncodeSession<'static> {
+        JsonEncodeSession::from_limits(self.limits.build())
     }
 
     /// Sets the complete-output byte maximum used by encode sessions.
@@ -97,10 +106,5 @@ impl JsonTestLimits {
     pub(crate) fn max_payload_bytes(mut self, maximum: usize) -> Self {
         self.limits = self.limits.max_payload_bytes(maximum);
         self
-    }
-
-    /// Creates fresh encode accounting from this test configuration.
-    pub(crate) fn encode_session(&self) -> JsonEncodeSession<'static> {
-        JsonEncodeSession::from_limits(self.limits.build())
     }
 }

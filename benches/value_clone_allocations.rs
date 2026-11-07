@@ -76,13 +76,23 @@ fn fixture(shape: &str, size: usize) -> SafeJsonValue {
     SafeJsonValue::new(value)
 }
 
-fn report(source: &SafeJsonValue, shape: &str, size: usize, operation: &str, feature: &str, revision: &str) {
+fn report(
+    source: &SafeJsonValue,
+    shape: &str,
+    size: usize,
+    operation: &str,
+    feature: &str,
+    revision: &str,
+) {
     let (copy, measurement) = allocation_counter::measure(|| match operation {
         "copy_from" => SafeJsonValue::copy_from(source.as_value()),
         "clone" => source.clone(),
         _ => unreachable!("known copy operation"),
     });
-    assert_eq!(&copy, source, "{shape}/{size}/{operation} changed the value");
+    assert_eq!(
+        &copy, source,
+        "{shape}/{size}/{operation} changed the value"
+    );
     std::hint::black_box(&copy);
     println!(
         "VALUE_CLONE_ALLOC,{shape},{size},{feature},{operation},{revision},{},{},{},{},{},{},{}",

@@ -14,7 +14,10 @@ use crate::value::SafeJsonValue;
 /// The container currently being materialized.
 pub(crate) enum JsonValueFrame {
     /// An array whose children are independently protected values.
-    Array(Vec<SafeJsonValue>),
+    Array(
+        /// Child values retained while the array is being materialized.
+        Vec<SafeJsonValue>,
+    ),
     /// An object with a decoded key awaiting its corresponding value.
     Object {
         /// Values accumulated for this object.

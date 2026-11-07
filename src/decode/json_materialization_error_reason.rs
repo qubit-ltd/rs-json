@@ -11,6 +11,15 @@
 ///
 /// The reason is available independently of diagnostic source retention and
 /// never contains input-derived text.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_json::decode::JsonMaterializationErrorReason;
+///
+/// let reason = JsonMaterializationErrorReason::DuplicateKey;
+/// assert_eq!(reason, JsonMaterializationErrorReason::DuplicateKey);
+/// ```
 #[non_exhaustive]
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

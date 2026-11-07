@@ -24,10 +24,19 @@ pub(crate) trait JsonLexicalConsumer<'input> {
 
     /// Checks a value before its event, at its zero-based byte offset and
     /// root-inclusive depth.
+    ///
+    /// # Parameters
+    ///
+    /// * `depth` — nesting depth, counting the document root as one.
+    /// * `offset` — zero-based byte offset of the value in the input.
     fn before_value(&mut self, depth: usize, offset: usize) -> Result<(), Self::Error>;
 
     /// Checks an object key before its key event, at the key token's byte
     /// offset.
+    ///
+    /// # Parameters
+    ///
+    /// * `offset` — zero-based byte offset of the key token in the input.
     fn before_key(&mut self, offset: usize) -> Result<(), Self::Error>;
 
     /// Checks a number token before its event and before its representation
@@ -35,38 +44,18 @@ pub(crate) trait JsonLexicalConsumer<'input> {
     /// borrowed from the input for `'input`. Later syntax, including the
     /// number delimiter and the remainder of the document, has not yet been
     /// validated.
+    ///
+    /// # Parameters
+    ///
+    /// * `token` — number spelling borrowed from the input for `'input`.
+    /// * `offset` — zero-based byte offset of the number token in the input.
     fn before_number(&mut self, token: &'input str, offset: usize) -> Result<(), Self::Error>;
 
     /// Receives a lexical event during the synchronous scan; token borrows
     /// remain tied to the input lifetime.
+    ///
+    /// # Parameters
+    ///
+    /// * `event` — recognized event, with token borrows tied to `'input`.
     fn event(&mut self, event: JsonLexicalEvent<'input>) -> Result<(), Self::Error>;
-}
-
-/// One callback point dispatched in source scan order.
-pub(crate) enum JsonLexicalScanPoint<'input> {
-    /// A JSON value is about to be scanned; depth counts the root as one.
-    BeforeValue {
-        /// Root-inclusive value depth; the document root is depth one.
-        depth: usize,
-        /// Zero-based byte offset in the original input.
-        offset: usize,
-    },
-    /// An object key is about to be scanned.
-    BeforeKey {
-        /// Zero-based byte offset of the key token in the original input.
-        offset: usize,
-    },
-    /// A number token is available before representation-range validation.
-    BeforeNumber {
-        /// Number spelling borrowed from the input for the synchronous
-        /// callback.
-        token: &'input str,
-        /// Zero-based byte offset of the number token in the original input.
-        offset: usize,
-    },
-    /// A token event has been recognized.
-    Event(
-        /// Event payload, with token borrows tied to the input lifetime.
-        JsonLexicalEvent<'input>,
-    ),
 }

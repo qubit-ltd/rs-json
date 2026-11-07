@@ -83,6 +83,8 @@ fn reference_usage(value: &Value) -> (usize, usize) {
 /// Returns the fixed-size control header and remaining payload when the
 /// complete input is within the shared fuzz limit and contains the header;
 /// otherwise returns `None`.
+#[must_use]
+#[inline]
 pub fn split_encode_input(data: &[u8]) -> Option<(&[u8; CONTROL_BYTES], &[u8])> {
     let data = bounded_input(data)?;
     let (control, payload) = data.split_at_checked(CONTROL_BYTES)?;
@@ -100,6 +102,8 @@ pub fn split_encode_input(data: &[u8]) -> Option<(&[u8; CONTROL_BYTES], &[u8])> 
 /// # Returns
 ///
 /// The selected absolute resource limit.
+#[must_use]
+#[inline]
 pub fn select_encode_limit(raw: u16, baseline: usize) -> usize {
     match raw % 5 {
         0 => 0,

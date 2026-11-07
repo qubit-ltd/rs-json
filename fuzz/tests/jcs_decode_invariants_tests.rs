@@ -14,6 +14,7 @@ use qubit_budget::json::JsonResource;
 use qubit_json::decode::JcsDecodeError;
 use qubit_json::decode::JcsDecoder;
 use qubit_json::decode::JsonDecodeErrorKind;
+use qubit_json_fuzz::jcs_decode_invariants::assert_jcs_decode_invariants;
 use serde_json::Value;
 
 #[test]
@@ -50,10 +51,10 @@ fn test_jcs_limits_keep_node_limit_when_depth_is_set() {
 
 #[test]
 fn test_jcs_invariant_harness_checks_zero_and_exact_node_limits() {
-    qubit_json_fuzz::jcs_decode_invariants::assert_jcs_decode_invariants(b"true", 0, 32);
-    qubit_json_fuzz::jcs_decode_invariants::assert_jcs_decode_invariants(b"true", 1, 32);
-    qubit_json_fuzz::jcs_decode_invariants::assert_jcs_decode_invariants(b"[0]", 1, 32);
-    qubit_json_fuzz::jcs_decode_invariants::assert_jcs_decode_invariants(b"[0]", 2, 32);
+    assert_jcs_decode_invariants(b"true", 0, 32);
+    assert_jcs_decode_invariants(b"true", 1, 32);
+    assert_jcs_decode_invariants(b"[0]", 1, 32);
+    assert_jcs_decode_invariants(b"[0]", 2, 32);
 }
 
 #[test]

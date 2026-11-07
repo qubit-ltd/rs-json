@@ -20,6 +20,14 @@ use serde_json::Value;
 use super::JsonValueVisitor;
 
 /// A child seed that rejects an excess container member before materialization.
+///
+/// # Type Parameters
+///
+/// * `'transaction` - Lifetime of the transaction receiving resource charges.
+/// * `'budget` - Lifetime of the resource budget backing that transaction.
+/// * `R` - Resource identity used for budget accounting.
+/// * `Q` - Quantity representation used for budget accounting; it must
+///   implement [`ResourceQuantity`].
 pub(in crate::value) struct JsonValueChildSeed<'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
@@ -45,10 +53,29 @@ where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
+    /// JSON value materialized by the child visitor.
     type Value = Value;
 
     /// Checks the container limit and then delegates construction to the child
     /// visitor.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` - Deserializer supplying the child's JSON representation.
+    ///
+    /// # Parameters
+    ///
+    /// * `self` - Seed carrying the transaction, depth, and container checks.
+    /// * `deserializer` - Source from which the child value is decoded.
+    ///
+    /// # Returns
+    ///
+    /// The materialized JSON value after the container limit check succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Returns the deserializer's error if the prospective container count
+    /// exceeds its limit or if the child representation cannot be decoded.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,

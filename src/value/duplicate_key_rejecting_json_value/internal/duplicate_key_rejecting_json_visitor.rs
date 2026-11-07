@@ -30,21 +30,49 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
     type Value = DuplicateKeyRejectingJsonValue;
 
     /// Describes the expected JSON value shape.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Receives the human-readable description.
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("a JSON value with unique object keys")
     }
 
     /// Decodes a JSON boolean.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Error type used by the deserializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Boolean event to convert.
     fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E> {
         Ok(DuplicateKeyRejectingJsonValue(Value::Bool(value)))
     }
 
     /// Decodes a signed JSON integer.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Error type used by the deserializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Signed integer event to convert.
     fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
         Ok(DuplicateKeyRejectingJsonValue(Value::Number(value.into())))
     }
 
     /// Decodes a signed wide JSON integer within serde_json's value range.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Error type used by the deserializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Signed integer event to convert.
     fn visit_i128<E>(self, value: i128) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -55,11 +83,27 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
     }
 
     /// Decodes an unsigned JSON integer.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Error type used by the deserializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Unsigned integer event to convert.
     fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
         Ok(DuplicateKeyRejectingJsonValue(Value::Number(value.into())))
     }
 
     /// Decodes an unsigned wide JSON integer within serde_json's value range.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Error type used by the deserializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Unsigned integer event to convert.
     fn visit_u128<E>(self, value: u128) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -70,6 +114,14 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
     }
 
     /// Decodes a finite JSON floating-point number.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Error type used by the deserializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Floating-point event to convert.
     fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -80,26 +132,60 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
     }
 
     /// Decodes a borrowed JSON string into owned storage.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Error type used by the deserializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Borrowed string event to copy.
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
-        Ok(DuplicateKeyRejectingJsonValue(Value::String(value.to_owned())))
+        Ok(DuplicateKeyRejectingJsonValue(Value::String(
+            value.to_owned(),
+        )))
     }
 
     /// Decodes an owned JSON string without another allocation.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Error type used by the deserializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Owned string event to retain.
     fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
         Ok(DuplicateKeyRejectingJsonValue(Value::String(value)))
     }
 
     /// Decodes JSON null.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Error type used by the deserializer.
     fn visit_unit<E>(self) -> Result<Self::Value, E> {
         Ok(DuplicateKeyRejectingJsonValue(Value::Null))
     }
 
     /// Decodes an absent optional JSON value as null.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Error type used by the deserializer.
     fn visit_none<E>(self) -> Result<Self::Value, E> {
         Ok(DuplicateKeyRejectingJsonValue(Value::Null))
     }
 
     /// Decodes a present optional JSON value through the strict visitor.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` - Deserializer that supplies the optional value.
+    ///
+    /// # Parameters
+    ///
+    /// * `deserializer` - Source of the present value.
     fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -108,6 +194,14 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
     }
 
     /// Decodes a JSON array recursively.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `A` - Sequence access implementation supplied by Serde.
+    ///
+    /// # Parameters
+    ///
+    /// * `sequence` - Access to the array elements.
     fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
     where
         A: SeqAccess<'de>,
@@ -120,6 +214,14 @@ impl<'de> Visitor<'de> for DuplicateKeyRejectingJsonVisitor {
     }
 
     /// Decodes a JSON object and rejects repeated keys.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `A` - Map access implementation supplied by Serde.
+    ///
+    /// # Parameters
+    ///
+    /// * `map` - Access to the object entries.
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
     where
         A: MapAccess<'de>,
@@ -228,7 +330,11 @@ mod tests {
                 .into_inner(),
             Value::from(i64::MIN),
         );
-        assert!(DuplicateKeyRejectingJsonVisitor.visit_i128::<Error>(i128::MIN).is_err());
+        assert!(
+            DuplicateKeyRejectingJsonVisitor
+                .visit_i128::<Error>(i128::MIN)
+                .is_err()
+        );
         assert_eq!(
             DuplicateKeyRejectingJsonVisitor
                 .visit_u128::<Error>(u64::MAX.into())
@@ -236,6 +342,10 @@ mod tests {
                 .into_inner(),
             Value::from(u64::MAX),
         );
-        assert!(DuplicateKeyRejectingJsonVisitor.visit_u128::<Error>(u128::MAX).is_err());
+        assert!(
+            DuplicateKeyRejectingJsonVisitor
+                .visit_u128::<Error>(u128::MAX)
+                .is_err()
+        );
     }
 }

@@ -11,22 +11,28 @@ use super::JsonTreeLocation;
 
 /// Describes the root-inclusive depth and parent location of a JSON node.
 ///
+/// # Type Parameters
+///
+/// * `'a` - Lifetime of an object key borrowed from the traversed JSON tree.
+///
 /// # Examples
 ///
 /// ```
 /// use qubit_json::value::traverse::JsonTreeContext;
 /// use qubit_json::value::traverse::JsonTreeLocation;
 ///
+/// let key = "items";
 /// let context = JsonTreeContext {
-///     depth: 1,
-///     location: JsonTreeLocation::Root,
+///     depth: 2,
+///     location: JsonTreeLocation::ObjectValue { key },
 /// };
-/// assert_eq!(context.depth, 1);
+/// assert_eq!(context.depth, 2);
+/// assert_eq!(context.location, JsonTreeLocation::ObjectValue { key });
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct JsonTreeContext<'a> {
     /// Root-inclusive depth; the root is always at depth one.
     pub depth: usize,
-    /// Location of this node in its immediate parent.
+    /// Root marker or location of this node in its immediate parent.
     pub location: JsonTreeLocation<'a>,
 }

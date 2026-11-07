@@ -17,6 +17,11 @@ use super::JsonValueDebugAction;
 /// Objects are compared by key lookup, independent of iteration order. The
 /// explicit continuation stack uses O(depth) auxiliary space, excluding both
 /// input trees.
+///
+/// # Parameters
+///
+/// * `left` - The first value to compare.
+/// * `right` - The second value to compare.
 pub(in crate::value) fn values_equal(left: &Value, right: &Value) -> bool {
     let mut current = Some((left, right));
     let mut frames = Vec::new();
@@ -77,16 +82,30 @@ pub(in crate::value) fn values_equal(left: &Value, right: &Value) -> bool {
 /// error is returned immediately. The action stack uses O(depth) auxiliary
 /// space, excluding the input value and any output storage owned by the
 /// formatter.
-pub(in crate::value) fn debug_value(value: &Value, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+///
+/// # Parameters
+///
+/// * `value` - The value whose owner/view debug syntax is formatted.
+/// * `formatter` - The formatter that receives the syntax.
+pub(in crate::value) fn debug_value(
+    value: &Value,
+    formatter: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
     let mut actions = vec![JsonValueDebugAction::Value(value)];
     while let Some(action) = actions.pop() {
         match action {
             JsonValueDebugAction::Text(text) => formatter.write_str(text)?,
             JsonValueDebugAction::Key(key) => fmt::Debug::fmt(key, formatter)?,
             JsonValueDebugAction::Value(Value::Null) => formatter.write_str("Null")?,
-            JsonValueDebugAction::Value(Value::Bool(value)) => write!(formatter, "Bool({value:?})")?,
-            JsonValueDebugAction::Value(Value::Number(value)) => write!(formatter, "Number({value:?})")?,
-            JsonValueDebugAction::Value(Value::String(value)) => write!(formatter, "String({value:?})")?,
+            JsonValueDebugAction::Value(Value::Bool(value)) => {
+                write!(formatter, "Bool({value:?})")?
+            }
+            JsonValueDebugAction::Value(Value::Number(value)) => {
+                write!(formatter, "Number({value:?})")?
+            }
+            JsonValueDebugAction::Value(Value::String(value)) => {
+                write!(formatter, "String({value:?})")?
+            }
             JsonValueDebugAction::Value(Value::Array(values)) => {
                 formatter.write_str("Array [")?;
                 actions.push(JsonValueDebugAction::Array {

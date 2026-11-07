@@ -41,8 +41,15 @@ use crate::internal::SERDE_JSON_RAW_VALUE_TOKEN;
 /// * `R` - Resource identifier used by the shared encode budget.
 /// * `Q` - Quantity representation used by the shared encode budget.
 /// * `VALUE_LIMITS` - Whether value-level limits are enforced.
-pub(in crate::encode) struct JsonEncodeCompound<'transaction, 'budget, 'context, C, R, Q, const VALUE_LIMITS: bool>
-where
+pub(in crate::encode) struct JsonEncodeCompound<
+    'transaction,
+    'budget,
+    'context,
+    C,
+    R,
+    Q,
+    const VALUE_LIMITS: bool,
+> where
     Q: ResourceQuantity,
 {
     /// Underlying Serde compound serializer.
@@ -253,6 +260,10 @@ where
 
     /// Rejects a callback for a compound declared with zero items or fields.
     ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Serde error type used to report an unexpected callback.
+    ///
     /// # Returns
     ///
     /// `Ok(())` when the compound declaration permits callbacks.
@@ -291,21 +302,25 @@ where
         E: Error,
     {
         let kind = self.private_kind.expect("private protocol kind must exist");
-        self.context
-            .borrow_mut()
-            .serialization_error(JsonSerializationErrorKind::InvalidSerializerState {
+        self.context.borrow_mut().serialization_error(
+            JsonSerializationErrorKind::InvalidSerializerState {
                 reason: kind.invalid_state(),
-            })
+            },
+        )
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeSeq for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeSeq
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeSeq,
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Successful result produced by the wrapped sequence serializer.
     type Ok = C::Ok;
+
+    /// Error type used by the wrapped sequence serializer.
     type Error = C::Error;
 
     /// Checks the observed count, then serializes one decorated child value.
@@ -332,7 +347,8 @@ where
     {
         self.reject_empty_callback()?;
         self.next_sequence()?;
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_element(&value)
     }
 
@@ -352,13 +368,17 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTuple for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTuple
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeTuple,
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Successful result produced by the wrapped tuple serializer.
     type Ok = C::Ok;
+
+    /// Error type used by the wrapped tuple serializer.
     type Error = C::Error;
 
     /// Serializes one decorated tuple element.
@@ -385,7 +405,8 @@ where
     {
         self.reject_empty_callback()?;
         self.next_sequence()?;
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_element(&value)
     }
 
@@ -404,13 +425,17 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleStruct for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleStruct
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeTupleStruct,
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Successful result produced by the wrapped tuple-struct serializer.
     type Ok = C::Ok;
+
+    /// Error type used by the wrapped tuple-struct serializer.
     type Error = C::Error;
 
     /// Serializes one decorated tuple-struct field.
@@ -436,7 +461,8 @@ where
     {
         self.reject_empty_callback()?;
         self.next_sequence()?;
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(&value)
     }
 
@@ -456,13 +482,17 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleVariant for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeTupleVariant
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeTupleVariant,
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Successful result produced by the wrapped tuple-variant serializer.
     type Ok = C::Ok;
+
+    /// Error type used by the wrapped tuple-variant serializer.
     type Error = C::Error;
 
     /// Serializes one decorated tuple-variant field.
@@ -488,7 +518,8 @@ where
     {
         self.reject_empty_callback()?;
         self.next_sequence()?;
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(&value)
     }
 
@@ -508,13 +539,17 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeMap for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeMap
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeMap,
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Successful result produced by the wrapped map serializer.
     type Ok = C::Ok;
+
+    /// Error type used by the wrapped map serializer.
     type Error = C::Error;
 
     /// Checks the entry count and key before delegating key serialization.
@@ -577,7 +612,8 @@ where
         if !self.map_key_pending {
             return Err(self.serialization_error(JsonSerializerStateError::MapValueWithoutKey));
         }
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_value(&value)?;
         self.map_key_pending = false;
         Ok(())
@@ -628,13 +664,17 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStruct for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStruct
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeStruct,
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Successful result produced by the wrapped struct serializer.
     type Ok = C::Ok;
+
+    /// Error type used by the wrapped struct serializer.
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
@@ -663,7 +703,10 @@ where
     {
         self.reject_empty_callback()?;
         if let Some(kind) = self.private_kind {
-            let state = self.private_state.as_mut().expect("private state must exist");
+            let state = self
+                .private_state
+                .as_mut()
+                .expect("private state must exist");
             if state.begin(key).is_err() {
                 return Err(self.private_protocol_error());
             }
@@ -671,7 +714,9 @@ where
                 JsonPrivateProtocolKind::RawValue => {
                     BudgetedPrivateValue::raw_value(value, self.context, self.child_depth)
                 }
-                JsonPrivateProtocolKind::Number => BudgetedPrivateValue::number(value, self.context, self.child_depth),
+                JsonPrivateProtocolKind::Number => {
+                    BudgetedPrivateValue::number(value, self.context, self.child_depth)
+                }
             };
             let inner_key = if kind == JsonPrivateProtocolKind::Number {
                 SERDE_JSON_RAW_VALUE_TOKEN
@@ -679,7 +724,10 @@ where
                 key
             };
             if let Err(error) = self.inner.serialize_field(inner_key, &payload) {
-                self.private_state.as_mut().expect("private state must exist").fail();
+                self.private_state
+                    .as_mut()
+                    .expect("private state must exist")
+                    .fail();
                 let _: Self::Error = self.private_protocol_error();
                 return Err(error);
             }
@@ -700,7 +748,8 @@ where
                 .borrow_mut()
                 .admit(JsonMeasurement::Key { bytes: key.len() })?;
         }
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(key, &value)
     }
 
@@ -750,13 +799,17 @@ where
     }
 }
 
-impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStructVariant for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
+impl<C, R, Q, const VALUE_LIMITS: bool> SerializeStructVariant
+    for JsonEncodeCompound<'_, '_, '_, C, R, Q, VALUE_LIMITS>
 where
     C: SerializeStructVariant,
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Successful result produced by the wrapped struct-variant serializer.
     type Ok = C::Ok;
+
+    /// Error type used by the wrapped struct-variant serializer.
     type Error = C::Error;
 
     /// Checks one field key and serializes its decorated value.
@@ -789,7 +842,8 @@ where
                 .borrow_mut()
                 .admit(JsonMeasurement::Key { bytes: key.len() })?;
         }
-        let value = BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
+        let value =
+            BudgetedValue::<_, _, _, VALUE_LIMITS>::new(value, self.context, self.child_depth);
         self.inner.serialize_field(key, &value)
     }
 

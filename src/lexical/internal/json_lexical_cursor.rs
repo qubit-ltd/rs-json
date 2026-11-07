@@ -15,11 +15,11 @@ use qubit_budget::json::JsonMeasurement;
 use qubit_budget::json::JsonValueTransaction;
 
 use super::super::json_lexical_admission_policy::JsonLexicalAdmissionPolicy;
-use super::super::json_lexical_consumer::JsonLexicalScanPoint;
 use super::super::json_lexical_error::JsonLexicalError;
 use super::super::json_lexical_error_reason::JsonLexicalErrorReason;
 use super::super::json_lexical_event::JsonLexicalEvent;
 use super::super::json_lexical_failure::JsonLexicalFailure;
+use super::super::json_lexical_scan_point::JsonLexicalScanPoint;
 use super::super::json_number_model::JsonNumberModel;
 use super::json_lexical_container_frame::JsonLexicalContainerFrame;
 use crate::decode::JsonDecodeContext;
@@ -125,11 +125,24 @@ where
     /// validates a complete string or number token before reporting its
     /// token-local admission or range failure; it still validates the rest of
     /// the document grammar.
-    pub(in crate::lexical) const fn set_admission_policy(&mut self, policy: JsonLexicalAdmissionPolicy) {
+    ///
+    /// # Parameters
+    ///
+    /// * `policy` - Token-local validation order for subsequent scans.
+    #[inline]
+    pub(in crate::lexical) const fn set_admission_policy(
+        &mut self,
+        policy: JsonLexicalAdmissionPolicy,
+    ) {
         self.admission_policy = policy;
     }
 
     /// Sets an optional maximum value depth, counting the root as depth one.
+    ///
+    /// # Parameters
+    ///
+    /// * `depth_limit` - Maximum root-inclusive depth, or `None` for no limit.
+    #[inline]
     pub(in crate::lexical) const fn set_depth_limit(&mut self, depth_limit: Option<Q>) {
         self.depth_limit = depth_limit;
     }
@@ -140,6 +153,11 @@ where
     /// before the following delimiter is validated. This lets a consumer stop
     /// on a materialization error without scanning later syntax; it does not
     /// change the delimiter rule when scanning continues.
+    ///
+    /// # Parameters
+    ///
+    /// * `defer` - Whether delimiter validation follows consumer callbacks.
+    #[inline]
     pub(in crate::lexical) const fn set_defer_number_delimiter(&mut self, defer: bool) {
         self.defer_number_delimiter = defer;
     }
@@ -148,11 +166,24 @@ where
     /// surrounding quotes and counting escape spelling bytes as written.
     ///
     /// This measures the source representation, not the decoded UTF-8 length.
-    pub(in crate::lexical) const fn set_max_encoded_string_bytes(&mut self, maximum: Option<usize>) {
+    ///
+    /// # Parameters
+    ///
+    /// * `maximum` - Maximum encoded bytes, or `None` for no configured limit.
+    #[inline]
+    pub(in crate::lexical) const fn set_max_encoded_string_bytes(
+        &mut self,
+        maximum: Option<usize>,
+    ) {
         self.max_encoded_string_bytes = maximum;
     }
 
     /// Sets the context attached to a subsequent syntax error.
+    ///
+    /// # Parameters
+    ///
+    /// * `context` - Decode context to attach to subsequent syntax failures.
+    #[inline]
     pub(in crate::lexical) const fn set_context(&mut self, context: JsonDecodeContext) {
         self.context = context;
     }
@@ -177,7 +208,10 @@ where
     ///
     /// A syntax error containing the cursor's byte offset, line, column, and
     /// supplied reason.
-    pub(in crate::lexical) fn syntax(&self, reason: JsonLexicalErrorReason) -> JsonLexicalError<R, Q> {
+    pub(in crate::lexical) fn syntax(
+        &self,
+        reason: JsonLexicalErrorReason,
+    ) -> JsonLexicalError<R, Q> {
         let (line, column) = self.line_column();
         JsonLexicalError::Syntax(JsonLexicalFailure {
             offset: self.offset,
@@ -194,6 +228,25 @@ where
     /// scanner returns immediately; its caller can use that sentinel to
     /// restore the consumer's saved error. Side effects from earlier callback
     /// invocations are not rolled back.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `F` - Callback type receiving scan points and deciding whether to
+    ///   continue.
+    ///
+    /// # Parameters
+    ///
+    /// * `emit` - Callback to invoke.
+    /// * `point` - Scan point to deliver.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when scanning continues, or a sentinel syntax error when it
+    /// stops.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConsumerStopped` when the callback declines the scan point.
     fn emit_scan_point<F>(
         &self,
         emit: &mut F,
@@ -218,6 +271,11 @@ where
     ///   objects.
     /// * `emit` - Callback receiving each lexical event discovered in the
     ///   value.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `F` - Callback type receiving scan points and deciding whether to
+    ///   continue.
     ///
     /// # Returns
     ///
@@ -295,7 +353,13 @@ where
                 let bytes = self.number_bytes()?;
                 let token = from_utf8(&self.input[start..self.offset])
                     .map_err(|_| self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber))?;
-                self.emit_scan_point(emit, JsonLexicalScanPoint::BeforeNumber { token, offset: start })?;
+                self.emit_scan_point(
+                    emit,
+                    JsonLexicalScanPoint::BeforeNumber {
+                        token,
+                        offset: start,
+                    },
+                )?;
                 self.admit(JsonMeasurement::Number { depth, bytes })?;
                 self.validate_number_range(start, self.offset)?;
                 self.emit_scan_point(
@@ -353,6 +417,11 @@ where
     ///   container end.
     /// * `emit` - Callback receiving lexical events discovered while resuming.
     ///
+    /// # Type Parameters
+    ///
+    /// * `F` - Callback type receiving scan points and deciding whether to
+    ///   continue.
+    ///
     /// # Returns
     ///
     /// Returns `Ok(())` when the container state has been resumed.
@@ -378,7 +447,10 @@ where
                     if items == 0 {
                         let offset = self.offset;
                         self.offset += 1;
-                        self.emit_scan_point(emit, JsonLexicalScanPoint::Event(JsonLexicalEvent::EndArray { offset }))?;
+                        self.emit_scan_point(
+                            emit,
+                            JsonLexicalScanPoint::Event(JsonLexicalEvent::EndArray { offset }),
+                        )?;
                         return Ok(());
                     }
                     return Err(self.syntax(JsonLexicalErrorReason::UnexpectedByte));
@@ -405,7 +477,10 @@ where
                     Some(b']') => {
                         let offset = self.offset;
                         self.offset += 1;
-                        self.emit_scan_point(emit, JsonLexicalScanPoint::Event(JsonLexicalEvent::EndArray { offset }))?;
+                        self.emit_scan_point(
+                            emit,
+                            JsonLexicalScanPoint::Event(JsonLexicalEvent::EndArray { offset }),
+                        )?;
                         Ok(())
                     }
                     None => Err(self.syntax(JsonLexicalErrorReason::UnexpectedEnd)),
@@ -425,10 +500,20 @@ where
                         )?;
                         return Ok(());
                     }
-                    self.emit_scan_point(emit, JsonLexicalScanPoint::BeforeKey { offset: self.offset })?;
+                    self.emit_scan_point(
+                        emit,
+                        JsonLexicalScanPoint::BeforeKey {
+                            offset: self.offset,
+                        },
+                    )?;
                     return Err(self.syntax(JsonLexicalErrorReason::ExpectedObjectKey));
                 }
-                self.emit_scan_point(emit, JsonLexicalScanPoint::BeforeKey { offset: self.offset })?;
+                self.emit_scan_point(
+                    emit,
+                    JsonLexicalScanPoint::BeforeKey {
+                        offset: self.offset,
+                    },
+                )?;
                 if self.peek() != Some(b'"') {
                     return Err(self.syntax(JsonLexicalErrorReason::ExpectedObjectKey));
                 }
@@ -488,11 +573,26 @@ where
     }
 
     /// Stages one native measurement when value limits are configured.
+    ///
+    /// # Parameters
+    ///
+    /// * `measurement` - Value or container measurement to stage.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when limits are disabled or admission succeeds; otherwise a
+    /// budget error.
+    ///
+    /// # Errors
+    ///
+    /// Returns a budget error when the transaction rejects the measurement.
     fn admit(&mut self, measurement: JsonMeasurement) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.has_value_limits {
             return Ok(());
         }
-        self.transaction.try_admit(measurement).map_err(JsonLexicalError::from)
+        self.transaction
+            .try_admit(measurement)
+            .map_err(JsonLexicalError::from)
     }
 
     /// Checks the encoded source length of a completely consumed string token.
@@ -504,19 +604,52 @@ where
     /// the limit while scanning the token, before this completed-token check.
     /// The incremental check reports unexpected EOF before a limit violation
     /// when the input ends before the token can be completed.
+    ///
+    /// # Parameters
+    ///
+    /// * `start` - Byte offset of the string's opening quote.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the limit is satisfied, or a syntax error when exceeded.
+    ///
+    /// # Errors
+    ///
+    /// Returns `EncodedStringLimit` when the encoded source length exceeds the
+    /// configured maximum.
     fn check_encoded_string_limit(&self, start: usize) -> Result<(), JsonLexicalError<R, Q>> {
         let Some(maximum) = self.max_encoded_string_bytes else {
             return Ok(());
         };
         let observed = self.offset.saturating_sub(start).saturating_sub(2);
         if observed > maximum {
-            return Err(self.syntax_at(start, JsonLexicalErrorReason::EncodedStringLimit { maximum, observed }));
+            return Err(self.syntax_at(
+                start,
+                JsonLexicalErrorReason::EncodedStringLimit { maximum, observed },
+            ));
         }
         Ok(())
     }
 
     /// Enters one container when value limits are configured.
-    fn enter_container(&mut self, kind: JsonContainerKind, depth: usize) -> Result<(), JsonLexicalError<R, Q>> {
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - Container kind being entered.
+    /// * `depth` - Root-inclusive depth of the container.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when limits are disabled or entry is admitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns a budget error when the transaction rejects the container.
+    fn enter_container(
+        &mut self,
+        kind: JsonContainerKind,
+        depth: usize,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.has_value_limits {
             return Ok(());
         }
@@ -526,7 +659,24 @@ where
     }
 
     /// Checks one observed container count when value limits are configured.
-    fn check_container_count(&mut self, kind: JsonContainerKind, count: usize) -> Result<(), JsonLexicalError<R, Q>> {
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - Container kind whose count is checked.
+    /// * `count` - Number of items or entries observed so far.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when limits are disabled or the count is accepted.
+    ///
+    /// # Errors
+    ///
+    /// Returns a budget error when the transaction rejects the observed count.
+    fn check_container_count(
+        &mut self,
+        kind: JsonContainerKind,
+        count: usize,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.has_value_limits {
             return Ok(());
         }
@@ -536,14 +686,35 @@ where
     }
 
     /// Returns the current byte without advancing.
-    #[must_use]
+    ///
+    /// # Returns
+    ///
+    /// The byte at the cursor offset, or `None` when the input has ended.
     #[inline(always)]
     fn peek(&self) -> Option<u8> {
         self.input.get(self.offset).copied()
     }
 
     /// Charges and consumes one scalar literal.
-    fn literal(&mut self, literal: &[u8], measurement: JsonMeasurement) -> Result<(), JsonLexicalError<R, Q>> {
+    ///
+    /// # Parameters
+    ///
+    /// * `literal` - Expected source bytes for the scalar.
+    /// * `measurement` - Budget measurement admitted after syntax validation.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after consuming the scalar, or its syntax or budget error.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax error for an incomplete, mismatched, or improperly
+    /// delimited literal, or a budget error when admission is rejected.
+    fn literal(
+        &mut self,
+        literal: &[u8],
+        measurement: JsonMeasurement,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         if !self.input[self.offset..].starts_with(literal) {
             let matched = self.input[self.offset..]
                 .iter()
@@ -569,6 +740,15 @@ where
     }
 
     /// Consumes one JSON string and returns its decoded UTF-8 byte length.
+    ///
+    /// # Returns
+    ///
+    /// The decoded UTF-8 byte length, or a syntax error for an invalid or
+    /// incomplete string.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax error when the string token is malformed or incomplete.
     fn string_bytes(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
         self.context = JsonDecodeContext::String;
         if self.admission_policy == JsonLexicalAdmissionPolicy::TokenFirst {
@@ -585,6 +765,20 @@ where
 
     /// Finds the closing quote while enforcing the token-local encoded byte
     /// limit.
+    ///
+    /// # Parameters
+    ///
+    /// * `start` - Byte offset of the string's opening quote.
+    ///
+    /// # Returns
+    ///
+    /// The offset after the closing quote, or a syntax error for an incomplete
+    /// or over-limit token.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax error when the token is incomplete or exceeds the
+    /// configured encoded-byte limit.
     fn raw_string_token_end(&self, start: usize) -> Result<usize, JsonLexicalError<R, Q>> {
         let mut end = start + 1;
         let mut escaped = false;
@@ -613,6 +807,16 @@ where
     }
 
     /// Consumes a JSON string and returns its decoded UTF-8 byte length.
+    ///
+    /// # Returns
+    ///
+    /// The decoded UTF-8 byte length, or a syntax error for an invalid or
+    /// incomplete string.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax error for invalid escapes, UTF-8, surrogate pairs, or
+    /// incomplete strings.
     fn string_bytes_immediate(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
         debug_assert_eq!(self.peek(), Some(b'"'));
         self.offset += 1;
@@ -691,6 +895,14 @@ where
     }
 
     /// Consumes a Unicode escape and returns its decoded UTF-8 byte length.
+    ///
+    /// # Returns
+    ///
+    /// The decoded UTF-8 byte length, or a syntax error for an invalid escape.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax error for invalid or unpaired surrogate escapes.
     fn unicode_escape_bytes(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
         debug_assert_eq!(self.peek(), Some(b'u'));
         self.offset += 1;
@@ -721,6 +933,16 @@ where
     }
 
     /// Consumes four hexadecimal digits from a Unicode escape.
+    ///
+    /// # Returns
+    ///
+    /// The decoded 16-bit value, or a syntax error when a digit is invalid or
+    /// missing.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax error when fewer than four hexadecimal digits remain
+    /// or a digit is invalid.
     fn hex_quad(&mut self) -> Result<u16, JsonLexicalError<R, Q>> {
         let mut value = 0_u16;
         for _ in 0..4 {
@@ -742,6 +964,15 @@ where
     }
 
     /// Consumes one JSON number and returns its original lexical byte length.
+    ///
+    /// # Returns
+    ///
+    /// The number token's byte length, or a syntax error for an invalid token.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax error when the number token violates JSON number
+    /// grammar.
     fn number_bytes(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
         self.context = JsonDecodeContext::Number;
         if self.admission_policy == JsonLexicalAdmissionPolicy::Immediate {
@@ -763,6 +994,16 @@ where
     }
 
     /// Applies the existing JSON number grammar without changing its rules.
+    ///
+    /// # Returns
+    ///
+    /// The consumed token's byte length, or a syntax error for malformed
+    /// number syntax.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax error when the number token violates JSON number
+    /// grammar.
     fn number_bytes_immediate(&mut self) -> Result<usize, JsonLexicalError<R, Q>> {
         self.context = JsonDecodeContext::Number;
         let start = self.offset;
@@ -808,7 +1049,25 @@ where
 
     /// Validates one syntactically complete number against the supported
     /// integer and floating-point representation ranges.
-    fn validate_number_range(&self, start: usize, end: usize) -> Result<(), JsonLexicalError<R, Q>> {
+    ///
+    /// # Parameters
+    ///
+    /// * `start` - Inclusive byte offset of the number token.
+    /// * `end` - Exclusive byte offset of the number token.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when representable under the selected model, or a syntax error.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax error when the token is invalid or outside the selected
+    /// numeric range.
+    fn validate_number_range(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Result<(), JsonLexicalError<R, Q>> {
         let Ok(token) = from_utf8(&self.input[start..end]) else {
             return Err(self.syntax_at(start, JsonLexicalErrorReason::InvalidNumber));
         };
@@ -849,6 +1108,16 @@ where
     }
 
     /// Consumes the required digits following a decimal point or exponent.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after consuming at least one digit, or a syntax error when no
+    /// digit follows.
+    ///
+    /// # Errors
+    ///
+    /// Returns a syntax error when no decimal digit follows the decimal point
+    /// or exponent marker.
     fn consume_digits(&mut self) -> Result<(), JsonLexicalError<R, Q>> {
         if !matches!(self.peek(), Some(b'0'..=b'9')) {
             return Err(self.syntax(JsonLexicalErrorReason::InvalidNumber));
@@ -860,13 +1129,29 @@ where
     }
 
     /// Tests whether the next byte can follow a complete JSON scalar value.
+    ///
+    /// # Parameters
+    ///
+    /// * `byte` - Following byte, or `None` when input has ended.
+    ///
+    /// # Returns
+    ///
+    /// `true` when the byte is a valid JSON value delimiter.
     #[must_use]
     #[inline]
     const fn is_value_delimiter(byte: Option<u8>) -> bool {
-        matches!(byte, None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}'))
+        matches!(
+            byte,
+            None | Some(b' ' | b'\n' | b'\r' | b'\t' | b',' | b']' | b'}')
+        )
     }
 
     /// Computes one-based line and UTF-8 character column at the cursor.
+    ///
+    /// # Returns
+    ///
+    /// One-based `(line, UTF-8 character column)` coordinates at the current
+    /// cursor offset.
     #[must_use]
     #[inline]
     fn line_column(&self) -> (usize, usize) {
@@ -874,6 +1159,15 @@ where
     }
 
     /// Builds a structured syntax error at an explicit input byte offset.
+    ///
+    /// # Parameters
+    ///
+    /// * `offset` - Input byte offset associated with the error.
+    /// * `reason` - Lexical failure reason to attach.
+    ///
+    /// # Returns
+    ///
+    /// A syntax error containing the offset, coordinates, reason, and context.
     fn syntax_at(&self, offset: usize, reason: JsonLexicalErrorReason) -> JsonLexicalError<R, Q> {
         let (line, column) = self.line_column_at(offset);
         JsonLexicalError::Syntax(JsonLexicalFailure {
@@ -886,6 +1180,14 @@ where
     }
 
     /// Computes one-based line and UTF-8 character column at `offset`.
+    ///
+    /// # Parameters
+    ///
+    /// * `offset` - Input byte offset, clamped to the end of the input.
+    ///
+    /// # Returns
+    ///
+    /// One-based `(line, UTF-8 character column)` coordinates.
     #[must_use]
     #[inline]
     fn line_column_at(&self, offset: usize) -> (usize, usize) {
@@ -915,6 +1217,10 @@ pub(crate) fn line_column_at(input: &[u8], offset: usize) -> (usize, usize) {
 ///
 /// The callback receives the number of input bytes examined in each scan step.
 ///
+/// # Type Parameters
+///
+/// * `F` - Callback type observing examined byte counts.
+///
 /// # Parameters
 ///
 /// * `input` - Source bytes containing the location to measure.
@@ -927,7 +1233,11 @@ pub(crate) fn line_column_at(input: &[u8], offset: usize) -> (usize, usize) {
 ///
 /// A pair of one-based `(line, UTF-8 character column)` coordinates.
 #[must_use]
-fn line_column_at_with_inspection<F>(input: &[u8], offset: usize, mut record_examined_bytes: F) -> (usize, usize)
+fn line_column_at_with_inspection<F>(
+    input: &[u8],
+    offset: usize,
+    mut record_examined_bytes: F,
+) -> (usize, usize)
 where
     F: FnMut(usize),
 {
@@ -970,7 +1280,14 @@ where
 }
 
 /// Returns the UTF-8 width encoded by one valid leading byte.
-#[must_use]
+///
+/// # Parameters
+///
+/// * `byte` - Candidate leading byte.
+///
+/// # Returns
+///
+/// The encoded width for a valid leading byte, or `None` for an invalid one.
 #[inline]
 const fn utf8_width(byte: u8) -> Option<usize> {
     match byte {

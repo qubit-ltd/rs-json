@@ -5,6 +5,8 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+//! Tests the mutable JSON tree visitor control flow.
+
 use qubit_json::value::traverse::JsonTreeContext;
 use qubit_json::value::traverse::JsonTreeControl;
 use qubit_json::value::traverse::JsonTreeLocation;
@@ -16,7 +18,11 @@ struct Visitor;
 impl JsonTreeMutVisitor for Visitor {
     type Error = ();
 
-    fn visit(&mut self, _value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(
+        &mut self,
+        _value: &mut Value,
+        _context: JsonTreeContext<'_>,
+    ) -> Result<JsonTreeControl, Self::Error> {
         Ok(JsonTreeControl::SkipSubtree)
     }
 }

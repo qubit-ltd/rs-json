@@ -55,8 +55,8 @@ fn test_json_encode_serializer_rejects_forged_private_key_as_regular_map() {
         .build();
     let mut session = JsonEncodeSession::from_limits(limits);
 
-    let error =
-        encode(&ForgedPrivateKey, &mut session).expect_err("the ordinary struct field must consume a map entry");
+    let error = encode(&ForgedPrivateKey, &mut session)
+        .expect_err("the ordinary struct field must consume a map entry");
     let error = error.into_budget_error().expect("expected a budget error");
 
     assert_eq!(

@@ -29,7 +29,9 @@ impl<T> TypedSeed<T> {
     #[must_use]
     #[inline(always)]
     pub(in crate::decode) const fn new() -> Self {
-        Self { marker: PhantomData }
+        Self {
+            marker: PhantomData,
+        }
     }
 }
 
@@ -42,6 +44,15 @@ where
 
     /// Delegates the seed operation to the target type's `Deserialize`
     /// implementation.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` - Deserializer providing the input consumed by `T::deserialize`.
+    ///
+    /// # Parameters
+    ///
+    /// * `self` - Zero-sized seed identifying the target type `T`.
+    /// * `deserializer` - Input source passed to `T::deserialize`.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,

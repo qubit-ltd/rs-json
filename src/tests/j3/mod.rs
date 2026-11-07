@@ -11,4 +11,5 @@ mod composition_tests;
 mod decode_tests;
 mod number_tests;
 mod owner_tests;
+mod pretty_tests;
 mod view_allocation_tests;

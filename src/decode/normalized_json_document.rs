@@ -54,6 +54,12 @@ pub struct NormalizedJsonDocument<'input> {
 
 impl<'input> NormalizedJsonDocument<'input> {
     /// Creates a document from normalized text and its original byte length.
+    ///
+    /// # Parameters
+    ///
+    /// - `text`: The normalized JSON text retained for later decoding.
+    /// - `raw_input_bytes`: The original input length in bytes, used for
+    ///   raw-input budget accounting.
     #[inline]
     #[must_use]
     pub(in crate::decode) fn new(text: Cow<'input, str>, raw_input_bytes: usize) -> Self {

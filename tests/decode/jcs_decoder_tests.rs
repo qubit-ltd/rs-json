@@ -49,7 +49,12 @@ impl ScriptedJcsInput {
 impl Input for ScriptedJcsInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> IoResult<usize> {
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> IoResult<usize> {
         self.reads += 1;
         if self.interrupt_once {
             self.interrupt_once = false;
@@ -63,7 +68,8 @@ impl Input for ScriptedJcsInput {
         }
         let read_limit = self.fail_at.unwrap_or(self.bytes.len());
         let read_len = count.min(read_limit - self.position);
-        output[index..index + read_len].copy_from_slice(&self.bytes[self.position..self.position + read_len]);
+        output[index..index + read_len]
+            .copy_from_slice(&self.bytes[self.position..self.position + read_len]);
         self.position += read_len;
         Ok(read_len)
     }
@@ -75,13 +81,19 @@ fn test_jcs_decoder_accepts_binary64_integer_text() {
     assert!(JsonDecoder::unlimited().decode_str::<Value>(input).is_err());
     let value = JcsDecoder::unlimited().decode_str(input).unwrap();
     assert!(value.as_number().unwrap().is_f64());
-    assert_eq!(JcsEncoder::unlimited().to_vec(&value).unwrap(), input.as_bytes());
+    assert_eq!(
+        JcsEncoder::unlimited().to_vec(&value).unwrap(),
+        input.as_bytes()
+    );
 }
 
 #[test]
 fn test_jcs_decoder_unlimited_does_not_measure_unconfigured_value_resources() {
     let mut decoder = JcsDecoder::unlimited();
-    assert_eq!(decoder.decode_str(r#"{"value":[1,true]}"#).unwrap()["value"][1], true);
+    assert_eq!(
+        decoder.decode_str(r#"{"value":[1,true]}"#).unwrap()["value"][1],
+        true
+    );
     assert_eq!(decoder.session().value_budget().used_nodes(), None);
 }
 
@@ -98,7 +110,11 @@ fn test_jcs_decoder_rejects_decoded_duplicate_key_without_leaking_key() {
 
 #[test]
 fn test_jcs_decoder_rounds_all_number_forms_to_binary64() {
-    for input in ["9007199254740993", "9007199254740993.0", "9007199254740993e0"] {
+    for input in [
+        "9007199254740993",
+        "9007199254740993.0",
+        "9007199254740993e0",
+    ] {
         let value = JcsDecoder::unlimited().decode_str(input).unwrap();
         assert_eq!(value.as_f64().unwrap().to_bits(), 0x4340_0000_0000_0000);
     }
@@ -113,7 +129,9 @@ fn test_jcs_decoder_preserves_number_and_real_marker_object() {
         let expected: f64 = token.parse().unwrap();
         assert_eq!(number.to_bits(), expected.to_bits());
     }
-    let object = decoder.decode_str(r#"{"$serde_json::private::Number":"1.5"}"#).unwrap();
+    let object = decoder
+        .decode_str(r#"{"$serde_json::private::Number":"1.5"}"#)
+        .unwrap();
     assert!(object.is_object());
     assert_eq!(object["$serde_json::private::Number"].as_str(), Some("1.5"));
 }
@@ -148,21 +166,39 @@ fn test_jcs_decoder_entry_points_share_binary64_value_semantics() {
     let by_utf8 = JcsDecoder::unlimited().decode_utf8(b"1.5").unwrap();
     let mut input = Cursor::new(b"1.5".to_vec());
     let by_input = JcsDecoder::unlimited().decode_input(&mut input).unwrap();
-    assert_eq!(by_str.as_f64().unwrap().to_bits(), by_utf8.as_f64().unwrap().to_bits());
-    assert_eq!(by_str.as_f64().unwrap().to_bits(), by_input.as_f64().unwrap().to_bits());
+    assert_eq!(
+        by_str.as_f64().unwrap().to_bits(),
+        by_utf8.as_f64().unwrap().to_bits()
+    );
+    assert_eq!(
+        by_str.as_f64().unwrap().to_bits(),
+        by_input.as_f64().unwrap().to_bits()
+    );
 }
 
 #[test]
 fn test_jcs_guarded_entry_points_preserve_binary64_and_objects() {
     let input = r#"{"id":9007199254740993,"items":[1.5,-0]}"#;
     let from_str = JcsDecoder::unlimited().decode_value_str(input).unwrap();
-    let from_bytes = JcsDecoder::unlimited().decode_value_utf8(input.as_bytes()).unwrap();
+    let from_bytes = JcsDecoder::unlimited()
+        .decode_value_utf8(input.as_bytes())
+        .unwrap();
     let mut source = Cursor::new(input.as_bytes());
-    let from_input = JcsDecoder::unlimited().decode_value_input(&mut source).unwrap();
+    let from_input = JcsDecoder::unlimited()
+        .decode_value_input(&mut source)
+        .unwrap();
     assert_eq!(from_str, from_bytes);
     assert_eq!(from_str, from_input);
-    assert_eq!(from_str.as_value()["id"].as_f64(), Some(9_007_199_254_740_992.0));
-    assert!(from_str.as_value()["items"][1].as_f64().unwrap().is_sign_negative());
+    assert_eq!(
+        from_str.as_value()["id"].as_f64(),
+        Some(9_007_199_254_740_992.0)
+    );
+    assert!(
+        from_str.as_value()["items"][1]
+            .as_f64()
+            .unwrap()
+            .is_sign_negative()
+    );
 }
 
 #[test]
@@ -217,7 +253,8 @@ fn test_jcs_guarded_and_legacy_entry_points_charge_once() {
 
     let guarded_error = guarded.decode_value_str("x").unwrap_err();
     let legacy_error = legacy.decode_str("x").unwrap_err();
-    let (JcsDecodeError::Decode(guarded_error), JcsDecodeError::Decode(legacy_error)) = (guarded_error, legacy_error)
+    let (JcsDecodeError::Decode(guarded_error), JcsDecodeError::Decode(legacy_error)) =
+        (guarded_error, legacy_error)
     else {
         panic!("guarded and legacy methods should classify malformed JSON alike");
     };
@@ -245,12 +282,21 @@ fn test_jcs_decoder_input_materialization_failure_keeps_input_and_allows_reuse()
     let mut failed_input = Cursor::new(duplicate.as_bytes().to_vec());
     assert!(decoder.decode_input(&mut failed_input).is_err());
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
-    assert_eq!(decoder.session().input_budget().unwrap().used(), duplicate.len());
+    assert_eq!(
+        decoder.session().input_budget().unwrap().used(),
+        duplicate.len()
+    );
 
     let mut next_input = Cursor::new(b"true".to_vec());
-    assert_eq!(decoder.decode_input(&mut next_input).unwrap(), Value::Bool(true));
+    assert_eq!(
+        decoder.decode_input(&mut next_input).unwrap(),
+        Value::Bool(true)
+    );
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
-    assert_eq!(decoder.session().input_budget().unwrap().used(), duplicate.len() + 4);
+    assert_eq!(
+        decoder.session().input_budget().unwrap().used(),
+        duplicate.len() + 4
+    );
 }
 
 #[test]
@@ -293,7 +339,10 @@ fn test_jcs_decoder_input_read_failure_keeps_input_and_allows_reuse() {
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
 
     let mut next_input = ScriptedJcsInput::new(b"true");
-    assert_eq!(decoder.decode_input(&mut next_input).unwrap(), Value::Bool(true));
+    assert_eq!(
+        decoder.decode_input(&mut next_input).unwrap(),
+        Value::Bool(true)
+    );
     assert_eq!(next_input.reads, 2);
     assert_eq!(next_input.position, 4);
     assert_eq!(decoder.session().input_budget().unwrap().used(), 8);
@@ -304,7 +353,10 @@ fn test_jcs_decoder_input_read_failure_keeps_input_and_allows_reuse() {
 fn test_jcs_decoder_reports_second_key_token_coordinates() {
     let input = "{\r\n  \"é\":1,\r\n  \"\\u00e9\":2}";
     let error = JcsDecoder::unlimited().decode_str(input).unwrap_err();
-    assert!(matches!(error, JcsDecodeError::DuplicateKey { line: 3, column: 3 }));
+    assert!(matches!(
+        error,
+        JcsDecodeError::DuplicateKey { line: 3, column: 3 }
+    ));
 }
 
 #[test]
@@ -312,7 +364,9 @@ fn test_jcs_decoder_complete_admission_precedes_materialization_errors() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(JsonValueLimits::builder().max_depth(2).build())
         .build();
-    let error = JcsDecoder::with_limits(limits).decode_str("[[0]]").unwrap_err();
+    let error = JcsDecoder::with_limits(limits)
+        .decode_str("[[0]]")
+        .unwrap_err();
     let JcsDecodeError::Decode(error) = error else {
         panic!("lexical depth budget must precede construction depth")
     };
@@ -396,7 +450,11 @@ fn test_jcs_decoder_checks_duplicate_keys_per_decoded_object() {
             assert!(result.is_ok());
         }
     }
-    assert!(JcsDecoder::unlimited().decode_str(r#"{"é":1,"e\u0301":2}"#).is_ok());
+    assert!(
+        JcsDecoder::unlimited()
+            .decode_str(r#"{"é":1,"e\u0301":2}"#)
+            .is_ok()
+    );
 }
 
 #[test]
@@ -411,7 +469,8 @@ fn test_jcs_decoder_exposes_policy_and_transfers_session() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .max_input_bytes(4)
         .build();
-    let mut decoder = JcsDecoder::with_limits(limits).with_diagnostic_policy(DiagnosticPolicy::Detailed);
+    let mut decoder =
+        JcsDecoder::with_limits(limits).with_diagnostic_policy(DiagnosticPolicy::Detailed);
 
     assert_eq!(decoder.diagnostic_policy(), DiagnosticPolicy::Detailed);
     assert_eq!(
@@ -435,13 +494,20 @@ fn test_jcs_decoder_rejects_invalid_utf8_and_unpaired_surrogate() {
         JcsDecoder::unlimited().decode_str(r#""\uDEAD""#),
         Err(JcsDecodeError::Decode(_))
     ));
-    assert_eq!(JcsDecoder::unlimited().decode_str(r#""\uD834\uDD1E""#).unwrap(), "𝄞");
+    assert_eq!(
+        JcsDecoder::unlimited()
+            .decode_str(r#""\uD834\uDD1E""#)
+            .unwrap(),
+        "𝄞"
+    );
 }
 
 #[test]
 fn test_jcs_decoder_duplicate_error_stays_redacted_with_detailed_policy() {
     let mut decoder = JcsDecoder::unlimited().with_diagnostic_policy(DiagnosticPolicy::Detailed);
-    let error = decoder.decode_str(r#"{"secret":1,"secret":2}"#).unwrap_err();
+    let error = decoder
+        .decode_str(r#"{"secret":1,"secret":2}"#)
+        .unwrap_err();
     assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
     assert!(!format!("{error:?}").contains("secret"));
     assert!(!error.to_string().contains("secret"));
@@ -490,7 +556,9 @@ fn test_jcs_decoder_accepts_json_whitespace_and_reports_binary64_range_errors() 
 #[test]
 fn test_jcs_decoder_nested_duplicate_key_failure_recovers_and_preserves_source_policy() {
     let mut decoder = JcsDecoder::unlimited();
-    let error = decoder.decode_str(r#"{"outer":{"x":1,"x":2}}"#).unwrap_err();
+    let error = decoder
+        .decode_str(r#"{"outer":{"x":1,"x":2}}"#)
+        .unwrap_err();
     assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
     assert_eq!(decoder.decode_str("true").unwrap(), Value::Bool(true));
 
@@ -509,11 +577,12 @@ fn test_jcs_decoder_nested_duplicate_key_failure_recovers_and_preserves_source_p
     assert!(Error::source(&inner).is_none());
 }
 
-#[cfg(feature = "jcs")]
 #[test]
 fn test_jcs_decoder_keeps_binary64_and_accepts_deep_tree() {
     let text = format!("{}1.0{}", "[".repeat(129), "]".repeat(129));
-    let value = qubit_json::decode::JcsDecoder::unlimited().decode_str(&text).unwrap();
+    let value = qubit_json::decode::JcsDecoder::unlimited()
+        .decode_str(&text)
+        .unwrap();
     assert!(value.is_array());
 
     let error = qubit_json::decode::JcsDecoder::unlimited()
@@ -523,18 +592,21 @@ fn test_jcs_decoder_keeps_binary64_and_accepts_deep_tree() {
         panic!("non-finite JCS number must be reported as a decode error");
     };
     assert_eq!(
-        error.syntax_error().map(qubit_json::decode::JsonSyntaxError::reason),
+        error
+            .syntax_error()
+            .map(qubit_json::decode::JsonSyntaxError::reason),
         Some(qubit_json::decode::JsonSyntaxErrorReason::FloatOutOfRange)
     );
 }
 
-#[cfg(feature = "jcs")]
 #[test]
 fn test_jcs_binary64_isolated_from_ordinary_decode_model() {
     let jcs = qubit_json::decode::JcsDecoder::unlimited()
         .decode_str("9007199254740993")
         .unwrap();
     assert!(jcs.as_number().unwrap().is_f64());
-    let ordinary: serde_json::Value = JsonDecoder::unlimited().decode_str("9007199254740993").unwrap();
+    let ordinary: serde_json::Value = JsonDecoder::unlimited()
+        .decode_str("9007199254740993")
+        .unwrap();
     assert_eq!(ordinary.as_u64(), Some(9_007_199_254_740_993));
 }

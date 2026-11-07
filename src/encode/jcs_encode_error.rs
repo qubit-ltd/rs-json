@@ -140,20 +140,24 @@ where
     /// retained source, which violates the encoder error invariant.
     pub(crate) fn from_json_encode(error: JsonEncodeError<R, Q>) -> Self {
         match error.kind() {
-            JsonEncodeErrorKind::Budget => {
-                Self::budget(error.into_budget_error().expect("budget kind retains a budget source"))
-            }
+            JsonEncodeErrorKind::Budget => Self::budget(
+                error
+                    .into_budget_error()
+                    .expect("budget kind retains a budget source"),
+            ),
             JsonEncodeErrorKind::Serialize => Self::serialization(
                 error
                     .into_serialization_error()
                     .expect("serialize kind retains a source"),
             ),
-            JsonEncodeErrorKind::Write => {
-                Self::write(error.into_write_error().expect("write kind retains an I/O source"))
-            }
-            JsonEncodeErrorKind::InvalidRawJson => Self::serialization(JsonSerializationError::new(
-                JsonSerializationErrorKind::CustomSerialization,
-            )),
+            JsonEncodeErrorKind::Write => Self::write(
+                error
+                    .into_write_error()
+                    .expect("write kind retains an I/O source"),
+            ),
+            JsonEncodeErrorKind::InvalidRawJson => Self::serialization(
+                JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization),
+            ),
         }
     }
 
@@ -182,6 +186,7 @@ where
     /// # Returns
     ///
     /// The retained budget error for a budget failure, or `None` otherwise.
+    #[must_use = "the retained budget failure should be inspected"]
     #[inline]
     pub const fn budget_error(&self) -> Option<&MeasuredBudgetError<R, Q>> {
         match &self.failure {
@@ -199,6 +204,7 @@ where
     ///
     /// The retained working-memory failure for that category, or `None`
     /// otherwise.
+    #[must_use = "the retained working-memory failure should be inspected"]
     #[inline]
     pub const fn working_memory_error(&self) -> Option<&JcsWorkingMemoryError> {
         match &self.failure {
@@ -216,6 +222,7 @@ where
     ///
     /// The privacy-safe serialization failure for that category, or `None`
     /// otherwise.
+    #[must_use = "the retained serialization failure should be inspected"]
     #[inline]
     pub const fn serialization_error(&self) -> Option<&JsonSerializationError> {
         match &self.failure {
@@ -232,6 +239,7 @@ where
     /// # Returns
     ///
     /// The retained writer error for that category, or `None` otherwise.
+    #[must_use = "the retained writer failure should be inspected"]
     #[inline]
     pub const fn write_error(&self) -> Option<&io::Error> {
         match &self.failure {

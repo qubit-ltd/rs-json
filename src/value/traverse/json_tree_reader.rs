@@ -120,7 +120,11 @@ where
     /// that transaction; a budget error rejects the transaction so it cannot
     /// be committed. Drop the transaction after an error and rebuild visitors
     /// that require balanced callbacks or clean state.
-    pub fn process<V>(&mut self, value: &Value, visitor: &mut V) -> Result<(), JsonTreeProcessError<R, Q, V::Error>>
+    pub fn process<V>(
+        &mut self,
+        value: &Value,
+        visitor: &mut V,
+    ) -> Result<(), JsonTreeProcessError<R, Q, V::Error>>
     where
         V: JsonTreeVisitor,
     {
@@ -138,11 +142,14 @@ where
                     let context = frame.context;
                     if self.enforce_limits {
                         if let JsonTreeLocation::ObjectValue { key } = context.location {
-                            self.transaction.try_admit(JsonMeasurement::Key { bytes: key.len() })?;
+                            self.transaction
+                                .try_admit(JsonMeasurement::Key { bytes: key.len() })?;
                         }
                         self.admit(value, context.depth)?;
                     }
-                    visitor.enter(value, context).map_err(JsonTreeProcessError::Visitor)?;
+                    visitor
+                        .enter(value, context)
+                        .map_err(JsonTreeProcessError::Visitor)?;
                     frame.state = ReadFrameState::Children(ChildCursor::new(value, context.depth));
                 }
                 ReadFrameState::Children(cursor) => {
@@ -209,6 +216,7 @@ where
     /// Returns a measured budget error when the transaction cannot admit the
     /// node within its configured resource limits.
     fn admit(&mut self, value: &Value, depth: usize) -> Result<(), MeasuredBudgetError<R, Q>> {
-        self.transaction.try_admit(json_value_measurement(value, depth))
+        self.transaction
+            .try_admit(json_value_measurement(value, depth))
     }
 }

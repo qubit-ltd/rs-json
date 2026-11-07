@@ -63,10 +63,16 @@ impl JsonPrettyError {
         offset: Option<usize>,
         source: Option<Box<dyn Error + Send + Sync>>,
     ) -> Self {
-        Self { kind, offset, source }
+        Self {
+            kind,
+            offset,
+            source,
+        }
     }
 
     /// Returns the stable error category.
+    #[must_use]
+    #[inline]
     pub fn kind(&self) -> JsonPrettyErrorKind {
         self.kind
     }
@@ -80,12 +86,26 @@ impl JsonPrettyError {
     /// # Returns
     ///
     /// The source input byte offset, or `None` when no coordinate is available.
+    #[inline]
     pub fn offset(&self) -> Option<usize> {
         self.offset
     }
 }
 
 impl fmt::Debug for JsonPrettyError {
+    /// Formats the error category and available source offset for diagnostics.
+    ///
+    /// The underlying cause is intentionally omitted; callers can inspect it
+    /// through [`Error::source`].
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` — destination formatter for the diagnostic representation.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` when formatting succeeds, or the formatter's error
+    /// when it cannot accept the diagnostic.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("JsonPrettyError")
@@ -96,6 +116,18 @@ impl fmt::Debug for JsonPrettyError {
 }
 
 impl fmt::Display for JsonPrettyError {
+    /// Formats the error category, including the source offset when available.
+    ///
+    /// The underlying cause is not included in this user-facing summary.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` — destination formatter for the user-facing summary.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` when formatting succeeds, or the formatter's error
+    /// when it cannot accept the summary.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.offset {
             Some(offset) => write!(formatter, "{} at byte offset {offset}", self.kind),
@@ -108,6 +140,11 @@ impl Error for JsonPrettyError {
     /// Returns the optional underlying parsing, allocation, or I/O cause.
     ///
     /// Formatting and debug output do not include this cause automatically.
+    ///
+    /// # Returns
+    ///
+    /// Returns the underlying cause when one was attached to this formatting
+    /// error, or `None` when no cause is available.
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         self.source.as_deref().map(|error| error as _)
     }

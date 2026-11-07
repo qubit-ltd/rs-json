@@ -63,7 +63,9 @@ where
     let placeholder = JsonEncodeSession::from_limits(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
-    let result = catch_unwind(AssertUnwindSafe(|| encoder.write_buffered(&mut writer, value)));
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        encoder.write_buffered(&mut writer, value)
+    }));
     *session = encoder.into_session();
     match result {
         Ok(result) => result,
@@ -89,7 +91,9 @@ where
     let placeholder = JsonEncodeSession::from_limits(JsonEncodeLimits::<R, Q>::builder().build());
     let owned = replace(session, placeholder);
     let mut encoder = JsonEncoder::new(owned);
-    let result = catch_unwind(AssertUnwindSafe(|| encoder.write_incremental(&mut writer, value)));
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        encoder.write_incremental(&mut writer, value)
+    }));
     *session = encoder.into_session();
     match result {
         Ok(result) => result,

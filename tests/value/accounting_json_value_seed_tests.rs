@@ -28,7 +28,9 @@ use serde_json::json;
 #[test]
 fn test_accounting_json_value_seed_rejects_decoded_nodes_incrementally() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)))
+        .structure_limits(
+            StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, 2)),
+        )
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
@@ -73,7 +75,9 @@ fn test_accounting_json_value_seed_admits_containers_before_descending() {
 
 #[test]
 fn test_accounting_json_value_seed_returns_the_admitted_value() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut deserializer = Deserializer::from_slice(br#"{"key":[true]}"#);
 
@@ -137,7 +141,10 @@ fn test_accounting_json_value_seed_budgets_decoded_number_display() {
 #[test]
 fn test_accounting_json_value_seed_counts_duplicate_object_entries() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)))
+        .structure_limits(
+            StructureLimits::builder()
+                .map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)),
+        )
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
@@ -180,7 +187,9 @@ fn test_accounting_seed_rejects_duplicate_keys_at_every_container_path() {
 
 #[test]
 fn test_accounting_seed_rejects_duplicate_before_decoding_second_value() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut parser = Deserializer::from_str(r#"{"sensitive-key":0,"sensitive-key":INVALID}"#);
     let error = AccountingJsonValueSeed::new(&mut transaction)
@@ -188,14 +197,19 @@ fn test_accounting_seed_rejects_duplicate_before_decoding_second_value() {
         .deserialize(&mut parser)
         .expect_err("duplicate rejection must precede malformed second value");
     let message = error.to_string();
-    assert!(message.starts_with("duplicate JSON object key"), "{message}");
+    assert!(
+        message.starts_with("duplicate JSON object key"),
+        "{message}"
+    );
     assert!(!message.contains("sensitive-key"), "{message}");
     assert!(!message.contains("INVALID"), "{message}");
 }
 
 #[test]
 fn test_accounting_seed_default_keeps_last_value() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut parser = Deserializer::from_str(r#"{"a":1,"a":2}"#);
     let value = AccountingJsonValueSeed::new(&mut transaction)
@@ -208,7 +222,9 @@ fn test_accounting_seed_default_keeps_last_value() {
 
 #[test]
 fn test_accounting_seed_duplicate_state_is_local_to_each_object() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut parser = Deserializer::from_str(r#"[{"a":0},{"a":1}]"#);
     let value = AccountingJsonValueSeed::new(&mut transaction)
@@ -295,7 +311,9 @@ fn test_accounting_seed_drops_failed_transaction_and_allows_retry() {
 
 #[test]
 fn test_accounting_seed_reject_option_preserves_private_number_marker_object() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut parser = Deserializer::from_str(r#"{"$serde_json::private::Number":"1e400"}"#);
     let value = AccountingJsonValueSeed::new(&mut transaction)
@@ -323,7 +341,9 @@ fn test_accounting_seed_reject_option_supports_u64_and_u8_quantities() {
     transaction.commit().unwrap();
     assert_eq!(budget.used_nodes(), Some(2));
 
-    let mut budget = JsonValueLimits::<JsonResource, u64>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, u64>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut parser = Deserializer::from_str(r#"{"a":0,"a":1}"#);
     let error = AccountingJsonValueSeed::new(&mut transaction)
@@ -332,7 +352,9 @@ fn test_accounting_seed_reject_option_supports_u64_and_u8_quantities() {
         .expect_err("u64 quantities must retain duplicate rejection");
     assert!(error.to_string().starts_with("duplicate JSON object key"));
 
-    let mut budget = JsonValueLimits::<JsonResource, u8>::builder().max_nodes(8).budget();
+    let mut budget = JsonValueLimits::<JsonResource, u8>::builder()
+        .max_nodes(8)
+        .budget();
     let mut transaction = budget.transaction();
     let mut parser = Deserializer::from_str(r#"{"ok":true}"#);
     let value = AccountingJsonValueSeed::new(&mut transaction)
@@ -431,20 +453,26 @@ fn test_accounting_seed_reject_option_preserves_number_byte_budget() {
 
 #[test]
 fn test_accounting_seed_reject_option_preserves_numeric_event_contract() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
 
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
             .reject_duplicate_keys()
-            .deserialize(value::I128Deserializer::<value::Error>::new(i64::MIN.into()))
+            .deserialize(value::I128Deserializer::<value::Error>::new(
+                i64::MIN.into()
+            ))
             .expect("i64 minimum remains representable"),
         json!(i64::MIN),
     );
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
             .reject_duplicate_keys()
-            .deserialize(value::U128Deserializer::<value::Error>::new(u64::MAX.into()))
+            .deserialize(value::U128Deserializer::<value::Error>::new(
+                u64::MAX.into()
+            ))
             .expect("u64 maximum remains representable"),
         json!(u64::MAX),
     );
@@ -453,14 +481,18 @@ fn test_accounting_seed_reject_option_preserves_numeric_event_contract() {
         (
             AccountingJsonValueSeed::new(&mut transaction)
                 .reject_duplicate_keys()
-                .deserialize(value::I128Deserializer::<value::Error>::new(i64::MIN as i128 - 1))
+                .deserialize(value::I128Deserializer::<value::Error>::new(
+                    i64::MIN as i128 - 1,
+                ))
                 .expect_err("i128 below i64 minimum must be rejected"),
             "i128 below i64 minimum",
         ),
         (
             AccountingJsonValueSeed::new(&mut transaction)
                 .reject_duplicate_keys()
-                .deserialize(value::I128Deserializer::<value::Error>::new(u64::MAX as i128 + 1))
+                .deserialize(value::I128Deserializer::<value::Error>::new(
+                    u64::MAX as i128 + 1,
+                ))
                 .expect_err("i128 above u64 maximum must be rejected"),
             "i128 above u64 maximum",
         ),
@@ -501,7 +533,10 @@ fn test_accounting_seed_discards_transaction_after_document_end_failure() {
             .deserialize(&mut parser)
             .expect("the seed consumes the first value");
         assert_eq!(value, json!({"a": 0}));
-        assert!(parser.end().is_err(), "the trailing value must fail end-of-input");
+        assert!(
+            parser.end().is_err(),
+            "the trailing value must fail end-of-input"
+        );
     }
     assert_eq!(budget.used_nodes(), Some(0));
 }
@@ -510,7 +545,9 @@ fn test_accounting_seed_discards_transaction_after_document_end_failure() {
 /// not necessarily dispatch to consistently across serde_json versions.
 #[test]
 fn test_accounting_json_value_seed_accepts_all_scalar_deserializer_shapes() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
 
     assert_eq!(
@@ -545,7 +582,9 @@ fn test_accounting_json_value_seed_accepts_all_scalar_deserializer_shapes() {
     );
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(value::StringDeserializer::<value::Error>::new(String::from("owned")))
+            .deserialize(value::StringDeserializer::<value::Error>::new(
+                String::from("owned")
+            ))
             .expect("owned strings are accepted"),
         json!("owned"),
     );
@@ -565,7 +604,9 @@ fn test_accounting_json_value_seed_supports_u8_resource_quantities() {
 
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(value::StringDeserializer::<value::Error>::new(String::from("owned-u8"),))
+            .deserialize(value::StringDeserializer::<value::Error>::new(
+                String::from("owned-u8"),
+            ))
             .expect("owned strings should be admitted"),
         json!("owned-u8"),
     );
@@ -598,7 +639,11 @@ impl<'de> SerdeDeserializer<'de> for NoneDeserializer {
         visitor.visit_none()
     }
 
-    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_newtype_struct<V>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
@@ -643,7 +688,9 @@ impl<'de> SerdeDeserializer<'de> for SomeDeserializer {
 /// non-representable numeric values.
 #[test]
 fn test_accounting_json_value_seed_handles_option_newtype_and_numeric_errors() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     assert!(
         AccountingJsonValueSeed::new(&mut transaction)
@@ -671,13 +718,17 @@ fn test_accounting_json_value_seed_handles_option_newtype_and_numeric_errors() {
     );
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(value::I128Deserializer::<value::Error>::new(i64::MIN.into()))
+            .deserialize(value::I128Deserializer::<value::Error>::new(
+                i64::MIN.into()
+            ))
             .expect("i64 minimum must remain representable"),
         json!(i64::MIN),
     );
     assert_eq!(
         AccountingJsonValueSeed::new(&mut transaction)
-            .deserialize(value::U128Deserializer::<value::Error>::new(u64::MAX.into()))
+            .deserialize(value::U128Deserializer::<value::Error>::new(
+                u64::MAX.into()
+            ))
             .expect("u64 maximum must remain representable"),
         json!(u64::MAX),
     );
@@ -753,7 +804,10 @@ fn test_accounting_seed_discards_usage_after_document_end_failure() {
             .deserialize(&mut parser)
             .unwrap();
         assert_eq!(value, json!([0]));
-        assert!(parser.end().is_err(), "the complete document contains trailing data");
+        assert!(
+            parser.end().is_err(),
+            "the complete document contains trailing data"
+        );
         assert_eq!(transaction.used_nodes(), Some(2));
     }
     assert_eq!(budget.used_nodes(), Some(0));

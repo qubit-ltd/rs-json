@@ -85,15 +85,24 @@ impl JsonSerializationError {
         match self.kind {
             JsonSerializationErrorKind::IntegerOutOfRange { .. }
             | JsonSerializationErrorKind::NonFiniteFloat
-            | JsonSerializationErrorKind::InvalidNumberRepresentation => JsonSerializationErrorCategory::Number,
-            JsonSerializationErrorKind::UnsupportedMapKey { .. } | JsonSerializationErrorKind::DuplicateObjectKey => {
+            | JsonSerializationErrorKind::InvalidNumberRepresentation => {
+                JsonSerializationErrorCategory::Number
+            }
+            JsonSerializationErrorKind::UnsupportedMapKey { .. }
+            | JsonSerializationErrorKind::DuplicateObjectKey => {
                 JsonSerializationErrorCategory::ObjectKey
             }
             JsonSerializationErrorKind::InvalidRawValue => JsonSerializationErrorCategory::RawValue,
-            JsonSerializationErrorKind::CollectionLengthOverflow { .. } => JsonSerializationErrorCategory::Capacity,
+            JsonSerializationErrorKind::CollectionLengthOverflow { .. } => {
+                JsonSerializationErrorCategory::Capacity
+            }
             JsonSerializationErrorKind::InvalidSerializerState { .. }
-            | JsonSerializationErrorKind::DisplayFormattingFailed => JsonSerializationErrorCategory::SerializerContract,
-            JsonSerializationErrorKind::CustomSerialization => JsonSerializationErrorCategory::Custom,
+            | JsonSerializationErrorKind::DisplayFormattingFailed => {
+                JsonSerializationErrorCategory::SerializerContract
+            }
+            JsonSerializationErrorKind::CustomSerialization => {
+                JsonSerializationErrorCategory::Custom
+            }
         }
     }
 
@@ -140,7 +149,10 @@ impl JsonSerializationError {
     #[must_use]
     #[inline(always)]
     pub const fn is_serializer_contract_error(&self) -> bool {
-        matches!(self.category(), JsonSerializationErrorCategory::SerializerContract)
+        matches!(
+            self.category(),
+            JsonSerializationErrorCategory::SerializerContract
+        )
     }
 
     /// Returns the signedness of an out-of-range integer, when applicable.
@@ -202,6 +214,20 @@ impl JsonSerializationError {
 
 impl SerError for JsonSerializationError {
     /// Converts arbitrary custom serializer text into one opaque, stable kind.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Displayable custom text supplied by the serializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `_message` - Custom text, which is intentionally discarded to avoid
+    ///   retaining arbitrary diagnostics.
+    ///
+    /// # Returns
+    ///
+    /// An error classified as
+    /// [`JsonSerializationErrorKind::CustomSerialization`].
     fn custom<T>(_message: T) -> Self
     where
         T: Display,

@@ -61,26 +61,16 @@ where
     ///
     /// A writer that records the first destination error for later conversion.
     #[inline]
-    pub(in crate::encode) fn new(writer: &'a mut W, accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>) -> Self {
+    pub(in crate::encode) fn new(
+        writer: &'a mut W,
+        accounting: &'a RefCell<JsonOutputAccounting<'a, R, Q>>,
+    ) -> Self {
         Self {
             writer,
             accounting,
             has_output_budget: accounting.borrow().has_output_budget(),
             io_error: None,
         }
-    }
-
-    /// Records the first destination error and returns a sanitized copy.
-    ///
-    /// The original error remains available for typed conversion after the
-    /// serializer has erased its source. The returned error keeps the same
-    /// kind without exposing the destination's error message to serialization.
-    fn record_io_error(&mut self, error: io::Error) -> io::Error {
-        let kind = error.kind();
-        if self.io_error.is_none() {
-            self.io_error = Some(error);
-        }
-        io::Error::new(kind, "JSON output operation failed")
     }
 
     /// Converts the serializer result while preserving typed failures.
@@ -117,10 +107,35 @@ where
             return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         if result.is_err() {
-            let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
+            let error = self
+                .accounting
+                .borrow_mut()
+                .take_serialization_error_or_custom();
             return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         Ok(())
+    }
+
+    /// Records the first destination error and returns a sanitized copy.
+    ///
+    /// The original error remains available for typed conversion after the
+    /// serializer has erased its source. The returned error keeps the same
+    /// kind without exposing the destination's error message to serialization.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - Destination error to retain and sanitize for the serializer.
+    ///
+    /// # Returns
+    ///
+    /// An I/O error with the original kind and a generic message for Serde.
+    #[must_use]
+    fn record_io_error(&mut self, error: io::Error) -> io::Error {
+        let kind = error.kind();
+        if self.io_error.is_none() {
+            self.io_error = Some(error);
+        }
+        io::Error::new(kind, "JSON output operation failed")
     }
 }
 
@@ -159,7 +174,10 @@ where
         match qubit_io::Output::write(&mut *self.writer, input) {
             Ok(written) => {
                 if written == 0 && !input.is_empty() {
-                    let error = io::Error::new(io::ErrorKind::WriteZero, "JSON output writer accepted no bytes");
+                    let error = io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "JSON output writer accepted no bytes",
+                    );
                     return Err(self.record_io_error(error));
                 }
                 if self.has_output_budget {

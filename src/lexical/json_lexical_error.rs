@@ -42,6 +42,10 @@ where
     Q: Copy + fmt::Debug,
 {
     /// Preserves a measured budget rejection from lexical accounting.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - Rejected measurement to retain as the budget failure.
     #[inline]
     fn from(error: MeasuredBudgetError<R, Q>) -> Self {
         Self::Budget(error)

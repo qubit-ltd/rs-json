@@ -5,7 +5,4 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use crate::format::JsonPrettyErrorKind;
-use crate::format::JsonPrettyOptions;
-use crate::format::format_json_tokens;
-use crate::format::write_json_tokens;
+//! Pretty formatter tests live in `tests/format/json_token_formatter_tests.rs`.

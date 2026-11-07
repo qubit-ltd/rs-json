@@ -48,7 +48,8 @@ pub(in crate::encode::serializer) struct JsonKeyBudgetSerializer<
     pub(in crate::encode::serializer) inner: S,
 
     /// Shared traversal context.
-    pub(in crate::encode::serializer) context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+    pub(in crate::encode::serializer) context:
+        &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 }
 
 impl<S, R, Q, const VALUE_LIMITS: bool> JsonKeyBudgetSerializer<'_, '_, '_, S, R, Q, VALUE_LIMITS>
@@ -76,7 +77,9 @@ where
         if !VALUE_LIMITS {
             return Ok(());
         }
-        self.context.borrow_mut().admit(JsonMeasurement::Key { bytes })
+        self.context
+            .borrow_mut()
+            .admit(JsonMeasurement::Key { bytes })
     }
 
     /// Rejects one unsupported key shape through the shared stable error.
@@ -109,6 +112,10 @@ where
 macro_rules! serialize_key_number {
     ($name:ident, signed $type:ty) => {
         #[doc = "Checks the serialized signed key length before forwarding it."]
+        #[doc = ""]
+        #[doc = "# Parameters"]
+        #[doc = ""]
+        #[doc = "* `value` — Signed integer key to serialize."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
             if VALUE_LIMITS {
                 self.check(JsonLexemeLength::signed_integer(value.into()))?;
@@ -118,6 +125,10 @@ macro_rules! serialize_key_number {
     };
     ($name:ident, unsigned $type:ty) => {
         #[doc = "Checks the serialized unsigned key length before forwarding it."]
+        #[doc = ""]
+        #[doc = "# Parameters"]
+        #[doc = ""]
+        #[doc = "* `value` — Unsigned integer key to serialize."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
             if VALUE_LIMITS {
                 self.check(JsonLexemeLength::unsigned_integer(value.into()))?;
@@ -154,6 +165,10 @@ where
     type SerializeStructVariant = S::SerializeStructVariant;
 
     /// Checks the boolean key length before forwarding it.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` — Boolean key to serialize.
     fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
         self.check(if value { 4 } else { 5 })?;
         self.inner.serialize_bool(value)
@@ -169,6 +184,10 @@ where
     serialize_key_number!(serialize_u64, unsigned u64);
 
     /// Charges and emits one full-range signed integer key as decimal text.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` — Signed integer key to serialize.
     fn serialize_i128(self, value: i128) -> Result<Self::Ok, Self::Error> {
         let text = JsonMapKey::signed_wide(value);
         if VALUE_LIMITS {
@@ -178,6 +197,10 @@ where
     }
 
     /// Charges and emits one full-range unsigned integer key as decimal text.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` — Unsigned integer key to serialize.
     fn serialize_u128(self, value: u128) -> Result<Self::Ok, Self::Error> {
         let text = JsonMapKey::unsigned_wide(value);
         if VALUE_LIMITS {
@@ -187,6 +210,10 @@ where
     }
 
     /// Checks a finite `f32` key length before forwarding it.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` — Finite floating-point key to serialize.
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
         if !value.is_finite() {
             return Err(self.non_finite());
@@ -198,6 +225,10 @@ where
     }
 
     /// Checks a finite `f64` key length before forwarding it.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` — Finite floating-point key to serialize.
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
         if !value.is_finite() {
             return Err(self.non_finite());
@@ -209,6 +240,10 @@ where
     }
 
     /// Checks the UTF-8 key length before forwarding a character.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` — Character key to serialize.
     fn serialize_char(self, value: char) -> Result<Self::Ok, Self::Error> {
         if VALUE_LIMITS {
             self.check(value.len_utf8())?;
@@ -217,6 +252,10 @@ where
     }
 
     /// Checks the string key length before forwarding it.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` — String key to serialize.
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
         if VALUE_LIMITS {
             self.check(value.len())?;
@@ -225,6 +264,10 @@ where
     }
 
     /// Rejects byte keys as unsupported JSON object keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `_value` — Byte sequence, which JSON object keys do not support.
     fn serialize_bytes(self, _value: &[u8]) -> Result<Self::Ok, Self::Error> {
         Err(self.unsupported(JsonMapKeyKind::Bytes))
     }
@@ -235,6 +278,14 @@ where
     }
 
     /// Serializes a present optional key through this decorator.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` — Serializable type of the optional key value.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` — Present key value to serialize through this decorator.
     fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -248,11 +299,21 @@ where
     }
 
     /// Rejects a unit-struct key as unsupported.
+    ///
+    /// # Parameters
+    ///
+    /// * `_name` — Unit-struct name supplied by Serde.
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
         Err(self.unsupported(JsonMapKeyKind::UnitStruct))
     }
 
     /// Checks a unit-variant key name before forwarding it.
+    ///
+    /// # Parameters
+    ///
+    /// * `name` — Enum name supplied by Serde.
+    /// * `variant_index` — Variant index supplied by Serde.
+    /// * `variant` — Variant name emitted as the key.
     fn serialize_unit_variant(
         self,
         name: &'static str,
@@ -262,11 +323,25 @@ where
         if VALUE_LIMITS {
             self.check(variant.len())?;
         }
-        self.inner.serialize_unit_variant(name, variant_index, variant)
+        self.inner
+            .serialize_unit_variant(name, variant_index, variant)
     }
 
     /// Serializes a newtype key through this decorator.
-    fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` — Serializable type wrapped by the newtype.
+    ///
+    /// # Parameters
+    ///
+    /// * `_name` — Newtype name supplied by Serde.
+    /// * `value` — Wrapped value to serialize through this decorator.
+    fn serialize_newtype_struct<T>(
+        self,
+        _name: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -274,6 +349,17 @@ where
     }
 
     /// Rejects newtype-variant keys as unsupported JSON object keys.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` — Serializable type of the rejected variant value.
+    ///
+    /// # Parameters
+    ///
+    /// * `_name` — Enum name supplied by Serde.
+    /// * `_variant_index` — Variant index supplied by Serde.
+    /// * `_variant` — Variant name supplied by Serde.
+    /// * `_value` — Variant payload, which JSON object keys do not support.
     fn serialize_newtype_variant<T>(
         self,
         _name: &'static str,
@@ -288,16 +374,29 @@ where
     }
 
     /// Rejects sequence keys as unsupported JSON object keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `_len` — Optional sequence length hint supplied by Serde.
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         Err(self.unsupported(JsonMapKeyKind::Sequence))
     }
 
     /// Rejects tuple keys as unsupported JSON object keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `_len` — Tuple element count supplied by Serde.
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         Err(self.unsupported(JsonMapKeyKind::Tuple))
     }
 
     /// Rejects tuple-struct keys as unsupported JSON object keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `_name` — Tuple-struct name supplied by Serde.
+    /// * `_len` — Tuple-struct field count supplied by Serde.
     fn serialize_tuple_struct(
         self,
         _name: &'static str,
@@ -307,6 +406,13 @@ where
     }
 
     /// Rejects tuple-variant keys as unsupported JSON object keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `_name` — Enum name supplied by Serde.
+    /// * `_variant_index` — Variant index supplied by Serde.
+    /// * `_variant` — Variant name supplied by Serde.
+    /// * `_len` — Variant field count supplied by Serde.
     fn serialize_tuple_variant(
         self,
         _name: &'static str,
@@ -318,16 +424,36 @@ where
     }
 
     /// Rejects map keys as unsupported JSON object keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `_len` — Optional map length hint supplied by Serde.
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         Err(self.unsupported(JsonMapKeyKind::Map))
     }
 
     /// Rejects struct keys as unsupported JSON object keys.
-    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+    ///
+    /// # Parameters
+    ///
+    /// * `_name` — Struct name supplied by Serde.
+    /// * `_len` — Struct field count supplied by Serde.
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
         Err(self.unsupported(JsonMapKeyKind::Struct))
     }
 
     /// Rejects struct-variant keys as unsupported JSON object keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `_name` — Enum name supplied by Serde.
+    /// * `_variant_index` — Variant index supplied by Serde.
+    /// * `_variant` — Variant name supplied by Serde.
+    /// * `_len` — Variant field count supplied by Serde.
     fn serialize_struct_variant(
         self,
         _name: &'static str,
@@ -339,11 +465,24 @@ where
     }
 
     /// Formats, accounts, and forwards a display-based key.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` — Displayable value whose formatted text becomes the key.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` — Value formatted and serialized as the key.
     fn collect_str<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Display + ?Sized,
     {
-        let text = JsonEncodeContext::collect_display::<S::Error, _>(self.context, value, DisplayBudgetKind::Key, 1)?;
+        let text = JsonEncodeContext::collect_display::<S::Error, _>(
+            self.context,
+            value,
+            DisplayBudgetKind::Key,
+            1,
+        )?;
         self.inner.serialize_str(&text)
     }
 

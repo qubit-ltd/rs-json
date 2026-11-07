@@ -34,6 +34,7 @@ const MAX_TREE_DEPTH: usize = 64;
 const GENEROUS_LIMIT: usize = 1_000_000;
 
 /// Builds a bounded tree with wide and deep shapes from arbitrary bytes.
+#[must_use]
 fn make_tree(data: &[u8]) -> Value {
     let mut items = Vec::new();
     for chunk in data.chunks(4).take(128) {
@@ -117,6 +118,7 @@ impl JsonTreeMutVisitor for ControlVisitor {
 }
 
 /// Counts every JSON value and container in the completed tree.
+#[must_use]
 fn node_count(value: &Value) -> usize {
     let children = match value {
         Value::Array(values) => values.iter().map(node_count).sum(),
@@ -331,6 +333,7 @@ pub fn assert_json_tree_invariants(data: &[u8]) {
 }
 
 /// Applies the expected redaction using ordinary recursive Value traversal.
+#[must_use]
 fn reference_redaction(original: &Value, skip_subtree: bool, stop_after: Option<usize>) -> (Value, usize, bool) {
     fn visit(value: &mut Value, skip: bool, stop: Option<usize>, calls: &mut usize) -> Result<(), ()> {
         *calls += 1;
@@ -371,7 +374,7 @@ mod tests {
     use super::reference_redaction;
 
     #[test]
-    fn reference_redaction_matches_handwritten_partial_result() {
+    fn test_reference_redaction_matches_handwritten_partial_result() {
         let original = json!({
             "secret": "root",
             "a": {"secret": "child", "keep": [1, 2]},
@@ -384,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn reference_redaction_covers_shapes_and_stop_positions() {
+    fn test_reference_redaction_covers_shapes_and_stop_positions() {
         for original in [
             Value::Null,
             json!([{"secret":"a", "keep":1}, [2, 3]]),
@@ -408,7 +411,7 @@ mod tests {
     }
 
     #[test]
-    fn complete_value_oracle_detects_representative_corruption() {
+    fn test_complete_value_oracle_detects_representative_corruption() {
         let original = json!({"secret":"root", "a":{"secret":"child","keep":[1,2]}, "z":7});
         let (expected, _, _) = reference_redaction(&original, false, None);
         for corrupted in [

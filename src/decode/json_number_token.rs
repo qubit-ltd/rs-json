@@ -50,6 +50,13 @@ impl<'call> JsonNumberToken<'call> {
     /// `raw` must be the exact source spelling of that validated token, and
     /// `offset` its zero-based byte offset in the same input. The borrow must
     /// remain limited to the synchronous policy callback.
+    ///
+    /// # Parameters
+    ///
+    /// - `raw`: the validated token's source spelling.
+    /// - `offset`: its zero-based byte offset in the source document.
+    #[must_use]
+    #[inline]
     pub(crate) const fn from_validated(raw: &'call str, offset: usize) -> Self {
         Self { raw, offset }
     }
@@ -59,11 +66,15 @@ impl<'call> JsonNumberToken<'call> {
     /// # Returns
     ///
     /// The validated source spelling, borrowed for the callback duration.
+    #[must_use]
+    #[inline]
     pub const fn raw(&self) -> &'call str {
         self.raw
     }
 
     /// Returns the zero-based byte offset of the token in its source document.
+    #[must_use]
+    #[inline]
     pub const fn offset(&self) -> usize {
         self.offset
     }
@@ -91,7 +102,10 @@ impl<'call> JsonNumberToken<'call> {
             .map(|position| start + position);
         let mantissa_end = exponent_marker.unwrap_or(bytes.len());
         let exponent = exponent_marker.map_or(0_i64, |position| {
-            parse_saturated_exponent(&bytes[position + 1..], bytes.len().saturating_add(32) as i64)
+            parse_saturated_exponent(
+                &bytes[position + 1..],
+                bytes.len().saturating_add(32) as i64,
+            )
         });
         let mut fractional_digits = 0_i64;
         let mut digit_count = 0_usize;
@@ -155,6 +169,11 @@ impl<'call> JsonNumberToken<'call> {
 }
 
 /// Parses validated exponent digits while bounding magnitude to avoid overflow.
+///
+/// # Parameters
+///
+/// - `bytes`: the exponent sign and validated decimal digits.
+/// - `bound`: the maximum magnitude retained while parsing.
 fn parse_saturated_exponent(bytes: &[u8], bound: i64) -> i64 {
     let negative = bytes.first() == Some(&b'-');
     let digits = if matches!(bytes.first(), Some(b'-' | b'+')) {

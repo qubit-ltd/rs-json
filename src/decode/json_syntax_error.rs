@@ -61,7 +61,12 @@ impl JsonSyntaxError {
     ///
     /// A syntax error containing the supplied location and classification.
     #[inline]
-    pub const fn new(offset: usize, line: usize, column: usize, reason: JsonSyntaxErrorReason) -> Self {
+    pub const fn new(
+        offset: usize,
+        line: usize,
+        column: usize,
+        reason: JsonSyntaxErrorReason,
+    ) -> Self {
         Self {
             offset,
             line,
@@ -87,7 +92,12 @@ impl JsonSyntaxError {
     /// A syntax error with the lexical failure's source coordinates and mapped
     /// reason.
     pub(crate) fn from_lexical(failure: JsonLexicalFailure) -> Self {
-        let mut error = Self::new(failure.offset, failure.line, failure.column, failure.reason.into());
+        let mut error = Self::new(
+            failure.offset,
+            failure.line,
+            failure.column,
+            failure.reason.into(),
+        );
         error.context = failure.context;
         error
     }
@@ -97,14 +107,6 @@ impl JsonSyntaxError {
     #[inline(always)]
     pub const fn context(&self) -> Option<JsonDecodeContext> {
         self.context
-    }
-
-    /// Returns this error with the supplied grammar context.
-    #[must_use = "the updated syntax error must be used"]
-    #[inline(always)]
-    pub const fn with_context(mut self, context: JsonDecodeContext) -> Self {
-        self.context = Some(context);
-        self
     }
 
     /// Returns the zero-based byte offset.
@@ -149,11 +151,27 @@ impl JsonSyntaxError {
     pub const fn reason(&self) -> JsonSyntaxErrorReason {
         self.reason
     }
+
+    /// Returns this error with the supplied grammar context.
+    ///
+    /// # Parameters
+    ///
+    /// * `context` - Grammar location associated with this syntax error.
+    #[must_use = "the updated syntax error must be used"]
+    #[inline(always)]
+    pub const fn with_context(mut self, context: JsonDecodeContext) -> Self {
+        self.context = Some(context);
+        self
+    }
 }
 
 impl fmt::Display for JsonSyntaxError {
     /// Formats the reason and complete source location for human-readable
     /// diagnostics.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Destination that receives the human-readable diagnostic.
     ///
     /// # Errors
     ///

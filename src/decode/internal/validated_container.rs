@@ -13,7 +13,10 @@
 /// marker remains until the corresponding child value ends as well.
 pub(super) enum ValidatedContainer {
     /// Array child currently expected; incremented after a complete child.
-    Array { next_index: usize },
+    Array {
+        /// Index assigned to the next child after prior children complete.
+        next_index: usize,
+    },
     /// Object whose current key/value child has not yet completed.
     Object,
 }

@@ -70,6 +70,7 @@ impl fmt::Display for JsonDecodeErrorKind {
 }
 
 impl FromStr for JsonDecodeErrorKind {
+    /// Uses a static message to report unsupported category names.
     type Err = &'static str;
 
     /// Parses a stable category name without ASCII case sensitivity.

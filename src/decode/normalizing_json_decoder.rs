@@ -83,7 +83,10 @@ where
     /// A decoder whose accounting starts empty and is constrained by `limits`.
     #[inline]
     #[must_use]
-    pub fn with_limits(policy: NormalizingJsonDecodePolicy, limits: JsonDecodeLimits<R, Q>) -> Self {
+    pub fn with_limits(
+        policy: NormalizingJsonDecodePolicy,
+        limits: JsonDecodeLimits<R, Q>,
+    ) -> Self {
         Self::new(policy, JsonDecodeSession::from_limits(limits))
     }
 }
@@ -108,7 +111,10 @@ where
     /// [`Self::into_session`].
     #[inline]
     #[must_use]
-    pub const fn new(policy: NormalizingJsonDecodePolicy, session: JsonDecodeSession<'budget, R, Q>) -> Self {
+    pub const fn new(
+        policy: NormalizingJsonDecodePolicy,
+        session: JsonDecodeSession<'budget, R, Q>,
+    ) -> Self {
         Self {
             normalizer: JsonNormalizer::new(policy),
             engine: JsonDecodeEngine::new(session),
@@ -127,6 +133,19 @@ where
     #[must_use]
     pub const fn session(&self) -> &JsonDecodeSession<'budget, R, Q> {
         self.engine.session()
+    }
+
+    /// Returns the immutable normalization and diagnostic policy.
+    ///
+    /// The returned reference remains tied to this decoder and controls how
+    /// future input is normalized and how input-derived failures are retained.
+    ///
+    /// # Returns
+    ///
+    /// A shared reference to the configured policy.
+    #[inline(always)]
+    pub const fn policy(&self) -> &NormalizingJsonDecodePolicy {
+        self.normalizer.policy()
     }
 
     /// Returns mutable access to the cumulative session.
@@ -155,19 +174,6 @@ where
     #[must_use]
     pub fn into_session(self) -> JsonDecodeSession<'budget, R, Q> {
         self.engine.into_session()
-    }
-
-    /// Returns the immutable normalization and diagnostic policy.
-    ///
-    /// The returned reference remains tied to this decoder and controls how
-    /// future input is normalized and how input-derived failures are retained.
-    ///
-    /// # Returns
-    ///
-    /// A shared reference to the configured policy.
-    #[inline(always)]
-    pub const fn policy(&self) -> &NormalizingJsonDecodePolicy {
-        self.normalizer.policy()
     }
 
     /// Normalizes one string and immediately charges its input budgets.

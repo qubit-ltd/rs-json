@@ -36,6 +36,7 @@ const NUMBER_NAME: &str = concat!("$", "serde_json", ":", ":private::Number");
 const RAW_FIELD: &str = concat!("$", "serde_json", ":", ":private::RawValue");
 const NUMBER_FIELD: &str = concat!("$", "serde_json", ":", ":private::Number");
 
+/// Selects signed values around the JSON encoder's supported integer bounds.
 fn signed_boundary(selector: u8) -> i128 {
     [
         i128::MIN,
@@ -49,6 +50,7 @@ fn signed_boundary(selector: u8) -> i128 {
     ][usize::from(selector) % 8]
 }
 
+/// Selects unsigned values around the JSON encoder's supported integer bounds.
 fn unsigned_boundary(selector: u8) -> u128 {
     [0, u64::MAX as u128, u64::MAX as u128 + 1, u128::MAX][usize::from(selector) % 4]
 }
@@ -135,6 +137,7 @@ impl Serialize for IntegerInput {
     }
 }
 
+/// Compares value and byte encoders against the expected integer range result.
 fn assert_integer_boundary(value: IntegerInput, expected_text: String, in_range: bool, signed: bool) {
     let projected = JsonValueEncoder::new().encode(&value);
     assert_eq!(projected.is_ok(), in_range, "JsonValueEncoder integer range");
@@ -165,6 +168,7 @@ fn assert_integer_boundary(value: IntegerInput, expected_text: String, in_range:
     }
 }
 
+/// Exercises representative signed and unsigned values at integer range edges.
 fn assert_integer_boundary_matrix(selector: u8) {
     let signed = [
         i128::MIN,
@@ -203,6 +207,7 @@ pub fn assert_json_integer_boundary_invariants(selector: u8) {
 impl<'a> ProtocolCase<'a> {
     /// Creates a protocol case from a bounded fuzz control header.
     #[must_use]
+    #[inline]
     pub const fn new(
         control: &'a [u8; 9],
         payload: &'static str,
@@ -289,6 +294,7 @@ impl Serialize for ProtocolCase<'_> {
     }
 }
 
+/// Chooses a fixed raw JSON token or number token from the control header.
 fn selected_payload(control: &[u8; 9]) -> &'static str {
     const NUMBERS: &[&str] = &["0", "-0", "1.25", "1e2", "1e400", "-1e400", "01"];
     const RAW: &[&str] = &["null", r#"{"ok":true}"#, "[", "[[[[0]]]]"];
@@ -299,6 +305,7 @@ fn selected_payload(control: &[u8; 9]) -> &'static str {
     }
 }
 
+/// Parses the selected token independently of the encoders under test.
 fn reference_payload(
     control: &[u8; 9],
     payload: &'static str,
@@ -311,6 +318,8 @@ fn reference_payload(
     normalize_reference_value(&value).map_err(|_| JsonSerializationErrorKind::InvalidRawValue)
 }
 
+/// Returns the reference value only when the control header describes one
+/// field.
 fn independent_oracle(control: &[u8; 9], payload: &'static str) -> Option<serde_json::Value> {
     if !matches!(control[1] % 4, 0 | 3) || control[2] % 3 != 1 || control[3] % 9 != 1 || !control[5].is_multiple_of(4) {
         return None;
@@ -330,6 +339,8 @@ fn independent_oracle(control: &[u8; 9], payload: &'static str) -> Option<serde_
     reference_payload(control, payload).ok()
 }
 
+/// Classifies the first expected serializer error for the selected protocol
+/// case.
 fn expected_value_error(control: &[u8; 9], payload: &'static str) -> Option<JsonSerializationErrorKind> {
     let invalid_state = || JsonSerializationErrorKind::InvalidSerializerState {
         reason: if control[0] & 1 == 0 {
@@ -366,6 +377,7 @@ fn expected_value_error(control: &[u8; 9], payload: &'static str) -> Option<Json
     None
 }
 
+/// Maps value errors to the corresponding public JSON encoder error kind.
 fn expected_encode_error(
     control: &[u8; 9],
     value_error: Option<JsonSerializationErrorKind>,
@@ -391,6 +403,7 @@ fn expected_encode_error(
     }
 }
 
+/// Builds independent limits for output bytes, JSON nodes, and payload bytes.
 fn encode_limits(output: usize, nodes: usize, payload: usize) -> JsonEncodeLimits<JsonResource, usize> {
     let structure = StructureLimits::builder().nodes_limit(ResourceLimit::new(JsonResource::Nodes, nodes));
     let values = JsonValueLimits::<JsonResource, usize>::builder()
@@ -403,6 +416,7 @@ fn encode_limits(output: usize, nodes: usize, payload: usize) -> JsonEncodeLimit
         .build()
 }
 
+/// Creates an encoder whose output and value budgets do not constrain the case.
 fn unbounded_encoder() -> JsonEncoder<'static, JsonResource, usize> {
     JsonEncoder::new(JsonEncodeSession::from_limits(encode_limits(
         usize::MAX,
@@ -411,6 +425,7 @@ fn unbounded_encoder() -> JsonEncoder<'static, JsonResource, usize> {
     )))
 }
 
+/// Couples protocol bytes with counters used to verify callback behavior.
 fn case<'a>(
     control: &'a [u8; 9],
     payload: &'static str,
@@ -420,6 +435,8 @@ fn case<'a>(
     ProtocolCase::new(control, payload, field_attempts, payload_callbacks)
 }
 
+/// Checks all three encoder modes at selected resource limits around a
+/// baseline.
 fn assert_protocol_budget_edges(value: &ProtocolCase<'_>, expected: &[u8], selectors: [u8; 3], baseline: [usize; 3]) {
     for resource in 0..3 {
         let mut limits = baseline;

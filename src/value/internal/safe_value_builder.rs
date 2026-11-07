@@ -26,6 +26,10 @@ impl SafeValueBuilder {
     }
 
     /// Starts an empty array builder with a caller-bounded allocation hint.
+    ///
+    /// # Parameters
+    ///
+    /// * `capacity` - Initial allocation capacity for array elements.
     pub(crate) fn array_with_capacity(capacity: usize) -> Self {
         Self {
             value: Some(Value::Array(Vec::with_capacity(capacity))),
@@ -40,6 +44,10 @@ impl SafeValueBuilder {
     }
 
     /// Appends a child owner while keeping an unwind-safe placeholder in place.
+    ///
+    /// # Parameters
+    ///
+    /// * `child` - Owned JSON subtree to append to this array.
     pub(crate) fn push(&mut self, child: SafeJsonValue) {
         let Value::Array(values) = self.value.as_mut().expect("builder is active") else {
             unreachable!()
@@ -50,6 +58,11 @@ impl SafeValueBuilder {
     }
 
     /// Inserts a child owner while keeping an unwind-safe placeholder in place.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Object key associated with the child subtree.
+    /// * `child` - Owned JSON subtree to insert at that key.
     pub(crate) fn insert(&mut self, key: String, child: SafeJsonValue) {
         let Value::Object(values) = self.value.as_mut().expect("builder is active") else {
             unreachable!()
@@ -66,6 +79,7 @@ impl SafeValueBuilder {
 }
 
 impl Drop for SafeValueBuilder {
+    /// Iteratively destroys any unfinished tree to avoid recursive cleanup.
     fn drop(&mut self) {
         if let Some(mut value) = self.value.take() {
             super::super::safe_json_value::drop_tree(&mut value);

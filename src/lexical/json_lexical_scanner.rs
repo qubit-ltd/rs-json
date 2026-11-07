@@ -14,11 +14,11 @@ use super::JsonLexicalAdmissionPolicy;
 use super::internal::JsonLexicalContainerFrame;
 use super::internal::json_lexical_cursor::JsonLexicalCursor;
 use super::json_lexical_consumer::JsonLexicalConsumer;
-use super::json_lexical_consumer::JsonLexicalScanPoint;
 use super::json_lexical_error::JsonLexicalError;
 use super::json_lexical_error_reason::JsonLexicalErrorReason;
 use super::json_lexical_event::JsonLexicalEvent;
 use super::json_lexical_scan_error::JsonLexicalScanError;
+use super::json_lexical_scan_point::JsonLexicalScanPoint;
 use super::json_number_model::JsonNumberModel;
 use crate::decode::JsonDecodeContext;
 
@@ -132,7 +132,18 @@ where
     /// admission for literals and numbers, while `TokenFirst` validates
     /// complete tokens before following syntax is checked. This policy does
     /// not enable or disable value-resource accounting.
-    pub(crate) const fn with_admission_policy(mut self, policy: JsonLexicalAdmissionPolicy) -> Self {
+    ///
+    /// # Parameters
+    ///
+    /// * `policy` - Token admission ordering used by the scan.
+    ///
+    /// # Returns
+    ///
+    /// This scanner configured with `policy`.
+    pub(crate) const fn with_admission_policy(
+        mut self,
+        policy: JsonLexicalAdmissionPolicy,
+    ) -> Self {
         self.admission_policy = policy;
         self
     }
@@ -143,6 +154,15 @@ where
     /// A limit of zero rejects the root value. This check is independent of
     /// `has_value_limits`, which controls staging of ordinary value
     /// measurements.
+    ///
+    /// # Parameters
+    ///
+    /// * `depth_limit` - Optional root-inclusive maximum depth; `None` disables
+    ///   the cap.
+    ///
+    /// # Returns
+    ///
+    /// This scanner configured with the requested depth cap.
     pub(crate) const fn with_depth_limit(mut self, depth_limit: Option<Q>) -> Self {
         self.depth_limit = depth_limit;
         self
@@ -155,6 +175,14 @@ where
     /// check, while zero permits only empty encoded string contents. This
     /// check is independent of `has_value_limits` and does not measure
     /// decoded string bytes.
+    ///
+    /// # Parameters
+    ///
+    /// * `maximum` - Optional maximum encoded content bytes per string token.
+    ///
+    /// # Returns
+    ///
+    /// This scanner configured with the requested token-local limit.
     pub(crate) const fn with_max_encoded_string_bytes(mut self, maximum: Option<usize>) -> Self {
         self.max_encoded_string_bytes = maximum;
         self
@@ -210,7 +238,8 @@ where
     where
         F: FnMut(JsonLexicalEvent<'input>),
     {
-        let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
+        let mut cursor =
+            JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         cursor.set_number_model(self.number_model);
         cursor.set_admission_policy(self.admission_policy);
         cursor.set_depth_limit(self.depth_limit);
@@ -248,6 +277,27 @@ where
     /// callbacks and scanning immediately. The number delimiter is checked
     /// after `before_number` and its event, so that callback does not
     /// establish that the following delimiter or document is valid.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `C` - Consumer implementing synchronous checks for this input
+    ///   lifetime.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Byte sequence containing exactly one JSON document.
+    /// * `consumer` - Callback implementation receiving checks and token
+    ///   events.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after complete validation and callback processing.
+    ///
+    /// # Errors
+    ///
+    /// Returns the consumer's error when a callback stops scanning, an
+    /// encoded-string limit error for that token-local violation, or a
+    /// lexical error for syntax or budget failures.
     pub(crate) fn scan_with_consumer<'input, C>(
         &mut self,
         input: &'input [u8],
@@ -256,7 +306,8 @@ where
     where
         C: JsonLexicalConsumer<'input>,
     {
-        let mut cursor = JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
+        let mut cursor =
+            JsonLexicalCursor::new(input, &mut *self.transaction, self.has_value_limits);
         cursor.set_number_model(self.number_model);
         cursor.set_admission_policy(self.admission_policy);
         cursor.set_depth_limit(self.depth_limit);
@@ -265,9 +316,13 @@ where
         let mut consumer_error = None;
         let mut dispatch = |point| {
             let result = match point {
-                JsonLexicalScanPoint::BeforeValue { depth, offset } => consumer.before_value(depth, offset),
+                JsonLexicalScanPoint::BeforeValue { depth, offset } => {
+                    consumer.before_value(depth, offset)
+                }
                 JsonLexicalScanPoint::BeforeKey { offset } => consumer.before_key(offset),
-                JsonLexicalScanPoint::BeforeNumber { token, offset } => consumer.before_number(token, offset),
+                JsonLexicalScanPoint::BeforeNumber { token, offset } => {
+                    consumer.before_number(token, offset)
+                }
                 JsonLexicalScanPoint::Event(event) => consumer.event(event),
             };
             match result {
@@ -304,13 +359,21 @@ where
                         offset: failure.offset,
                     })
                 }
-                JsonLexicalErrorReason::ConsumerStopped if consumer_error.is_some() => Err(
-                    JsonLexicalScanError::Consumer(consumer_error.expect("consumer failure was captured")),
-                ),
-                _ if consumer_error.is_some() => Err(JsonLexicalScanError::Consumer(consumer_error.unwrap())),
-                _ => Err(JsonLexicalScanError::Lexical(JsonLexicalError::Syntax(failure))),
+                JsonLexicalErrorReason::ConsumerStopped if consumer_error.is_some() => {
+                    Err(JsonLexicalScanError::Consumer(
+                        consumer_error.expect("consumer failure was captured"),
+                    ))
+                }
+                _ if consumer_error.is_some() => {
+                    Err(JsonLexicalScanError::Consumer(consumer_error.unwrap()))
+                }
+                _ => Err(JsonLexicalScanError::Lexical(JsonLexicalError::Syntax(
+                    failure,
+                ))),
             },
-            Err(_error) if consumer_error.is_some() => Err(JsonLexicalScanError::Consumer(consumer_error.unwrap())),
+            Err(_error) if consumer_error.is_some() => {
+                Err(JsonLexicalScanError::Consumer(consumer_error.unwrap()))
+            }
             Err(error) => Err(JsonLexicalScanError::Lexical(error)),
         }
     }

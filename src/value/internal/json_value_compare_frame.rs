@@ -38,6 +38,7 @@ impl<'a> JsonValueCompareFrame<'a> {
     /// The outer `None` means the iterator is exhausted; `Some(None)` means an
     /// object key is absent from the right map; and `Some(Some(pair))` yields
     /// the next child pair.
+    #[inline]
     pub(in crate::value) fn next_pair(&mut self) -> Option<Option<(&'a Value, &'a Value)>> {
         match self {
             Self::Array { left, right } => match (left.next(), right.next()) {

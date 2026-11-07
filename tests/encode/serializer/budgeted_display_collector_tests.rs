@@ -14,6 +14,7 @@ use qubit_json::encode::JsonEncoder;
 use serde::Serialize;
 use serde::Serializer;
 
+/// Supplies fixed display text through Serde's collected-string hook.
 struct DisplayValue;
 
 impl Serialize for DisplayValue {

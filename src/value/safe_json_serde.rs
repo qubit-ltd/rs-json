@@ -25,6 +25,26 @@ use super::internal::Nested;
 use super::internal::ValueVisitor;
 
 impl Serialize for SafeJsonValue {
+    /// Serializes the protected JSON tree through the supplied Serde backend.
+    ///
+    /// The traversal grows the stack when needed. Errors from scalar,
+    /// container, or nested serializer operations are returned unchanged.
+    ///
+    /// # Parameters
+    ///
+    /// * `serializer` - Backend that receives the serialized JSON value.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `S` - Serde serializer that defines the output and error types.
+    ///
+    /// # Returns
+    ///
+    /// The value produced by the serializer on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns the backend's error if any serialization operation fails.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -44,6 +64,10 @@ impl Serialize for SafeJsonValue {
 ///
 /// * `value` - JSON subtree to serialize without taking ownership.
 /// * `serializer` - Destination Serde serializer.
+///
+/// # Type Parameters
+///
+/// * `S` - Serde serializer that defines the output and error types.
 ///
 /// # Returns
 ///
@@ -79,12 +103,34 @@ where
 }
 
 impl<'de> Deserialize<'de> for SafeJsonValue {
+    /// Deserializes a JSON value through the supplied Serde backend.
+    ///
+    /// The traversal grows the stack when needed. Duplicate object keys are
+    /// rejected by the visitor; the backend's own errors are propagated.
+    ///
+    /// # Parameters
+    ///
+    /// * `deserializer` - Backend providing the input value.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` - Serde deserializer that defines the input and error types.
+    ///
+    /// # Returns
+    ///
+    /// A protected owner for the deserialized JSON tree.
+    ///
+    /// # Errors
+    ///
+    /// Returns the backend or visitor error if decoding fails.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         stacker::maybe_grow(32 * 1024, 1024 * 1024, || {
-            deserializer.deserialize_any(ValueVisitor).map(SafeJsonValue::new)
+            deserializer
+                .deserialize_any(ValueVisitor)
+                .map(SafeJsonValue::new)
         })
     }
 }

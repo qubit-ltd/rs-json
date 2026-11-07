@@ -25,6 +25,12 @@ use crate::lexical::JsonNumberModel;
 /// * `input` - Complete JSON document bytes to scan.
 /// * `has_value_limits` - Whether value measurements can reject the document.
 ///
+/// # Type Parameters
+///
+/// * `R` - Resource identity tracked by the decode attempt; it must be
+///   cloneable.
+/// * `Q` - Quantity representation used by value accounting.
+///
 /// # Returns
 ///
 /// Returns `Ok(())` after the scanner admits the complete document and leaves
@@ -55,6 +61,12 @@ where
 /// * `input` - Complete JSON document bytes to scan.
 /// * `has_value_limits` - Whether value measurements can reject the document.
 /// * `model` - Number range contract applied while scanning number tokens.
+///
+/// # Type Parameters
+///
+/// * `R` - Resource identity tracked by the decode attempt; it must be
+///   cloneable.
+/// * `Q` - Quantity representation used by value accounting.
 ///
 /// # Returns
 ///
@@ -87,6 +99,12 @@ where
 /// * `seed` - Serde seed that materializes the target value.
 /// * `input` - Complete JSON document bytes borrowed for `'de`.
 ///
+/// # Type Parameters
+///
+/// * `'de` - Lifetime for which the input bytes and deserialized borrows remain
+///   valid.
+/// * `S` - Seed that produces the requested value from the document.
+///
 /// # Returns
 ///
 /// The value produced by `seed` after the deserializer confirms that no input
@@ -100,7 +118,10 @@ where
 /// # Panics
 ///
 /// Panics raised by the seed's visitor propagate to the caller.
-pub(in crate::decode) fn deserialize_json_document<'de, S>(seed: S, input: &'de [u8]) -> Result<S::Value, Error>
+pub(in crate::decode) fn deserialize_json_document<'de, S>(
+    seed: S,
+    input: &'de [u8],
+) -> Result<S::Value, Error>
 where
     S: DeserializeSeed<'de>,
 {

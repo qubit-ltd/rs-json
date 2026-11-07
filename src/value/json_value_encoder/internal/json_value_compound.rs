@@ -40,6 +40,14 @@ use crate::value::internal::SafeValueBuilder;
 
 /// Shared staged transaction and sticky first-failure state for one projection.
 /// Compounds borrow this context and never commit it themselves.
+///
+/// # Type Parameters
+///
+/// * `'context` - Lifetime of the shared context borrow.
+/// * `'transaction` - Lifetime of the staged resource transaction.
+/// * `'budget` - Lifetime of the configured resource budget.
+/// * `R` - Resource quantity tracked by the budget.
+/// * `Q` - Quantity representation used for resource accounting.
 type ContextCell<'context, 'transaction, 'budget, R, Q> =
     &'context RefCell<JsonValueEncodeContext<'transaction, 'budget, R, Q>>;
 
@@ -50,8 +58,21 @@ type ContextCell<'context, 'transaction, 'budget, R, Q> =
 /// being returned. Private raw-value and number payloads use dedicated protocol
 /// states. A generic map event sequence is treated as a map and cannot reveal
 /// that it originated from serde_json's private `Number` representation.
-pub(in crate::value::json_value_encoder) struct JsonValueCompound<'context, 'transaction, 'budget, R, Q>
-where
+///
+/// # Type Parameters
+///
+/// * `'context` - Lifetime of the borrowed shared encoding context.
+/// * `'transaction` - Lifetime of its staged resource transaction.
+/// * `'budget` - Lifetime of its configured resource budget.
+/// * `R` - Resource quantity tracked by the budget; it must be cloneable.
+/// * `Q` - Quantity representation required by resource accounting.
+pub(in crate::value::json_value_encoder) struct JsonValueCompound<
+    'context,
+    'transaction,
+    'budget,
+    R,
+    Q,
+> where
     Q: ResourceQuantity,
 {
     /// Shared staged transaction and first-failure state; this compound does
@@ -250,6 +271,14 @@ where
 
     /// Retains this compound's first serialization failure and records it in
     /// the shared context.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - Serialization error to retain if no earlier failure exists.
+    ///
+    /// # Returns
+    ///
+    /// The first error retained by this compound.
     fn fail(&self, error: JsonSerializationError) -> JsonSerializationError {
         if self.failure.get().is_none() {
             self.failure.set(Some(error));
@@ -262,6 +291,10 @@ where
     /// returning it. The retained failure remains observable even if an
     /// enclosing `Serialize` implementation ignores this result and later
     /// reports success. The shared context preserves first-failure precedence.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Successful finalization value carried through unchanged.
     ///
     /// # Parameters
     ///
@@ -283,6 +316,16 @@ where
     }
 
     /// Stops this compound when either its local or shared context has failed.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` while both failure states are clear; otherwise, the first
+    /// retained serialization error.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first failure recorded by this compound or its shared
+    /// encoding context.
     fn check_failure(&self) -> Result<(), JsonSerializationError> {
         if let Some(error) = self.failure.get() {
             return Err(error);
@@ -295,6 +338,19 @@ where
         Ok(())
     }
 
+    /// Admits one resource measurement and makes any rejection sticky.
+    ///
+    /// # Parameters
+    ///
+    /// * `measurement` - Resource usage to admit to the shared transaction.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the measurement is admitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns and retains the resource-budget error when admission fails.
     fn admit(&mut self, measurement: JsonMeasurement) -> Result<(), JsonSerializationError> {
         let result = { self.context.borrow_mut().admit(measurement) };
         result.map_err(|error| self.fail(error))
@@ -305,6 +361,10 @@ where
     /// serializer error; checking the context prevents that error from being
     /// converted into success. Child errors are retained through this
     /// compound's failure path.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Serde value being encoded as a child.
     ///
     /// # Parameters
     ///
@@ -318,7 +378,11 @@ where
     /// # Errors
     ///
     /// Returns the first retained serialization failure.
-    fn serialize_child<T>(&mut self, value: &T, depth: usize) -> Result<SafeJsonValue, JsonSerializationError>
+    fn serialize_child<T>(
+        &mut self,
+        value: &T,
+        depth: usize,
+    ) -> Result<SafeJsonValue, JsonSerializationError>
     where
         T: Serialize + ?Sized,
     {
@@ -331,7 +395,25 @@ where
         }
     }
 
-    fn check_count(&mut self, kind: JsonContainerKind, count: usize) -> Result<(), JsonSerializationError> {
+    /// Checks a prospective item count against the shared container limits.
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - Container category whose limit applies.
+    /// * `count` - Prospective number of items after the next insertion.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the count is within the configured container limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns and retains the serialization error when the count is rejected.
+    fn check_count(
+        &mut self,
+        kind: JsonContainerKind,
+        count: usize,
+    ) -> Result<(), JsonSerializationError> {
         let result = { self.context.borrow_mut().check_container_count(kind, count) };
         result.map_err(|error| self.fail(error))
     }
@@ -343,6 +425,26 @@ where
     /// the configured temporary payload limit before appending text. Complete
     /// JSON syntax and number materialization are checked when the compound is
     /// finished; successful collection alone does not validate the payload.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Serde value whose text representation is collected.
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - Private protocol whose payload is being collected.
+    /// * `key` - Protocol field name presented by the serializer.
+    /// * `value` - Value serialized by the restricted text serializer.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the private payload field is collected and the protocol
+    /// advances to its complete state.
+    ///
+    /// # Errors
+    ///
+    /// Returns and retains an error for an invalid protocol state, rejected
+    /// payload value, or temporary text-limit violation.
     fn set_private_field<T>(
         &mut self,
         kind: JsonPrivateProtocolKind,
@@ -355,7 +457,8 @@ where
         let context = self.context;
         let mut check_text_bytes = |length| context.borrow_mut().check_private_text_bytes(length);
         let result = match &mut self.state {
-            CompoundState::RawValue { text, state, .. } | CompoundState::Number { text, state, .. } => {
+            CompoundState::RawValue { text, state, .. }
+            | CompoundState::Number { text, state, .. } => {
                 set_private_payload(text, state, kind, key, value, &mut check_text_bytes)
             }
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
@@ -363,10 +466,32 @@ where
         result.map_err(|error| self.fail(error))
     }
 
+    /// Releases a completed guarded array as a protected JSON value.
+    ///
+    /// # Parameters
+    ///
+    /// * `values` - Completed children retained by the guarded builder.
+    ///
+    /// # Returns
+    ///
+    /// The guarded JSON array built from the supplied children.
+    #[must_use]
+    #[inline]
     fn finish_sequence(values: SafeValueBuilder) -> SafeJsonValue {
         SafeJsonValue::new(values.finish())
     }
 
+    /// Releases completed guarded entries as a protected JSON object.
+    ///
+    /// # Parameters
+    ///
+    /// * `values` - Completed keys and guarded values to insert into the
+    ///   object.
+    ///
+    /// # Returns
+    ///
+    /// The guarded JSON object built from the supplied entries.
+    #[must_use]
     fn finish_object(values: Vec<(String, SafeJsonValue)>) -> SafeJsonValue {
         let mut object = SafeValueBuilder::object();
         for (key, value) in values {
@@ -375,6 +500,16 @@ where
         SafeJsonValue::new(object.finish())
     }
 
+    /// Materializes a completed private payload and records any failure.
+    ///
+    /// # Returns
+    ///
+    /// The guarded JSON value produced by the payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns and records an invalid protocol, malformed payload, or resource
+    /// admission error.
     fn finish_private(self) -> Result<SafeJsonValue, JsonSerializationError> {
         let context = self.context;
         self.finish_private_inner()
@@ -383,6 +518,15 @@ where
 
     /// Validates the complete private protocol before parsing/admitting its
     /// payload.
+    ///
+    /// # Returns
+    ///
+    /// The guarded JSON value after protocol validation and materialization.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-state error for an incomplete or mismatched protocol,
+    /// or the payload parsing/admission error.
     fn finish_private_inner(self) -> Result<SafeJsonValue, JsonSerializationError> {
         match &self.state {
             CompoundState::RawValue {
@@ -410,9 +554,10 @@ where
                 match crate::internal::StrictJsonNumber::parse(text) {
                     Ok(number) => {
                         let bytes = crate::value::internal::json_number_lexeme_length(&number);
-                        self.context
-                            .borrow_mut()
-                            .admit(JsonMeasurement::Number { depth: *depth, bytes })?;
+                        self.context.borrow_mut().admit(JsonMeasurement::Number {
+                            depth: *depth,
+                            bytes,
+                        })?;
                         Ok(SafeJsonValue::new(Value::Number(number)))
                     }
                     Err(error) => Err(self.context.borrow_mut().record_serialization_error(error)),
@@ -432,6 +577,28 @@ where
 /// UTF-8 source bytes against the temporary text limit before appending them.
 /// This helper does not parse the complete JSON payload or record a sticky
 /// shared error; its caller owns first-error recording.
+///
+/// # Type Parameters
+///
+/// * `T` - Serde value expected to produce one text payload.
+///
+/// # Parameters
+///
+/// * `text` - Destination for the collected payload text.
+/// * `state` - Protocol lifecycle state advanced by this payload.
+/// * `kind` - Protocol whose payload is being collected.
+/// * `key` - Field name supplied by the serializer.
+/// * `value` - Serde value expected to serialize as text.
+/// * `check_text_bytes` - Callback enforcing the temporary text byte limit.
+///
+/// # Returns
+///
+/// `Ok(())` after exactly one valid text payload completes the protocol.
+///
+/// # Errors
+///
+/// Returns an invalid-state error for an unexpected field or non-text value,
+/// or the serializer/text-limit error produced while collecting the payload.
 fn set_private_payload<T>(
     text: &mut Option<String>,
     state: &mut JsonPrivateProtocolState,
@@ -446,7 +613,10 @@ where
     if state.begin(key).is_err() {
         return Err(private_invalid_state(kind));
     }
-    let value = match value.serialize(PrivateTextSerializer { kind, check_text_bytes }) {
+    let value = match value.serialize(PrivateTextSerializer {
+        kind,
+        check_text_bytes,
+    }) {
         Ok(Value::String(value)) => value,
         Ok(_) => {
             state.fail();
@@ -469,16 +639,38 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Guarded JSON value produced when this sequence is completed.
     type Ok = SafeJsonValue;
+    /// Serialization error retained for invalid elements or compound state.
     type Error = JsonSerializationError;
 
+    /// Serializes one child after count, depth, and resource checks succeed.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Serde value being encoded as an element.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Element value to serialize.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the element is admitted and appended.
+    ///
+    /// # Errors
+    ///
+    /// Returns the retained failure if the compound already failed, its count
+    /// or depth is invalid, or child serialization fails.
     fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         self.check_failure()?;
         let (depth, count, kind) = match &self.state {
-            CompoundState::Sequence { depth, count, kind, .. } => (*depth, *count, *kind),
+            CompoundState::Sequence {
+                depth, count, kind, ..
+            } => (*depth, *count, *kind),
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
         let next_count = count.checked_add(1).ok_or_else(|| {
@@ -489,9 +681,9 @@ where
             ))
         })?;
         self.check_count(kind, next_count)?;
-        let child_depth = depth
-            .checked_add(1)
-            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
+        let child_depth = depth.checked_add(1).ok_or_else(|| {
+            self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))
+        })?;
         let child = self.serialize_child(value, child_depth)?;
         let CompoundState::Sequence { values, count, .. } = &mut self.state else {
             unreachable!()
@@ -503,6 +695,15 @@ where
 
     /// Completes the compound only when no earlier failure or incomplete
     /// protocol remains.
+    ///
+    /// # Returns
+    ///
+    /// The guarded JSON array after all elements have been accepted.
+    ///
+    /// # Errors
+    ///
+    /// Returns the retained serialization error or an error for an unexpected
+    /// compound state.
     fn end(self) -> Result<Self::Ok, Self::Error> {
         self.check_failure()?;
         let context = self.context;
@@ -519,14 +720,46 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Guarded JSON value produced when this tuple is completed.
     type Ok = SafeJsonValue;
+    /// Serialization error retained for invalid elements or compound state.
     type Error = JsonSerializationError;
+    /// Serializes one positional child using the sequence implementation.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Serde value being encoded as a tuple element.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Tuple element to serialize.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the tuple element is appended.
+    ///
+    /// # Errors
+    ///
+    /// Returns the sequence serializer's count, depth, or child-serialization
+    /// error.
+    #[inline]
     fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         SerializeSeq::serialize_element(self, value)
     }
+    /// Completes the tuple and returns its guarded value.
+    ///
+    /// # Returns
+    ///
+    /// The guarded JSON array representing the tuple.
+    ///
+    /// # Errors
+    ///
+    /// Returns the sequence serializer's retained failure or invalid-state
+    /// error.
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         SerializeSeq::end(self)
     }
@@ -537,14 +770,46 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Guarded JSON value produced when this tuple struct is completed.
     type Ok = SafeJsonValue;
+    /// Serialization error retained for invalid fields or compound state.
     type Error = JsonSerializationError;
+    /// Serializes one tuple-struct field using the sequence implementation.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Serde value being encoded as a tuple-struct field.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Tuple-struct field value to serialize.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the field is appended.
+    ///
+    /// # Errors
+    ///
+    /// Returns the sequence serializer's count, depth, or child-serialization
+    /// error.
+    #[inline]
     fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         SerializeSeq::serialize_element(self, value)
     }
+    /// Completes the tuple struct and returns its guarded value.
+    ///
+    /// # Returns
+    ///
+    /// The guarded JSON array representing the tuple struct.
+    ///
+    /// # Errors
+    ///
+    /// Returns the sequence serializer's retained failure or invalid-state
+    /// error.
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         SerializeSeq::end(self)
     }
@@ -555,8 +820,28 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Guarded JSON value produced when this tuple variant is completed.
     type Ok = SafeJsonValue;
+    /// Serialization error retained for invalid elements or compound state.
     type Error = JsonSerializationError;
+    /// Serializes one enum-variant element after count and depth checks.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Serde value being encoded as a variant element.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Enum-variant element to serialize.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the element is admitted and appended.
+    ///
+    /// # Errors
+    ///
+    /// Returns the retained failure if the compound failed, count or depth
+    /// validation fails, or child serialization fails.
     fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
@@ -574,9 +859,9 @@ where
             ))
         })?;
         self.check_count(JsonContainerKind::Sequence, next)?;
-        let child_depth = depth
-            .checked_add(2)
-            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
+        let child_depth = depth.checked_add(2).ok_or_else(|| {
+            self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))
+        })?;
         let child = self.serialize_child(value, child_depth)?;
         let CompoundState::TupleVariant { values, count, .. } = &mut self.state else {
             unreachable!()
@@ -585,11 +870,23 @@ where
         *count = next;
         Ok(())
     }
+    /// Completes the variant object and returns its guarded value.
+    ///
+    /// # Returns
+    ///
+    /// The guarded one-entry JSON object containing the tuple variant.
+    ///
+    /// # Errors
+    ///
+    /// Returns a retained serialization error or an invalid compound-state
+    /// error.
     fn end(self) -> Result<Self::Ok, Self::Error> {
         self.check_failure()?;
         let context = self.context;
         let result = match self.state {
-            CompoundState::TupleVariant { variant, values, .. } => {
+            CompoundState::TupleVariant {
+                variant, values, ..
+            } => {
                 let inner = Self::finish_sequence(values);
                 let mut object = SafeValueBuilder::object();
                 object.insert(variant, inner);
@@ -606,21 +903,44 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Guarded JSON object produced when this map is completed.
     type Ok = SafeJsonValue;
+    /// Serialization error retained for invalid entries or compound state.
     type Error = JsonSerializationError;
     /// Serializes and checks the prospective key before the corresponding value
     /// is admitted.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Serde value serialized as a map key.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Key to serialize and retain for the next value.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the key passes validation and is retained for its value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for a pending prior key, invalid key representation,
+    /// count or budget rejection, or prior compound failure.
     fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         self.check_failure()?;
         let (count, pending) = match &self.state {
-            CompoundState::Map { count, next_key, .. } => (*count, next_key.is_some()),
+            CompoundState::Map {
+                count, next_key, ..
+            } => (*count, next_key.is_some()),
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
         if pending {
-            return Err(self.fail(invalid_state(JsonSerializerStateError::MapKeyAlreadyPending)));
+            return Err(self.fail(invalid_state(
+                JsonSerializerStateError::MapKeyAlreadyPending,
+            )));
         }
         let next = count.checked_add(1).ok_or_else(|| {
             self.fail(JsonSerializationError::new(
@@ -635,7 +955,10 @@ where
             Err(error) => return Err(self.fail(error)),
         };
         self.admit(JsonMeasurement::Key { bytes: key.len() })?;
-        let CompoundState::Map { next_key, count, .. } = &mut self.state else {
+        let CompoundState::Map {
+            next_key, count, ..
+        } = &mut self.state
+        else {
             unreachable!()
         };
         *next_key = Some(key);
@@ -643,6 +966,23 @@ where
         Ok(())
     }
     /// Adds a value only after its pending key and guarded child succeed.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Serde value serialized as the pending map value.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Value corresponding to the pending key.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the value is serialized and paired with its key.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when no key is pending, the key is duplicated, child
+    /// serialization fails, or the compound has already failed.
     fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
@@ -650,10 +990,15 @@ where
         self.check_failure()?;
         let depth = match &self.state {
             CompoundState::Map {
-                keys, next_key, depth, ..
+                keys,
+                next_key,
+                depth,
+                ..
             } => {
                 let Some(key) = next_key.as_ref() else {
-                    return Err(self.fail(invalid_state(JsonSerializerStateError::MapValueWithoutKey)));
+                    return Err(
+                        self.fail(invalid_state(JsonSerializerStateError::MapValueWithoutKey))
+                    );
                 };
                 if keys.contains(key.as_str()) {
                     return Err(self.fail(JsonSerializationError::new(
@@ -665,13 +1010,20 @@ where
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
         if let CompoundState::Map { keys, next_key, .. } = &mut self.state {
-            keys.insert(next_key.as_ref().expect("pending map key was checked").clone());
+            keys.insert(
+                next_key
+                    .as_ref()
+                    .expect("pending map key was checked")
+                    .clone(),
+            );
         }
-        let child_depth = depth
-            .checked_add(1)
-            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
+        let child_depth = depth.checked_add(1).ok_or_else(|| {
+            self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))
+        })?;
         let key = match &mut self.state {
-            CompoundState::Map { next_key, .. } => next_key.take().expect("pending map key was checked"),
+            CompoundState::Map { next_key, .. } => {
+                next_key.take().expect("pending map key was checked")
+            }
             _ => unreachable!(),
         };
         let child = self.serialize_child(value, child_depth)?;
@@ -681,16 +1033,30 @@ where
         values.push((key, child));
         Ok(())
     }
+    /// Completes the map, rejecting a key that has no corresponding value.
+    ///
+    /// # Returns
+    ///
+    /// The guarded JSON object after all key-value pairs are complete.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for a pending key, unexpected state, or earlier
+    /// retained serialization failure.
     fn end(self) -> Result<Self::Ok, Self::Error> {
         self.check_failure()?;
         let context = self.context;
         let result = match self.state {
             CompoundState::Map {
-                values, next_key: None, ..
+                values,
+                next_key: None,
+                ..
             } => Ok(Self::finish_object(values)),
-            CompoundState::Map { next_key: Some(_), .. } => {
-                Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey))
-            }
+            CompoundState::Map {
+                next_key: Some(_), ..
+            } => Err(invalid_state(
+                JsonSerializerStateError::MapEndedWithPendingKey,
+            )),
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         };
         Self::keep_end_error(context, result)
@@ -702,22 +1068,63 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Guarded JSON object produced when this struct is completed.
     type Ok = SafeJsonValue;
+    /// Serialization error retained for invalid fields or compound state.
     type Error = JsonSerializationError;
+    /// Accepts omitted fields for ordinary structs, but not private protocols.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Name of the struct field omitted by the serializer.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` for ordinary structs, where omission requires no state change.
+    ///
+    /// # Errors
+    ///
+    /// Returns and retains an error when omission violates a private payload
+    /// protocol.
     fn skip_field(&mut self, _: &'static str) -> Result<(), Self::Error> {
         match &self.state {
-            CompoundState::RawValue { .. } => Err(self.fail(private_invalid_state(JsonPrivateProtocolKind::RawValue))),
-            CompoundState::Number { .. } => Err(self.fail(private_invalid_state(JsonPrivateProtocolKind::Number))),
+            CompoundState::RawValue { .. } => {
+                Err(self.fail(private_invalid_state(JsonPrivateProtocolKind::RawValue)))
+            }
+            CompoundState::Number { .. } => {
+                Err(self.fail(private_invalid_state(JsonPrivateProtocolKind::Number)))
+            }
             _ => Ok(()),
         }
     }
+    /// Serializes a unique struct field or advances a private payload protocol.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Serde value encoded for the field or private payload.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Static field name supplied by Serde.
+    /// * `value` - Field or protocol payload value to serialize.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the field is appended or a private payload completes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for duplicate fields, invalid protocol state, count or
+    /// budget rejection, or child/payload serialization failure.
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         self.check_failure()?;
         match &self.state {
-            CompoundState::Map { keys, depth, count, .. } => {
+            CompoundState::Map {
+                keys, depth, count, ..
+            } => {
                 let (depth, count, duplicate) = (*depth, *count, keys.contains(key));
                 if duplicate {
                     return Err(self.fail(JsonSerializationError::new(
@@ -736,9 +1143,9 @@ where
                 if let CompoundState::Map { keys, .. } = &mut self.state {
                     keys.insert(key.to_owned());
                 }
-                let child_depth = depth
-                    .checked_add(1)
-                    .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
+                let child_depth = depth.checked_add(1).ok_or_else(|| {
+                    self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))
+                })?;
                 let child = self.serialize_child(value, child_depth)?;
                 let CompoundState::Map { values, count, .. } = &mut self.state else {
                     unreachable!()
@@ -747,11 +1154,25 @@ where
                 *count = next;
                 Ok(())
             }
-            CompoundState::RawValue { .. } => self.set_private_field(JsonPrivateProtocolKind::RawValue, key, value),
-            CompoundState::Number { .. } => self.set_private_field(JsonPrivateProtocolKind::Number, key, value),
+            CompoundState::RawValue { .. } => {
+                self.set_private_field(JsonPrivateProtocolKind::RawValue, key, value)
+            }
+            CompoundState::Number { .. } => {
+                self.set_private_field(JsonPrivateProtocolKind::Number, key, value)
+            }
             _ => Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         }
     }
+    /// Completes the struct or validates and materializes its private payload.
+    ///
+    /// # Returns
+    ///
+    /// The guarded JSON object or materialized private payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for incomplete or invalid state, malformed private
+    /// payload, resource rejection, or an earlier retained failure.
     fn end(self) -> Result<Self::Ok, Self::Error> {
         self.check_failure()?;
         if matches!(
@@ -763,11 +1184,15 @@ where
         let context = self.context;
         let result = match self.state {
             CompoundState::Map {
-                values, next_key: None, ..
+                values,
+                next_key: None,
+                ..
             } => Ok(Self::finish_object(values)),
-            CompoundState::Map { next_key: Some(_), .. } => {
-                Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey))
-            }
+            CompoundState::Map {
+                next_key: Some(_), ..
+            } => Err(invalid_state(
+                JsonSerializerStateError::MapEndedWithPendingKey,
+            )),
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         };
         Self::keep_end_error(context, result)
@@ -779,15 +1204,38 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Guarded JSON object produced when this struct variant is completed.
     type Ok = SafeJsonValue;
+    /// Serialization error retained for invalid fields or compound state.
     type Error = JsonSerializationError;
+    /// Serializes a unique field in the enum variant's inner object.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Serde value encoded for the variant field.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Static field name supplied by Serde.
+    /// * `value` - Variant field value to serialize.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the unique variant field is admitted and appended.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for duplicate fields, invalid state, count or budget
+    /// rejection, or child serialization failure.
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
         self.check_failure()?;
         let (depth, count, duplicate) = match &self.state {
-            CompoundState::StructVariant { keys, depth, count, .. } => (*depth, *count, keys.contains(key)),
+            CompoundState::StructVariant {
+                keys, depth, count, ..
+            } => (*depth, *count, keys.contains(key)),
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
         if duplicate {
@@ -807,9 +1255,9 @@ where
         if let CompoundState::StructVariant { keys, .. } = &mut self.state {
             keys.insert(key.to_owned());
         }
-        let child_depth = depth
-            .checked_add(2)
-            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
+        let child_depth = depth.checked_add(2).ok_or_else(|| {
+            self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))
+        })?;
         let child = self.serialize_child(value, child_depth)?;
         let CompoundState::StructVariant { values, count, .. } = &mut self.state else {
             unreachable!()
@@ -818,11 +1266,23 @@ where
         *count = next;
         Ok(())
     }
+    /// Completes the enum variant object and returns its guarded value.
+    ///
+    /// # Returns
+    ///
+    /// The guarded one-entry JSON object containing the struct variant.
+    ///
+    /// # Errors
+    ///
+    /// Returns a retained serialization error or an invalid compound-state
+    /// error.
     fn end(self) -> Result<Self::Ok, Self::Error> {
         self.check_failure()?;
         let context = self.context;
         let result = match self.state {
-            CompoundState::StructVariant { variant, values, .. } => {
+            CompoundState::StructVariant {
+                variant, values, ..
+            } => {
                 let inner = Self::finish_object(values);
                 let mut outer = SafeValueBuilder::object();
                 outer.insert(variant, inner);
@@ -834,10 +1294,28 @@ where
     }
 }
 
+/// Wraps a serializer lifecycle violation in the serialization error type.
+///
+/// # Parameters
+///
+/// * `reason` - State-machine violation to preserve in the error.
+///
+/// # Returns
+///
+/// A serialization error identifying the invalid serializer state.
 fn invalid_state(reason: JsonSerializerStateError) -> JsonSerializationError {
     JsonSerializationError::new(JsonSerializationErrorKind::InvalidSerializerState { reason })
 }
 
+/// Creates the private-protocol lifecycle error for the supplied protocol.
+///
+/// # Parameters
+///
+/// * `kind` - Private protocol whose lifecycle was violated.
+///
+/// # Returns
+///
+/// A serialization error identifying the violated private protocol state.
 pub(super) fn private_invalid_state(kind: JsonPrivateProtocolKind) -> JsonSerializationError {
     invalid_state(kind.invalid_state())
 }
@@ -847,6 +1325,27 @@ pub(super) fn private_invalid_state(kind: JsonPrivateProtocolKind) -> JsonSerial
 /// Syntax, numeric range, duplicate-key, and budget failures retain their
 /// existing mapping: budget failures preserve their budget error, while other
 /// invalid payloads become `InvalidRawValue`.
+///
+/// # Type Parameters
+///
+/// * `R` - Cloneable resource quantity tracked by the staged transaction.
+/// * `Q` - Quantity representation used by the resource budget.
+///
+/// # Parameters
+///
+/// * `text` - Complete raw JSON text collected from the private protocol.
+/// * `context` - Shared staged transaction and sticky error state.
+/// * `depth` - Nesting depth at which the resulting value is admitted.
+///
+/// # Returns
+///
+/// The guarded JSON value parsed from the complete raw JSON text.
+///
+/// # Errors
+///
+/// Returns a budget error when scanning exceeds configured limits; syntax,
+/// number, duplicate-key, and guarded-builder failures are reported as an
+/// invalid raw value.
 fn decode_raw_value<R, Q>(
     text: &str,
     context: ContextCell<'_, '_, '_, R, Q>,
@@ -856,28 +1355,41 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    let mut builder = crate::value::internal::LexicalJsonValueBuilder::new(crate::lexical::JsonNumberModel::Integer64);
+    let mut builder = crate::value::internal::LexicalJsonValueBuilder::new(
+        crate::lexical::JsonNumberModel::Integer64,
+    );
     let has_limits = context.borrow().has_limits();
     let scan = {
         let mut ctx = context.borrow_mut();
         let transaction = ctx.transaction();
         crate::lexical::JsonLexicalScanner::at_depth(transaction, depth, has_limits)
             .with_number_model(crate::lexical::JsonNumberModel::Integer64)
-            .scan_with_consumer(text.as_bytes(), &mut RawValueConsumer { builder: &mut builder })
+            .scan_with_consumer(
+                text.as_bytes(),
+                &mut RawValueConsumer {
+                    builder: &mut builder,
+                },
+            )
     };
     match scan {
-        Ok(()) => match builder.finish_guarded() {
-            Ok(value) => Ok(value),
-            Err(_) => Err(context
-                .borrow_mut()
-                .record_serialization_error(JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue))),
-        },
-        Err(crate::lexical::JsonLexicalScanError::Lexical(crate::lexical::JsonLexicalError::Budget(error))) => {
-            Err(context.borrow_mut().record_budget_failure(error))
+        Ok(()) => {
+            match builder.finish_guarded() {
+                Ok(value) => Ok(value),
+                Err(_) => Err(context.borrow_mut().record_serialization_error(
+                    JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue),
+                )),
+            }
         }
-        Err(_) => Err(context
-            .borrow_mut()
-            .record_serialization_error(JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue))),
+        Err(crate::lexical::JsonLexicalScanError::Lexical(
+            crate::lexical::JsonLexicalError::Budget(error),
+        )) => Err(context.borrow_mut().record_budget_failure(error)),
+        Err(_) => {
+            Err(context
+                .borrow_mut()
+                .record_serialization_error(JsonSerializationError::new(
+                    JsonSerializationErrorKind::InvalidRawValue,
+                )))
+        }
     }
 }
 
@@ -906,13 +1418,22 @@ mod tests {
     fn test_compound_count_and_depth_overflow_are_sticky() {
         // Seed only the counters: reaching these guards must not require an
         // allocation or traversal proportional to usize::MAX.
-        for path in ["sequence", "tuple-variant", "map", "struct", "struct-variant"] {
+        for path in [
+            "sequence",
+            "tuple-variant",
+            "map",
+            "struct",
+            "struct-variant",
+        ] {
             for overflow_count in [true, false] {
-                let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
+                let mut budget =
+                    JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
                 let mut transaction = budget.transaction();
                 let context = RefCell::new(JsonValueEncodeContext::new(&mut transaction, None));
                 let mut compound = match path {
-                    "sequence" => JsonValueCompound::sequence(&context, 1, JsonContainerKind::Sequence, 0),
+                    "sequence" => {
+                        JsonValueCompound::sequence(&context, 1, JsonContainerKind::Sequence, 0)
+                    }
                     "tuple-variant" => JsonValueCompound::tuple_variant(&context, "Tuple", 1, 0),
                     "struct-variant" => JsonValueCompound::struct_variant(&context, "Struct", 1, 0),
                     _ => JsonValueCompound::map(&context, 1, 0),
@@ -934,10 +1455,13 @@ mod tests {
                     "sequence" => SerializeSeq::serialize_element(&mut compound, &true),
                     "tuple-variant" => SerializeTupleVariant::serialize_field(&mut compound, &true),
                     "struct" => SerializeStruct::serialize_field(&mut compound, "key", &true),
-                    "struct-variant" => SerializeStructVariant::serialize_field(&mut compound, "key", &true),
+                    "struct-variant" => {
+                        SerializeStructVariant::serialize_field(&mut compound, "key", &true)
+                    }
                     _ if overflow_count => SerializeMap::serialize_key(&mut compound, "key"),
                     _ => {
-                        SerializeMap::serialize_key(&mut compound, "key").expect("key does not increase depth");
+                        SerializeMap::serialize_key(&mut compound, "key")
+                            .expect("key does not increase depth");
                         SerializeMap::serialize_value(&mut compound, &true)
                     }
                 };
@@ -955,8 +1479,15 @@ mod tests {
                         reason: JsonSerializerStateError::UnexpectedCompound,
                     }
                 };
-                assert_eq!(error.kind(), expected, "{path}, count overflow: {overflow_count}");
-                assert_eq!(compound.check_failure().expect_err("failure is sticky"), error);
+                assert_eq!(
+                    error.kind(),
+                    expected,
+                    "{path}, count overflow: {overflow_count}"
+                );
+                assert_eq!(
+                    compound.check_failure().expect_err("failure is sticky"),
+                    error
+                );
                 assert_eq!(context.borrow().ser_error(), error);
             }
         }

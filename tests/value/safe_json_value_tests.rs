@@ -11,9 +11,12 @@ use serde_json::Value;
 
 #[test]
 fn test_safe_value_bridge_rejects_decoded_duplicate_keys() {
-    let error =
-        serde_json::from_str::<SafeJsonValue>(r#"{"a":1,"\u0061":2}"#).expect_err("decoded duplicate keys must fail");
-    assert!(error.is_data(), "duplicates must retain the data error category");
+    let error = serde_json::from_str::<SafeJsonValue>(r#"{"a":1,"\u0061":2}"#)
+        .expect_err("decoded duplicate keys must fail");
+    assert!(
+        error.is_data(),
+        "duplicates must retain the data error category"
+    );
     assert!(
         error.to_string().contains("duplicate JSON object key"),
         "duplicate diagnostic must stay stable"
@@ -28,7 +31,10 @@ fn test_safe_value_bridge_preserves_all_wide_object_entries() {
         .join(",");
     let text = format!("{{{fields}}}");
     let owner: SafeJsonValue = serde_json::from_str(&text).expect("wide object must decode");
-    let object = owner.as_value().as_object().expect("root must remain an object");
+    let object = owner
+        .as_value()
+        .as_object()
+        .expect("root must remain an object");
     assert_eq!(object.len(), 4096, "all distinct entries must be preserved");
     for i in 0..4096 {
         assert_eq!(object[&format!("key-{i:04}")].as_u64(), Some(i as u64));
@@ -38,8 +44,12 @@ fn test_safe_value_bridge_preserves_all_wide_object_entries() {
 #[test]
 fn test_safe_value_bridge_rejects_duplicates_at_both_object_positions() {
     for input in [r#"{"a":1,"b":2,"a":3}"#, r#"{"b":1,"a":2,"a":3}"#] {
-        let error = serde_json::from_str::<SafeJsonValue>(input).expect_err("repeated key must fail");
-        assert!(error.is_data(), "duplicates must retain the data error category");
+        let error =
+            serde_json::from_str::<SafeJsonValue>(input).expect_err("repeated key must fail");
+        assert!(
+            error.is_data(),
+            "duplicates must retain the data error category"
+        );
         assert!(
             error.to_string().contains("duplicate JSON object key"),
             "duplicate diagnostic must stay stable"
@@ -51,7 +61,10 @@ fn test_safe_value_bridge_rejects_duplicates_at_both_object_positions() {
 fn test_safe_value_bridge_rejects_duplicate_before_reading_its_value() {
     let error = serde_json::from_str::<SafeJsonValue>(r#"{"a":0,"a":[}"#)
         .expect_err("duplicate key must be rejected before its malformed value");
-    assert!(error.is_data(), "duplicates must retain the data error category");
+    assert!(
+        error.is_data(),
+        "duplicates must retain the data error category"
+    );
     assert!(
         error.to_string().contains("duplicate JSON object key"),
         "duplicate diagnostic must take precedence over malformed value syntax"
@@ -61,10 +74,16 @@ fn test_safe_value_bridge_rejects_duplicate_before_reading_its_value() {
 #[test]
 fn test_safe_value_bridge_preserves_object_entry_order() {
     let input = r#"{"z":1,"a":2,"m":3}"#;
-    let expected: serde_json::Value = serde_json::from_str(input).expect("reference object must decode");
+    let expected: serde_json::Value =
+        serde_json::from_str(input).expect("reference object must decode");
     let owner: SafeJsonValue = serde_json::from_str(input).expect("unique object must decode");
-    let object = owner.as_value().as_object().expect("root must remain an object");
-    let expected = expected.as_object().expect("reference root must be an object");
+    let object = owner
+        .as_value()
+        .as_object()
+        .expect("root must remain an object");
+    let expected = expected
+        .as_object()
+        .expect("reference root must be an object");
     assert_eq!(
         object.keys().map(String::as_str).collect::<Vec<_>>(),
         expected.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -152,7 +171,10 @@ mod view_robustness {
     impl Write for RejectAfter {
         fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
             if self.0 == 0 {
-                return Err(io::Error::new(io::ErrorKind::PermissionDenied, "view-test-sink"));
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "view-test-sink",
+                ));
             }
             let written = self.0.min(bytes.len());
             self.0 -= written;
@@ -176,7 +198,10 @@ mod view_robustness {
                 assert_eq!(view, JsonValueRef::new(equal.as_value()));
                 assert_ne!(view, JsonValueRef::new(different.as_value()));
                 assert_eq!(format!("{view:?}"), format!("{owner:?}"));
-                assert_eq!(serde_json::to_vec(&view).unwrap(), serde_json::to_vec(&owner).unwrap());
+                assert_eq!(
+                    serde_json::to_vec(&view).unwrap(),
+                    serde_json::to_vec(&owner).unwrap()
+                );
                 let error = serde_json::to_writer(RejectAfter(2048), &view).unwrap_err();
                 assert_eq!(error.io_error_kind(), Some(io::ErrorKind::PermissionDenied));
                 assert!(owner.as_value().is_array());
@@ -282,10 +307,19 @@ mod view_robustness {
         fn serialize_unit_struct(self, _: &'static str) -> Result<(), Self::Error> {
             Err(SentinelError(37))
         }
-        fn serialize_unit_variant(self, _: &'static str, _: u32, _: &'static str) -> Result<(), Self::Error> {
+        fn serialize_unit_variant(
+            self,
+            _: &'static str,
+            _: u32,
+            _: &'static str,
+        ) -> Result<(), Self::Error> {
             Err(SentinelError(37))
         }
-        fn serialize_newtype_struct<T: ?Sized + Serialize>(self, _: &'static str, _: &T) -> Result<(), Self::Error> {
+        fn serialize_newtype_struct<T: ?Sized + Serialize>(
+            self,
+            _: &'static str,
+            _: &T,
+        ) -> Result<(), Self::Error> {
             Err(SentinelError(37))
         }
         fn serialize_newtype_variant<T: ?Sized + Serialize>(
@@ -303,7 +337,11 @@ mod view_robustness {
         fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Self::Error> {
             Err(SentinelError(37))
         }
-        fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        fn serialize_tuple_struct(
+            self,
+            _: &'static str,
+            _: usize,
+        ) -> Result<Self::SerializeTupleStruct, Self::Error> {
             Err(SentinelError(37))
         }
         fn serialize_tuple_variant(
@@ -318,7 +356,11 @@ mod view_robustness {
         fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
             Err(SentinelError(37))
         }
-        fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Self::Error> {
+        fn serialize_struct(
+            self,
+            _: &'static str,
+            _: usize,
+        ) -> Result<Self::SerializeStruct, Self::Error> {
             Err(SentinelError(37))
         }
         fn serialize_struct_variant(
@@ -342,13 +384,6 @@ mod view_robustness {
         assert!(owner.as_value().is_object());
     }
 }
-// =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
-//
-//    SPDX-License-Identifier: Apache-2.0
-//
-//    Licensed under the Apache License, Version 2.0.
-// =============================================================================
 
 mod migrated_owner {
     use qubit_json::value::SafeJsonValue;
@@ -432,7 +467,12 @@ mod migrated_owner {
     #[test]
     fn test_owner_handles_ten_thousand_shallow_objects_in_a_wide_array() {
         let values = (0..10_000)
-            .map(|index| Value::Object(serde_json::Map::from_iter([("index".to_owned(), Value::from(index))])))
+            .map(|index| {
+                Value::Object(serde_json::Map::from_iter([(
+                    "index".to_owned(),
+                    Value::from(index),
+                )]))
+            })
             .collect();
         let owner = SafeJsonValue::new(Value::Array(values));
         let cloned = owner.clone();
@@ -469,7 +509,13 @@ mod migrated_owner {
         let cloned = value.clone();
         assert_eq!(value, cloned);
         let debug = format!("{value:?}");
-        for expected in ["Null", "Bool(true)", "Number(7)", "String(\"text\")", "Object"] {
+        for expected in [
+            "Null",
+            "Bool(true)",
+            "Number(7)",
+            "String(\"text\")",
+            "Object",
+        ] {
             assert!(
                 debug.contains(expected),
                 "debug output {debug:?} must contain {expected:?}"
@@ -525,7 +571,8 @@ mod migrated_owner {
         use serde::de::value::StringDeserializer;
         use serde::de::value::UnitDeserializer;
 
-        let unit = SafeJsonValue::deserialize(UnitDeserializer::<serde_json::Error>::new()).unwrap();
+        let unit =
+            SafeJsonValue::deserialize(UnitDeserializer::<serde_json::Error>::new()).unwrap();
         assert!(unit.as_value().is_null());
 
         struct NoneDeserializer;
@@ -550,11 +597,14 @@ mod migrated_owner {
         let none = SafeJsonValue::deserialize(NoneDeserializer).unwrap();
         assert!(none.as_value().is_null());
 
-        let integer = SafeJsonValue::deserialize(I64Deserializer::<serde_json::Error>::new(-7)).unwrap();
+        let integer =
+            SafeJsonValue::deserialize(I64Deserializer::<serde_json::Error>::new(-7)).unwrap();
         assert_eq!(integer.as_value().as_i64(), Some(-7));
 
-        let string =
-            SafeJsonValue::deserialize(StringDeserializer::<serde_json::Error>::new(String::from("owned"))).unwrap();
+        let string = SafeJsonValue::deserialize(StringDeserializer::<serde_json::Error>::new(
+            String::from("owned"),
+        ))
+        .unwrap();
         assert_eq!(string.as_value().as_str(), Some("owned"));
     }
 
@@ -562,10 +612,13 @@ mod migrated_owner {
     fn test_owner_serde_bridge_preserves_unsigned_number_and_nested_containers() {
         use serde::de::value::U64Deserializer;
 
-        let number = SafeJsonValue::deserialize(U64Deserializer::<serde_json::Error>::new(u64::MAX)).unwrap();
+        let number =
+            SafeJsonValue::deserialize(U64Deserializer::<serde_json::Error>::new(u64::MAX))
+                .unwrap();
         assert_eq!(number.as_value().as_u64(), Some(u64::MAX));
 
-        let owner: SafeJsonValue = serde_json::from_str(r#"{"items":[1,{"enabled":true},null]}"#).unwrap();
+        let owner: SafeJsonValue =
+            serde_json::from_str(r#"{"items":[1,{"enabled":true},null]}"#).unwrap();
         assert_eq!(
             owner.as_value(),
             &serde_json::json!({"items": [1, {"enabled": true}, null]})
@@ -576,7 +629,9 @@ mod migrated_owner {
     fn test_owner_serde_bridge_propagates_non_finite_float_error() {
         use serde::de::value::F64Deserializer;
 
-        let error = SafeJsonValue::deserialize(F64Deserializer::<serde_json::Error>::new(f64::INFINITY)).unwrap_err();
+        let error =
+            SafeJsonValue::deserialize(F64Deserializer::<serde_json::Error>::new(f64::INFINITY))
+                .unwrap_err();
         assert!(error.is_data());
         assert!(error.to_string().contains("non-finite float"));
     }
@@ -619,7 +674,8 @@ mod migrated_owner {
                 } else {
                     if input == "-0" {
                         let numeric_zero = owner.as_value().as_i64() == Some(0)
-                            || owner.as_value()["$serde_json::private::Number"].as_str() == Some("-0");
+                            || owner.as_value()["$serde_json::private::Number"].as_str()
+                                == Some("-0");
                         assert!(numeric_zero, "negative zero should remain numerically zero");
                     } else {
                         assert_eq!(owner.as_value().as_i64(), Some(7));
@@ -627,7 +683,11 @@ mod migrated_owner {
                     }
                 }
             } else {
-                assert_eq!(owner.as_value().to_string(), ordinary_serialization, "{input}");
+                assert_eq!(
+                    owner.as_value().to_string(),
+                    ordinary_serialization,
+                    "{input}"
+                );
                 if input == "-0" {
                     assert_eq!(
                         owner.as_value().as_f64().unwrap().to_bits(),
@@ -656,9 +716,15 @@ mod migrated_owner {
                 "arbitrary-precision Serde versions may expose negative zero as a number or private map"
             );
         } else {
-            assert_eq!(owner.as_value(), &serde_json::json!({"nested": [1.25, {"x": -0.0}]}));
             assert_eq!(
-                owner.as_value()["nested"][1]["x"].as_f64().unwrap().to_bits(),
+                owner.as_value(),
+                &serde_json::json!({"nested": [1.25, {"x": -0.0}]})
+            );
+            assert_eq!(
+                owner.as_value()["nested"][1]["x"]
+                    .as_f64()
+                    .unwrap()
+                    .to_bits(),
                 (-0.0_f64).to_bits(),
             );
         }
@@ -671,7 +737,9 @@ mod migrated_owner {
         let scalar = decoder.decode_value_str("1.25").unwrap();
         assert_eq!(scalar.as_value().as_f64(), Some(1.25));
 
-        let nested = decoder.decode_value_str(r#"{"nested":[1.25,1e2,-0]}"#).unwrap();
+        let nested = decoder
+            .decode_value_str(r#"{"nested":[1.25,1e2,-0]}"#)
+            .unwrap();
         assert_eq!(nested.as_value()["nested"][0].as_f64(), Some(1.25));
         assert_eq!(nested.as_value()["nested"][1].as_f64(), Some(100.0));
         assert_eq!(
@@ -700,7 +768,13 @@ fn test_owner_comparison_and_debug_preserve_wide_tree_semantics() {
     let array = |changed: Option<usize>| {
         SafeJsonValue::new(serde_json::Value::Array(
             (0..width)
-                .map(|index| serde_json::Value::from(if changed == Some(index) { -1 } else { index as i64 }))
+                .map(|index| {
+                    serde_json::Value::from(if changed == Some(index) {
+                        -1
+                    } else {
+                        index as i64
+                    })
+                })
                 .collect(),
         ))
     };
@@ -712,10 +786,16 @@ fn test_owner_comparison_and_debug_preserve_wide_tree_semantics() {
     let mut left = serde_json::Map::new();
     let mut right = serde_json::Map::new();
     for index in 0..width {
-        left.insert(format!("key-{index:05}"), serde_json::Value::from(index as u64));
+        left.insert(
+            format!("key-{index:05}"),
+            serde_json::Value::from(index as u64),
+        );
     }
     for index in (0..width).rev() {
-        right.insert(format!("key-{index:05}"), serde_json::Value::from(index as u64));
+        right.insert(
+            format!("key-{index:05}"),
+            serde_json::Value::from(index as u64),
+        );
     }
     let expected_object = SafeJsonValue::new(left.clone().into());
     assert_eq!(expected_object, SafeJsonValue::new(right.into()));
@@ -896,7 +976,10 @@ mod wide_and_wrapped_events {
         }
         for value in [0_u128, 1, u128::from(u64::MAX)] {
             let owner = SafeJsonValue::deserialize(U128Deserializer::<Error>::new(value)).unwrap();
-            assert_eq!(owner.as_value(), &Value::from(u64::try_from(value).unwrap()));
+            assert_eq!(
+                owner.as_value(),
+                &Value::from(u64::try_from(value).unwrap())
+            );
         }
     }
 
@@ -905,7 +988,12 @@ mod wide_and_wrapped_events {
         use serde::de::value::I128Deserializer;
         use serde::de::value::U128Deserializer;
 
-        for value in [i128::MIN, i128::from(i64::MIN) - 1, i128::from(u64::MAX) + 1, i128::MAX] {
+        for value in [
+            i128::MIN,
+            i128::from(i64::MIN) - 1,
+            i128::from(u64::MAX) + 1,
+            i128::MAX,
+        ] {
             assert!(SafeJsonValue::deserialize(I128Deserializer::<Error>::new(value)).is_err());
         }
         for value in [u128::from(u64::MAX) + 1, u128::MAX] {

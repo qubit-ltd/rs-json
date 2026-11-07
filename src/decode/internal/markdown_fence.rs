@@ -42,7 +42,10 @@ impl MarkdownFence {
         if marker != b'`' && marker != b'~' {
             return None;
         }
-        let marker_len = input[indent_len..].bytes().take_while(|byte| *byte == marker).count();
+        let marker_len = input[indent_len..]
+            .bytes()
+            .take_while(|byte| *byte == marker)
+            .count();
         (marker_len >= 3).then_some(Self {
             marker,
             marker_len,
@@ -102,8 +105,11 @@ impl MarkdownFence {
     #[must_use]
     fn first_line_break(input: &str) -> Option<(usize, usize)> {
         let bytes = input.as_bytes();
-        let line_end = bytes.iter().position(|byte| matches!(*byte, b'\n' | b'\r'))?;
-        let next_line_start = if bytes[line_end] == b'\r' && bytes.get(line_end + 1) == Some(&b'\n') {
+        let line_end = bytes
+            .iter()
+            .position(|byte| matches!(*byte, b'\n' | b'\r'))?;
+        let next_line_start = if bytes[line_end] == b'\r' && bytes.get(line_end + 1) == Some(&b'\n')
+        {
             line_end + 2
         } else {
             line_end + 1
@@ -126,7 +132,9 @@ impl MarkdownFence {
     #[must_use]
     fn is_json_info_string(info_string: &str) -> bool {
         let language = info_string.split_whitespace().next().unwrap_or("");
-        language.is_empty() || language.eq_ignore_ascii_case("json") || language.eq_ignore_ascii_case("jsonc")
+        language.is_empty()
+            || language.eq_ignore_ascii_case("json")
+            || language.eq_ignore_ascii_case("jsonc")
     }
 
     /// Removes a compatible closing fence from content when present.
@@ -148,7 +156,10 @@ impl MarkdownFence {
             .rposition(|byte| matches!(byte, b'\n' | b'\r'))
             .map_or(0, |index| index + 1);
         let closing_line = &trimmed_end[closing_line_start..];
-        let indent_len = closing_line.bytes().take_while(|byte| *byte == b' ').count();
+        let indent_len = closing_line
+            .bytes()
+            .take_while(|byte| *byte == b' ')
+            .count();
         if indent_len > 3 {
             return None;
         }

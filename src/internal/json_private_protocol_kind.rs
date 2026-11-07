@@ -26,6 +26,11 @@ impl JsonPrivateProtocolKind {
     /// Only the private RawValue and Number protocol tokens are recognized;
     /// every other name is treated as an unrelated serializer struct.
     ///
+    /// # Parameters
+    ///
+    /// * `name` — the serializer struct name to match against the private
+    ///   protocol tokens.
+    ///
     /// # Returns
     ///
     /// `Some` identifies a recognized private protocol, and `None` means the

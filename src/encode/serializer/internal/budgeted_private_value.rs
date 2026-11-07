@@ -21,6 +21,11 @@ use super::PrivateTextKind;
 ///
 /// # Type Parameters
 ///
+/// * `'a` - Lifetime of the private payload borrowed from `serde_json`.
+/// * `'transaction` - Lifetime of the encoding transaction referenced by the
+///   context.
+/// * `'budget` - Lifetime of the resource budget used by the transaction.
+/// * `'context` - Lifetime of the shared encoding context borrow.
 /// * `T` - Private payload type supplied by serde_json.
 /// * `R` - Resource identifier used by the encode budget.
 /// * `Q` - Quantity representation used by the encode budget.
@@ -39,7 +44,8 @@ where
     kind: PrivateTextKind,
 }
 
-impl<'a, 'transaction, 'budget, 'context, T, R, Q> BudgetedPrivateValue<'a, 'transaction, 'budget, 'context, T, R, Q>
+impl<'a, 'transaction, 'budget, 'context, T, R, Q>
+    BudgetedPrivateValue<'a, 'transaction, 'budget, 'context, T, R, Q>
 where
     T: ?Sized,
     Q: ResourceQuantity,

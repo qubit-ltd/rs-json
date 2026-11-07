@@ -17,7 +17,10 @@ fn test_output_limit_keeps_later_syntax_error_and_zero_output() {
     let error = write_json_tokens(&mut output, b"[0,0,0,0,]", &options, Some(1))
         .expect_err("invalid tail must be diagnosed after the output limit is crossed");
     assert_eq!(error.kind(), JsonPrettyErrorKind::Syntax);
-    assert!(output.is_empty(), "failed planning must not write any prefix");
+    assert!(
+        output.is_empty(),
+        "failed planning must not write any prefix"
+    );
 }
 
 #[test]
@@ -40,7 +43,10 @@ fn test_output_limit_rejects_valid_document_without_writing() {
     let error = write_json_tokens(&mut output, b"[0,0,0]", &options, Some(1))
         .expect_err("valid output above the maximum must fail");
     assert_eq!(error.kind(), JsonPrettyErrorKind::OutputLimit);
-    assert!(output.is_empty(), "output limit failure must write no prefix");
+    assert!(
+        output.is_empty(),
+        "output limit failure must write no prefix"
+    );
 }
 
 #[test]
@@ -59,7 +65,8 @@ fn test_indentation_size_overflow_is_a_capacity_error() {
         .indent_width(usize::MAX)
         .build()
         .expect("valid options");
-    let error = format_json_tokens(b"[[0]]", &options, None).expect_err("indent multiplication must be checked");
+    let error = format_json_tokens(b"[[0]]", &options, None)
+        .expect_err("indent multiplication must be checked");
     assert_eq!(error.kind(), JsonPrettyErrorKind::Capacity);
 }
 
@@ -71,22 +78,22 @@ fn test_token_format_preserves_source_tokens_and_requested_whitespace() {
         .trailing_newline(true)
         .build()
         .expect("valid options");
-    let output =
-        format_json_tokens(br#"{"n":1.00e+02,"s":"\\u0061"}"#, &options, None).expect("valid JSON must format");
-    assert_eq!(output, b"{\n  \"n\": 1.00e+02,\n  \"s\": \"\\\\u0061\"\n}\n");
+    let output = format_json_tokens(br#"{"n":1.00e+02,"s":"\\u0061"}"#, &options, None)
+        .expect("valid JSON must format");
+    assert_eq!(
+        output,
+        b"{\n  \"n\": 1.00e+02,\n  \"s\": \"\\\\u0061\"\n}\n"
+    );
 }
-// =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
-//
-//    SPDX-License-Identifier: Apache-2.0
-//
-//    Licensed under the Apache License, Version 2.0.
-// =============================================================================
-
 #[test]
 fn test_pretty_preserves_duplicate_keys_and_original_tokens() {
     let options = JsonPrettyOptions::builder().build().unwrap();
-    let output = format_json_tokens(br#"{"x":1e400,"x":1.00,"z":-0,"s":"\u0061"}"#, &options, None).unwrap();
+    let output = format_json_tokens(
+        br#"{"x":1e400,"x":1.00,"z":-0,"s":"\u0061"}"#,
+        &options,
+        None,
+    )
+    .unwrap();
     assert_eq!(
         output,
         b"{\n  \"x\": 1e400,\n  \"x\": 1.00,\n  \"z\": -0,\n  \"s\": \"\\u0061\"\n}",
@@ -95,7 +102,10 @@ fn test_pretty_preserves_duplicate_keys_and_original_tokens() {
 
 #[test]
 fn test_pretty_error_kinds_have_stable_messages() {
-    assert_eq!(JsonPrettyErrorKind::Syntax.to_string(), "invalid JSON syntax");
+    assert_eq!(
+        JsonPrettyErrorKind::Syntax.to_string(),
+        "invalid JSON syntax"
+    );
     assert_eq!(
         JsonPrettyErrorKind::OutputLimit.to_string(),
         "formatted output limit exceeded"
@@ -104,7 +114,10 @@ fn test_pretty_error_kinds_have_stable_messages() {
         JsonPrettyErrorKind::Capacity.to_string(),
         "formatting capacity exceeded"
     );
-    assert_eq!(JsonPrettyErrorKind::Io.to_string(), "formatted output write failed");
+    assert_eq!(
+        JsonPrettyErrorKind::Io.to_string(),
+        "formatted output write failed"
+    );
 }
 
 #[test]
@@ -122,9 +135,18 @@ fn test_pretty_empty_containers_limits_and_final_newline() {
     let options = JsonPrettyOptions::builder().build().unwrap();
     assert_eq!(format_json_tokens(b"{ }", &options, None).unwrap(), b"{}");
     assert_eq!(format_json_tokens(b"[ ]", &options, None).unwrap(), b"[]");
-    let newline = JsonPrettyOptions::builder().trailing_newline(true).build().unwrap();
-    assert_eq!(format_json_tokens(b" true \n", &newline, None).unwrap(), b"true\n");
-    let no_spaces = JsonPrettyOptions::builder().indent_width(0).build().unwrap();
+    let newline = JsonPrettyOptions::builder()
+        .trailing_newline(true)
+        .build()
+        .unwrap();
+    assert_eq!(
+        format_json_tokens(b" true \n", &newline, None).unwrap(),
+        b"true\n"
+    );
+    let no_spaces = JsonPrettyOptions::builder()
+        .indent_width(0)
+        .build()
+        .unwrap();
     assert_eq!(
         format_json_tokens(br#"{"x":1}"#, &no_spaces, None).unwrap(),
         b"{\n\"x\": 1\n}"
@@ -134,7 +156,12 @@ fn test_pretty_empty_containers_limits_and_final_newline() {
 #[test]
 fn test_pretty_preserves_false_null_and_nested_container_layout() {
     let options = JsonPrettyOptions::builder().build().unwrap();
-    let output = format_json_tokens(br#"{"items":[false,null,{"nested":"\u0061"}]}"#, &options, None).unwrap();
+    let output = format_json_tokens(
+        br#"{"items":[false,null,{"nested":"\u0061"}]}"#,
+        &options,
+        None,
+    )
+    .unwrap();
 
     assert_eq!(
         output,
@@ -168,7 +195,10 @@ fn test_pretty_output_limit_exact_boundary_and_checked_indent_overflow() {
         format_json_tokens(input, &options, Some(formatted.len())).unwrap(),
         formatted
     );
-    let newline = JsonPrettyOptions::builder().trailing_newline(true).build().unwrap();
+    let newline = JsonPrettyOptions::builder()
+        .trailing_newline(true)
+        .build()
+        .unwrap();
     let with_newline = format_json_tokens(input, &newline, None).unwrap();
     assert_eq!(with_newline.last(), Some(&b'\n'));
     assert_eq!(
@@ -178,15 +208,21 @@ fn test_pretty_output_limit_exact_boundary_and_checked_indent_overflow() {
     let error = format_json_tokens(input, &newline, Some(with_newline.len() - 1)).unwrap_err();
     assert_eq!(error.kind(), JsonPrettyErrorKind::OutputLimit);
     let mut output = Vec::new();
-    let error = write_json_tokens(&mut output, input, &options, Some(formatted.len() - 1)).unwrap_err();
+    let error =
+        write_json_tokens(&mut output, input, &options, Some(formatted.len() - 1)).unwrap_err();
     assert_eq!(error.kind(), JsonPrettyErrorKind::OutputLimit);
     assert!(output.is_empty());
     assert_eq!(format_json_tokens(b"{}", &options, Some(2)).unwrap(), b"{}");
     assert_eq!(
-        format_json_tokens(b"0", &options, Some(0)).unwrap_err().kind(),
+        format_json_tokens(b"0", &options, Some(0))
+            .unwrap_err()
+            .kind(),
         JsonPrettyErrorKind::OutputLimit
     );
-    let wide = JsonPrettyOptions::builder().indent_width(usize::MAX).build().unwrap();
+    let wide = JsonPrettyOptions::builder()
+        .indent_width(usize::MAX)
+        .build()
+        .unwrap();
     let error = format_json_tokens(b"[[]]", &wide, None).unwrap_err();
     assert_eq!(error.kind(), JsonPrettyErrorKind::Capacity);
 }
@@ -196,7 +232,10 @@ fn test_pretty_depth_saturation_retains_real_level() {
     let mut input = vec![b'['; 64];
     input.push(b'0');
     input.extend(std::iter::repeat_n(b']', 64));
-    let options = JsonPrettyOptions::builder().max_indent_levels(Some(3)).build().unwrap();
+    let options = JsonPrettyOptions::builder()
+        .max_indent_levels(Some(3))
+        .build()
+        .unwrap();
     let output = format_json_tokens(&input, &options, None).unwrap();
     assert!(output.windows(7).any(|window| window == b"      0"));
     assert_eq!(output.iter().filter(|byte| **byte == b'\n').count(), 128);
@@ -206,7 +245,10 @@ fn test_pretty_depth_saturation_retains_real_level() {
         .max_indent_levels(Some(0))
         .build()
         .unwrap();
-    assert_eq!(format_json_tokens(b"[0]", &no_levels, None).unwrap(), b"[\n0\n]");
+    assert_eq!(
+        format_json_tokens(b"[0]", &no_levels, None).unwrap(),
+        b"[\n0\n]"
+    );
 
     let mut deep = vec![b'['; 32_768];
     deep.push(b'0');
@@ -218,12 +260,18 @@ fn test_pretty_depth_saturation_retains_real_level() {
 
 #[test]
 fn test_pretty_large_indentation_writes_all_space_chunks() {
-    let options = JsonPrettyOptions::builder().indent_width(300).build().unwrap();
+    let options = JsonPrettyOptions::builder()
+        .indent_width(300)
+        .build()
+        .unwrap();
     let mut expected = b"[\n".to_vec();
     expected.extend(std::iter::repeat_n(b' ', 300));
     expected.extend_from_slice(b"0\n]");
 
-    assert_eq!(format_json_tokens(b"[0]", &options, None).unwrap(), expected);
+    assert_eq!(
+        format_json_tokens(b"[0]", &options, None).unwrap(),
+        expected
+    );
 
     let mut output = Vec::new();
     write_json_tokens(&mut output, b"[0]", &options, None).unwrap();

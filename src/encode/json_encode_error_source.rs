@@ -52,11 +52,24 @@ where
     Q: Copy + fmt::Debug,
 {
     /// Resource accounting rejected the encoded work or output.
-    Budget(MeasuredBudgetError<R, Q>),
+    Budget(
+        /// The measured resource usage and configured budget that caused the
+        /// rejection.
+        MeasuredBudgetError<R, Q>,
+    ),
     /// A `serde_json::value::RawValue` payload was not strict JSON.
-    InvalidRawJson(JsonSyntaxError),
+    InvalidRawJson(
+        /// The syntax error found while validating the raw JSON payload.
+        JsonSyntaxError,
+    ),
     /// Serde rejected the source value during strict serialization.
-    Serialize(JsonSerializationError),
+    Serialize(
+        /// The serialization failure reported by Serde.
+        JsonSerializationError,
+    ),
     /// The destination writer rejected an output operation.
-    Write(IoError),
+    Write(
+        /// The I/O error returned by the destination writer.
+        IoError,
+    ),
 }

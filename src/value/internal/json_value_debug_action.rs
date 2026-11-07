@@ -16,11 +16,20 @@ use serde_json::Value;
 /// nesting depth. Input and formatter storage are not included in that bound.
 pub(in crate::value) enum JsonValueDebugAction<'a> {
     /// Formats one JSON value.
-    Value(&'a Value),
+    Value(
+        /// The value borrowed from the input tree.
+        &'a Value,
+    ),
     /// Writes a static punctuation fragment.
-    Text(&'static str),
+    Text(
+        /// Static text emitted verbatim by the formatter.
+        &'static str,
+    ),
     /// Formats an object key using Rust string Debug syntax.
-    Key(&'a str),
+    Key(
+        /// The key borrowed from the input object's iteration.
+        &'a str,
+    ),
     /// Continues an array after processing at most one element.
     Array {
         /// Remaining array elements.

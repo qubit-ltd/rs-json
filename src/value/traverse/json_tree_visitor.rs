@@ -94,6 +94,7 @@ pub trait JsonTreeVisitor {
     /// # Errors
     ///
     /// Returns the visitor-defined error when handling this node fails.
+    #[inline]
     fn leave(&mut self, _value: &Value, _context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
         Ok(())
     }

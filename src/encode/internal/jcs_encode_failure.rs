@@ -27,11 +27,25 @@ where
     Q: Copy + fmt::Debug,
 {
     /// Resource accounting rejected the value or output.
-    Budget(MeasuredBudgetError<R, Q>),
+    Budget(
+        /// The measured resource or quantity failure reported by budget
+        /// accounting.
+        MeasuredBudgetError<R, Q>,
+    ),
     /// Rendering exceeded its auxiliary-memory limit.
-    WorkingMemory(JcsWorkingMemoryError),
+    WorkingMemory(
+        /// The working-memory limit failure retained from rendering.
+        JcsWorkingMemoryError,
+    ),
     /// Canonical serialization could not represent the value.
-    Serialize(JsonSerializationError),
+    Serialize(
+        /// The privacy-safe serialization failure retained from
+        /// canonicalization.
+        JsonSerializationError,
+    ),
     /// The destination rejected output bytes.
-    Write(io::Error),
+    Write(
+        /// The I/O failure returned while writing the encoded bytes.
+        io::Error,
+    ),
 }

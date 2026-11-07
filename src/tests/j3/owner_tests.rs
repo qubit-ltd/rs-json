@@ -77,7 +77,10 @@ fn test_owner_copy_from_unwind_drops_partial_object_iteratively() {
     let source = SafeJsonValue::new(source);
     SafeJsonValue::panic_after_guarded_inserts_for_test(64);
     let result = std::panic::catch_unwind(|| SafeJsonValue::copy_from(source.as_value()));
-    assert!(result.is_err());
+    assert!(
+        result.is_err(),
+        "copy_from should unwind after the injected object insertion panic"
+    );
     SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
     drop(source);
 }
@@ -91,7 +94,10 @@ fn test_owner_copy_from_unwind_drops_partial_array_iteratively() {
     let source = SafeJsonValue::new(source);
     SafeJsonValue::panic_after_guarded_inserts_for_test(64);
     let result = std::panic::catch_unwind(|| SafeJsonValue::copy_from(source.as_value()));
-    assert!(result.is_err());
+    assert!(
+        result.is_err(),
+        "copy_from should unwind after the injected array insertion panic"
+    );
     SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
     drop(source);
 }
@@ -105,7 +111,10 @@ fn test_owner_serde_unwind_drops_partial_array_iteratively() {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         SafeJsonValue::deserialize(&mut deserializer)
     }));
-    assert!(result.is_err());
+    assert!(
+        result.is_err(),
+        "deserialization should unwind after the injected insertion panic"
+    );
     SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
 }
 
@@ -121,30 +130,55 @@ fn test_array_accumulator_unwind_drops_inserted_deep_child_iteratively() {
         let mut values = SafeValueBuilder::array_with_capacity(1);
         values.push(SafeJsonValue::new(child));
     }));
-    assert!(result.is_err(), "the guarded array insertion hook must fire");
+    assert!(
+        result.is_err(),
+        "the guarded array insertion hook must fire"
+    );
     SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
 }
 
 #[test]
 fn test_builder_returns_guarded_value_and_stops_after_first_error() {
     let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Integer64);
-    assert!(builder.try_accept(JsonLexicalEvent::BeginObject { offset: 0 }).is_ok());
+    assert!(
+        builder
+            .try_accept(JsonLexicalEvent::BeginObject { offset: 0 })
+            .is_ok(),
+        "the builder should accept the object start"
+    );
     assert!(
         builder
             .try_accept(JsonLexicalEvent::Key {
                 token: br#""a""#,
                 offset: 1
             })
-            .is_ok()
+            .is_ok(),
+        "the builder should accept the first object key"
     );
-    assert!(builder.try_accept(JsonLexicalEvent::Null { offset: 5 }).is_ok());
+    assert!(
+        builder
+            .try_accept(JsonLexicalEvent::Null { offset: 5 })
+            .is_ok(),
+        "the builder should accept the first object value"
+    );
     let duplicate = builder.try_accept(JsonLexicalEvent::Key {
         token: br#""a""#,
         offset: 9,
     });
-    assert!(duplicate.is_err());
-    assert!(builder.try_accept(JsonLexicalEvent::EndObject { offset: 12 }).is_err());
-    assert!(builder.finish_guarded().is_err());
+    assert!(
+        duplicate.is_err(),
+        "the builder should reject a duplicate key"
+    );
+    assert!(
+        builder
+            .try_accept(JsonLexicalEvent::EndObject { offset: 12 })
+            .is_err(),
+        "the builder should remain failed after rejecting a duplicate key"
+    );
+    assert!(
+        builder.finish_guarded().is_err(),
+        "a failed builder should not produce a guarded value"
+    );
 }
 
 #[test]
@@ -154,31 +188,40 @@ fn test_builder_container_finalize_unwind_keeps_partial_tree_guarded() {
         let result = std::panic::catch_unwind(|| {
             let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Integer64);
             if is_object {
-                builder.try_accept(JsonLexicalEvent::BeginObject { offset: 0 }).unwrap();
+                builder
+                    .try_accept(JsonLexicalEvent::BeginObject { offset: 0 })
+                    .expect("the builder should accept the object start");
                 builder
                     .try_accept(JsonLexicalEvent::Key {
                         token: br#""deep""#,
                         offset: 1,
                     })
-                    .unwrap();
+                    .expect("the builder should accept the object key");
             }
             for depth in 0..256 {
                 builder
                     .try_accept(JsonLexicalEvent::BeginArray { offset: depth })
-                    .unwrap();
+                    .expect("the builder should accept each nested array start");
             }
-            builder.try_accept(JsonLexicalEvent::Null { offset: 256 }).unwrap();
+            builder
+                .try_accept(JsonLexicalEvent::Null { offset: 256 })
+                .expect("the builder should accept the leaf value");
             for depth in (0..256).rev() {
                 builder
                     .try_accept(JsonLexicalEvent::EndArray { offset: depth })
-                    .unwrap();
+                    .expect("the builder should accept each nested array end");
             }
             if is_object {
-                builder.try_accept(JsonLexicalEvent::EndObject { offset: 257 }).unwrap();
+                builder
+                    .try_accept(JsonLexicalEvent::EndObject { offset: 257 })
+                    .expect("the builder should accept the object end");
             }
             drop(builder);
         });
-        assert!(result.is_err());
+        assert!(
+            result.is_err(),
+            "container finalization should unwind after the injected insertion panic"
+        );
         SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
     }
 }

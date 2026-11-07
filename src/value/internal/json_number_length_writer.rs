@@ -12,6 +12,7 @@ use std::fmt::Write;
 
 /// Infallible byte counter used by Number's Display implementation.
 pub(crate) struct JsonNumberLengthWriter {
+    /// Accumulated UTF-8 byte count, saturating at `usize::MAX`.
     len: usize,
 }
 
@@ -27,7 +28,10 @@ impl JsonNumberLengthWriter {
         Self { len: 0 }
     }
 
-    /// Returns the accumulated byte count.
+    /// Returns the number of UTF-8 bytes written to this counter.
+    ///
+    /// The count saturates at `usize::MAX` if the total written length exceeds
+    /// the largest representable `usize` value.
     ///
     /// # Returns
     ///

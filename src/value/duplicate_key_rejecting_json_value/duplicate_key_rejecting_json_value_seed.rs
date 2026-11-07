@@ -57,6 +57,7 @@ impl DuplicateKeyRejectingJsonValueSeed {
 }
 
 impl<'de> DeserializeSeed<'de> for DuplicateKeyRejectingJsonValueSeed {
+    /// The owned JSON value produced after duplicate keys are rejected.
     type Value = DuplicateKeyRejectingJsonValue;
 
     /// Deserializes one JSON value with recursive duplicate-key rejection.
@@ -70,6 +71,15 @@ impl<'de> DeserializeSeed<'de> for DuplicateKeyRejectingJsonValueSeed {
     ///
     /// Returns the deserializer's error if it cannot decode the value or if
     /// any object contains a duplicate key.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` is the deserializer that supplies the value's Serde events.
+    ///
+    /// # Parameters
+    ///
+    /// * `deserializer` supplies the value to decode. Object entries are
+    ///   checked recursively for duplicate keys.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,

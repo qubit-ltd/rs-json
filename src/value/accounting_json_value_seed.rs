@@ -56,6 +56,8 @@ use super::internal::JsonValueVisitor;
 ///
 /// # Type Parameters
 ///
+/// * `'transaction` - Lifetime of the mutable accounting transaction borrow.
+/// * `'budget` - Lifetime of the budget state owned by that transaction.
 /// * `R` - Resource identity tracked by the value transaction.
 /// * `Q` - Quantity representation used for resource accounting.
 ///
@@ -137,6 +139,7 @@ where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
+    /// JSON value tree produced by deserializing with this accounting seed.
     type Value = Value;
 
     /// Builds one value through the accounting visitor and stages its resource
@@ -145,6 +148,11 @@ where
     /// # Parameters
     ///
     /// * `deserializer` - Serde input that supplies the value to decode.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` - Deserializer that supplies the input and determines its error
+    ///   type.
     ///
     /// # Returns
     ///
@@ -164,6 +172,10 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_any(JsonValueVisitor::new(self.transaction, 1, self.reject_duplicate_keys))
+        deserializer.deserialize_any(JsonValueVisitor::new(
+            self.transaction,
+            1,
+            self.reject_duplicate_keys,
+        ))
     }
 }

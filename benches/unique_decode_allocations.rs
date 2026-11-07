@@ -12,21 +12,22 @@ mod allocation_counter;
 mod unique_decode_support;
 
 use qubit_json::decode::JsonDecoder;
-use unique_decode_support::decode_path::DecodePath;
-use unique_decode_support::decode_path::assert_decoded;
-use unique_decode_support::decode_path::assert_duplicate_rejected;
-use unique_decode_support::decode_path::decode_batch_with_decoder;
-use unique_decode_support::decode_path::decode_once;
-use unique_decode_support::decode_path::decode_reject_once;
-use unique_decode_support::decode_path::decode_with_decoder;
-use unique_decode_support::decode_path::finite_decoder;
-use unique_decode_support::fixtures::Shape;
-use unique_decode_support::fixtures::fixture;
-use unique_decode_support::fixtures::reject_fixture;
-use unique_decode_support::structural_decode;
-use unique_decode_support::structural_fixtures::COUNTS;
-use unique_decode_support::structural_fixtures::DuplicatePosition;
-use unique_decode_support::structural_fixtures::StructuralShape;
+
+use crate::unique_decode_support::decode_path::DecodePath;
+use crate::unique_decode_support::decode_path::assert_decoded;
+use crate::unique_decode_support::decode_path::assert_duplicate_rejected;
+use crate::unique_decode_support::decode_path::decode_batch_with_decoder;
+use crate::unique_decode_support::decode_path::decode_once;
+use crate::unique_decode_support::decode_path::decode_reject_once;
+use crate::unique_decode_support::decode_path::decode_with_decoder;
+use crate::unique_decode_support::decode_path::finite_decoder;
+use crate::unique_decode_support::fixtures::Shape;
+use crate::unique_decode_support::fixtures::fixture;
+use crate::unique_decode_support::fixtures::reject_fixture;
+use crate::unique_decode_support::structural_decode;
+use crate::unique_decode_support::structural_fixtures::COUNTS;
+use crate::unique_decode_support::structural_fixtures::DuplicatePosition;
+use crate::unique_decode_support::structural_fixtures::StructuralShape;
 
 const SIZES: [usize; 3] = [1024, 64 * 1024, 1024 * 1024];
 
@@ -65,7 +66,8 @@ fn main() {
                     let warmup = decode_with_decoder(path, &fixture, &mut decoder);
                     assert_decoded(&warmup, path, &fixture);
                     std::hint::black_box(warmup);
-                    let (fresh_result, fresh) = allocation_counter::measure(|| decode_once(path, &fixture, finite));
+                    let (fresh_result, fresh) =
+                        allocation_counter::measure(|| decode_once(path, &fixture, finite));
                     assert_decoded(&fresh_result, path, &fixture);
                     std::hint::black_box(fresh_result);
                     println!(
@@ -106,8 +108,9 @@ fn main() {
                     } else {
                         JsonDecoder::unlimited()
                     };
-                    let (batch_result, batch) =
-                        allocation_counter::measure(|| decode_batch_with_decoder(path, &fixture, &mut decoder, 8));
+                    let (batch_result, batch) = allocation_counter::measure(|| {
+                        decode_batch_with_decoder(path, &fixture, &mut decoder, 8)
+                    });
                     for decoded in batch_result {
                         assert_decoded(&decoded, path, &fixture);
                         std::hint::black_box(decoded);
@@ -168,7 +171,8 @@ fn main() {
                 let budget = if finite { "finite" } else { "unlimited" };
                 let warmup = assert_duplicate_rejected(decode_reject_once(&reject, finite));
                 let _ = std::hint::black_box(warmup);
-                let (rejection_result, rejected) = allocation_counter::measure(|| decode_reject_once(&reject, finite));
+                let (rejection_result, rejected) =
+                    allocation_counter::measure(|| decode_reject_once(&reject, finite));
                 let rejection_error = assert_duplicate_rejected(rejection_result);
                 let _ = std::hint::black_box(rejection_error);
                 println!(
@@ -207,12 +211,14 @@ fn main() {
                     } else {
                         JsonDecoder::unlimited()
                     };
-                    let warmup = structural_decode::decode_with_decoder(path, &fixture, &mut warmup_decoder);
+                    let warmup =
+                        structural_decode::decode_with_decoder(path, &fixture, &mut warmup_decoder);
                     structural_decode::assert_decoded(&warmup, &fixture);
                     std::hint::black_box(warmup);
 
-                    let (fresh_result, fresh) =
-                        allocation_counter::measure(|| structural_decode::decode_once(path, &fixture, finite));
+                    let (fresh_result, fresh) = allocation_counter::measure(|| {
+                        structural_decode::decode_once(path, &fixture, finite)
+                    });
                     structural_decode::assert_decoded(&fresh_result, &fixture);
                     std::hint::black_box(fresh_result);
                     println!(
@@ -244,7 +250,11 @@ fn main() {
                     } else {
                         JsonDecoder::unlimited()
                     };
-                    let warmup = structural_decode::decode_batch_with_decoder(path, &fixture, &mut warmup_decoder);
+                    let warmup = structural_decode::decode_batch_with_decoder(
+                        path,
+                        &fixture,
+                        &mut warmup_decoder,
+                    );
                     for decoded in warmup {
                         structural_decode::assert_decoded(&decoded, &fixture);
                         std::hint::black_box(decoded);
@@ -320,7 +330,8 @@ fn main() {
 
     for count in COUNTS {
         for position in [DuplicatePosition::Early, DuplicatePosition::Late] {
-            let fixture = unique_decode_support::structural_fixtures::reject_fixture(count, position);
+            let fixture =
+                unique_decode_support::structural_fixtures::reject_fixture(count, position);
             for finite in [false, true] {
                 let budget = if finite { "finite" } else { "unlimited" };
                 structural_decode::assert_reject_fixture(&fixture);
@@ -328,8 +339,9 @@ fn main() {
                     structural_decode::decode_reject_once(&fixture, finite),
                 );
                 let _ = std::hint::black_box(warmup);
-                let (result, measurement) =
-                    allocation_counter::measure(|| structural_decode::decode_reject_once(&fixture, finite));
+                let (result, measurement) = allocation_counter::measure(|| {
+                    structural_decode::decode_reject_once(&fixture, finite)
+                });
                 let error = unique_decode_support::decode_path::assert_duplicate_rejected(result);
                 let _ = std::hint::black_box(error);
                 println!(
@@ -353,7 +365,10 @@ fn main() {
         for (key_style, fixture) in [
             (
                 "short_key",
-                unique_decode_support::structural_fixtures::success_fixture(StructuralShape::WideObject, count),
+                unique_decode_support::structural_fixtures::success_fixture(
+                    StructuralShape::WideObject,
+                    count,
+                ),
             ),
             (
                 "long_prefix",
@@ -361,7 +376,10 @@ fn main() {
             ),
         ] {
             for (path, decode) in [
-                ("owned_value", structural_decode::decode_owned_value as fn(_) -> _),
+                (
+                    "owned_value",
+                    structural_decode::decode_owned_value as fn(_) -> _,
+                ),
                 (
                     "validated_preserve",
                     structural_decode::decode_validated_preserve as fn(_) -> _,

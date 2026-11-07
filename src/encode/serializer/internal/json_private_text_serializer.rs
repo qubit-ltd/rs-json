@@ -38,15 +38,22 @@ use crate::encode::JsonSerializerStateError;
 ///
 /// A serializer callback can panic if the shared context or its output
 /// accounting cell is already borrowed when the callback needs access.
-pub(in crate::encode::serializer) struct JsonPrivateTextSerializer<'context, 'transaction, 'budget, S, R, Q>
-where
+pub(in crate::encode::serializer) struct JsonPrivateTextSerializer<
+    'context,
+    'transaction,
+    'budget,
+    S,
+    R,
+    Q,
+> where
     Q: ResourceQuantity,
 {
     /// serde_json private string emitter.
     pub(in crate::encode::serializer) inner: S,
 
     /// Shared traversal context.
-    pub(in crate::encode::serializer) context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+    pub(in crate::encode::serializer) context:
+        &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 
     /// Budget semantics represented by the emitted text.
     pub(in crate::encode::serializer) kind: PrivateTextKind,
@@ -55,6 +62,17 @@ where
 macro_rules! delegate_number_method {
     ($name:ident, $type:ty) => {
         #[doc = "Rejects this non-text payload for the selected private text protocol."]
+        #[doc = ""]
+        #[doc = "# Parameters"]
+        #[doc = ""]
+        #[doc = "* `value` - Payload rejected because private protocols require text."]
+        #[doc = ""]
+        #[doc = "# Returns"]
+        #[doc = ""]
+        #[doc = "No success value is produced; this callback returns the protocol error."]
+        #[doc = ""]
+        #[doc = "# Errors"]
+        #[doc = ""]
         #[doc = "Returns the selected private protocol's stable serializer-state error."]
         fn $name(self, value: $type) -> Result<Self::Ok, Self::Error> {
             self.reject_non_text_payload()?;
@@ -106,14 +124,31 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
+    /// Success value produced by the wrapped serializer.
     type Ok = S::Ok;
+    /// Error type used by the wrapped serializer for protocol and output
+    /// failures.
     type Error = S::Error;
+    /// Sequence state type exposed by the wrapped serializer; private text
+    /// rejects sequences.
     type SerializeSeq = S::SerializeSeq;
+    /// Tuple state type exposed by the wrapped serializer; private text rejects
+    /// tuples.
     type SerializeTuple = S::SerializeTuple;
+    /// Tuple-struct state type exposed by the wrapped serializer; private text
+    /// rejects these values.
     type SerializeTupleStruct = S::SerializeTupleStruct;
+    /// Tuple-variant state type exposed by the wrapped serializer; private text
+    /// rejects these values.
     type SerializeTupleVariant = S::SerializeTupleVariant;
+    /// Map state type exposed by the wrapped serializer; private text rejects
+    /// maps.
     type SerializeMap = S::SerializeMap;
+    /// Struct state type exposed by the wrapped serializer; private text
+    /// rejects structs.
     type SerializeStruct = S::SerializeStruct;
+    /// Struct-variant state type exposed by the wrapped serializer; private
+    /// text rejects these values.
     type SerializeStructVariant = S::SerializeStructVariant;
 
     delegate_number_method!(serialize_bool, bool);
@@ -162,9 +197,18 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Byte payload rejected because private protocols require
+    ///   text.
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_bytes(value)
@@ -172,6 +216,10 @@ where
 
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
+    ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
     ///
     /// # Errors
     ///
@@ -184,9 +232,21 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value type that the wrapped serializer would serialize.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Value rejected because private protocols require text.
     fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
@@ -197,6 +257,10 @@ where
 
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
+    ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
     ///
     /// # Errors
     ///
@@ -209,9 +273,17 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
+    ///
+    /// # Parameters
+    ///
+    /// * `name` - Struct name rejected because private protocols require text.
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_unit_struct(name)
@@ -220,9 +292,21 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
+    ///
+    /// # Parameters
+    ///
+    /// * `name` - Enum name rejected because private protocols require text.
+    /// * `variant_index` - Variant index rejected because private protocols
+    ///   require text.
+    /// * `variant` - Variant name rejected because private protocols require
+    ///   text.
     fn serialize_unit_variant(
         self,
         name: &'static str,
@@ -230,16 +314,34 @@ where
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
-        self.inner.serialize_unit_variant(name, variant_index, variant)
+        self.inner
+            .serialize_unit_variant(name, variant_index, variant)
     }
 
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
-    fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value type that the wrapped serializer would serialize.
+    ///
+    /// # Parameters
+    ///
+    /// * `name` - Newtype name rejected because private protocols require text.
+    /// * `value` - Value rejected because private protocols require text.
+    fn serialize_newtype_struct<T>(
+        self,
+        name: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -250,9 +352,26 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - Value type that the wrapped serializer would serialize.
+    ///
+    /// # Parameters
+    ///
+    /// * `name` - Enum name rejected because private protocols require text.
+    /// * `variant_index` - Variant index rejected because private protocols
+    ///   require text.
+    /// * `variant` - Variant name rejected because private protocols require
+    ///   text.
+    /// * `value` - Value rejected because private protocols require text.
     fn serialize_newtype_variant<T>(
         self,
         name: &'static str,
@@ -271,9 +390,18 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
+    ///
+    /// # Parameters
+    ///
+    /// * `len` - Sequence length hint rejected because private protocols
+    ///   require text.
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_seq(len)
@@ -282,9 +410,17 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
+    ///
+    /// # Parameters
+    ///
+    /// * `len` - Tuple length rejected because private protocols require text.
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_tuple(len)
@@ -293,10 +429,25 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
-    fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    ///
+    /// # Parameters
+    ///
+    /// * `name` - Tuple-struct name rejected because private protocols require
+    ///   text.
+    /// * `len` - Tuple-struct field count rejected because private protocols
+    ///   require text.
+    fn serialize_tuple_struct(
+        self,
+        name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_tuple_struct(name, len)
     }
@@ -304,9 +455,23 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
+    ///
+    /// # Parameters
+    ///
+    /// * `name` - Enum name rejected because private protocols require text.
+    /// * `variant_index` - Variant index rejected because private protocols
+    ///   require text.
+    /// * `variant` - Variant name rejected because private protocols require
+    ///   text.
+    /// * `len` - Variant field count rejected because private protocols require
+    ///   text.
     fn serialize_tuple_variant(
         self,
         name: &'static str,
@@ -315,15 +480,25 @@ where
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         self.reject_non_text_payload()?;
-        self.inner.serialize_tuple_variant(name, variant_index, variant, len)
+        self.inner
+            .serialize_tuple_variant(name, variant_index, variant, len)
     }
 
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
+    ///
+    /// # Parameters
+    ///
+    /// * `len` - Map entry count hint rejected because private protocols
+    ///   require text.
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_map(len)
@@ -332,10 +507,24 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
-    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+    ///
+    /// # Parameters
+    ///
+    /// * `name` - Struct name rejected because private protocols require text.
+    /// * `len` - Struct field count rejected because private protocols require
+    ///   text.
+    fn serialize_struct(
+        self,
+        name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_struct(name, len)
     }
@@ -343,9 +532,19 @@ where
     /// Rejects this non-text payload because the selected private text
     /// protocol accepts string payloads only.
     ///
+    /// # Returns
+    ///
+    /// No success value is produced; this callback returns the protocol error.
+    ///
     /// # Errors
     ///
     /// Returns the selected protocol's stable serializer-state error.
+    ///
+    /// # Parameters
+    ///
+    /// * `name` - Struct name rejected because private protocols require text.
+    /// * `len` - Struct field count rejected because private protocols require
+    ///   text.
     fn serialize_struct_variant(
         self,
         name: &'static str,
@@ -354,7 +553,8 @@ where
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         self.reject_non_text_payload()?;
-        self.inner.serialize_struct_variant(name, variant_index, variant, len)
+        self.inner
+            .serialize_struct_variant(name, variant_index, variant, len)
     }
 
     /// Formats a display value, preflights it according to the selected
@@ -384,7 +584,12 @@ where
             PrivateTextKind::RawValue { depth } => (depth, DisplayBudgetKind::RawOutput),
             PrivateTextKind::Number { depth } => (depth, DisplayBudgetKind::Number),
         };
-        let text = JsonEncodeContext::collect_display::<S::Error, _>(self.context, value, budget_kind, depth)?;
+        let text = JsonEncodeContext::collect_display::<S::Error, _>(
+            self.context,
+            value,
+            budget_kind,
+            depth,
+        )?;
         match self.kind {
             PrivateTextKind::RawValue { .. } => {
                 self.context.borrow_mut().preflight_raw(&text, depth)?;

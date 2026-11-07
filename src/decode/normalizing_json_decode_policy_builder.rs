@@ -23,6 +23,7 @@ use super::NormalizingJsonDecodePolicy;
 ///     .build();
 /// assert!(!policy.strip_utf8_bom());
 /// ```
+#[must_use = "store the configured builder or call build to use the policy"]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizingJsonDecodePolicyBuilder {
     /// Policy under construction.
@@ -36,7 +37,6 @@ impl NormalizingJsonDecodePolicyBuilder {
     ///
     /// A builder ready for selective policy customization.
     #[inline]
-    #[must_use]
     pub const fn new() -> Self {
         Self {
             policy: NormalizingJsonDecodePolicy::lenient(),
@@ -53,7 +53,6 @@ impl NormalizingJsonDecodePolicyBuilder {
     ///
     /// This builder with the updated setting.
     #[inline]
-    #[must_use]
     pub const fn trim_whitespace(mut self, enabled: bool) -> Self {
         self.policy.set_trim_whitespace(enabled);
         self
@@ -69,7 +68,6 @@ impl NormalizingJsonDecodePolicyBuilder {
     ///
     /// This builder with the updated setting.
     #[inline]
-    #[must_use]
     pub const fn strip_utf8_bom(mut self, enabled: bool) -> Self {
         self.policy.set_strip_utf8_bom(enabled);
         self
@@ -85,7 +83,6 @@ impl NormalizingJsonDecodePolicyBuilder {
     ///
     /// This builder with the updated setting.
     #[inline]
-    #[must_use]
     pub const fn markdown_fence_policy(mut self, policy: MarkdownFencePolicy) -> Self {
         self.policy.set_markdown_fence_policy(policy);
         self
@@ -101,7 +98,6 @@ impl NormalizingJsonDecodePolicyBuilder {
     ///
     /// This builder with the updated setting.
     #[inline]
-    #[must_use]
     pub const fn escape_control_chars_in_strings(mut self, enabled: bool) -> Self {
         self.policy.set_escape_control_chars_in_strings(enabled);
         self
@@ -117,7 +113,6 @@ impl NormalizingJsonDecodePolicyBuilder {
     ///
     /// This builder with the updated setting.
     #[inline]
-    #[must_use]
     pub const fn diagnostic_policy(mut self, policy: DiagnosticPolicy) -> Self {
         self.policy.set_diagnostic_policy(policy);
         self

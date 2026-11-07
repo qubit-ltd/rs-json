@@ -60,7 +60,10 @@ fn test_redacted_syntax_diagnostics_do_not_reveal_unexpected_input_bytes() {
 
     assert_eq!(error.diagnostic_policy(), DiagnosticPolicy::Redacted);
     assert_eq!(syntax.reason(), JsonSyntaxErrorReason::UnexpectedByte);
-    assert_eq!(syntax.to_string(), "unexpected byte at line 1 column 1 (byte offset 0)");
+    assert_eq!(
+        syntax.to_string(),
+        "unexpected byte at line 1 column 1 (byte offset 0)"
+    );
     assert!(!format!("{error:?}").contains("0x40"));
     assert!(std::error::Error::source(&error).is_none());
 }
@@ -68,7 +71,9 @@ fn test_redacted_syntax_diagnostics_do_not_reveal_unexpected_input_bytes() {
 #[test]
 fn test_redacted_deserialize_without_coordinates_omits_location() {
     let mut decoder = JsonDecoder::unlimited();
-    let error = decoder.decode_unique_str::<bool>("1").expect_err("type mismatch");
+    let error = decoder
+        .decode_unique_str::<bool>("1")
+        .expect_err("type mismatch");
     assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
     assert_eq!(error.line(), None);
     assert_eq!(error.column(), None);
@@ -107,13 +112,19 @@ fn test_deserialize_with_coordinates_retains_location() {
     let error = strict.decode_str::<bool>("1").expect_err("type mismatch");
     let line = error.line().expect("known line");
     let column = error.column().expect("known column");
-    assert!(error.to_string().ends_with(&format!("at line {line} column {column}")));
+    assert!(
+        error
+            .to_string()
+            .ends_with(&format!("at line {line} column {column}"))
+    );
 
     let mut normalizing = NormalizingJsonDecoder::with_limits(
         no_normalization_policy(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
-    let error = normalizing.decode_str::<bool>("1").expect_err("type mismatch");
+    let error = normalizing
+        .decode_str::<bool>("1")
+        .expect_err("type mismatch");
     let line = error.line().expect("known normalized line");
     let column = error.column().expect("known normalized column");
     assert!(
@@ -130,7 +141,9 @@ fn test_json_decode_error_reports_normalization_failure() {
         NormalizingJsonDecodePolicy::lenient(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
-    let error = decoder.decode_value("").expect_err("empty normalized input must fail");
+    let error = decoder
+        .decode_value("")
+        .expect_err("empty normalized input must fail");
 
     assert_eq!(error.kind(), JsonDecodeErrorKind::EmptyInput);
     assert_eq!(error.stage(), JsonDecodeStage::Normalize);
@@ -147,7 +160,9 @@ fn test_decoder_facades_share_error_classification() {
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
 
-    let strict_syntax = strict.decode_str::<serde_json::Value>("{").expect_err("syntax error");
+    let strict_syntax = strict
+        .decode_str::<serde_json::Value>("{")
+        .expect_err("syntax error");
     let normalizing_syntax = normalizing
         .decode_str::<serde_json::Value>("{")
         .expect_err("syntax error");
@@ -155,7 +170,9 @@ fn test_decoder_facades_share_error_classification() {
     assert_eq!(strict_syntax.stage(), normalizing_syntax.stage());
 
     let strict_target = strict.decode_str::<bool>("1").expect_err("target error");
-    let normalizing_target = normalizing.decode_str::<bool>("1").expect_err("target error");
+    let normalizing_target = normalizing
+        .decode_str::<bool>("1")
+        .expect_err("target error");
     assert_eq!(strict_target.kind(), normalizing_target.kind());
     assert_eq!(strict_target.stage(), normalizing_target.stage());
 
@@ -163,7 +180,9 @@ fn test_decoder_facades_share_error_classification() {
     let mut strict = JsonDecoder::with_limits(limits);
     let mut normalizing = NormalizingJsonDecoder::with_limits(no_normalization_policy(), limits);
     let strict_budget = strict.decode_str::<bool>("true").expect_err("input budget");
-    let normalizing_budget = normalizing.decode_str::<bool>("true").expect_err("input budget");
+    let normalizing_budget = normalizing
+        .decode_str::<bool>("true")
+        .expect_err("input budget");
     assert_eq!(strict_budget.kind(), normalizing_budget.kind());
     assert_eq!(strict_budget.stage(), normalizing_budget.stage());
 }
@@ -176,7 +195,10 @@ fn test_json_decode_error_kind_and_stage_round_trip() {
         (JsonDecodeErrorKind::EmptyInput, "empty_input"),
         (JsonDecodeErrorKind::InvalidUtf8, "invalid_utf8"),
         (JsonDecodeErrorKind::InvalidJson, "invalid_json"),
-        (JsonDecodeErrorKind::UnexpectedTopLevel, "unexpected_top_level"),
+        (
+            JsonDecodeErrorKind::UnexpectedTopLevel,
+            "unexpected_top_level",
+        ),
         (JsonDecodeErrorKind::Deserialize, "deserialize"),
     ];
     for (kind, text) in kinds {
@@ -206,10 +228,15 @@ fn test_json_decode_error_kind_and_stage_round_trip() {
 #[test]
 fn test_json_decode_error_model_representative_matrix() {
     let mut invalid_utf8 = JsonDecoder::unlimited();
-    let error = invalid_utf8.validate_utf8(&[0xff]).expect_err("invalid UTF-8");
+    let error = invalid_utf8
+        .validate_utf8(&[0xff])
+        .expect_err("invalid UTF-8");
     assert_eq!(
         (error.kind(), error.stage()),
-        (JsonDecodeErrorKind::InvalidUtf8, JsonDecodeStage::DecodeText),
+        (
+            JsonDecodeErrorKind::InvalidUtf8,
+            JsonDecodeStage::DecodeText
+        ),
     );
     assert_eq!(error.utf8_valid_up_to(), Some(0));
 
@@ -223,7 +250,10 @@ fn test_json_decode_error_model_representative_matrix() {
         .expect_err("object contract");
     assert_eq!(
         (error.kind(), error.stage()),
-        (JsonDecodeErrorKind::UnexpectedTopLevel, JsonDecodeStage::TopLevelCheck,),
+        (
+            JsonDecodeErrorKind::UnexpectedTopLevel,
+            JsonDecodeStage::TopLevelCheck,
+        ),
     );
 
     let error = decoder
@@ -231,7 +261,10 @@ fn test_json_decode_error_model_representative_matrix() {
         .expect_err("target mismatch");
     assert_eq!(
         (error.kind(), error.stage()),
-        (JsonDecodeErrorKind::Deserialize, JsonDecodeStage::Deserialize,),
+        (
+            JsonDecodeErrorKind::Deserialize,
+            JsonDecodeStage::Deserialize,
+        ),
     );
 }
 
@@ -241,7 +274,11 @@ fn test_json_decode_error_model_representative_matrix() {
 fn test_json_decode_error_into_source_exposes_owned_variants() {
     let limits = JsonDecodeLimits::builder().max_input_bytes(1_usize).build();
     let mut decoder = JsonDecoder::with_limits(limits);
-    match decoder.validate_str("null").expect_err("input budget").into_source() {
+    match decoder
+        .validate_str("null")
+        .expect_err("input budget")
+        .into_source()
+    {
         JsonDecodeErrorSource::Budget {
             stage,
             raw_input_bytes,
@@ -259,9 +296,15 @@ fn test_json_decode_error_into_source_exposes_owned_variants() {
         NormalizingJsonDecodePolicy::lenient(),
         JsonDecodeLimits::<JsonResource, usize>::default(),
     );
-    match normalizing.decode_value("").expect_err("empty input").into_source() {
+    match normalizing
+        .decode_value("")
+        .expect_err("empty input")
+        .into_source()
+    {
         JsonDecodeErrorSource::EmptyInput {
-            stage, raw_input_bytes, ..
+            stage,
+            raw_input_bytes,
+            ..
         } => {
             assert_eq!(stage, JsonDecodeStage::Normalize);
             assert_eq!(raw_input_bytes, 0);
@@ -270,7 +313,11 @@ fn test_json_decode_error_into_source_exposes_owned_variants() {
     }
 
     let mut decoder = JsonDecoder::unlimited().with_diagnostic_policy(DiagnosticPolicy::Detailed);
-    match decoder.validate_utf8(&[0xff]).expect_err("invalid UTF-8").into_source() {
+    match decoder
+        .validate_utf8(&[0xff])
+        .expect_err("invalid UTF-8")
+        .into_source()
+    {
         JsonDecodeErrorSource::InvalidUtf8 {
             valid_up_to,
             error_len,
@@ -284,7 +331,11 @@ fn test_json_decode_error_into_source_exposes_owned_variants() {
         source => panic!("expected invalid-UTF-8 source, got {source:?}"),
     }
 
-    match decoder.validate_str("{").expect_err("invalid JSON").into_source() {
+    match decoder
+        .validate_str("{")
+        .expect_err("invalid JSON")
+        .into_source()
+    {
         JsonDecodeErrorSource::InvalidJson { syntax, source, .. } => {
             assert_eq!(syntax.offset(), 1);
             assert!(source.is_some());
@@ -297,7 +348,9 @@ fn test_json_decode_error_into_source_exposes_owned_variants() {
         .expect_err("object contract")
         .into_source()
     {
-        JsonDecodeErrorSource::UnexpectedTopLevel { expected, actual, .. } => {
+        JsonDecodeErrorSource::UnexpectedTopLevel {
+            expected, actual, ..
+        } => {
             assert_eq!(expected, JsonRootKind::Object);
             assert_eq!(actual, JsonRootKind::Other);
         }
@@ -310,7 +363,10 @@ fn test_json_decode_error_into_source_exposes_owned_variants() {
         .into_source()
     {
         JsonDecodeErrorSource::Deserialize {
-            line, column, source, ..
+            line,
+            column,
+            source,
+            ..
         } => {
             assert_eq!(line, 1);
             assert_eq!(column, 1);
@@ -341,7 +397,10 @@ fn test_unique_decode_materialization_reason_matrix() {
     assert!(!format!("{error:?}").contains("RJ_SECRET"));
     assert!(std::error::Error::source(&error).is_none());
     let reason = error.materialization_error_reason();
-    assert!(matches!(error.into_source(), JsonDecodeErrorSource::Deserialize { .. }));
+    assert!(matches!(
+        error.into_source(),
+        JsonDecodeErrorSource::Deserialize { .. }
+    ));
     assert_eq!(reason, Some(JsonMaterializationErrorReason::DuplicateKey));
 
     let mut detailed = JsonDecoder::unlimited().with_diagnostic_policy(DiagnosticPolicy::Detailed);
@@ -355,7 +414,10 @@ fn test_unique_decode_materialization_reason_matrix() {
     assert!(std::error::Error::source(&error).is_some());
 
     let legacy_depth_reason = JsonMaterializationErrorReason::DepthLimit { limit: 127 };
-    assert_eq!(format!("{legacy_depth_reason:?}"), "DepthLimit { limit: 127 }");
+    assert_eq!(
+        format!("{legacy_depth_reason:?}"),
+        "DepthLimit { limit: 127 }"
+    );
 
     let mut decoder = JsonDecoder::unlimited();
     let target_error = decoder

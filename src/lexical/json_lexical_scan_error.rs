@@ -19,15 +19,29 @@ use super::JsonLexicalError;
 /// callback failures are carried by [`Self::Consumer`]. An encoded string
 /// limit violation has its own variant so callers can inspect its byte
 /// measurements and input location.
+///
+/// # Type Parameters
+///
+/// - `E` is the error type returned by the consumer callback.
+/// - `R` is the resource type used to report lexical budget failures.
+/// - `Q` is the quantity type used to measure resource budgets and must
+///   implement [`ResourceQuantity`].
+#[must_use]
 #[derive(Debug)]
 pub(crate) enum JsonLexicalScanError<E, R, Q>
 where
     Q: ResourceQuantity,
 {
     /// A scanner syntax or value-budget failure.
-    Lexical(JsonLexicalError<R, Q>),
+    Lexical(
+        /// The underlying syntax or budget error, preserving its details.
+        JsonLexicalError<R, Q>,
+    ),
     /// The error returned by a consumer callback that stopped the scan.
-    Consumer(E),
+    Consumer(
+        /// The callback error returned at the point scanning stopped.
+        E,
+    ),
     /// A string token exceeded its maximum encoded source length.
     EncodedStringLimit {
         /// Maximum bytes between the string's quotes, including escape
@@ -45,6 +59,12 @@ impl<E, R, Q> From<JsonLexicalError<R, Q>> for JsonLexicalScanError<E, R, Q>
 where
     Q: ResourceQuantity,
 {
+    /// Wraps a scanner syntax or budget failure in the lexical variant.
+    ///
+    /// # Parameters
+    ///
+    /// - `error` is the scanner failure to preserve.
+    #[inline]
     fn from(error: JsonLexicalError<R, Q>) -> Self {
         Self::Lexical(error)
     }
@@ -57,6 +77,12 @@ where
     R: fmt::Debug,
     Q: ResourceQuantity,
 {
+    /// Formats the contained error, or returns the stable encoded-string limit
+    /// message.
+    ///
+    /// # Parameters
+    ///
+    /// - `f` is the formatter that receives the rendered error message.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Lexical(error) => write!(f, "{error:?}"),

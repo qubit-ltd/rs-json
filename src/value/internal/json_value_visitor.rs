@@ -55,6 +55,12 @@ where
     Q: ResourceQuantity,
 {
     /// Creates a visitor that accounts a value at `depth`.
+    ///
+    /// # Parameters
+    ///
+    /// * `transaction` - Transaction that receives measurements for the value.
+    /// * `depth` - Root-inclusive depth assigned to the value.
+    /// * `reject_duplicate_keys` - Whether repeated decoded object keys fail.
     #[inline]
     pub(in crate::value) fn new(
         transaction: &'transaction mut JsonValueTransaction<'budget, R, Q>,
@@ -69,6 +75,14 @@ where
     }
 
     /// Stages one complete JSON measurement.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used to report accounting failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `measurement` - Measurement to admit into the transaction.
     fn admit<E>(&mut self, measurement: JsonMeasurement) -> Result<(), E>
     where
         E: Error,
@@ -77,6 +91,14 @@ where
     }
 
     /// Charges a number's decoded text representation.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used to report accounting failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `number` - JSON number whose representation is charged.
     fn enter_number<E>(&mut self, number: Number) -> Result<Value, E>
     where
         E: Error,
@@ -98,6 +120,11 @@ where
     }
 
     /// Creates a child seed that checks a container limit before decoding.
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - Container kind whose prospective child is checked.
+    /// * `prospective` - One-based child count to validate before decoding.
     fn prospective_child<'child>(
         &'child mut self,
         kind: JsonContainerKind,
@@ -118,9 +145,18 @@ where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
+    /// JSON value produced after the seed delegates deserialization.
     type Value = Value;
 
     /// Starts an `deserialize_any` visit for the requested JSON value.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` - Deserializer supplying the JSON value.
+    ///
+    /// # Parameters
+    ///
+    /// * `deserializer` - Source that presents the value to this seed.
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -129,19 +165,33 @@ where
     }
 }
 
-impl<'de, 'transaction, 'budget, R, Q> Visitor<'de> for JsonValueVisitor<'transaction, 'budget, R, Q>
+impl<'de, 'transaction, 'budget, R, Q> Visitor<'de>
+    for JsonValueVisitor<'transaction, 'budget, R, Q>
 where
     R: Clone + Debug,
     Q: ResourceQuantity,
 {
+    /// JSON value assembled from the deserializer's visitor events.
     type Value = Value;
 
     /// Describes the JSON value shape accepted by this visitor.
+    ///
+    /// # Parameters
+    ///
+    /// * `formatter` - Formatter receiving the human-readable expectation.
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("a value representable as JSON")
     }
 
     /// Accounts and constructs a JSON boolean.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used for accounting failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Boolean supplied by the deserializer.
     fn visit_bool<E>(mut self, value: bool) -> Result<Self::Value, E>
     where
         E: Error,
@@ -151,6 +201,14 @@ where
     }
 
     /// Accounts and constructs a signed JSON integer.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used for accounting failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Signed integer supplied by the deserializer.
     fn visit_i64<E>(mut self, value: i64) -> Result<Self::Value, E>
     where
         E: Error,
@@ -160,6 +218,14 @@ where
 
     /// Rejects unsupported wide signed integers or accounts the representable
     /// value.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used for conversion failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Wide signed integer supplied by the deserializer.
     #[inline(never)]
     fn visit_i128<E>(mut self, value: i128) -> Result<Self::Value, E>
     where
@@ -170,6 +236,14 @@ where
     }
 
     /// Accounts and constructs an unsigned JSON integer.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used for accounting failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Unsigned integer supplied by the deserializer.
     fn visit_u64<E>(mut self, value: u64) -> Result<Self::Value, E>
     where
         E: Error,
@@ -179,6 +253,14 @@ where
 
     /// Rejects unsupported wide unsigned integers or accounts the representable
     /// value.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used for conversion failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Wide unsigned integer supplied by the deserializer.
     #[inline(never)]
     fn visit_u128<E>(mut self, value: u128) -> Result<Self::Value, E>
     where
@@ -189,16 +271,32 @@ where
     }
 
     /// Rejects non-finite floats or accounts the representable JSON number.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used for conversion failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Floating-point value supplied by the deserializer.
     fn visit_f64<E>(mut self, value: f64) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        let number =
-            Number::from_f64(value).ok_or_else(|| E::custom("non-finite float is not representable as JSON"))?;
+        let number = Number::from_f64(value)
+            .ok_or_else(|| E::custom("non-finite float is not representable as JSON"))?;
         self.enter_number(number)
     }
 
     /// Accounts and copies a borrowed JSON string.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used for accounting failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Borrowed string supplied by the deserializer.
     fn visit_str<E>(mut self, value: &str) -> Result<Self::Value, E>
     where
         E: Error,
@@ -211,6 +309,14 @@ where
     }
 
     /// Accounts and adopts an owned JSON string.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used for accounting failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - Owned string supplied by the deserializer.
     fn visit_string<E>(mut self, value: String) -> Result<Self::Value, E>
     where
         E: Error,
@@ -223,6 +329,10 @@ where
     }
 
     /// Accounts a missing optional value as JSON null.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used for accounting failures.
     fn visit_none<E>(mut self) -> Result<Self::Value, E>
     where
         E: Error,
@@ -232,6 +342,10 @@ where
     }
 
     /// Accounts a unit value as JSON null.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `E` - Deserialization error type used for accounting failures.
     fn visit_unit<E>(mut self) -> Result<Self::Value, E>
     where
         E: Error,
@@ -241,6 +355,14 @@ where
     }
 
     /// Delegates an optional value to the same JSON visitor.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` - Deserializer supplying the optional payload.
+    ///
+    /// # Parameters
+    ///
+    /// * `deserializer` - Source that presents the optional payload.
     fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -249,6 +371,14 @@ where
     }
 
     /// Delegates a newtype payload to the same JSON visitor.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` - Deserializer supplying the newtype payload.
+    ///
+    /// # Parameters
+    ///
+    /// * `deserializer` - Source that presents the wrapped value.
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -257,6 +387,14 @@ where
     }
 
     /// Accounts and materializes a JSON array from sequence events.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `A` - Sequence access implementation supplied by the deserializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `sequence` - Accessor yielding the array's elements.
     fn visit_seq<A>(mut self, mut sequence: A) -> Result<Self::Value, A::Error>
     where
         A: SeqAccess<'de>,
@@ -270,7 +408,8 @@ where
                 .len()
                 .checked_add(1)
                 .ok_or_else(|| A::Error::custom("JSON sequence item count overflowed usize"))?;
-            let Some(value) = sequence.next_element_seed(self.prospective_child(JsonContainerKind::Sequence, next))?
+            let Some(value) = sequence
+                .next_element_seed(self.prospective_child(JsonContainerKind::Sequence, next))?
             else {
                 break;
             };
@@ -280,6 +419,14 @@ where
     }
 
     /// Accounts and materializes a JSON object from map events.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `A` - Map access implementation supplied by the deserializer.
+    ///
+    /// # Parameters
+    ///
+    /// * `map` - Accessor yielding the object's keys and values.
     fn visit_map<A>(mut self, mut map: A) -> Result<Self::Value, A::Error>
     where
         A: MapAccess<'de>,

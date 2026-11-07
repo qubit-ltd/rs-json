@@ -42,7 +42,6 @@ const DIMENSION_COUNT: usize = 9;
 
 /// Splits a complete bounded fuzz input into its fixed control header and
 /// payload.
-#[must_use]
 pub fn split_budget_input(data: &[u8]) -> Option<(&[u8; CONTROL_BYTES], &[u8])> {
     let input = bounded_input(data)?;
     let (control, payload) = input.split_at_checked(CONTROL_BYTES)?;
@@ -196,6 +195,10 @@ fn control_limit(control: &[u8; CONTROL_BYTES], dimension: usize, baseline: usiz
     select_budget_limit(raw, baseline)
 }
 
+/// Measures the independent resource usage of a decoded JSON value.
+///
+/// The result records maxima for structural limits and totals for byte and
+/// node accounting, matching the resource dimensions consumed by the decoder.
 fn reference_usage(value: &Value, input_bytes: usize) -> [usize; DIMENSION_COUNT] {
     let mut measured = [0; DIMENSION_COUNT];
     measured[INPUT] = input_bytes;
