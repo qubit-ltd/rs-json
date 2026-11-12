@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-qubit-json = { features = ["jcs"] , version = "^0.12" }
+qubit-json = { features = ["jcs"] , version = "^0.12", path = "../../../" }
 qubit-budget = { version = "^0.10", features = ["json"] }
 
 serde = { version = "1.0", features = ["derive"] }

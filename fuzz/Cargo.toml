@@ -18,7 +18,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ["cfg(fuzzing)"] }
 libfuzzer-sys = "^0.4"
 qubit-budget = { version = "^0.10", features = ["json"] }
 
-qubit-json = { features = ["jcs"] , version = "^0.12" }
+qubit-json = { features = ["jcs"] , version = "^0.12", path = "../" }
 serde = { version = "^1.0", features = ["derive"] }
 serde_json = { version = "^1.0", features = ["raw_value"] }
 serde_json_canonicalizer = "^0.4"
