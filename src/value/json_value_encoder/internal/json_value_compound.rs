@@ -66,13 +66,8 @@ type ContextCell<'context, 'transaction, 'budget, R, Q> =
 /// * `'budget` - Lifetime of its configured resource budget.
 /// * `R` - Resource quantity tracked by the budget; it must be cloneable.
 /// * `Q` - Quantity representation required by resource accounting.
-pub(in crate::value::json_value_encoder) struct JsonValueCompound<
-    'context,
-    'transaction,
-    'budget,
-    R,
-    Q,
-> where
+pub(in crate::value::json_value_encoder) struct JsonValueCompound<'context, 'transaction, 'budget, R, Q>
+where
     Q: ResourceQuantity,
 {
     /// Shared staged transaction and first-failure state; this compound does
@@ -378,11 +373,7 @@ where
     /// # Errors
     ///
     /// Returns the first retained serialization failure.
-    fn serialize_child<T>(
-        &mut self,
-        value: &T,
-        depth: usize,
-    ) -> Result<SafeJsonValue, JsonSerializationError>
+    fn serialize_child<T>(&mut self, value: &T, depth: usize) -> Result<SafeJsonValue, JsonSerializationError>
     where
         T: Serialize + ?Sized,
     {
@@ -409,11 +400,7 @@ where
     /// # Errors
     ///
     /// Returns and retains the serialization error when the count is rejected.
-    fn check_count(
-        &mut self,
-        kind: JsonContainerKind,
-        count: usize,
-    ) -> Result<(), JsonSerializationError> {
+    fn check_count(&mut self, kind: JsonContainerKind, count: usize) -> Result<(), JsonSerializationError> {
         let result = { self.context.borrow_mut().check_container_count(kind, count) };
         result.map_err(|error| self.fail(error))
     }
@@ -457,8 +444,7 @@ where
         let context = self.context;
         let mut check_text_bytes = |length| context.borrow_mut().check_private_text_bytes(length);
         let result = match &mut self.state {
-            CompoundState::RawValue { text, state, .. }
-            | CompoundState::Number { text, state, .. } => {
+            CompoundState::RawValue { text, state, .. } | CompoundState::Number { text, state, .. } => {
                 set_private_payload(text, state, kind, key, value, &mut check_text_bytes)
             }
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
@@ -554,10 +540,9 @@ where
                 match crate::internal::StrictJsonNumber::parse(text) {
                     Ok(number) => {
                         let bytes = crate::value::internal::json_number_lexeme_length(&number);
-                        self.context.borrow_mut().admit(JsonMeasurement::Number {
-                            depth: *depth,
-                            bytes,
-                        })?;
+                        self.context
+                            .borrow_mut()
+                            .admit(JsonMeasurement::Number { depth: *depth, bytes })?;
                         Ok(SafeJsonValue::new(Value::Number(number)))
                     }
                     Err(error) => Err(self.context.borrow_mut().record_serialization_error(error)),
@@ -613,10 +598,7 @@ where
     if state.begin(key).is_err() {
         return Err(private_invalid_state(kind));
     }
-    let value = match value.serialize(PrivateTextSerializer {
-        kind,
-        check_text_bytes,
-    }) {
+    let value = match value.serialize(PrivateTextSerializer { kind, check_text_bytes }) {
         Ok(Value::String(value)) => value,
         Ok(_) => {
             state.fail();
@@ -668,9 +650,7 @@ where
     {
         self.check_failure()?;
         let (depth, count, kind) = match &self.state {
-            CompoundState::Sequence {
-                depth, count, kind, ..
-            } => (*depth, *count, *kind),
+            CompoundState::Sequence { depth, count, kind, .. } => (*depth, *count, *kind),
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
         let next_count = count.checked_add(1).ok_or_else(|| {
@@ -681,9 +661,9 @@ where
             ))
         })?;
         self.check_count(kind, next_count)?;
-        let child_depth = depth.checked_add(1).ok_or_else(|| {
-            self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))
-        })?;
+        let child_depth = depth
+            .checked_add(1)
+            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
         let child = self.serialize_child(value, child_depth)?;
         let CompoundState::Sequence { values, count, .. } = &mut self.state else {
             unreachable!()
@@ -859,9 +839,9 @@ where
             ))
         })?;
         self.check_count(JsonContainerKind::Sequence, next)?;
-        let child_depth = depth.checked_add(2).ok_or_else(|| {
-            self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))
-        })?;
+        let child_depth = depth
+            .checked_add(2)
+            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
         let child = self.serialize_child(value, child_depth)?;
         let CompoundState::TupleVariant { values, count, .. } = &mut self.state else {
             unreachable!()
@@ -884,9 +864,7 @@ where
         self.check_failure()?;
         let context = self.context;
         let result = match self.state {
-            CompoundState::TupleVariant {
-                variant, values, ..
-            } => {
+            CompoundState::TupleVariant { variant, values, .. } => {
                 let inner = Self::finish_sequence(values);
                 let mut object = SafeValueBuilder::object();
                 object.insert(variant, inner);
@@ -932,15 +910,11 @@ where
     {
         self.check_failure()?;
         let (count, pending) = match &self.state {
-            CompoundState::Map {
-                count, next_key, ..
-            } => (*count, next_key.is_some()),
+            CompoundState::Map { count, next_key, .. } => (*count, next_key.is_some()),
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
         if pending {
-            return Err(self.fail(invalid_state(
-                JsonSerializerStateError::MapKeyAlreadyPending,
-            )));
+            return Err(self.fail(invalid_state(JsonSerializerStateError::MapKeyAlreadyPending)));
         }
         let next = count.checked_add(1).ok_or_else(|| {
             self.fail(JsonSerializationError::new(
@@ -955,10 +929,7 @@ where
             Err(error) => return Err(self.fail(error)),
         };
         self.admit(JsonMeasurement::Key { bytes: key.len() })?;
-        let CompoundState::Map {
-            next_key, count, ..
-        } = &mut self.state
-        else {
+        let CompoundState::Map { next_key, count, .. } = &mut self.state else {
             unreachable!()
         };
         *next_key = Some(key);
@@ -990,15 +961,10 @@ where
         self.check_failure()?;
         let depth = match &self.state {
             CompoundState::Map {
-                keys,
-                next_key,
-                depth,
-                ..
+                keys, next_key, depth, ..
             } => {
                 let Some(key) = next_key.as_ref() else {
-                    return Err(
-                        self.fail(invalid_state(JsonSerializerStateError::MapValueWithoutKey))
-                    );
+                    return Err(self.fail(invalid_state(JsonSerializerStateError::MapValueWithoutKey)));
                 };
                 if keys.contains(key.as_str()) {
                     return Err(self.fail(JsonSerializationError::new(
@@ -1010,20 +976,13 @@ where
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
         if let CompoundState::Map { keys, next_key, .. } = &mut self.state {
-            keys.insert(
-                next_key
-                    .as_ref()
-                    .expect("pending map key was checked")
-                    .clone(),
-            );
+            keys.insert(next_key.as_ref().expect("pending map key was checked").clone());
         }
-        let child_depth = depth.checked_add(1).ok_or_else(|| {
-            self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))
-        })?;
+        let child_depth = depth
+            .checked_add(1)
+            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
         let key = match &mut self.state {
-            CompoundState::Map { next_key, .. } => {
-                next_key.take().expect("pending map key was checked")
-            }
+            CompoundState::Map { next_key, .. } => next_key.take().expect("pending map key was checked"),
             _ => unreachable!(),
         };
         let child = self.serialize_child(value, child_depth)?;
@@ -1048,15 +1007,11 @@ where
         let context = self.context;
         let result = match self.state {
             CompoundState::Map {
-                values,
-                next_key: None,
-                ..
+                values, next_key: None, ..
             } => Ok(Self::finish_object(values)),
-            CompoundState::Map {
-                next_key: Some(_), ..
-            } => Err(invalid_state(
-                JsonSerializerStateError::MapEndedWithPendingKey,
-            )),
+            CompoundState::Map { next_key: Some(_), .. } => {
+                Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey))
+            }
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         };
         Self::keep_end_error(context, result)
@@ -1088,12 +1043,8 @@ where
     /// protocol.
     fn skip_field(&mut self, _: &'static str) -> Result<(), Self::Error> {
         match &self.state {
-            CompoundState::RawValue { .. } => {
-                Err(self.fail(private_invalid_state(JsonPrivateProtocolKind::RawValue)))
-            }
-            CompoundState::Number { .. } => {
-                Err(self.fail(private_invalid_state(JsonPrivateProtocolKind::Number)))
-            }
+            CompoundState::RawValue { .. } => Err(self.fail(private_invalid_state(JsonPrivateProtocolKind::RawValue))),
+            CompoundState::Number { .. } => Err(self.fail(private_invalid_state(JsonPrivateProtocolKind::Number))),
             _ => Ok(()),
         }
     }
@@ -1122,9 +1073,7 @@ where
     {
         self.check_failure()?;
         match &self.state {
-            CompoundState::Map {
-                keys, depth, count, ..
-            } => {
+            CompoundState::Map { keys, depth, count, .. } => {
                 let (depth, count, duplicate) = (*depth, *count, keys.contains(key));
                 if duplicate {
                     return Err(self.fail(JsonSerializationError::new(
@@ -1143,9 +1092,9 @@ where
                 if let CompoundState::Map { keys, .. } = &mut self.state {
                     keys.insert(key.to_owned());
                 }
-                let child_depth = depth.checked_add(1).ok_or_else(|| {
-                    self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))
-                })?;
+                let child_depth = depth
+                    .checked_add(1)
+                    .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
                 let child = self.serialize_child(value, child_depth)?;
                 let CompoundState::Map { values, count, .. } = &mut self.state else {
                     unreachable!()
@@ -1154,12 +1103,8 @@ where
                 *count = next;
                 Ok(())
             }
-            CompoundState::RawValue { .. } => {
-                self.set_private_field(JsonPrivateProtocolKind::RawValue, key, value)
-            }
-            CompoundState::Number { .. } => {
-                self.set_private_field(JsonPrivateProtocolKind::Number, key, value)
-            }
+            CompoundState::RawValue { .. } => self.set_private_field(JsonPrivateProtocolKind::RawValue, key, value),
+            CompoundState::Number { .. } => self.set_private_field(JsonPrivateProtocolKind::Number, key, value),
             _ => Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         }
     }
@@ -1184,15 +1129,11 @@ where
         let context = self.context;
         let result = match self.state {
             CompoundState::Map {
-                values,
-                next_key: None,
-                ..
+                values, next_key: None, ..
             } => Ok(Self::finish_object(values)),
-            CompoundState::Map {
-                next_key: Some(_), ..
-            } => Err(invalid_state(
-                JsonSerializerStateError::MapEndedWithPendingKey,
-            )),
+            CompoundState::Map { next_key: Some(_), .. } => {
+                Err(invalid_state(JsonSerializerStateError::MapEndedWithPendingKey))
+            }
             _ => Err(invalid_state(JsonSerializerStateError::UnexpectedCompound)),
         };
         Self::keep_end_error(context, result)
@@ -1233,9 +1174,7 @@ where
     {
         self.check_failure()?;
         let (depth, count, duplicate) = match &self.state {
-            CompoundState::StructVariant {
-                keys, depth, count, ..
-            } => (*depth, *count, keys.contains(key)),
+            CompoundState::StructVariant { keys, depth, count, .. } => (*depth, *count, keys.contains(key)),
             _ => return Err(self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))),
         };
         if duplicate {
@@ -1255,9 +1194,9 @@ where
         if let CompoundState::StructVariant { keys, .. } = &mut self.state {
             keys.insert(key.to_owned());
         }
-        let child_depth = depth.checked_add(2).ok_or_else(|| {
-            self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound))
-        })?;
+        let child_depth = depth
+            .checked_add(2)
+            .ok_or_else(|| self.fail(invalid_state(JsonSerializerStateError::UnexpectedCompound)))?;
         let child = self.serialize_child(value, child_depth)?;
         let CompoundState::StructVariant { values, count, .. } = &mut self.state else {
             unreachable!()
@@ -1280,9 +1219,7 @@ where
         self.check_failure()?;
         let context = self.context;
         let result = match self.state {
-            CompoundState::StructVariant {
-                variant, values, ..
-            } => {
+            CompoundState::StructVariant { variant, values, .. } => {
                 let inner = Self::finish_object(values);
                 let mut outer = SafeValueBuilder::object();
                 outer.insert(variant, inner);
@@ -1355,41 +1292,28 @@ where
     R: Clone,
     Q: ResourceQuantity,
 {
-    let mut builder = crate::value::internal::LexicalJsonValueBuilder::new(
-        crate::lexical::JsonNumberModel::Integer64,
-    );
+    let mut builder = crate::value::internal::LexicalJsonValueBuilder::new(crate::lexical::JsonNumberModel::Integer64);
     let has_limits = context.borrow().has_limits();
     let scan = {
         let mut ctx = context.borrow_mut();
         let transaction = ctx.transaction();
         crate::lexical::JsonLexicalScanner::at_depth(transaction, depth, has_limits)
             .with_number_model(crate::lexical::JsonNumberModel::Integer64)
-            .scan_with_consumer(
-                text.as_bytes(),
-                &mut RawValueConsumer {
-                    builder: &mut builder,
-                },
-            )
+            .scan_with_consumer(text.as_bytes(), &mut RawValueConsumer { builder: &mut builder })
     };
     match scan {
-        Ok(()) => {
-            match builder.finish_guarded() {
-                Ok(value) => Ok(value),
-                Err(_) => Err(context.borrow_mut().record_serialization_error(
-                    JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue),
-                )),
-            }
-        }
-        Err(crate::lexical::JsonLexicalScanError::Lexical(
-            crate::lexical::JsonLexicalError::Budget(error),
-        )) => Err(context.borrow_mut().record_budget_failure(error)),
-        Err(_) => {
-            Err(context
+        Ok(()) => match builder.finish_guarded() {
+            Ok(value) => Ok(value),
+            Err(_) => Err(context
                 .borrow_mut()
-                .record_serialization_error(JsonSerializationError::new(
-                    JsonSerializationErrorKind::InvalidRawValue,
-                )))
+                .record_serialization_error(JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue))),
+        },
+        Err(crate::lexical::JsonLexicalScanError::Lexical(crate::lexical::JsonLexicalError::Budget(error))) => {
+            Err(context.borrow_mut().record_budget_failure(error))
         }
+        Err(_) => Err(context
+            .borrow_mut()
+            .record_serialization_error(JsonSerializationError::new(JsonSerializationErrorKind::InvalidRawValue))),
     }
 }
 
@@ -1418,22 +1342,13 @@ mod tests {
     fn test_compound_count_and_depth_overflow_are_sticky() {
         // Seed only the counters: reaching these guards must not require an
         // allocation or traversal proportional to usize::MAX.
-        for path in [
-            "sequence",
-            "tuple-variant",
-            "map",
-            "struct",
-            "struct-variant",
-        ] {
+        for path in ["sequence", "tuple-variant", "map", "struct", "struct-variant"] {
             for overflow_count in [true, false] {
-                let mut budget =
-                    JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
+                let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
                 let mut transaction = budget.transaction();
                 let context = RefCell::new(JsonValueEncodeContext::new(&mut transaction, None));
                 let mut compound = match path {
-                    "sequence" => {
-                        JsonValueCompound::sequence(&context, 1, JsonContainerKind::Sequence, 0)
-                    }
+                    "sequence" => JsonValueCompound::sequence(&context, 1, JsonContainerKind::Sequence, 0),
                     "tuple-variant" => JsonValueCompound::tuple_variant(&context, "Tuple", 1, 0),
                     "struct-variant" => JsonValueCompound::struct_variant(&context, "Struct", 1, 0),
                     _ => JsonValueCompound::map(&context, 1, 0),
@@ -1455,13 +1370,10 @@ mod tests {
                     "sequence" => SerializeSeq::serialize_element(&mut compound, &true),
                     "tuple-variant" => SerializeTupleVariant::serialize_field(&mut compound, &true),
                     "struct" => SerializeStruct::serialize_field(&mut compound, "key", &true),
-                    "struct-variant" => {
-                        SerializeStructVariant::serialize_field(&mut compound, "key", &true)
-                    }
+                    "struct-variant" => SerializeStructVariant::serialize_field(&mut compound, "key", &true),
                     _ if overflow_count => SerializeMap::serialize_key(&mut compound, "key"),
                     _ => {
-                        SerializeMap::serialize_key(&mut compound, "key")
-                            .expect("key does not increase depth");
+                        SerializeMap::serialize_key(&mut compound, "key").expect("key does not increase depth");
                         SerializeMap::serialize_value(&mut compound, &true)
                     }
                 };
@@ -1479,15 +1391,8 @@ mod tests {
                         reason: JsonSerializerStateError::UnexpectedCompound,
                     }
                 };
-                assert_eq!(
-                    error.kind(),
-                    expected,
-                    "{path}, count overflow: {overflow_count}"
-                );
-                assert_eq!(
-                    compound.check_failure().expect_err("failure is sticky"),
-                    error
-                );
+                assert_eq!(error.kind(), expected, "{path}, count overflow: {overflow_count}");
+                assert_eq!(compound.check_failure().expect_err("failure is sticky"), error);
                 assert_eq!(context.borrow().ser_error(), error);
             }
         }

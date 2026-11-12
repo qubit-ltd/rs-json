@@ -36,9 +36,7 @@ impl<'a> PrivateTextCollector<'a> {
     /// # Returns
     ///
     /// An empty collector that uses the callback for every write.
-    pub(super) fn new(
-        check_text_bytes: &'a mut dyn FnMut(usize) -> Result<(), JsonSerializationError>,
-    ) -> Self {
+    pub(super) fn new(check_text_bytes: &'a mut dyn FnMut(usize) -> Result<(), JsonSerializationError>) -> Self {
         Self {
             text: String::new(),
             check_text_bytes,

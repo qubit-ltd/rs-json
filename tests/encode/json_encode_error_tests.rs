@@ -36,8 +36,7 @@ impl Serialize for InvalidRawValue {
     where
         S: Serializer,
     {
-        let mut state = serializer
-            .serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
+        let mut state = serializer.serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
         state.serialize_field(concat!("$", "serde_json", ":", ":private::RawValue"), "[")?;
         state.end()
     }
@@ -104,18 +103,11 @@ fn test_encode_error_exposes_budget_contract() {
     assert!(error.source().is_some());
     assert_eq!(
         error.to_string(),
-        error
-            .source()
-            .expect("budget source must exist")
-            .to_string()
+        error.source().expect("budget source must exist").to_string()
     );
 
     assert!(create_budget_error().into_budget_error().is_some());
-    assert!(
-        create_invalid_raw_json_error()
-            .into_budget_error()
-            .is_none()
-    );
+    assert!(create_invalid_raw_json_error().into_budget_error().is_none());
     assert!(create_serialization_error().into_budget_error().is_none());
     assert!(create_write_error().into_budget_error().is_none());
 }
@@ -134,11 +126,7 @@ fn test_encode_error_exposes_invalid_raw_json_contract() {
     assert!(error.to_string().starts_with("JSON raw value is invalid: "));
 
     assert!(create_budget_error().into_syntax_error().is_none());
-    assert!(
-        create_invalid_raw_json_error()
-            .into_syntax_error()
-            .is_some()
-    );
+    assert!(create_invalid_raw_json_error().into_syntax_error().is_some());
     assert!(create_serialization_error().into_syntax_error().is_none());
     assert!(create_write_error().into_syntax_error().is_none());
 }
@@ -165,16 +153,8 @@ fn test_encode_error_exposes_serialization_contract() {
     assert!(error.to_string().starts_with("JSON serialization failed: "));
 
     assert!(create_budget_error().into_serialization_error().is_none());
-    assert!(
-        create_invalid_raw_json_error()
-            .into_serialization_error()
-            .is_none()
-    );
-    assert!(
-        create_serialization_error()
-            .into_serialization_error()
-            .is_some()
-    );
+    assert!(create_invalid_raw_json_error().into_serialization_error().is_none());
+    assert!(create_serialization_error().into_serialization_error().is_some());
     assert!(create_write_error().into_serialization_error().is_none());
 }
 
@@ -271,10 +251,7 @@ fn test_encode_error_kind_round_trips_stable_names() {
 
     for (name, kind) in cases {
         assert_eq!(name.parse::<JsonEncodeErrorKind>(), Ok(kind));
-        assert_eq!(
-            name.to_ascii_uppercase().parse::<JsonEncodeErrorKind>(),
-            Ok(kind)
-        );
+        assert_eq!(name.to_ascii_uppercase().parse::<JsonEncodeErrorKind>(), Ok(kind));
         assert_eq!(kind.to_string(), name);
     }
 
@@ -290,10 +267,7 @@ fn test_serde_custom_error_redacts_message() {
     const SECRET: &str = "SERIALIZATION_SECRET";
     let error = <JsonSerializationError as SerdeError>::custom(SECRET);
 
-    assert_eq!(
-        error.kind(),
-        JsonSerializationErrorKind::CustomSerialization
-    );
+    assert_eq!(error.kind(), JsonSerializationErrorKind::CustomSerialization);
     assert_eq!(error.category(), JsonSerializationErrorCategory::Custom);
     assert!(!error.to_string().contains(SECRET));
     assert!(!format!("{error:?}").contains(SECRET));
@@ -307,10 +281,7 @@ fn test_serialization_error_accessors_match_stable_kinds() {
     let integer = JsonSerializationError::new(JsonSerializationErrorKind::IntegerOutOfRange {
         signedness: JsonIntegerSignedness::Signed,
     });
-    assert_eq!(
-        integer.integer_signedness(),
-        Some(JsonIntegerSignedness::Signed)
-    );
+    assert_eq!(integer.integer_signedness(), Some(JsonIntegerSignedness::Signed));
     assert_eq!(integer.map_key_kind(), None);
     assert!(integer.is_number_error());
 
@@ -321,14 +292,10 @@ fn test_serialization_error_accessors_match_stable_kinds() {
     assert_eq!(map_key.collection_kind(), None);
     assert!(map_key.is_map_key_error());
 
-    let collection =
-        JsonSerializationError::new(JsonSerializationErrorKind::CollectionLengthOverflow {
-            kind: JsonCollectionKind::Array,
-        });
-    assert_eq!(
-        collection.collection_kind(),
-        Some(JsonCollectionKind::Array)
-    );
+    let collection = JsonSerializationError::new(JsonSerializationErrorKind::CollectionLengthOverflow {
+        kind: JsonCollectionKind::Array,
+    });
+    assert_eq!(collection.collection_kind(), Some(JsonCollectionKind::Array));
     assert_eq!(collection.serializer_state_error(), None);
 
     let state = JsonSerializationError::new(JsonSerializationErrorKind::InvalidSerializerState {

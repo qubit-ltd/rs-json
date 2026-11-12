@@ -151,9 +151,8 @@ JCS Value 构造复用共享 builder，没有独立固定容器上限；包含�
 预算描述被计量资源，不构成精确 malloc 上限。JCS 解码只检查并构造值，已规范字节验证须由调用方将编码结果与输入比较。根 crate 兼容矩阵以
 `serde_json 1.0.135` 和可解析到的最新版本运行 `jcs`、`arbitrary_precision`、`preserve_order`
 的八种组合，测试对象是当前 crate 自身。最低基线 `1.0.135` 由 API 边界确定：
-`serde_json::Map::into_values()` 从此版本开始提供。若锁文件版本更早，应先执行
-`cargo update -p serde_json` 再运行带 `--locked` 的验证；使用最低版本不需要启用
-`arbitrary_precision` 或 `preserve_order`。
+`serde_json::Map::into_values()` 从此版本开始提供。manifest 要求 serde_json 1.0.135 或兼容的后续
+1.x 版本。若现有锁文件需要更新，请先运行 `cargo update -p serde_json`，再执行 locked 检查；若显式版本约束不兼容，须先放宽该约束。使用最低版本不需要启用 `arbitrary_precision` 或 `preserve_order`。
 
 `JsonValueEncoder` 使用同一个 RawValue 物化器，因此真正的 `serde_json::value::RawValue` payload 也遵循同一配置深度契约。
 `InvalidRawValue` 表示严格物化契约拒绝输入，可能涉及重复键、数字约束或深度，并非仅用于语法错误。

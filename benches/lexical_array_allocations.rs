@@ -58,10 +58,7 @@ fn decoder(fixture: &ArrayFixture, finite: bool) -> JsonDecoder<'static> {
         return JsonDecoder::unlimited();
     }
     let limits = JsonDecodeLimits::builder()
-        .input_bytes_limit(ResourceLimit::new(
-            JsonResource::InputBytes,
-            fixture.text.len(),
-        ))
+        .input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, fixture.text.len()))
         .max_nodes(fixture.nodes)
         .max_depth(fixture.depth)
         .max_sequence_items(fixture.sequence_items)
@@ -104,20 +101,15 @@ fn decode_safe(path: Path, fixture: &ArrayFixture, finite: bool) -> SafeJsonValu
             .decode_value_str(&fixture.text)
             .expect("value fixture decodes"),
         Path::ValidatedPreserve => decoder(fixture, finite)
-            .decode_unique_validated_str(
-                &fixture.text,
-                &JsonValidatedDecodeOptions::builder().build(),
-                |_, _| Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve),
-            )
+            .decode_unique_validated_str(&fixture.text, &JsonValidatedDecodeOptions::builder().build(), |_, _| {
+                Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
+            })
             .expect("validated fixture decodes"),
         #[cfg(feature = "jcs")]
         Path::JcsValue => {
             if finite {
                 let limits = JsonDecodeLimits::builder()
-                    .input_bytes_limit(ResourceLimit::new(
-                        JsonResource::InputBytes,
-                        fixture.text.len(),
-                    ))
+                    .input_bytes_limit(ResourceLimit::new(JsonResource::InputBytes, fixture.text.len()))
                     .max_nodes(fixture.nodes)
                     .max_depth(fixture.depth)
                     .max_sequence_items(fixture.sequence_items)
@@ -178,12 +170,10 @@ fn report(fixture: &ArrayFixture, path: Path, finite: bool) {
     }
     match path {
         Path::Typed | Path::Seed if fixture.shape == ArrayShape::Scalar => {
-            let (value, measurement) =
-                allocation_counter::measure(|| decode_typed::<Vec<u64>>(path, fixture, finite));
+            let (value, measurement) = allocation_counter::measure(|| decode_typed::<Vec<u64>>(path, fixture, finite));
             assert_eq!(value.len(), fixture.size);
             assert!(value.iter().enumerate().all(|(i, v)| *v == i as u64));
-            let delta =
-                measurement.end_live_bytes as isize - measurement.baseline_live_bytes as isize;
+            let delta = measurement.end_live_bytes as isize - measurement.baseline_live_bytes as isize;
             println!(
                 "LEXICAL_ARRAY_ALLOC,{},{},{},{},{},{},{},{},{},{},{}",
                 fixture.shape.name(),
@@ -210,8 +200,7 @@ fn report(fixture: &ArrayFixture, path: Path, finite: bool) {
                     .enumerate()
                     .all(|(i, row)| row.id == i as u64 && row.label == format!("v{i:06}"))
             );
-            let delta =
-                measurement.end_live_bytes as isize - measurement.baseline_live_bytes as isize;
+            let delta = measurement.end_live_bytes as isize - measurement.baseline_live_bytes as isize;
             println!(
                 "LEXICAL_ARRAY_ALLOC,{},{},{},{},{},{},{},{},{},{},{}",
                 fixture.shape.name(),
@@ -231,11 +220,9 @@ fn report(fixture: &ArrayFixture, path: Path, finite: bool) {
         Path::Typed | Path::Seed => {}
         #[cfg(feature = "jcs")]
         Path::JcsValue => {
-            let (owner, measurement) =
-                allocation_counter::measure(|| decode_safe(path, fixture, finite));
+            let (owner, measurement) = allocation_counter::measure(|| decode_safe(path, fixture, finite));
             assert_jcs_owner_matches(&owner, fixture);
-            let delta =
-                measurement.end_live_bytes as isize - measurement.baseline_live_bytes as isize;
+            let delta = measurement.end_live_bytes as isize - measurement.baseline_live_bytes as isize;
             println!(
                 "LEXICAL_ARRAY_ALLOC,{},{},{},{},{},{},{},{},{},{},{}",
                 fixture.shape.name(),
@@ -253,11 +240,9 @@ fn report(fixture: &ArrayFixture, path: Path, finite: bool) {
             std::hint::black_box(owner);
         }
         _ => {
-            let (owner, measurement) =
-                allocation_counter::measure(|| decode_safe(path, fixture, finite));
+            let (owner, measurement) = allocation_counter::measure(|| decode_safe(path, fixture, finite));
             assert_owner_matches(&owner, fixture);
-            let delta =
-                measurement.end_live_bytes as isize - measurement.baseline_live_bytes as isize;
+            let delta = measurement.end_live_bytes as isize - measurement.baseline_live_bytes as isize;
             println!(
                 "LEXICAL_ARRAY_ALLOC,{},{},{},{},{},{},{},{},{},{},{}",
                 fixture.shape.name(),
@@ -318,8 +303,7 @@ fn assert_jcs_owner_matches(owner: &SafeJsonValue, fixture: &ArrayFixture) {
                 let object = row.as_object().expect("record fixture item is object");
                 object.len() == 2
                     && object.get("id").and_then(serde_json::Value::as_f64) == Some(i as f64)
-                    && object.get("label").and_then(serde_json::Value::as_str)
-                        == Some(format!("v{i:06}").as_str())
+                    && object.get("label").and_then(serde_json::Value::as_str) == Some(format!("v{i:06}").as_str())
             }));
         }
         ArrayShape::Chain => {

@@ -12,19 +12,10 @@ const DOCUMENTS: &[(&str, &str)] = &[
     ("README.md", include_str!("../README.md")),
     ("README.zh_CN.md", include_str!("../README.zh_CN.md")),
     ("doc/user_guide.md", include_str!("../doc/user_guide.md")),
-    (
-        "doc/user_guide.zh_CN.md",
-        include_str!("../doc/user_guide.zh_CN.md"),
-    ),
+    ("doc/user_guide.zh_CN.md", include_str!("../doc/user_guide.zh_CN.md")),
     ("doc/json_design.md", include_str!("../doc/json_design.md")),
-    (
-        "doc/json_design.zh_CN.md",
-        include_str!("../doc/json_design.zh_CN.md"),
-    ),
-    (
-        "doc/number_contract.md",
-        include_str!("../doc/number_contract.md"),
-    ),
+    ("doc/json_design.zh_CN.md", include_str!("../doc/json_design.zh_CN.md")),
+    ("doc/number_contract.md", include_str!("../doc/number_contract.md")),
     (
         "doc/number_contract.zh_CN.md",
         include_str!("../doc/number_contract.zh_CN.md"),
@@ -97,9 +88,7 @@ fn hidden_or_local_jcs(lines: &str) -> Option<(&str, usize)> {
         if source == "#" || source.starts_with("# ") {
             return Some(("rustdoc hidden line", index + 1));
         }
-        if source.contains("cfg(feature = \"jcs\")")
-            || source.contains("cfg(not(feature = \"jcs\"))")
-        {
+        if source.contains("cfg(feature = \"jcs\")") || source.contains("cfg(not(feature = \"jcs\"))") {
             return Some(("consumer-local jcs cfg", index + 1));
         }
     }
@@ -139,12 +128,8 @@ fn test_published_markdown_rust_fences_are_copyable_and_jcs_is_explicit() {
     let mut errors = Vec::new();
     for (name, markdown) in DOCUMENTS {
         errors.extend(inspect_document(name, markdown));
-        if (name.starts_with("README") || name.contains("user_guide"))
-            && !markdown.contains("--include-ignored")
-        {
-            errors.push(format!(
-                "{name}: missing explicit ignored JCS doctest command"
-            ));
+        if (name.starts_with("README") || name.contains("user_guide")) && !markdown.contains("--include-ignored") {
+            errors.push(format!("{name}: missing explicit ignored JCS doctest command"));
         }
     }
     assert!(errors.is_empty(), "{}", errors.join("\n"));
@@ -152,8 +137,7 @@ fn test_published_markdown_rust_fences_are_copyable_and_jcs_is_explicit() {
 
 #[test]
 fn test_markdown_scanner_checks_only_rust_fences_and_recognizes_attributes() {
-    let markdown =
-        "# title\n\n```text\n# comment\n```\n\n```rust\n#[derive(Debug)]\nfn main() {}\n```\n";
+    let markdown = "# title\n\n```text\n# comment\n```\n\n```rust\n#[derive(Debug)]\nfn main() {}\n```\n";
     assert!(inspect_document("fixture.md", markdown).is_empty());
 }
 

@@ -45,9 +45,7 @@ impl StrictJsonNumber {
     /// supported integer or finite-float range.
     pub(crate) fn parse(text: &str) -> Result<Number, JsonSerializationError> {
         let bytes = text.as_bytes();
-        if bytes
-            .first()
-            .is_none_or(|byte| !matches!(byte, b'-' | b'0'..=b'9'))
+        if bytes.first().is_none_or(|byte| !matches!(byte, b'-' | b'0'..=b'9'))
             || bytes.last().is_some_and(u8::is_ascii_whitespace)
         {
             return Err(invalid_number());
@@ -55,8 +53,8 @@ impl StrictJsonNumber {
         let limits = JsonValueLimits::<JsonResource, usize>::default();
         let mut budget = JsonValueBudget::new(limits);
         let mut transaction = budget.transaction();
-        let mut scanner = JsonLexicalScanner::new(&mut transaction, false)
-            .with_number_model(JsonNumberModel::Integer64);
+        let mut scanner =
+            JsonLexicalScanner::new(&mut transaction, false).with_number_model(JsonNumberModel::Integer64);
         match scanner.scan(bytes) {
             Ok(()) => Self::from_admitted_lexeme(text),
             Err(JsonLexicalError::Syntax(failure)) => match failure.reason {
@@ -137,18 +135,14 @@ impl StrictJsonNumber {
             Ok(number) => Ok(number),
             Err(error)
                 if model == JsonDecodeNumberModel::Integer64WithFiniteFallback
-                    && matches!(
-                        error.kind(),
-                        JsonSerializationErrorKind::IntegerOutOfRange { .. }
-                    )
+                    && matches!(error.kind(), JsonSerializationErrorKind::IntegerOutOfRange { .. })
                     && !text.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E')) =>
             {
                 let value = text.parse::<f64>().map_err(|_| error)?;
                 if !value.is_finite() {
                     return Err(number_error(JsonSerializationErrorKind::NonFiniteFloat));
                 }
-                Number::from_f64(value)
-                    .ok_or_else(|| number_error(JsonSerializationErrorKind::NonFiniteFloat))
+                Number::from_f64(value).ok_or_else(|| number_error(JsonSerializationErrorKind::NonFiniteFloat))
             }
             Err(error) => Err(error),
         }
@@ -193,8 +187,7 @@ impl StrictJsonNumber {
     ///
     /// Returns an error when `value` exceeds the unsigned 64-bit integer range.
     pub(crate) fn from_u128(value: u128) -> Result<Number, JsonSerializationError> {
-        let value =
-            u64::try_from(value).map_err(|_| integer_error(JsonIntegerSignedness::Unsigned))?;
+        let value = u64::try_from(value).map_err(|_| integer_error(JsonIntegerSignedness::Unsigned))?;
         Ok(Number::from(value))
     }
 }

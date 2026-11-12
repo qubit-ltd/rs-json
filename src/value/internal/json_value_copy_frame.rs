@@ -75,9 +75,7 @@ impl<'a> JsonValueCopyFrame<'a> {
         match self {
             Self::Array { values, .. } => values.next(),
             Self::Object {
-                values,
-                pending_key,
-                ..
+                values, pending_key, ..
             } => values.next().map(|(key, value)| {
                 *pending_key = Some(key);
                 value
@@ -130,18 +128,14 @@ impl<'a> JsonValueCopyFrame<'a> {
         builders: &mut [SafeValueBuilder],
     ) -> Option<SafeJsonValue> {
         match self {
-            Self::Array {
-                has_builder: true, ..
-            } => {
+            Self::Array { has_builder: true, .. } => {
                 builders
                     .last_mut()
                     .expect("an active array frame has its builder")
                     .push(child);
                 None
             }
-            Self::Array {
-                has_builder: false, ..
-            } => {
+            Self::Array { has_builder: false, .. } => {
                 let mut builder = SafeValueBuilder::array();
                 builder.push(child);
                 Some(SafeJsonValue::new(builder.finish()))
@@ -204,24 +198,12 @@ impl<'a> JsonValueCopyFrame<'a> {
     /// An owner of the completed JSON array or object.
     pub(crate) fn finish(self, builders: &mut Vec<SafeValueBuilder>) -> SafeJsonValue {
         match self {
-            Self::Array {
-                has_builder: true, ..
-            }
-            | Self::Object {
-                has_builder: true, ..
-            } => {}
-            Self::Array {
-                has_builder: false, ..
-            }
-            | Self::Object {
-                has_builder: false, ..
-            } => {
+            Self::Array { has_builder: true, .. } | Self::Object { has_builder: true, .. } => {}
+            Self::Array { has_builder: false, .. } | Self::Object { has_builder: false, .. } => {
                 unreachable!("single-child frames finish when their child arrives")
             }
         }
-        let builder = builders
-            .pop()
-            .expect("an active frame always has its builder");
+        let builder = builders.pop().expect("an active frame always has its builder");
         SafeJsonValue::new(builder.finish())
     }
 }

@@ -84,9 +84,11 @@ The serde_json compatibility matrix also tests this root crate, not a downstream
 fixture: it runs eight combinations of `jcs`, `serde_json/arbitrary_precision`,
 and `serde_json/preserve_order` against baseline `1.0.135` and the latest
 resolvable version. The baseline follows the API boundary: `Map::into_values()`
-was added in serde_json 1.0.135. If an existing `Cargo.lock` pins an older
-release, run `cargo update -p serde_json` before the `--locked` checks. The
-minimum does not require `arbitrary_precision` or `preserve_order`.
+was added in serde_json 1.0.135. The manifest requires serde_json 1.0.135 or a
+compatible later 1.x release. If an existing lockfile needs updating, run
+`cargo update -p serde_json` before locked checks. An explicit incompatible
+version constraint must first be relaxed. The minimum does not require
+`arbitrary_precision` or `preserve_order`.
 
 ```rust
 use qubit_budget::json::JsonDecodeLimits;

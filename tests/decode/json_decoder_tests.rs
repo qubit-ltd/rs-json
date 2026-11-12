@@ -39,9 +39,7 @@ use serde_json::json;
 #[test]
 fn test_indexed_object_keys_preserve_decoded_identity() {
     let duplicate = r#"{"a":1,"\u0061":2}"#;
-    let error = JsonDecoder::unlimited()
-        .decode_value_str(duplicate)
-        .unwrap_err();
+    let error = JsonDecoder::unlimited().decode_value_str(duplicate).unwrap_err();
     assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
     assert_eq!(error.line(), Some(1));
     assert_eq!(error.column(), Some(8));
@@ -95,9 +93,7 @@ fn test_indexed_object_keys_preserve_decoded_identity() {
     assert_eq!(value.as_value().as_object().unwrap().len(), 4096);
     many.pop();
     many.push_str(",\"key-0\":0}");
-    let error = JsonDecoder::unlimited()
-        .decode_value_str(&many)
-        .unwrap_err();
+    let error = JsonDecoder::unlimited().decode_value_str(&many).unwrap_err();
     assert_eq!(error.kind(), JsonDecodeErrorKind::Deserialize);
 
     let limits = JsonDecodeLimits::builder().max_nodes(2_usize).build();
@@ -169,15 +165,10 @@ fn test_unique_decoder_supports_enum_newtype_and_raw_targets() {
         (r#""Unit""#, UniqueEnum::Unit),
         (r#"{"New":1.5}"#, UniqueEnum::New(1.5)),
         (r#"{"Tuple":[1.5,true]}"#, UniqueEnum::Tuple(1.5, true)),
-        (
-            r#"{"Struct":{"amount":1.5}}"#,
-            UniqueEnum::Struct { amount: 1.5 },
-        ),
+        (r#"{"Struct":{"amount":1.5}}"#, UniqueEnum::Struct { amount: 1.5 }),
     ] {
         assert_eq!(
-            JsonDecoder::unlimited()
-                .decode_unique_str::<UniqueEnum>(input)
-                .unwrap(),
+            JsonDecoder::unlimited().decode_unique_str::<UniqueEnum>(input).unwrap(),
             expected
         );
     }
@@ -193,11 +184,7 @@ fn test_unique_decoder_supports_enum_newtype_and_raw_targets() {
         .expect("owned RawValue targets must be reconstructed");
     assert_eq!(raw.get(), r#"{"amount":1.5}"#);
     for input in [r#"{"New":1.5,"Unit":null}"#, r#"{"Tuple":[1.5,true,7]}"#] {
-        assert!(
-            JsonDecoder::unlimited()
-                .decode_unique_str::<UniqueEnum>(input)
-                .is_err()
-        );
+        assert!(JsonDecoder::unlimited().decode_unique_str::<UniqueEnum>(input).is_err());
     }
 }
 
@@ -208,11 +195,7 @@ fn test_unique_decoder_retains_input_charges_and_rolls_back_value_failures() {
         .max_nodes(3)
         .build();
     let mut decoder = JsonDecoder::with_limits(limits);
-    assert!(
-        decoder
-            .decode_unique_seed_utf8(FailingSeed, b"[1]")
-            .is_err()
-    );
+    assert!(decoder.decode_unique_seed_utf8(FailingSeed, b"[1]").is_err());
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
     assert_eq!(decoder.session().input_budget().unwrap().used(), 3);
     let duplicate = "{\n \"x\":1,\"x\":2}";
@@ -223,14 +206,8 @@ fn test_unique_decoder_retains_input_charges_and_rolls_back_value_failures() {
     assert_eq!(error.line(), Some(2));
     assert_eq!(error.column(), Some(8));
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
-    assert_eq!(
-        decoder.session().input_budget().unwrap().used(),
-        3 + duplicate.len()
-    );
-    assert_eq!(
-        decoder.decode_unique_str::<Vec<u8>>("[1]").unwrap(),
-        vec![1]
-    );
+    assert_eq!(decoder.session().input_budget().unwrap().used(), 3 + duplicate.len());
+    assert_eq!(decoder.decode_unique_str::<Vec<u8>>("[1]").unwrap(), vec![1]);
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(2));
     let error = decoder.decode_unique_str::<Vec<u8>>("[2]").unwrap_err();
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
@@ -274,8 +251,7 @@ fn test_unique_decoder_materialization_uses_byte_coordinates() {
             assert_eq!(error.column(), Some(column), "input={input:?}");
             if policy == DiagnosticPolicy::Detailed {
                 let JsonDecodeErrorSource::Deserialize {
-                    source: Some(source),
-                    ..
+                    source: Some(source), ..
                 } = error.into_source()
                 else {
                     panic!("detailed diagnostics must retain the Serde source");
@@ -332,18 +308,13 @@ impl<'de> DeserializeSeed<'de> for NonConsumingSeed {
 
 /// Builds one scalar nested inside `container_depth` JSON arrays.
 fn nested_array(container_depth: usize) -> String {
-    format!(
-        "{}0{}",
-        "[".repeat(container_depth),
-        "]".repeat(container_depth)
-    )
+    format!("{}0{}", "[".repeat(container_depth), "]".repeat(container_depth))
 }
 
 /// Verifies a decoder returns a typed value for one complete document.
 #[test]
 fn test_json_text_decoder_decodes_typed_value() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     let value = JsonDecoder::new(session)
         .decode_utf8::<bool>(b"true")
         .expect("JSON boolean should decode");
@@ -354,8 +325,7 @@ fn test_json_text_decoder_decodes_typed_value() {
 /// Verifies validation accounts a complete document without deserializing it.
 #[test]
 fn test_json_text_decoder_validates_complete_document() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     JsonDecoder::new(session)
         .validate_utf8(br#"{"ok":[true,null]}"#)
         .expect("a complete JSON document should validate");
@@ -364,8 +334,7 @@ fn test_json_text_decoder_validates_complete_document() {
 /// Verifies seed deserialization failures retain safe Serde metadata.
 #[test]
 fn test_json_text_decoder_maps_seed_failure() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     assert!(
         JsonDecoder::new(session)
             .decode_seed_utf8(FailingSeed, b"true")
@@ -376,8 +345,7 @@ fn test_json_text_decoder_maps_seed_failure() {
 /// Verifies a seed that leaves input unread is rejected by the final check.
 #[test]
 fn test_json_text_decoder_rejects_unconsumed_seed_input() {
-    let session =
-        JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
+    let session = JsonDecodeSession::from_limits(JsonDecodeLimits::<JsonResource, usize>::builder().build());
     assert!(
         JsonDecoder::new(session)
             .decode_seed_utf8(NonConsumingSeed, b"true")
@@ -420,11 +388,7 @@ fn test_json_text_decoder_rejects_integer_above_u64() {
         .decode_utf8::<Value>(b"18446744073709551616")
         .expect_err("an integer above u64 must be rejected");
 
-    assert!(
-        error
-            .to_string()
-            .contains("outside the supported 64-bit range")
-    );
+    assert!(error.to_string().contains("outside the supported 64-bit range"));
 }
 
 /// Verifies the complete signed and unsigned 64-bit integer boundaries.
@@ -443,10 +407,7 @@ fn test_json_text_decoder_enforces_integer_boundaries() {
             .expect("u64::MAX must decode"),
         json!(u64::MAX),
     );
-    for input in [
-        b"-9223372036854775809".as_slice(),
-        b"18446744073709551616".as_slice(),
-    ] {
+    for input in [b"-9223372036854775809".as_slice(), b"18446744073709551616".as_slice()] {
         let error = decoder
             .decode_utf8::<Value>(input)
             .expect_err("an integer outside the supported range must fail");
@@ -476,10 +437,7 @@ fn test_json_text_decoder_prioritizes_number_budget_over_range() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::builder()
-                .number_bytes_limit(ResourceLimit::new(
-                    JsonResource::NumberBytes,
-                    input.len() - 1,
-                ))
+                .number_bytes_limit(ResourceLimit::new(JsonResource::NumberBytes, input.len() - 1))
                 .build(),
         )
         .build();
@@ -549,12 +507,7 @@ impl OnlyInput {
 impl Input for OnlyInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [u8],
-        index: usize,
-        count: usize,
-    ) -> IoResult<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> IoResult<usize> {
         self.reads += 1;
         if self.interrupt_once {
             self.interrupt_once = false;
@@ -608,10 +561,7 @@ fn test_only_input_preserves_chunk_remainder_across_small_reads() {
     }
 
     assert_eq!(read, bytes);
-    assert_eq!(
-        input.reads, 5,
-        "the interrupt, three data reads, and EOF are counted"
-    );
+    assert_eq!(input.reads, 5, "the interrupt, three data reads, and EOF are counted");
 }
 
 #[test]
@@ -619,15 +569,9 @@ fn test_only_input_zero_count_does_not_consume_input() {
     let mut input = OnlyInput::new(vec![b"true"]);
     let mut output = [0; 5];
 
-    assert_eq!(
-        unsafe { input.read_unchecked(&mut output, 1, 0) }.unwrap(),
-        0
-    );
+    assert_eq!(unsafe { input.read_unchecked(&mut output, 1, 0) }.unwrap(), 0);
     assert_eq!(input.next, 0);
-    assert_eq!(
-        unsafe { input.read_unchecked(&mut output, 1, 4) }.unwrap(),
-        4
-    );
+    assert_eq!(unsafe { input.read_unchecked(&mut output, 1, 4) }.unwrap(), 4);
     assert_eq!(&output[1..5], b"true");
 }
 
@@ -704,10 +648,7 @@ fn test_json_decoder_stream_read_errors_are_redacted_or_retained() {
     assert_eq!(cloned.read_error_kind(), Some(ErrorKind::Other));
     assert!(matches!(
         error.into_source(),
-        JsonDecodeErrorSource::Read {
-            source: Some(_),
-            ..
-        }
+        JsonDecodeErrorSource::Read { source: Some(_), .. }
     ));
 
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
@@ -1012,16 +953,11 @@ fn test_jcs_decoder_reuses_stream_input_fixtures() {
     };
     assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
     assert_eq!(error.raw_input_bytes(), 4);
-    assert_eq!(
-        oversized_decoder.session().input_budget().unwrap().used(),
-        4
-    );
+    assert_eq!(oversized_decoder.session().input_budget().unwrap().used(), 4);
 
     let mut failing = OnlyInput::new(vec![b"true"]);
     failing.fail_after_chunks = true;
-    let error = JcsDecoder::unlimited()
-        .decode_input(&mut failing)
-        .unwrap_err();
+    let error = JcsDecoder::unlimited().decode_input(&mut failing).unwrap_err();
     let JcsDecodeError::Decode(error) = error else {
         panic!("expected input read error")
     };
@@ -1031,9 +967,7 @@ fn test_jcs_decoder_reuses_stream_input_fixtures() {
     let mut interrupted = OnlyInput::new(vec![b"true"]);
     interrupted.interrupt_once = true;
     assert_eq!(
-        JcsDecoder::unlimited()
-            .decode_input(&mut interrupted)
-            .unwrap(),
+        JcsDecoder::unlimited().decode_input(&mut interrupted).unwrap(),
         Value::Bool(true)
     );
     assert_eq!(interrupted.reads, 3);
@@ -1050,16 +984,11 @@ fn test_jcs_decoder_depth_admission_precedes_backend_materialization() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::builder()
-                .structure_limits(
-                    StructureLimits::builder()
-                        .depth_limit(ResourceLimit::new(JsonResource::Depth, 128)),
-                )
+                .structure_limits(StructureLimits::builder().depth_limit(ResourceLimit::new(JsonResource::Depth, 128)))
                 .build(),
         )
         .build();
-    let error = JcsDecoder::with_limits(limits)
-        .decode_str(&deep)
-        .unwrap_err();
+    let error = JcsDecoder::with_limits(limits).decode_str(&deep).unwrap_err();
     let JcsDecodeError::Decode(error) = error else {
         panic!("expected lexical depth budget rejection")
     };
@@ -1115,23 +1044,11 @@ mod migrated_ordinary {
     #[test]
     fn test_deep_scanner_failures_drop_guarded_partial_values() {
         let truncated = format!("{}0", "[".repeat(512));
-        assert!(
-            JsonDecoder::unlimited()
-                .decode_value_str(&truncated)
-                .is_err()
-        );
+        assert!(JsonDecoder::unlimited().decode_value_str(&truncated).is_err());
         let deeply_truncated = format!("{}0", "[".repeat(32_768));
-        assert!(
-            JsonDecoder::unlimited()
-                .decode_value_str(&deeply_truncated)
-                .is_err()
-        );
+        assert!(JsonDecoder::unlimited().decode_value_str(&deeply_truncated).is_err());
         let duplicate = format!("{}{{\"x\":0,\"x\":1}}{}", "[".repeat(128), "]".repeat(128));
-        assert!(
-            JsonDecoder::unlimited()
-                .decode_value_str(&duplicate)
-                .is_err()
-        );
+        assert!(JsonDecoder::unlimited().decode_value_str(&duplicate).is_err());
     }
 
     #[test]
@@ -1161,9 +1078,7 @@ mod migrated_ordinary {
                 ..
             }
         ));
-        let no_key_budget = JsonValidatedDecodeOptions::builder()
-            .max_value_and_key_nodes(1)
-            .build();
+        let no_key_budget = JsonValidatedDecodeOptions::builder().max_value_and_key_nodes(1).build();
         let budget_first = JsonDecoder::unlimited()
             .decode_unique_validated_str(r#"{"a":true,}"#, &no_key_budget, |_, _| {
                 Ok::<_, ()>(JsonNumberPolicy::Preserve)
@@ -1203,9 +1118,7 @@ mod migrated_ordinary {
         };
         let input: &mut dyn qubit_io::ByteInput = &mut reader;
         let owner = JsonDecoder::unlimited()
-            .decode_unique_validated_input(input, &options, |_, _| {
-                Ok::<_, ()>(JsonNumberPolicy::Preserve)
-            })
+            .decode_unique_validated_input(input, &options, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
             .unwrap();
         assert!(owner.as_value().is_array());
         assert_eq!(reader.offset, 8);
@@ -1213,26 +1126,18 @@ mod migrated_ordinary {
 
     #[test]
     fn test_input_utf8_io_and_one_byte_limit_probe() {
-        let limits = JsonDecodeLimits::builder()
-            .max_input_bytes(16_usize)
-            .build();
+        let limits = JsonDecodeLimits::builder().max_input_bytes(16_usize).build();
         let mut decoder = JsonDecoder::with_limits(limits);
         let mut invalid = std::io::Cursor::new(vec![0xff]);
         let error = decoder.decode_value_input(&mut invalid).unwrap_err();
-        assert_eq!(
-            error.kind(),
-            qubit_json::decode::JsonDecodeErrorKind::InvalidUtf8
-        );
+        assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::InvalidUtf8);
         assert_eq!(decoder.session().input_budget().unwrap().used(), 1);
 
         let limits = JsonDecodeLimits::builder().max_input_bytes(2_usize).build();
         let mut decoder = JsonDecoder::with_limits(limits);
         let mut oversized = std::io::Cursor::new(b"true".to_vec());
         let error = decoder.decode_value_input(&mut oversized).unwrap_err();
-        assert_eq!(
-            error.kind(),
-            qubit_json::decode::JsonDecodeErrorKind::Budget
-        );
+        assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::Budget);
         assert_eq!(decoder.session().input_budget().unwrap().used(), 2);
         assert_eq!(oversized.position(), 3);
 
@@ -1249,9 +1154,7 @@ mod migrated_ordinary {
                 Ok(1)
             }
         }
-        let limits = JsonDecodeLimits::builder()
-            .max_input_bytes(16_usize)
-            .build();
+        let limits = JsonDecodeLimits::builder().max_input_bytes(16_usize).build();
         let mut decoder = JsonDecoder::with_limits(limits);
         let error = decoder
             .decode_value_input(&mut FailsAfterTwo { offset: 0 })
@@ -1273,8 +1176,7 @@ mod migrated_ordinary {
             Some(qubit_json::decode::JsonMaterializationErrorReason::DuplicateKey)
         );
 
-        let raw: Box<serde_json::value::RawValue> =
-            decoder.decode_unique_str(r#"{"x":1}"#).unwrap();
+        let raw: Box<serde_json::value::RawValue> = decoder.decode_unique_str(r#"{"x":1}"#).unwrap();
         assert_eq!(raw.get(), r#"{"x":1}"#);
     }
 
@@ -1299,23 +1201,13 @@ mod migrated_ordinary {
         );
         let unit_variant: DecodeEnum = decoder.decode_unique_str(r#""Unit""#).unwrap();
         let tuple_variant: DecodeEnum = decoder.decode_unique_str(r#"{"Tuple":[7,true]}"#).unwrap();
-        let struct_variant: DecodeEnum = decoder
-            .decode_unique_str(r#"{"Struct":{"value":"x"}}"#)
-            .unwrap();
+        let struct_variant: DecodeEnum = decoder.decode_unique_str(r#"{"Struct":{"value":"x"}}"#).unwrap();
         assert_eq!(unit_variant, DecodeEnum::Unit);
         assert_eq!(tuple_variant, DecodeEnum::Tuple(7, true));
-        assert_eq!(
-            struct_variant,
-            DecodeEnum::Struct {
-                value: "x".to_owned()
-            }
-        );
+        assert_eq!(struct_variant, DecodeEnum::Struct { value: "x".to_owned() });
 
         let type_error = decoder.decode_unique_str::<u64>(r#""wrong""#).unwrap_err();
-        assert_eq!(
-            type_error.kind(),
-            qubit_json::decode::JsonDecodeErrorKind::Deserialize
-        );
+        assert_eq!(type_error.kind(), qubit_json::decode::JsonDecodeErrorKind::Deserialize);
 
         let syntax_first = decoder
             .decode_unique_str::<serde_json::Value>(r#"{"x":0,"x":1} trailing"#)
@@ -1335,11 +1227,7 @@ mod migrated_ordinary {
             Some(qubit_json::decode::JsonMaterializationErrorReason::DuplicateKey),
             "{duplicate_with_location}"
         );
-        assert!(
-            duplicate_with_location
-                .to_string()
-                .contains("line 2 column 7")
-        );
+        assert!(duplicate_with_location.to_string().contains("line 2 column 7"));
     }
 
     #[test]
@@ -1361,9 +1249,7 @@ mod migrated_ordinary {
         assert!(!error.to_string().contains("secret read detail"));
 
         let mut input = ReadFailure;
-        let error = JsonDecoder::unlimited()
-            .decode_value_input(&mut input)
-            .unwrap_err();
+        let error = JsonDecoder::unlimited().decode_value_input(&mut input).unwrap_err();
         assert_eq!(error.kind(), qubit_json::decode::JsonDecodeErrorKind::Read);
         assert!(std::error::Error::source(&error).is_none());
         assert!(!error.to_string().contains("secret read detail"));
@@ -1405,12 +1291,10 @@ mod migrated_ordinary {
         let streamed: serde_json::Value = decoder.decode_input(&mut input).unwrap();
         assert_eq!(streamed, serde_json::json!({"n": 3}));
 
-        let object: serde_json::Map<String, serde_json::Value> =
-            decoder.decode_object_str(r#"{"n":4}"#).unwrap();
+        let object: serde_json::Map<String, serde_json::Value> = decoder.decode_object_str(r#"{"n":4}"#).unwrap();
         assert_eq!(object.get("n"), Some(&serde_json::json!(4)));
 
-        let object: serde_json::Map<String, serde_json::Value> =
-            decoder.decode_object_utf8(br#"{"n":5}"#).unwrap();
+        let object: serde_json::Map<String, serde_json::Value> = decoder.decode_object_utf8(br#"{"n":5}"#).unwrap();
         assert_eq!(object.get("n"), Some(&serde_json::json!(5)));
 
         let array: Vec<serde_json::Value> = decoder.decode_array_str("[6]").unwrap();

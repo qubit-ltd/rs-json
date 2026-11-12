@@ -249,10 +249,11 @@ The root-crate compatibility matrix runs all eight combinations of `jcs`,
 serde_json 1.0.135 and the latest resolvable version. Version 1.0.135 is the
 lowest compatibility baseline because `serde_json::Map::into_values()`,
 which was added in that release, is used by the crate. Matrix commands target
-the root crate's own unit and integration tests. A lockfile pinned below
-1.0.135 must be refreshed with `cargo update -p serde_json` before locked
-verification; using this minimum does not require `arbitrary_precision` or
-`preserve_order`.
+the root crate's own unit and integration tests. The manifest requires
+serde_json 1.0.135 or a compatible later 1.x release. If an existing lockfile
+needs updating, run `cargo update -p serde_json` before locked checks. An
+explicit incompatible version constraint must first be relaxed. Using this
+minimum does not require `arbitrary_precision` or `preserve_order`.
 
 The private Number protocol is recognized only by its exact Serde struct name and payload shape. A real object whose key is `$serde_json::private::Number` remains an object. The separate `RawValue` protocol is also recognized and strictly validated. Finite float lexeme lengths use the public
 `serde_json::ser::CompactFormatter` interface, without a direct dependency on

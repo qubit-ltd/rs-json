@@ -372,10 +372,12 @@ matrix also runs the root crate tests against the `serde_json 1.0.135` baseline
 and the latest resolvable version, with eight combinations of `jcs`,
 `serde_json/arbitrary_precision`, and `serde_json/preserve_order`. The baseline
 is `1.0.135` because `serde_json::Map::into_values()` first appears there;
-this is the lowest compatible version established by that API boundary. If an
-existing `Cargo.lock` pins an older release, run `cargo update -p serde_json`
-before using the `--locked` verification commands. The minimum does not require
-enabling `arbitrary_precision` or `preserve_order`. The `rust,ignore` examples
+this is the lowest compatible version established by that API boundary. The
+manifest requires serde_json 1.0.135 or a compatible later 1.x release. If an
+existing lockfile needs updating, run `cargo update -p serde_json` before
+locked checks. An explicit incompatible version constraint must first be
+relaxed. The minimum does not require enabling `arbitrary_precision` or
+`preserve_order`. The `rust,ignore` examples
 require the optional JCS dependency feature; the commands below explicitly run
 them after enabling `jcs`.
 

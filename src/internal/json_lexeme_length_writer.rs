@@ -71,9 +71,7 @@ mod tests {
 
     #[test]
     fn test_overflow_preserves_count_and_flush_is_a_noop() {
-        let mut writer = JsonLexemeLengthWriter {
-            len: usize::MAX - 1,
-        };
+        let mut writer = JsonLexemeLengthWriter { len: usize::MAX - 1 };
         assert_eq!(writer.write(b"a").expect("last byte fits"), 1);
         assert_eq!(
             writer.write(b"b").expect_err("count must not wrap").kind(),

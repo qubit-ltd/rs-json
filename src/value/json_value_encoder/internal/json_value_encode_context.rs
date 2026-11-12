@@ -83,9 +83,7 @@ where
     ///
     /// A mutable borrow of the staged transaction.
     #[must_use = "the staged transaction borrow must be used"]
-    pub(in crate::value::json_value_encoder) fn transaction(
-        &mut self,
-    ) -> &mut JsonValueTransaction<'budget, R, Q> {
+    pub(in crate::value::json_value_encoder) fn transaction(&mut self) -> &mut JsonValueTransaction<'budget, R, Q> {
         self.transaction
     }
 
@@ -357,9 +355,7 @@ where
     ///
     /// The first retained failure, or `None` if the projection completed
     /// without recording one.
-    pub(in crate::value::json_value_encoder) fn take_failure(
-        self,
-    ) -> Option<JsonValueEncodeFailure<R, Q>> {
+    pub(in crate::value::json_value_encoder) fn take_failure(self) -> Option<JsonValueEncodeFailure<R, Q>> {
         self.failure
     }
 }

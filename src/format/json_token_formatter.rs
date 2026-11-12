@@ -182,11 +182,7 @@ pub fn write_json_tokens<O: ByteOutput + ?Sized>(
 ///
 /// Returns the mapped syntax or capacity error, or `OutputLimit` after a
 /// successful scan when the full output exceeds `maximum`.
-fn make_plan(
-    input: &[u8],
-    options: &JsonPrettyOptions,
-    maximum: Option<usize>,
-) -> Result<Plan, JsonPrettyError> {
+fn make_plan(input: &[u8], options: &JsonPrettyOptions, maximum: Option<usize>) -> Result<Plan, JsonPrettyError> {
     let mut planner = Planner {
         input,
         options,
@@ -213,11 +209,7 @@ fn make_plan(
         planner.byte(b'\n')?;
     }
     if maximum.is_some_and(|maximum| planner.length > maximum) {
-        return Err(JsonPrettyError::new(
-            JsonPrettyErrorKind::OutputLimit,
-            None,
-            None,
-        ));
+        return Err(JsonPrettyError::new(JsonPrettyErrorKind::OutputLimit, None, None));
     }
     Ok(Plan {
         actions: planner.actions,
@@ -264,20 +256,14 @@ fn render_vec(input: &[u8], actions: &[Action], output: &mut Vec<u8>) {
 /// The corresponding formatter error category, preserving available syntax
 /// offsets and causes.
 #[must_use]
-fn map_scan_error(
-    error: JsonLexicalScanError<JsonPrettyError, JsonResource, usize>,
-) -> JsonPrettyError {
+fn map_scan_error(error: JsonLexicalScanError<JsonPrettyError, JsonResource, usize>) -> JsonPrettyError {
     match error {
-        JsonLexicalScanError::Lexical(crate::lexical::JsonLexicalError::Syntax(failure)) => {
-            JsonPrettyError::new(
-                JsonPrettyErrorKind::Syntax,
-                Some(failure.offset),
-                Some(Box::new(failure)),
-            )
-        }
-        JsonLexicalScanError::Lexical(_) => {
-            JsonPrettyError::new(JsonPrettyErrorKind::Syntax, None, None)
-        }
+        JsonLexicalScanError::Lexical(crate::lexical::JsonLexicalError::Syntax(failure)) => JsonPrettyError::new(
+            JsonPrettyErrorKind::Syntax,
+            Some(failure.offset),
+            Some(Box::new(failure)),
+        ),
+        JsonLexicalScanError::Lexical(_) => JsonPrettyError::new(JsonPrettyErrorKind::Syntax, None, None),
         JsonLexicalScanError::Consumer(error) => error,
         JsonLexicalScanError::EncodedStringLimit { offset, .. } => {
             JsonPrettyError::new(JsonPrettyErrorKind::Syntax, Some(offset), None)

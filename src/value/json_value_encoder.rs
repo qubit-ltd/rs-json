@@ -128,11 +128,9 @@ impl JsonValueEncoder {
                 ));
             }
         };
-        transaction.commit().map_err(|_| {
-            JsonSerializationError::new(
-                crate::encode::JsonSerializationErrorKind::CustomSerialization,
-            )
-        })?;
+        transaction
+            .commit()
+            .map_err(|_| JsonSerializationError::new(crate::encode::JsonSerializationErrorKind::CustomSerialization))?;
         Ok(owner.into_value())
     }
 
@@ -261,19 +259,14 @@ impl JsonValueEncoder {
         R: Clone,
         Q: ResourceQuantity,
     {
-        let context = std::cell::RefCell::new(JsonValueEncodeContext::new(
-            transaction,
-            max_private_text_bytes,
-        ));
+        let context = std::cell::RefCell::new(JsonValueEncodeContext::new(transaction, max_private_text_bytes));
         let result = value.serialize(JsonValueSerializer::new(&context, 1));
         if let Err(error) = result.as_ref() {
             let _ = context.borrow_mut().record_serialization_error(*error);
         }
         match context.into_inner().take_failure() {
             Some(JsonValueEncodeFailure::Budget(error)) => Err(JsonValueEncodeError::Budget(error)),
-            Some(JsonValueEncodeFailure::Serialization(error)) => {
-                Err(JsonValueEncodeError::Serialization(error))
-            }
+            Some(JsonValueEncodeFailure::Serialization(error)) => Err(JsonValueEncodeError::Serialization(error)),
             Some(JsonValueEncodeFailure::PrivateTextLimitExceeded { maximum }) => {
                 Err(JsonValueEncodeError::PrivateTextLimitExceeded { maximum })
             }

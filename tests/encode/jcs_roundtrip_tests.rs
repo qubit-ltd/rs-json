@@ -26,10 +26,7 @@ fn test_jcs_roundtrip_reads_encoder_integer_boundary_output() {
     let second = JcsEncoder::unlimited()
         .to_vec(&decoded)
         .expect("the decoded integer boundary must re-encode");
-    assert_eq!(
-        second, first,
-        "JCS integer boundary encoding must round trip"
-    );
+    assert_eq!(second, first, "JCS integer boundary encoding must round trip");
 }
 
 #[test]
@@ -42,10 +39,7 @@ fn test_jcs_roundtrip_fixed_rfc_binary64_vector() {
     let first = JcsEncoder::unlimited()
         .to_vec(&value)
         .expect("the encoder should serialize the RFC binary64 vector");
-    assert_eq!(
-        first, expected,
-        "JCS must emit the RFC binary64 decimal form"
-    );
+    assert_eq!(first, expected, "JCS must emit the RFC binary64 decimal form");
     let decoded = JcsDecoder::unlimited()
         .decode_utf8(expected)
         .expect("the RFC binary64 decimal form must decode");

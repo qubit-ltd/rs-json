@@ -306,9 +306,8 @@ JCS 编码中，`Budget` 表示值或输出限制拒绝了操作；`WorkingMemor
 `--all-features` 覆盖根 crate 自身声明的 feature。兼容矩阵会以根 crate 测试验证
 `serde_json 1.0.135` 基线和可解析到的最新版本，各运行 `jcs`、`serde_json/arbitrary_precision`、
 `serde_json/preserve_order` 的八种组合。`1.0.135` 是由 API 边界证据确定的最低兼容版本：
-`serde_json::Map::into_values()` 从该版本开始提供。若现有 `Cargo.lock` 锁定了更早版本，
-先运行 `cargo update -p serde_json`，再执行使用 `--locked` 的验证命令。最低版本不要求启用
-`arbitrary_precision` 或 `preserve_order`。
+`serde_json::Map::into_values()` 从该版本开始提供。manifest 要求 serde_json 1.0.135 或兼容的后续
+1.x 版本。若现有锁文件需要更新，请先运行 `cargo update -p serde_json`，再执行 locked 检查；若显式版本约束不兼容，须先放宽该约束。最低版本不要求启用 `arbitrary_precision` 或 `preserve_order`。
 
 ```bash
 # 使用默认 feature 运行单元测试和公开行为集成测试

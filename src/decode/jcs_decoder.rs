@@ -275,10 +275,7 @@ where
     /// Returns [`JcsDecodeError`] for invalid JSON, unsupported JCS numbers,
     /// duplicate keys, or resource-limit violations. Input usage already
     /// admitted remains charged when later materialization fails.
-    pub fn decode_value_utf8(
-        &mut self,
-        input: &[u8],
-    ) -> Result<SafeJsonValue, JcsDecodeError<R, Q>> {
+    pub fn decode_value_utf8(&mut self, input: &[u8]) -> Result<SafeJsonValue, JcsDecodeError<R, Q>> {
         self.engine.decode_jcs_utf8(input, self.diagnostic_policy)
     }
 
@@ -327,10 +324,7 @@ where
     ///
     /// Returns [`JcsDecodeError`] for input read failures, invalid JSON,
     /// duplicate keys, JCS number violations, or resource-limit violations.
-    pub fn decode_value_input<I>(
-        &mut self,
-        input: &mut I,
-    ) -> Result<SafeJsonValue, JcsDecodeError<R, Q>>
+    pub fn decode_value_input<I>(&mut self, input: &mut I) -> Result<SafeJsonValue, JcsDecodeError<R, Q>>
     where
         I: Input<Item = u8> + ?Sized,
     {
@@ -360,14 +354,10 @@ where
     ///
     /// Returns `JcsDecodeError` for input read failures, invalid JSON, JCS
     /// number violations, or resource-limit violations.
-    pub fn decode_input<I>(
-        &mut self,
-        input: &mut I,
-    ) -> Result<serde_json::Value, JcsDecodeError<R, Q>>
+    pub fn decode_input<I>(&mut self, input: &mut I) -> Result<serde_json::Value, JcsDecodeError<R, Q>>
     where
         I: Input<Item = u8> + ?Sized,
     {
-        self.decode_value_input(input)
-            .map(SafeJsonValue::into_value)
+        self.decode_value_input(input).map(SafeJsonValue::into_value)
     }
 }

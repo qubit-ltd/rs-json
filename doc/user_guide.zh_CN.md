@@ -63,8 +63,9 @@ JCS 示例使用 `rust,ignore` 围栏，因为它们依赖可选 feature；由�
 `cargo test --locked --manifest-path tests/fixtures/documentation_examples/Cargo.toml --doc -- --include-ignored`。
 serde_json 兼容矩阵同样测试根 crate，而非下游 fixture：以 `1.0.135` 基线和可解析到的最新版本，
 分别运行 `jcs`、`serde_json/arbitrary_precision`、`serde_json/preserve_order` 的八种组合。
-基线来自 API 边界证据：`serde_json::Map::into_values()` 从 1.0.135 开始提供。若现有
-`Cargo.lock` 锁定了更早版本，应先运行 `cargo update -p serde_json`，再执行带 `--locked` 的验证。
+基线来自 API 边界证据：`serde_json::Map::into_values()` 从 1.0.135 开始提供。manifest 要求
+serde_json 1.0.135 或兼容的后续 1.x 版本。若现有锁文件需要更新，请先运行
+`cargo update -p serde_json`，再执行 locked 检查；若显式版本约束不兼容，须先放宽该约束。
 最低版本不要求启用 `arbitrary_precision` 或 `preserve_order`。
 
 ```rust

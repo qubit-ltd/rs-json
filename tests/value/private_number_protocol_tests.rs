@@ -67,10 +67,7 @@ fn test_private_number_protocol_constructs_only_a_number() {
         JsonValueEncoder::new().encode(&valid),
         Ok(Value::Number(Number::from(u64::MAX))),
     );
-    assert_eq!(
-        JsonValueEncoder::new().encode(&Number::from(42)),
-        Ok(json!(42)),
-    );
+    assert_eq!(JsonValueEncoder::new().encode(&Number::from(42)), Ok(json!(42)),);
 
     for invalid in ["1e400", "01", "{}"] {
         let value = NumberProtocol {
@@ -82,8 +79,7 @@ fn test_private_number_protocol_constructs_only_a_number() {
             .expect_err("invalid number text must fail");
         assert!(matches!(
             error.kind(),
-            JsonSerializationErrorKind::NonFiniteFloat
-                | JsonSerializationErrorKind::InvalidNumberRepresentation
+            JsonSerializationErrorKind::NonFiniteFloat | JsonSerializationErrorKind::InvalidNumberRepresentation
         ));
     }
 }
@@ -106,17 +102,11 @@ fn test_private_number_zero_exponents_and_underflow() {
             ..valid_probe()
         };
         let value = JsonValueEncoder::new().encode(&protocol).expect(text);
-        assert_eq!(
-            value.as_f64().expect(text).to_bits(),
-            expected.to_bits(),
-            "{text}"
-        );
+        assert_eq!(value.as_f64().expect(text).to_bits(), expected.to_bits(), "{text}");
 
         let raw = RawValue::from_string(text.to_owned()).expect(text);
         let raw_value = JsonValueEncoder::new().encode(&raw).expect(text);
-        let decoded = JsonDecoder::unlimited()
-            .decode_str::<Value>(text)
-            .expect(text);
+        let decoded = JsonDecoder::unlimited().decode_str::<Value>(text).expect(text);
         assert_eq!(
             raw_value.as_f64().expect(text).to_bits(),
             decoded.as_f64().expect(text).to_bits(),
@@ -179,10 +169,7 @@ fn test_private_number_protocol_rejects_wrong_shapes_and_keeps_lookalike_map_key
 
     let mut object = BTreeMap::new();
     object.insert(NUMBER.to_owned(), 1);
-    assert_eq!(
-        JsonValueEncoder::new().encode(&object),
-        Ok(json!({ NUMBER: 1 })),
-    );
+    assert_eq!(JsonValueEncoder::new().encode(&object), Ok(json!({ NUMBER: 1 })),);
 }
 
 /// Serde fixture that supplies a numeric value where private Number expects
@@ -291,10 +278,7 @@ fn test_private_number_protocol_collects_display_text() {
     let error = JsonValueEncoder::new()
         .encode(&FailingDisplayNumberPayload)
         .expect_err("formatter failure must fail private Number serialization");
-    assert_eq!(
-        error.kind(),
-        JsonSerializationErrorKind::DisplayFormattingFailed,
-    );
+    assert_eq!(error.kind(), JsonSerializationErrorKind::DisplayFormattingFailed,);
 }
 
 /// Serde payload shapes that the private Number text serializer must reject.
@@ -380,21 +364,15 @@ impl Serialize for NonTextPayload {
             NonTextShape::UnitStruct => serializer.serialize_unit_struct("Unit"),
             NonTextShape::UnitVariant => serializer.serialize_unit_variant("Enum", 0, "Unit"),
             NonTextShape::NewtypeStruct => serializer.serialize_newtype_struct("Newtype", &1),
-            NonTextShape::NewtypeVariant => {
-                serializer.serialize_newtype_variant("Enum", 0, "Newtype", &1)
-            }
+            NonTextShape::NewtypeVariant => serializer.serialize_newtype_variant("Enum", 0, "Newtype", &1),
             NonTextShape::Sequence => serializer.serialize_seq(Some(0)).map(|_| unreachable!()),
             NonTextShape::Tuple => serializer.serialize_tuple(0).map(|_| unreachable!()),
-            NonTextShape::TupleStruct => serializer
-                .serialize_tuple_struct("Tuple", 0)
-                .map(|_| unreachable!()),
+            NonTextShape::TupleStruct => serializer.serialize_tuple_struct("Tuple", 0).map(|_| unreachable!()),
             NonTextShape::TupleVariant => serializer
                 .serialize_tuple_variant("Enum", 0, "Tuple", 0)
                 .map(|_| unreachable!()),
             NonTextShape::Map => serializer.serialize_map(Some(0)).map(|_| unreachable!()),
-            NonTextShape::Struct => serializer
-                .serialize_struct("Struct", 0)
-                .map(|_| unreachable!()),
+            NonTextShape::Struct => serializer.serialize_struct("Struct", 0).map(|_| unreachable!()),
             NonTextShape::StructVariant => serializer
                 .serialize_struct_variant("Enum", 0, "Struct", 0)
                 .map(|_| unreachable!()),
@@ -551,9 +529,7 @@ mod projection_lifecycle {
     fn test_projection_validates_real_private_number_protocol_lifecycle() {
         let projected = JsonValueEncoder::new().encode(&ValidPrivateNumber).unwrap();
         assert_eq!(projected, serde_json::json!(17));
-        let error = JsonValueEncoder::new()
-            .encode(&InvalidPrivateNumber)
-            .unwrap_err();
+        let error = JsonValueEncoder::new().encode(&InvalidPrivateNumber).unwrap_err();
         assert!(error.is_number_error());
     }
 
@@ -565,9 +541,7 @@ mod projection_lifecycle {
 
     #[test]
     fn test_projection_keeps_ignored_compound_finalization_errors_sticky() {
-        let map_error = JsonValueEncoder::new()
-            .encode(&IgnoresMapEndFailure)
-            .unwrap_err();
+        let map_error = JsonValueEncoder::new().encode(&IgnoresMapEndFailure).unwrap_err();
         assert_eq!(
             map_error.serializer_state_error(),
             Some(JsonSerializerStateError::MapEndedWithPendingKey)
@@ -584,9 +558,7 @@ mod projection_lifecycle {
 
     #[test]
     fn test_projection_rejects_incomplete_private_raw_value_protocol() {
-        let error = JsonValueEncoder::new()
-            .encode(&MissingPrivateRawValue)
-            .unwrap_err();
+        let error = JsonValueEncoder::new().encode(&MissingPrivateRawValue).unwrap_err();
         assert!(error.is_serializer_contract_error());
         assert_eq!(
             error.serializer_state_error(),

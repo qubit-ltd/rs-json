@@ -99,10 +99,7 @@ fn record_values(count: usize) -> Vec<StructuralRecord> {
 }
 
 fn assert_count(count: usize) {
-    assert!(
-        COUNTS.contains(&count),
-        "structural count must be one of COUNTS"
-    );
+    assert!(COUNTS.contains(&count), "structural count must be one of COUNTS");
 }
 
 pub(crate) fn success_fixture(shape: StructuralShape, count: usize) -> StructuralFixture {
@@ -114,75 +111,52 @@ pub(crate) fn long_prefix_success_fixture(count: usize) -> StructuralFixture {
     success_fixture_with_prefix(StructuralShape::WideObject, count, "shared-public-prefix-")
 }
 
-fn success_fixture_with_prefix(
-    shape: StructuralShape,
-    count: usize,
-    key_prefix: &str,
-) -> StructuralFixture {
+fn success_fixture_with_prefix(shape: StructuralShape, count: usize, key_prefix: &str) -> StructuralFixture {
     assert_count(count);
-    let (
-        text,
-        expected,
-        node_count,
-        payload_bytes,
-        max_depth,
-        max_sequence_items,
-        max_map_entries,
-        max_number_bytes,
-    ) = match shape {
-        StructuralShape::WideObject => {
-            let values = object_values_with_prefix(count, key_prefix);
-            let text = serde_json::to_string(&values).expect("object fixture must serialize");
-            let parsed: serde_json::Value =
-                serde_json::from_str(&text).expect("object fixture must parse");
-            assert_eq!(
-                parsed.as_object().expect("object fixture is object").len(),
-                count
-            );
-            for (index, (key, value)) in values.iter().enumerate() {
-                assert_eq!(parsed[key], *value);
-                assert_eq!(key, &format!("{key_prefix}{index:06}"));
+    let (text, expected, node_count, payload_bytes, max_depth, max_sequence_items, max_map_entries, max_number_bytes) =
+        match shape {
+            StructuralShape::WideObject => {
+                let values = object_values_with_prefix(count, key_prefix);
+                let text = serde_json::to_string(&values).expect("object fixture must serialize");
+                let parsed: serde_json::Value = serde_json::from_str(&text).expect("object fixture must parse");
+                assert_eq!(parsed.as_object().expect("object fixture is object").len(), count);
+                for (index, (key, value)) in values.iter().enumerate() {
+                    assert_eq!(parsed[key], *value);
+                    assert_eq!(key, &format!("{key_prefix}{index:06}"));
+                }
+                let payload_bytes = values.iter().map(|(key, value)| key.len() + value.len()).sum();
+                (
+                    text,
+                    Some(StructuralExpected::Object(values)),
+                    count + 1,
+                    payload_bytes,
+                    2,
+                    0,
+                    count,
+                    0,
+                )
             }
-            let payload_bytes = values
-                .iter()
-                .map(|(key, value)| key.len() + value.len())
-                .sum();
-            (
-                text,
-                Some(StructuralExpected::Object(values)),
-                count + 1,
-                payload_bytes,
-                2,
-                0,
-                count,
-                0,
-            )
-        }
-        StructuralShape::RecordArray => {
-            let values = record_values(count);
-            let text = serde_json::to_string(&values).expect("record fixture must serialize");
-            let parsed: serde_json::Value =
-                serde_json::from_str(&text).expect("record fixture must parse");
-            assert_eq!(
-                parsed.as_array().expect("record fixture is array").len(),
-                count
-            );
-            for (index, record) in values.iter().enumerate() {
-                assert_eq!(parsed[index]["id"], 7);
-                assert_eq!(parsed[index]["payload"], record.payload);
+            StructuralShape::RecordArray => {
+                let values = record_values(count);
+                let text = serde_json::to_string(&values).expect("record fixture must serialize");
+                let parsed: serde_json::Value = serde_json::from_str(&text).expect("record fixture must parse");
+                assert_eq!(parsed.as_array().expect("record fixture is array").len(), count);
+                for (index, record) in values.iter().enumerate() {
+                    assert_eq!(parsed[index]["id"], 7);
+                    assert_eq!(parsed[index]["payload"], record.payload);
+                }
+                (
+                    text,
+                    Some(StructuralExpected::Records(values)),
+                    3 * count + 1,
+                    17 * count,
+                    3,
+                    count,
+                    2,
+                    1,
+                )
             }
-            (
-                text,
-                Some(StructuralExpected::Records(values)),
-                3 * count + 1,
-                17 * count,
-                3,
-                count,
-                2,
-                1,
-            )
-        }
-    };
+        };
     let fixture = StructuralFixture {
         shape,
         count,
@@ -206,11 +180,7 @@ fn success_fixture_with_prefix(
         StructuralShape::WideObject => count * (key_prefix.len() + 19) + 1,
         StructuralShape::RecordArray => 29 * count + 1,
     };
-    assert_eq!(
-        fixture.text.len(),
-        expected_bytes,
-        "fixture byte budget formula"
-    );
+    assert_eq!(fixture.text.len(), expected_bytes, "fixture byte budget formula");
     fixture
 }
 

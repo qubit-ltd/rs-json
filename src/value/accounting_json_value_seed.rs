@@ -172,10 +172,6 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_any(JsonValueVisitor::new(
-            self.transaction,
-            1,
-            self.reject_duplicate_keys,
-        ))
+        deserializer.deserialize_any(JsonValueVisitor::new(self.transaction, 1, self.reject_duplicate_keys))
     }
 }

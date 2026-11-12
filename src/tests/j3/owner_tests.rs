@@ -130,10 +130,7 @@ fn test_array_accumulator_unwind_drops_inserted_deep_child_iteratively() {
         let mut values = SafeValueBuilder::array_with_capacity(1);
         values.push(SafeJsonValue::new(child));
     }));
-    assert!(
-        result.is_err(),
-        "the guarded array insertion hook must fire"
-    );
+    assert!(result.is_err(), "the guarded array insertion hook must fire");
     SafeJsonValue::assert_guarded_insert_panic_consumed_for_test();
 }
 
@@ -141,9 +138,7 @@ fn test_array_accumulator_unwind_drops_inserted_deep_child_iteratively() {
 fn test_builder_returns_guarded_value_and_stops_after_first_error() {
     let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Integer64);
     assert!(
-        builder
-            .try_accept(JsonLexicalEvent::BeginObject { offset: 0 })
-            .is_ok(),
+        builder.try_accept(JsonLexicalEvent::BeginObject { offset: 0 }).is_ok(),
         "the builder should accept the object start"
     );
     assert!(
@@ -156,23 +151,16 @@ fn test_builder_returns_guarded_value_and_stops_after_first_error() {
         "the builder should accept the first object key"
     );
     assert!(
-        builder
-            .try_accept(JsonLexicalEvent::Null { offset: 5 })
-            .is_ok(),
+        builder.try_accept(JsonLexicalEvent::Null { offset: 5 }).is_ok(),
         "the builder should accept the first object value"
     );
     let duplicate = builder.try_accept(JsonLexicalEvent::Key {
         token: br#""a""#,
         offset: 9,
     });
+    assert!(duplicate.is_err(), "the builder should reject a duplicate key");
     assert!(
-        duplicate.is_err(),
-        "the builder should reject a duplicate key"
-    );
-    assert!(
-        builder
-            .try_accept(JsonLexicalEvent::EndObject { offset: 12 })
-            .is_err(),
+        builder.try_accept(JsonLexicalEvent::EndObject { offset: 12 }).is_err(),
         "the builder should remain failed after rejecting a duplicate key"
     );
     assert!(

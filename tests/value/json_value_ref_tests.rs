@@ -16,10 +16,7 @@ fn test_view_matches_owner_and_borrows_original() {
     let copied = view;
     assert!(std::ptr::eq(copied.as_value(), owner.as_value()));
     assert_eq!(format!("{view:?}"), format!("{owner:?}"));
-    assert_eq!(
-        serde_json::to_vec(&view).unwrap(),
-        serde_json::to_vec(&owner).unwrap()
-    );
+    assert_eq!(serde_json::to_vec(&view).unwrap(), serde_json::to_vec(&owner).unwrap());
     assert_eq!(view, copied);
 }
 
@@ -34,14 +31,8 @@ fn test_view_equality_uses_value_semantics() {
     assert_ne!(JsonValueRef::new(&a), JsonValueRef::new(&c));
     assert_ne!(JsonValueRef::new(&a), JsonValueRef::new(&missing_key));
     assert_ne!(JsonValueRef::new(&a), JsonValueRef::new(&shorter_array));
-    assert_ne!(
-        JsonValueRef::new(&json!(null)),
-        JsonValueRef::new(&json!(false))
-    );
-    assert_ne!(
-        JsonValueRef::new(&json!(true)),
-        JsonValueRef::new(&json!(0))
-    );
+    assert_ne!(JsonValueRef::new(&json!(null)), JsonValueRef::new(&json!(false)));
+    assert_ne!(JsonValueRef::new(&json!(true)), JsonValueRef::new(&json!(0)));
     assert_ne!(JsonValueRef::new(&json!(1)), JsonValueRef::new(&json!("1")));
 }
 

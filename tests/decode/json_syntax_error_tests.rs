@@ -45,9 +45,7 @@ mod api_gaps_context {
                 let options = JsonValidatedDecodeOptions::builder().build();
                 let mut decoder = JsonDecoder::unlimited().with_diagnostic_policy(diagnostics);
                 let error = decoder
-                    .decode_unique_validated_str(text, &options, |_, _| {
-                        Ok::<_, ()>(JsonNumberPolicy::Preserve)
-                    })
+                    .decode_unique_validated_str(text, &options, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
                     .unwrap_err();
                 let JsonValidatedDecodeError::Decode { error, context } = error else {
                     panic!("expected a structured decode error");
@@ -65,11 +63,7 @@ mod api_gaps_context {
     #[test]
     fn test_syntax_phase_tracks_nested_grammar_and_token_state() {
         let cases = [
-            (
-                "",
-                JsonSyntaxErrorReason::UnexpectedEnd,
-                JsonDecodeContext::Value,
-            ),
+            ("", JsonSyntaxErrorReason::UnexpectedEnd, JsonDecodeContext::Value),
             (
                 "{x:1}",
                 JsonSyntaxErrorReason::ExpectedObjectKey,
@@ -80,11 +74,7 @@ mod api_gaps_context {
                 JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd,
                 JsonDecodeContext::ArraySeparator,
             ),
-            (
-                "[1,",
-                JsonSyntaxErrorReason::UnexpectedEnd,
-                JsonDecodeContext::Value,
-            ),
+            ("[1,", JsonSyntaxErrorReason::UnexpectedEnd, JsonDecodeContext::Value),
             (
                 "[\"中\"\r\nx]",
                 JsonSyntaxErrorReason::ExpectedCommaOrArrayEnd,
@@ -109,17 +99,11 @@ mod api_gaps_context {
         for (text, reason, context) in cases {
             let mut decoder = JsonDecoder::unlimited();
             let error = decoder
-                .decode_unique_validated_str(
-                    text,
-                    &JsonValidatedDecodeOptions::builder().build(),
-                    |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve),
-                )
+                .decode_unique_validated_str(text, &JsonValidatedDecodeOptions::builder().build(), |_, _| {
+                    Ok::<_, ()>(JsonNumberPolicy::Preserve)
+                })
                 .unwrap_err();
-            let JsonValidatedDecodeError::Decode {
-                error,
-                context: outer,
-            } = error
-            else {
+            let JsonValidatedDecodeError::Decode { error, context: outer } = error else {
                 panic!("expected a structured decode error");
             };
             let syntax = error.syntax_error().unwrap();
