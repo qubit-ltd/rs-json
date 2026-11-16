@@ -29,9 +29,6 @@ use super::JsonNumberLengthWriter;
 pub(crate) fn json_number_lexeme_length(number: &Number) -> usize {
     let mut writer = JsonNumberLengthWriter::new();
     let result = write!(&mut writer, "{number}");
-    debug_assert!(
-        result.is_ok(),
-        "Number Display only writes to an infallible counter"
-    );
+    debug_assert!(result.is_ok(), "Number Display only writes to an infallible counter");
     writer.len()
 }

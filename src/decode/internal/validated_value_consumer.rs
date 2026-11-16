@@ -120,11 +120,7 @@ impl<F, E> ValidatedValueConsumer<F, E> {
     ///
     /// Returns a limit error when the encoded content exceeds the configured
     /// maximum.
-    fn check_encoded_limit(
-        &self,
-        token_len: usize,
-        offset: usize,
-    ) -> Result<(), ValidatedConsumerError<E>> {
+    fn check_encoded_limit(&self, token_len: usize, offset: usize) -> Result<(), ValidatedConsumerError<E>> {
         let Some(maximum) = self.options.max_encoded_string_bytes() else {
             return Ok(());
         };
@@ -163,10 +159,7 @@ impl<F, E> ValidatedValueConsumer<F, E> {
 
 impl<'input, F, E> JsonLexicalConsumer<'input> for ValidatedValueConsumer<F, E>
 where
-    F: for<'call> FnMut(
-        &'call [JsonPathSegment],
-        JsonNumberToken<'call>,
-    ) -> Result<JsonNumberPolicy, E>,
+    F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
 {
     /// Internal failure category mapped by the decode engine to its public
     /// error.
@@ -243,9 +236,8 @@ where
     ///
     /// Returns the policy callback's error when it rejects the number token.
     fn before_number(&mut self, token: &'input str, offset: usize) -> Result<(), Self::Error> {
-        self.next_number_policy =
-            (self.policy)(&self.path, JsonNumberToken::from_validated(token, offset))
-                .map_err(|source| ValidatedConsumerError::Policy { source, offset })?;
+        self.next_number_policy = (self.policy)(&self.path, JsonNumberToken::from_validated(token, offset))
+            .map_err(|source| ValidatedConsumerError::Policy { source, offset })?;
         Ok(())
     }
 
@@ -269,12 +261,12 @@ where
                 let value = JsonNumberToken::from_validated(text, offset)
                     .exact_safe_integer()
                     .map_err(|source| ValidatedConsumerError::Exact { source, offset })?;
-                self.builder
-                    .try_accept_number(value.into(), offset)
-                    .map_err(|source| ValidatedConsumerError::Materialization {
+                self.builder.try_accept_number(value.into(), offset).map_err(|source| {
+                    ValidatedConsumerError::Materialization {
                         source,
                         context: JsonDecodeContext::Number,
-                    })?;
+                    }
+                })?;
                 self.next_number_policy = JsonNumberPolicy::Preserve;
                 self.complete_value();
             }
@@ -282,12 +274,12 @@ where
                 self.check_encoded_limit(token.len(), offset)?;
                 let key = from_slice::<String>(token).expect("scanner admitted valid key token");
                 let path_key = self.track_path.then(|| key.clone());
-                self.builder
-                    .try_accept_decoded_key(key, offset)
-                    .map_err(|source| ValidatedConsumerError::Materialization {
+                self.builder.try_accept_decoded_key(key, offset).map_err(|source| {
+                    ValidatedConsumerError::Materialization {
                         source,
                         context: JsonDecodeContext::ObjectKey,
-                    })?;
+                    }
+                })?;
                 if let Some(key) = path_key {
                     self.path.push(JsonPathSegment::Key(key));
                 }
@@ -303,41 +295,40 @@ where
                 self.complete_value();
             }
             JsonLexicalEvent::BeginArray { .. } => {
-                self.builder.try_accept(event).map_err(|source| {
-                    ValidatedConsumerError::Materialization {
+                self.builder
+                    .try_accept(event)
+                    .map_err(|source| ValidatedConsumerError::Materialization {
                         source,
                         context: JsonDecodeContext::Value,
-                    }
-                })?;
-                self.containers
-                    .push(ValidatedContainer::Array { next_index: 0 });
+                    })?;
+                self.containers.push(ValidatedContainer::Array { next_index: 0 });
             }
             JsonLexicalEvent::BeginObject { .. } => {
-                self.builder.try_accept(event).map_err(|source| {
-                    ValidatedConsumerError::Materialization {
+                self.builder
+                    .try_accept(event)
+                    .map_err(|source| ValidatedConsumerError::Materialization {
                         source,
                         context: JsonDecodeContext::Value,
-                    }
-                })?;
+                    })?;
                 self.containers.push(ValidatedContainer::Object);
             }
             JsonLexicalEvent::EndArray { .. } | JsonLexicalEvent::EndObject { .. } => {
-                self.builder.try_accept(event).map_err(|source| {
-                    ValidatedConsumerError::Materialization {
+                self.builder
+                    .try_accept(event)
+                    .map_err(|source| ValidatedConsumerError::Materialization {
                         source,
                         context: JsonDecodeContext::Value,
-                    }
-                })?;
+                    })?;
                 self.containers.pop();
                 self.complete_value();
             }
             other => {
-                self.builder.try_accept(other).map_err(|source| {
-                    ValidatedConsumerError::Materialization {
+                self.builder
+                    .try_accept(other)
+                    .map_err(|source| ValidatedConsumerError::Materialization {
                         source,
                         context: JsonDecodeContext::Value,
-                    }
-                })?;
+                    })?;
                 self.complete_value();
             }
         }

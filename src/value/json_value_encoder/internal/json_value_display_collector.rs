@@ -47,13 +47,8 @@ type ContextCell<'context, 'transaction, 'budget, R, Q> =
 /// - `'transaction` and `'budget` are the lifetimes used by that context.
 /// - `R` and `Q` are its resource and quantity types; `Q` must implement
 ///   [`ResourceQuantity`].
-pub(in crate::value::json_value_encoder) struct JsonValueDisplayCollector<
-    'context,
-    'transaction,
-    'budget,
-    R,
-    Q,
-> where
+pub(in crate::value::json_value_encoder) struct JsonValueDisplayCollector<'context, 'transaction, 'budget, R, Q>
+where
     Q: ResourceQuantity,
 {
     /// Shared transaction state and sticky first failure.
@@ -64,8 +59,7 @@ pub(in crate::value::json_value_encoder) struct JsonValueDisplayCollector<
     text: String,
 }
 
-impl<'context, 'transaction, 'budget, R, Q>
-    JsonValueDisplayCollector<'context, 'transaction, 'budget, R, Q>
+impl<'context, 'transaction, 'budget, R, Q> JsonValueDisplayCollector<'context, 'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
@@ -155,16 +149,11 @@ where
     /// is rejected.
     fn write_str(&mut self, chunk: &str) -> fmt::Result {
         let Some(next) = self.text.len().checked_add(chunk.len()) else {
-            let error =
-                JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed);
+            let error = JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed);
             let _ = self.context.borrow_mut().record_serialization_error(error);
             return Err(fmt::Error);
         };
-        let result = {
-            self.context
-                .borrow_mut()
-                .check_admit(self.measurement(next))
-        };
+        let result = { self.context.borrow_mut().check_admit(self.measurement(next)) };
         if result.is_err() {
             return Err(fmt::Error);
         }

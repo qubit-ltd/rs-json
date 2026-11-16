@@ -29,15 +29,9 @@ where
     Q: ResourceQuantity,
 {
     /// A measured budget rejected a value, container, or collection count.
-    Budget(
-        #[doc = "Measured resource rejection retained for the owning encoder."]
-        MeasuredBudgetError<R, Q>,
-    ),
+    Budget(#[doc = "Measured resource rejection retained for the owning encoder."] MeasuredBudgetError<R, Q>),
     /// Serde or the projection serializer reported a structured error.
-    Serialization(
-        #[doc = "Structured serialization error preserved for the owning encoder."]
-        JsonSerializationError,
-    ),
+    Serialization(#[doc = "Structured serialization error preserved for the owning encoder."] JsonSerializationError),
     /// A private payload exceeded its inclusive UTF-8 byte threshold.
     PrivateTextLimitExceeded {
         /// Inclusive UTF-8 byte threshold configured for each private payload.

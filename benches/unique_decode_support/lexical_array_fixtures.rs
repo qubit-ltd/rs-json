@@ -63,10 +63,7 @@ impl ArrayFixture {
 
     pub(crate) fn scalars(size: usize) -> Self {
         assert!(SIZES.contains(&size));
-        let values = (0..size)
-            .map(|n| n.to_string())
-            .collect::<Vec<_>>()
-            .join(",");
+        let values = (0..size).map(|n| n.to_string()).collect::<Vec<_>>().join(",");
         Self {
             shape: ArrayShape::Scalar,
             size,

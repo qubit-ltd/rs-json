@@ -87,25 +87,16 @@ pub(in crate::value) fn values_equal(left: &Value, right: &Value) -> bool {
 ///
 /// * `value` - The value whose owner/view debug syntax is formatted.
 /// * `formatter` - The formatter that receives the syntax.
-pub(in crate::value) fn debug_value(
-    value: &Value,
-    formatter: &mut fmt::Formatter<'_>,
-) -> fmt::Result {
+pub(in crate::value) fn debug_value(value: &Value, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     let mut actions = vec![JsonValueDebugAction::Value(value)];
     while let Some(action) = actions.pop() {
         match action {
             JsonValueDebugAction::Text(text) => formatter.write_str(text)?,
             JsonValueDebugAction::Key(key) => fmt::Debug::fmt(key, formatter)?,
             JsonValueDebugAction::Value(Value::Null) => formatter.write_str("Null")?,
-            JsonValueDebugAction::Value(Value::Bool(value)) => {
-                write!(formatter, "Bool({value:?})")?
-            }
-            JsonValueDebugAction::Value(Value::Number(value)) => {
-                write!(formatter, "Number({value:?})")?
-            }
-            JsonValueDebugAction::Value(Value::String(value)) => {
-                write!(formatter, "String({value:?})")?
-            }
+            JsonValueDebugAction::Value(Value::Bool(value)) => write!(formatter, "Bool({value:?})")?,
+            JsonValueDebugAction::Value(Value::Number(value)) => write!(formatter, "Number({value:?})")?,
+            JsonValueDebugAction::Value(Value::String(value)) => write!(formatter, "String({value:?})")?,
             JsonValueDebugAction::Value(Value::Array(values)) => {
                 formatter.write_str("Array [")?;
                 actions.push(JsonValueDebugAction::Array {

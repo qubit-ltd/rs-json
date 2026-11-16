@@ -47,13 +47,7 @@ fn large_read_value(shape: &str, width: usize, changed: Option<usize>) -> Value 
     match shape {
         "array" => Value::Array(
             (0..width)
-                .map(|index| {
-                    Value::from(if changed == Some(index) {
-                        -1
-                    } else {
-                        index as i64
-                    })
-                })
+                .map(|index| Value::from(if changed == Some(index) { -1 } else { index as i64 }))
                 .collect(),
         ),
         "object" => {
@@ -61,11 +55,7 @@ fn large_read_value(shape: &str, width: usize, changed: Option<usize>) -> Value 
             for index in 0..width {
                 entries.insert(
                     format!("key-{index:05}"),
-                    Value::from(if changed == Some(index) {
-                        -1
-                    } else {
-                        index as i64
-                    }),
+                    Value::from(if changed == Some(index) { -1 } else { index as i64 }),
                 );
             }
             Value::Object(entries)
@@ -92,10 +82,7 @@ fn benchmark_value_reads(c: &mut Criterion) {
     macro_rules! compare_case {
         ($shape:expr, $representation:literal, $operation:literal, $width:expr, $left:expr, $right:expr) => {
             group.bench_function(
-                format!(
-                    "compare/{}/{}/{}/{}",
-                    $shape, $representation, $operation, $width
-                ),
+                format!("compare/{}/{}/{}/{}", $shape, $representation, $operation, $width),
                 |bencher| bencher.iter(|| black_box($left) == black_box($right)),
             );
         };
@@ -115,33 +102,14 @@ fn benchmark_value_reads(c: &mut Criterion) {
             compare_case!(shape, "owner", "first-difference", width, &left, &first);
             compare_case!(shape, "owner", "last-difference", width, &left, &last);
             compare_case!(shape, "view", "equal", width, left_view, equal_view);
-            compare_case!(
-                shape,
-                "view",
-                "first-difference",
-                width,
-                left_view,
-                first_view
-            );
-            compare_case!(
-                shape,
-                "view",
-                "last-difference",
-                width,
-                left_view,
-                last_view
-            );
+            compare_case!(shape, "view", "first-difference", width, left_view, first_view);
+            compare_case!(shape, "view", "last-difference", width, left_view, last_view);
 
             group.bench_function(format!("debug/{shape}/owner/{width}"), |bencher| {
-                bencher.iter(|| {
-                    debug_to_discard(black_box(&left)).expect("discard sink accepts Debug output")
-                });
+                bencher.iter(|| debug_to_discard(black_box(&left)).expect("discard sink accepts Debug output"));
             });
             group.bench_function(format!("debug/{shape}/view/{width}"), |bencher| {
-                bencher.iter(|| {
-                    debug_to_discard(black_box(&left_view))
-                        .expect("discard sink accepts Debug output")
-                });
+                bencher.iter(|| debug_to_discard(black_box(&left_view)).expect("discard sink accepts Debug output"));
             });
         }
     }
@@ -158,14 +126,10 @@ fn benchmark_value_reads(c: &mut Criterion) {
             bencher.iter(|| black_box(left_view) == black_box(equal_view));
         });
         group.bench_function(format!("debug/deep/owner/{depth}"), |bencher| {
-            bencher.iter(|| {
-                debug_to_discard(black_box(&left)).expect("discard sink accepts Debug output")
-            });
+            bencher.iter(|| debug_to_discard(black_box(&left)).expect("discard sink accepts Debug output"));
         });
         group.bench_function(format!("debug/deep/view/{depth}"), |bencher| {
-            bencher.iter(|| {
-                debug_to_discard(black_box(&left_view)).expect("discard sink accepts Debug output")
-            });
+            bencher.iter(|| debug_to_discard(black_box(&left_view)).expect("discard sink accepts Debug output"));
         });
     }
     group.finish();
@@ -205,11 +169,7 @@ impl JsonTreeMutVisitor for RedactionShapeVisitor {
 
     /// Removes the synthetic secret field and descends into the remaining
     /// tree.
-    fn visit(
-        &mut self,
-        value: &mut Value,
-        _context: JsonTreeContext<'_>,
-    ) -> Result<JsonTreeControl, Self::Error> {
+    fn visit(&mut self, value: &mut Value, _context: JsonTreeContext<'_>) -> Result<JsonTreeControl, Self::Error> {
         if let Value::Object(entries) = value {
             entries.remove("secret");
         }
@@ -393,10 +353,8 @@ fn benchmark_mut(c: &mut Criterion) {
                     bencher.iter_batched(
                         || value.clone(),
                         |mut value| {
-                            let mut input_budget =
-                                JsonValueBudget::new(traversal_limits(input_bounded));
-                            let mut output_budget =
-                                JsonValueBudget::new(traversal_limits(output_bounded));
+                            let mut input_budget = JsonValueBudget::new(traversal_limits(input_bounded));
+                            let mut output_budget = JsonValueBudget::new(traversal_limits(output_bounded));
                             let mut input = input_budget.transaction();
                             let mut output = output_budget.transaction();
                             let mut visitor = RedactionShapeVisitor;
@@ -416,10 +374,5 @@ fn benchmark_mut(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    benchmark_read,
-    benchmark_mut,
-    benchmark_value_reads
-);
+criterion_group!(benches, benchmark_read, benchmark_mut, benchmark_value_reads);
 criterion_main!(benches);

@@ -15,10 +15,7 @@ use qubit_json::decode::JsonValidatedDecodeError;
 use qubit_json::decode::JsonValidatedDecodeOptions;
 use qubit_json::decode::JsonValidatedLimit;
 
-fn options(
-    mode: JsonValidatedAdmissionPolicy,
-    maximum: Option<usize>,
-) -> JsonValidatedDecodeOptions {
+fn options(mode: JsonValidatedAdmissionPolicy, maximum: Option<usize>) -> JsonValidatedDecodeOptions {
     let mut builder = JsonValidatedDecodeOptions::builder().admission_policy(mode);
     if let Some(maximum) = maximum {
         builder = builder.max_encoded_string_bytes(maximum);
@@ -47,16 +44,10 @@ fn assert_syntax(
     offset: usize,
 ) {
     let error = decode_error(text, mode, maximum);
-    let JsonValidatedDecodeError::Decode {
-        error,
-        context: outer,
-    } = error
-    else {
+    let JsonValidatedDecodeError::Decode { error, context: outer } = error else {
         panic!("expected syntax rejection for {text:?}");
     };
-    let syntax = error
-        .syntax_error()
-        .expect("decode error must expose syntax details");
+    let syntax = error.syntax_error().expect("decode error must expose syntax details");
     assert_eq!(syntax.reason(), reason, "{text:?}");
     assert_eq!(syntax.context(), Some(context), "{text:?}");
     assert_eq!(outer, syntax.context(), "{text:?}");
@@ -64,11 +55,7 @@ fn assert_syntax(
 }
 
 fn assert_limit(text: &str, maximum: usize, observed: usize, offset: usize) {
-    let error = decode_error(
-        text,
-        JsonValidatedAdmissionPolicy::TokenFirst,
-        Some(maximum),
-    );
+    let error = decode_error(text, JsonValidatedAdmissionPolicy::TokenFirst, Some(maximum));
     assert!(
         matches!(
             error,
@@ -161,21 +148,10 @@ fn test_token_first_does_not_call_policy_for_malformed_number_candidates() {
         };
         assert_eq!(context, Some(JsonDecodeContext::Number), "{text}");
         let syntax = error.syntax_error().expect("number syntax details");
-        assert_eq!(
-            syntax.reason(),
-            JsonSyntaxErrorReason::InvalidNumber,
-            "{text}"
-        );
+        assert_eq!(syntax.reason(), JsonSyntaxErrorReason::InvalidNumber, "{text}");
         assert_eq!(syntax.context(), Some(JsonDecodeContext::Number), "{text}");
     }
-    for (text, offset) in [
-        ("01", 1),
-        ("1-2", 1),
-        ("1+2", 1),
-        ("1..2", 2),
-        ("1e+", 3),
-        ("1.", 2),
-    ] {
+    for (text, offset) in [("01", 1), ("1-2", 1), ("1+2", 1), ("1..2", 2), ("1e+", 3), ("1.", 2)] {
         assert_syntax(
             text,
             JsonValidatedAdmissionPolicy::TokenFirst,
@@ -402,13 +378,9 @@ fn test_token_first_string_boundary_handles_escapes_unicode_and_keys() {
         JsonDecodeContext::String,
         3,
     );
-    let one_node = JsonValidatedDecodeOptions::builder()
-        .max_value_and_key_nodes(1)
-        .build();
+    let one_node = JsonValidatedDecodeOptions::builder().max_value_and_key_nodes(1).build();
     let error = JsonDecoder::unlimited()
-        .decode_unique_validated_str(r#"{"\q":0}"#, &one_node, |_, _| {
-            Ok::<_, ()>(JsonNumberPolicy::Preserve)
-        })
+        .decode_unique_validated_str(r#"{"\q":0}"#, &one_node, |_, _| Ok::<_, ()>(JsonNumberPolicy::Preserve))
         .unwrap_err();
     assert!(matches!(
         error,

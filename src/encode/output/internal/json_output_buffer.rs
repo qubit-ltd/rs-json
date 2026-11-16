@@ -96,10 +96,7 @@ where
             return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         if result.is_err() {
-            let error = self
-                .accounting
-                .borrow_mut()
-                .take_serialization_error_or_custom();
+            let error = self.accounting.borrow_mut().take_serialization_error_or_custom();
             return Err(JsonEncodeError::<R, Q>::serialization(error));
         }
         Ok(self.bytes)

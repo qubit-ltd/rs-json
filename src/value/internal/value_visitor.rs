@@ -116,9 +116,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     /// Returns the deserializer's error when the integer is outside the JSON
     /// range.
     fn visit_i128<E: DeError>(self, value: i128) -> Result<Value, E> {
-        StrictJsonNumber::from_i128(value)
-            .map(Value::Number)
-            .map_err(E::custom)
+        StrictJsonNumber::from_i128(value).map(Value::Number).map_err(E::custom)
     }
     /// Converts a `u128` event when it fits the JSON integer range.
     ///
@@ -136,9 +134,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     /// Returns the deserializer's error when the integer is outside the JSON
     /// range.
     fn visit_u128<E: DeError>(self, value: u128) -> Result<Value, E> {
-        StrictJsonNumber::from_u128(value)
-            .map(Value::Number)
-            .map_err(E::custom)
+        StrictJsonNumber::from_u128(value).map(Value::Number).map_err(E::custom)
     }
     /// Deserializes an optional payload while retaining stack protection.
     ///
@@ -171,10 +167,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     /// # Errors
     ///
     /// Returns an error from deserializing the wrapped value.
-    fn visit_newtype_struct<D: Deserializer<'de>>(
-        self,
-        deserializer: D,
-    ) -> Result<Value, D::Error> {
+    fn visit_newtype_struct<D: Deserializer<'de>>(self, deserializer: D) -> Result<Value, D::Error> {
         SafeJsonValue::deserialize(deserializer).map(SafeJsonValue::into_value)
     }
     /// Converts a finite floating-point event to a JSON number.

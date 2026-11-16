@@ -20,11 +20,7 @@ use crate::lexical::JsonNumberModel;
 
 /// Checks whether the scanner admits one input under the selected number
 /// model and limits.
-fn scan(
-    input: &[u8],
-    model: JsonNumberModel,
-    limits: JsonDecodeLimits<JsonResource, usize>,
-) -> bool {
+fn scan(input: &[u8], model: JsonNumberModel, limits: JsonDecodeLimits<JsonResource, usize>) -> bool {
     let mut session = JsonDecodeSession::from_limits(limits);
     let mut attempt = session.begin_value();
     JsonLexicalScanner::new(attempt.value_transaction_mut(), true)

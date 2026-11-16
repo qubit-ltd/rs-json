@@ -40,10 +40,7 @@ impl<'value> ReadFrame<'value> {
     /// A frame in the enter phase for the supplied value.
     #[must_use]
     #[inline(always)]
-    pub(in crate::value::traverse) fn enter(
-        value: &'value Value,
-        context: JsonTreeContext<'value>,
-    ) -> Self {
+    pub(in crate::value::traverse) fn enter(value: &'value Value, context: JsonTreeContext<'value>) -> Self {
         Self {
             value,
             context,

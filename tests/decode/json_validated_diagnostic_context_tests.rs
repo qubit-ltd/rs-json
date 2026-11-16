@@ -27,11 +27,9 @@ fn test_diagnostic_context_preserves_eof_stage() {
         (b"{\"a\":-", Context::Number),
     ] {
         let error = JsonDecoder::unlimited()
-            .decode_unique_validated_utf8(
-                input,
-                &JsonValidatedDecodeOptions::builder().build(),
-                |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve),
-            )
+            .decode_unique_validated_utf8(input, &JsonValidatedDecodeOptions::builder().build(), |_, _| {
+                Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
+            })
             .expect_err("incomplete JSON must fail");
         match error {
             JsonValidatedDecodeError::Decode { error, context } => {
@@ -68,11 +66,7 @@ fn test_diagnostic_context_tracks_utf8_escapes_and_post_value_positions() {
             Context::String,
             JsonSyntaxErrorReason::UnexpectedByte,
         ),
-        (
-            br#"{"a" "#,
-            Context::Colon,
-            JsonSyntaxErrorReason::UnexpectedEnd,
-        ),
+        (br#"{"a" "#, Context::Colon, JsonSyntaxErrorReason::UnexpectedEnd),
         (
             br#"[1 x]"#,
             Context::ArraySeparator,
@@ -88,11 +82,7 @@ fn test_diagnostic_context_tracks_utf8_escapes_and_post_value_positions() {
             Context::TrailingInput,
             JsonSyntaxErrorReason::TrailingCharacters,
         ),
-        (
-            br#"{"a": "#,
-            Context::Value,
-            JsonSyntaxErrorReason::UnexpectedEnd,
-        ),
+        (br#"{"a": "#, Context::Value, JsonSyntaxErrorReason::UnexpectedEnd),
         (
             br#"{a:1}"#,
             Context::ObjectKey,
@@ -100,11 +90,9 @@ fn test_diagnostic_context_tracks_utf8_escapes_and_post_value_positions() {
         ),
     ] {
         let error = JsonDecoder::unlimited()
-            .decode_unique_validated_utf8(
-                input,
-                &JsonValidatedDecodeOptions::builder().build(),
-                |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve),
-            )
+            .decode_unique_validated_utf8(input, &JsonValidatedDecodeOptions::builder().build(), |_, _| {
+                Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
+            })
             .expect_err("malformed JSON must fail");
         match error {
             JsonValidatedDecodeError::Decode { error, context } => {

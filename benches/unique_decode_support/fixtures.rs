@@ -120,28 +120,15 @@ pub(crate) fn fixture(shape: Shape, target_bytes: usize) -> Fixture {
         Shape::WireEnvelope => 6,
     };
     let filler_bytes = target_bytes.saturating_sub(96).max(1);
-    let (
-        max_depth,
-        max_sequence_items,
-        max_map_entries,
-        max_key_bytes,
-        max_number_bytes,
-        payload_bytes,
-    ) = match shape {
+    let (max_depth, max_sequence_items, max_map_entries, max_key_bytes, max_number_bytes, payload_bytes) = match shape {
         Shape::Config => (2, 0, 3, 7, 0, filler_bytes + 23),
         Shape::Metadata => (2, 0, 3, 7, 0, filler_bytes + 26),
         Shape::WireEnvelope => (4, 1, 2, 7, 1, filler_bytes + 25),
     };
     let expected = match shape {
-        Shape::Config => {
-            Expected::Config(serde_json::from_str(&text).expect("config fixture must parse"))
-        }
-        Shape::Metadata => {
-            Expected::Metadata(serde_json::from_str(&text).expect("metadata fixture must parse"))
-        }
-        Shape::WireEnvelope => {
-            Expected::WireEnvelope(serde_json::from_str(&text).expect("wire fixture must parse"))
-        }
+        Shape::Config => Expected::Config(serde_json::from_str(&text).expect("config fixture must parse")),
+        Shape::Metadata => Expected::Metadata(serde_json::from_str(&text).expect("metadata fixture must parse")),
+        Shape::WireEnvelope => Expected::WireEnvelope(serde_json::from_str(&text).expect("wire fixture must parse")),
     };
     let fixture = Fixture {
         shape,
@@ -169,39 +156,24 @@ impl Fixture {
     fn assert_meaning(&self) {
         match self.shape {
             Shape::Config => {
-                let Expected::Config(value) = self
-                    .expected
-                    .as_ref()
-                    .expect("success fixture has expected value")
+                let Expected::Config(value) = self.expected.as_ref().expect("success fixture has expected value")
                 else {
                     panic!("config expected value must match shape")
                 };
                 assert_eq!(value.name, "bench");
                 assert!(value.enabled);
-                assert_eq!(
-                    value.payload.len(),
-                    self.target_bytes.saturating_sub(96).max(1)
-                );
+                assert_eq!(value.payload.len(), self.target_bytes.saturating_sub(96).max(1));
             }
             Shape::Metadata => {
-                let Expected::Metadata(value) = self
-                    .expected
-                    .as_ref()
-                    .expect("success fixture has expected value")
+                let Expected::Metadata(value) = self.expected.as_ref().expect("success fixture has expected value")
                 else {
                     panic!("metadata expected value must match shape")
                 };
                 assert_eq!(value.name, "bench");
-                assert_eq!(
-                    value.payload.len(),
-                    self.target_bytes.saturating_sub(96).max(1)
-                );
+                assert_eq!(value.payload.len(), self.target_bytes.saturating_sub(96).max(1));
             }
             Shape::WireEnvelope => {
-                let Expected::WireEnvelope(value) = self
-                    .expected
-                    .as_ref()
-                    .expect("success fixture has expected value")
+                let Expected::WireEnvelope(value) = self.expected.as_ref().expect("success fixture has expected value")
                 else {
                     panic!("wire expected value must match shape")
                 };

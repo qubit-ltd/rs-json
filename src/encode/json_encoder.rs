@@ -257,11 +257,7 @@ where
     /// JSON admission, a serialization error when Serde rejects `value`, or
     /// a writer error when writing fails. Inspect
     /// [`JsonEncodeError::syntax_error`] for the structured syntax reason.
-    pub fn write_buffered<O, T>(
-        &mut self,
-        writer: &mut O,
-        value: &T,
-    ) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_buffered<O, T>(&mut self, writer: &mut O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         O: ByteOutput + ?Sized,
         T: Serialize + ?Sized,
@@ -313,11 +309,7 @@ where
     /// Accepted output prefixes remain written and charged when a later
     /// operation fails; value-resource charges commit only after the complete
     /// operation succeeds.
-    pub fn write_incremental<O, T>(
-        &mut self,
-        writer: &mut O,
-        value: &T,
-    ) -> Result<(), JsonEncodeError<R, Q>>
+    pub fn write_incremental<O, T>(&mut self, writer: &mut O, value: &T) -> Result<(), JsonEncodeError<R, Q>>
     where
         O: ByteOutput + ?Sized,
         T: Serialize + ?Sized,
@@ -336,13 +328,9 @@ where
                     has_value_limits,
                 });
                 if has_value_limits {
-                    value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(
-                        &mut inner, &context,
-                    ))
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
                 } else {
-                    value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(
-                        &mut inner, &context,
-                    ))
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(&mut inner, &context))
                 }
             };
             if result.is_ok() {
@@ -396,13 +384,9 @@ where
                     has_value_limits,
                 });
                 if has_value_limits {
-                    value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(
-                        &mut inner, &context,
-                    ))
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
                 } else {
-                    value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(
-                        &mut inner, &context,
-                    ))
+                    value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(&mut inner, &context))
                 }
             };
             if let Some(error) = accounting.borrow_mut().take_violation() {
@@ -430,13 +414,9 @@ where
                 has_value_limits,
             });
             if has_value_limits {
-                value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(
-                    &mut inner, &context,
-                ))
+                value.serialize(JsonEncodeSerializer::<_, R, Q, true>::new(&mut inner, &context))
             } else {
-                value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(
-                    &mut inner, &context,
-                ))
+                value.serialize(JsonEncodeSerializer::<_, R, Q, false>::new(&mut inner, &context))
             }
         };
         if result.is_ok() {

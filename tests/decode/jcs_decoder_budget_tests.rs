@@ -28,10 +28,7 @@ fn test_jcs_decoder_duplicate_key_rolls_back_values_but_keeps_input() {
     let error = decoder
         .decode_str(input)
         .expect_err("duplicate object keys should be rejected");
-    assert!(matches!(
-        error,
-        JcsDecodeError::DuplicateKey { line: 1, column: 8 }
-    ));
+    assert!(matches!(error, JcsDecodeError::DuplicateKey { line: 1, column: 8 }));
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
     assert_eq!(
         decoder
@@ -66,24 +63,15 @@ fn test_jcs_guarded_duplicate_key_rolls_back_values_but_keeps_input() {
     let error = decoder
         .decode_value_str(input)
         .expect_err("duplicate object keys should be rejected");
-    assert!(matches!(
-        error,
-        JcsDecodeError::DuplicateKey { line: 1, column: 8 }
-    ));
+    assert!(matches!(error, JcsDecodeError::DuplicateKey { line: 1, column: 8 }));
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(0));
-    assert_eq!(
-        decoder.session().input_budget().unwrap().used(),
-        input.len()
-    );
+    assert_eq!(decoder.session().input_budget().unwrap().used(), input.len());
     let owner = decoder
         .decode_value_str("true")
         .expect("a valid JSON boolean should decode within the remaining limits");
     assert_eq!(owner.as_value(), &Value::Bool(true));
     assert_eq!(decoder.session().value_budget().used_nodes(), Some(1));
-    assert_eq!(
-        decoder.session().input_budget().unwrap().used(),
-        input.len() + 4
-    );
+    assert_eq!(decoder.session().input_budget().unwrap().used(), input.len() + 4);
 }
 
 #[test]
@@ -96,19 +84,12 @@ fn test_jcs_guarded_deep_materialization_and_lexical_failures_do_not_commit_valu
     };
     let mut duplicate_decoder = JcsDecoder::with_limits(limits());
     let depth = 16;
-    let duplicate = format!(
-        "{}{{\"x\":1,\"x\":2}}{}",
-        "{\"nest\":".repeat(depth),
-        "}".repeat(depth),
-    );
+    let duplicate = format!("{}{{\"x\":1,\"x\":2}}{}", "{\"nest\":".repeat(depth), "}".repeat(depth),);
     let error = duplicate_decoder
         .decode_value_str(&duplicate)
         .expect_err("a deeply nested duplicate key must be rejected");
     assert!(matches!(error, JcsDecodeError::DuplicateKey { .. }));
-    assert_eq!(
-        duplicate_decoder.session().value_budget().used_nodes(),
-        Some(0)
-    );
+    assert_eq!(duplicate_decoder.session().value_budget().used_nodes(), Some(0));
     assert_eq!(
         duplicate_decoder.session().input_budget().unwrap().used(),
         duplicate.len()
@@ -120,10 +101,7 @@ fn test_jcs_guarded_deep_materialization_and_lexical_failures_do_not_commit_valu
         .decode_value_str(&malformed)
         .expect_err("malformed syntax must be rejected before value accounting commits");
     assert!(matches!(error, JcsDecodeError::Decode(_)));
-    assert_eq!(
-        lexical_decoder.session().value_budget().used_nodes(),
-        Some(0)
-    );
+    assert_eq!(lexical_decoder.session().value_budget().used_nodes(), Some(0));
     assert_eq!(
         lexical_decoder.session().input_budget().unwrap().used(),
         malformed.len()
@@ -271,9 +249,7 @@ fn test_jcs_decoder_input_entry_keeps_cumulative_budget_exhaustion() {
         .build();
     let mut decoder = JcsDecoder::with_limits(limits);
     let mut exact = Cursor::new(b"true".to_vec());
-    decoder
-        .decode_input(&mut exact)
-        .expect("the first input fits");
+    decoder.decode_input(&mut exact).expect("the first input fits");
 
     let mut next = Cursor::new(b"x".to_vec());
     let error = decoder

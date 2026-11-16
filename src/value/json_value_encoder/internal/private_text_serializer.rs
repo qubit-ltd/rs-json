@@ -424,12 +424,7 @@ impl Serializer for PrivateTextSerializer<'_> {
     ///
     /// Returns the stable invalid-state error for the selected private
     /// protocol.
-    fn serialize_unit_variant(
-        self,
-        _: &'static str,
-        _: u32,
-        _: &'static str,
-    ) -> Result<Value, Self::Error> {
+    fn serialize_unit_variant(self, _: &'static str, _: u32, _: &'static str) -> Result<Value, Self::Error> {
         Err(private_invalid_state(self.kind))
     }
     /// Rejects newtype payloads because this private protocol requires text.
@@ -451,11 +446,7 @@ impl Serializer for PrivateTextSerializer<'_> {
     ///
     /// Returns the stable invalid-state error for the selected private
     /// protocol.
-    fn serialize_newtype_struct<T: Serialize + ?Sized>(
-        self,
-        _: &'static str,
-        _: &T,
-    ) -> Result<Value, Self::Error> {
+    fn serialize_newtype_struct<T: Serialize + ?Sized>(self, _: &'static str, _: &T) -> Result<Value, Self::Error> {
         Err(private_invalid_state(self.kind))
     }
     /// Rejects newtype-variant payloads because this private protocol requires
@@ -541,11 +532,7 @@ impl Serializer for PrivateTextSerializer<'_> {
     ///
     /// Returns the stable invalid-state error for the selected private
     /// protocol.
-    fn serialize_tuple_struct(
-        self,
-        _: &'static str,
-        _: usize,
-    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         Err(private_invalid_state(self.kind))
     }
     /// Rejects tuple-variant payloads because this private protocol requires
@@ -608,11 +595,7 @@ impl Serializer for PrivateTextSerializer<'_> {
     ///
     /// Returns the stable invalid-state error for the selected private
     /// protocol.
-    fn serialize_struct(
-        self,
-        _: &'static str,
-        _: usize,
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Self::Error> {
         Err(private_invalid_state(self.kind))
     }
     /// Rejects struct-variant payloads because this private protocol requires
@@ -668,9 +651,7 @@ impl Serializer for PrivateTextSerializer<'_> {
         if let Some(error) = collector.take_failure() {
             return Err(error);
         }
-        formatted.map_err(|_| {
-            JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed)
-        })?;
+        formatted.map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::DisplayFormattingFailed))?;
         let text = collector.into_string();
         Ok(Value::String(text))
     }

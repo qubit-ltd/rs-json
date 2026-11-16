@@ -61,13 +61,8 @@ type ContextCell<'context, 'transaction, 'budget, R, Q> =
 /// * `R` - Cloneable resource quantity tracked by the budget.
 /// * `Q` - Resource quantity representation required by accounting.
 #[derive(Clone, Copy)]
-pub(in crate::value::json_value_encoder) struct JsonValueSerializer<
-    'context,
-    'transaction,
-    'budget,
-    R,
-    Q,
-> where
+pub(in crate::value::json_value_encoder) struct JsonValueSerializer<'context, 'transaction, 'budget, R, Q>
+where
     Q: ResourceQuantity,
 {
     /// Shared transaction, failure, and private-payload-limit state.
@@ -76,8 +71,7 @@ pub(in crate::value::json_value_encoder) struct JsonValueSerializer<
     depth: usize,
 }
 
-impl<'context, 'transaction, 'budget, R, Q>
-    JsonValueSerializer<'context, 'transaction, 'budget, R, Q>
+impl<'context, 'transaction, 'budget, R, Q> JsonValueSerializer<'context, 'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
@@ -226,11 +220,7 @@ where
     /// # Errors
     ///
     /// A count-limit rejection or earlier sticky serialization failure.
-    fn container_count(
-        &self,
-        kind: JsonContainerKind,
-        count: usize,
-    ) -> Result<(), JsonSerializationError> {
+    fn container_count(&self, kind: JsonContainerKind, count: usize) -> Result<(), JsonSerializationError> {
         let result = { self.context.borrow_mut().check_container_count(kind, count) };
         result.map_err(|error| self.fail(error))
     }
@@ -254,8 +244,7 @@ fn preallocated_capacity(len: Option<usize>) -> usize {
     len.unwrap_or(0).min(1_024)
 }
 
-impl<'context, 'transaction, 'budget, R, Q> Serializer
-    for JsonValueSerializer<'context, 'transaction, 'budget, R, Q>
+impl<'context, 'transaction, 'budget, R, Q> Serializer for JsonValueSerializer<'context, 'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: ResourceQuantity,
@@ -515,9 +504,7 @@ where
     /// first failure.
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
         if !value.is_finite() {
-            return Err(self.fail(JsonSerializationError::new(
-                JsonSerializationErrorKind::NonFiniteFloat,
-            )));
+            return Err(self.fail(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat)));
         }
         match to_string(&value).and_then(|text| serde_json::from_str::<Number>(&text)) {
             Ok(number) => self.number(number),
@@ -546,9 +533,7 @@ where
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
         match Number::from_f64(value) {
             Some(number) => self.number(number),
-            None => Err(self.fail(JsonSerializationError::new(
-                JsonSerializationErrorKind::NonFiniteFloat,
-            ))),
+            None => Err(self.fail(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat))),
         }
     }
 
@@ -724,12 +709,7 @@ where
     ///
     /// A serialization or resource-budget error, retained as the projection’s
     /// first failure.
-    fn serialize_unit_variant(
-        self,
-        _: &'static str,
-        _: u32,
-        variant: &'static str,
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_variant(self, _: &'static str, _: u32, variant: &'static str) -> Result<Self::Ok, Self::Error> {
         self.admit(JsonMeasurement::String {
             depth: self.depth,
             bytes: variant.len(),
@@ -757,11 +737,7 @@ where
     ///
     /// A serialization or resource-budget error, retained as the projection’s
     /// first failure.
-    fn serialize_newtype_struct<T>(
-        self,
-        _: &'static str,
-        value: &T,
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T>(self, _: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -803,9 +779,7 @@ where
     {
         self.enter(JsonContainerKind::Map)?;
         self.container_count(JsonContainerKind::Map, 1)?;
-        self.admit(JsonMeasurement::Key {
-            bytes: variant.len(),
-        })?;
+        self.admit(JsonMeasurement::Key { bytes: variant.len() })?;
         let child_depth = self
             .depth
             .checked_add(1)
@@ -874,11 +848,7 @@ where
     ///
     /// A serialization or resource-budget error, retained as the projection’s
     /// first failure.
-    fn serialize_tuple_struct(
-        self,
-        _: &'static str,
-        len: usize,
-    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    fn serialize_tuple_struct(self, _: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.serialize_seq(Some(len))
     }
 
@@ -910,9 +880,7 @@ where
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         self.enter(JsonContainerKind::Map)?;
         self.container_count(JsonContainerKind::Map, 1)?;
-        self.admit(JsonMeasurement::Key {
-            bytes: variant.len(),
-        })?;
+        self.admit(JsonMeasurement::Key { bytes: variant.len() })?;
         let depth = self
             .depth
             .checked_add(1)
@@ -979,23 +947,14 @@ where
     ///
     /// A serialization or resource-budget error, retained as the projection’s
     /// first failure.
-    fn serialize_struct(
-        self,
-        name: &'static str,
-        len: usize,
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         if let Some(kind) = JsonPrivateProtocolKind::from_struct_name(name) {
             let state = JsonPrivateProtocolState::new(kind, len).map_err(|reason| {
                 self.fail(JsonSerializationError::new(
                     JsonSerializationErrorKind::InvalidSerializerState { reason },
                 ))
             })?;
-            return Ok(JsonValueCompound::private(
-                self.context,
-                self.depth,
-                kind,
-                state,
-            ));
+            return Ok(JsonValueCompound::private(self.context, self.depth, kind, state));
         }
         self.enter(JsonContainerKind::Map)?;
         Ok(JsonValueCompound::map(
@@ -1033,18 +992,12 @@ where
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         self.enter(JsonContainerKind::Map)?;
         self.container_count(JsonContainerKind::Map, 1)?;
-        self.admit(JsonMeasurement::Key {
-            bytes: variant.len(),
-        })?;
+        self.admit(JsonMeasurement::Key { bytes: variant.len() })?;
         let depth = self
             .depth
             .checked_add(1)
             .ok_or_else(|| self.collection_error(JsonCollectionKind::Object))?;
-        let result = {
-            self.context
-                .borrow_mut()
-                .enter_container(JsonContainerKind::Map, depth)
-        };
+        let result = { self.context.borrow_mut().enter_container(JsonContainerKind::Map, depth) };
         result.map_err(|error| self.fail(error))?;
         Ok(JsonValueCompound::struct_variant(
             self.context,
@@ -1077,10 +1030,8 @@ where
     where
         T: Display + ?Sized,
     {
-        let mut collector = JsonValueDisplayCollector::new(
-            self.context,
-            JsonValueDisplayKind::String { depth: self.depth },
-        );
+        let mut collector =
+            JsonValueDisplayCollector::new(self.context, JsonValueDisplayKind::String { depth: self.depth });
         if write!(&mut collector, "{value}").is_err() {
             return Err(self.fail(JsonSerializationError::new(
                 JsonSerializationErrorKind::DisplayFormattingFailed,
@@ -1117,12 +1068,8 @@ mod tests {
                 "newtype" => serializer
                     .serialize_newtype_variant("Enum", 0, "New", &true)
                     .map(|_| ()),
-                "tuple" => serializer
-                    .serialize_tuple_variant("Enum", 0, "Tuple", 1)
-                    .map(|_| ()),
-                _ => serializer
-                    .serialize_struct_variant("Enum", 0, "Struct", 1)
-                    .map(|_| ()),
+                "tuple" => serializer.serialize_tuple_variant("Enum", 0, "Tuple", 1).map(|_| ()),
+                _ => serializer.serialize_struct_variant("Enum", 0, "Struct", 1).map(|_| ()),
             };
             let error = result.expect_err("child depth must not wrap");
             assert_eq!(

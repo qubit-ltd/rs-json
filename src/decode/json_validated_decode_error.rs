@@ -133,10 +133,7 @@ where
                 .field("error", error)
                 .field("context", context)
                 .finish(),
-            Self::Policy { offset, .. } => f
-                .debug_struct("Policy")
-                .field("offset", offset)
-                .finish_non_exhaustive(),
+            Self::Policy { offset, .. } => f.debug_struct("Policy").field("offset", offset).finish_non_exhaustive(),
             Self::ExactSafeInteger { source, offset } => f
                 .debug_struct("ExactSafeInteger")
                 .field("source", source)
@@ -185,10 +182,7 @@ where
                 write!(f, "JSON number policy rejected token at byte {offset}")
             }
             Self::ExactSafeInteger { source, offset } => {
-                write!(
-                    f,
-                    "exact safe integer conversion failed at byte {offset}: {source:?}"
-                )
+                write!(f, "exact safe integer conversion failed at byte {offset}: {source:?}")
             }
             Self::Limit {
                 limit,

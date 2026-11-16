@@ -25,15 +25,10 @@ use qubit_json::decode::JsonValidatedDecodeOptions;
 use qubit_json::decode::JsonValidatedLimit;
 
 fn options(policy: JsonValidatedAdmissionPolicy) -> JsonValidatedDecodeOptions {
-    JsonValidatedDecodeOptions::builder()
-        .admission_policy(policy)
-        .build()
+    JsonValidatedDecodeOptions::builder().admission_policy(policy).build()
 }
 
-fn decode_error(
-    input: &str,
-    policy: JsonValidatedAdmissionPolicy,
-) -> JsonValidatedDecodeError<Infallible> {
+fn decode_error(input: &str, policy: JsonValidatedAdmissionPolicy) -> JsonValidatedDecodeError<Infallible> {
     JsonDecoder::unlimited()
         .decode_unique_validated_str(input, &options(policy), |_, _| {
             Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
@@ -44,14 +39,9 @@ fn decode_error(
 #[test]
 fn test_immediate_remains_the_default_and_keeps_its_first_error_order() {
     let defaults = JsonValidatedDecodeOptions::builder().build();
+    assert_eq!(defaults.admission_policy(), JsonValidatedAdmissionPolicy::Immediate);
     assert_eq!(
-        defaults.admission_policy(),
-        JsonValidatedAdmissionPolicy::Immediate
-    );
-    assert_eq!(
-        JsonValidatedDecodeOptions::builder()
-            .build()
-            .admission_policy(),
+        JsonValidatedDecodeOptions::builder().build().admission_policy(),
         JsonValidatedAdmissionPolicy::Immediate
     );
 
@@ -95,14 +85,8 @@ fn test_token_first_admits_complete_literals_before_container_delimiters() {
     }
 
     for (input, reason) in [
-        (
-            "tru",
-            qubit_json::decode::JsonSyntaxErrorReason::UnexpectedEnd,
-        ),
-        (
-            "[tru]",
-            qubit_json::decode::JsonSyntaxErrorReason::UnexpectedByte,
-        ),
+        ("tru", qubit_json::decode::JsonSyntaxErrorReason::UnexpectedEnd),
+        ("[tru]", qubit_json::decode::JsonSyntaxErrorReason::UnexpectedByte),
     ] {
         match decode_error(input, JsonValidatedAdmissionPolicy::TokenFirst) {
             JsonValidatedDecodeError::Decode { error, context } => {
@@ -123,10 +107,7 @@ fn test_token_first_preserves_escaped_quotes_and_classifies_incomplete_escapes()
             |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve),
         )
         .expect("escaped quotes are part of the string token");
-    assert_eq!(
-        owner.as_value(),
-        &serde_json::Value::String("before\"after".to_owned())
-    );
+    assert_eq!(owner.as_value(), &serde_json::Value::String("before\"after".to_owned()));
 
     for input in ["\"tail\\", "\"\\u12"] {
         match decode_error(input, JsonValidatedAdmissionPolicy::TokenFirst) {
@@ -175,11 +156,7 @@ fn test_token_first_uses_maximal_number_tokens_and_rejects_invalid_candidates() 
         match decode_error(input, JsonValidatedAdmissionPolicy::TokenFirst) {
             JsonValidatedDecodeError::Decode { error, context } => {
                 assert_eq!(context, Some(expected_context), "{input}");
-                assert_eq!(
-                    error.syntax_error().unwrap().reason(),
-                    expected_reason,
-                    "{input}"
-                );
+                assert_eq!(error.syntax_error().unwrap().reason(), expected_reason, "{input}");
             }
             other => panic!("unexpected error for {input}: {other:?}"),
         }
@@ -218,10 +195,7 @@ fn test_token_first_applies_decoded_string_and_key_budgets_after_source_admissio
         JsonValidatedDecodeError::Decode { error, context } => {
             assert_eq!(context, None);
             assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
-            assert_eq!(
-                error.budget_error().unwrap().resource(),
-                &JsonResource::StringBytes
-            );
+            assert_eq!(error.budget_error().unwrap().resource(), &JsonResource::StringBytes);
         }
         other => panic!("unexpected decoded-string budget result: {other:?}"),
     }
@@ -246,10 +220,7 @@ fn test_token_first_applies_decoded_string_and_key_budgets_after_source_admissio
         JsonValidatedDecodeError::Decode { error, context } => {
             assert_eq!(context, None);
             assert_eq!(error.kind(), JsonDecodeErrorKind::Budget);
-            assert_eq!(
-                error.budget_error().unwrap().resource(),
-                &JsonResource::KeyBytes
-            );
+            assert_eq!(error.budget_error().unwrap().resource(), &JsonResource::KeyBytes);
         }
         other => panic!("unexpected decoded-key budget result: {other:?}"),
     }
@@ -263,9 +234,7 @@ fn test_token_first_checks_raw_string_budgets_before_decoding_contents() {
         .build();
     for (input, expected) in [("\"ab", None), ("\"abc", Some(2)), ("\"ab\"", Some(2))] {
         let error = JsonDecoder::unlimited()
-            .decode_unique_validated_str(input, &options, |_, _| {
-                Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
-            })
+            .decode_unique_validated_str(input, &options, |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve))
             .expect_err("string exceeds its limit or is unterminated");
         match (error, expected) {
             (JsonValidatedDecodeError::Decode { error, context }, None) => {
@@ -293,10 +262,7 @@ fn test_token_first_checks_raw_string_budgets_before_decoding_contents() {
     }
 
     for (malformed, expected_reason) in [
-        (
-            "\"\\q\"",
-            qubit_json::decode::JsonSyntaxErrorReason::InvalidEscape,
-        ),
+        ("\"\\q\"", qubit_json::decode::JsonSyntaxErrorReason::InvalidEscape),
         (
             "\"\\u12xz\"",
             qubit_json::decode::JsonSyntaxErrorReason::InvalidUnicodeEscape,
@@ -319,17 +285,13 @@ fn test_token_first_checks_limit_and_escape_order_with_small_strings() {
         .max_encoded_string_bytes(0)
         .build();
     let empty = JsonDecoder::unlimited()
-        .decode_unique_validated_str("\"\"", &options, |_, _| {
-            Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
-        })
+        .decode_unique_validated_str("\"\"", &options, |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve))
         .expect("empty string fits the zero-byte token limit");
     assert_eq!(empty.as_value(), &serde_json::Value::String(String::new()));
 
     for input in ["\"x\"", "\"\\q\""] {
         let error = JsonDecoder::unlimited()
-            .decode_unique_validated_str(input, &options, |_, _| {
-                Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
-            })
+            .decode_unique_validated_str(input, &options, |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve))
             .expect_err("encoded token limit is checked before string decoding");
         assert!(matches!(
             error,
@@ -350,18 +312,12 @@ fn test_token_first_checks_limit_and_escape_order_with_small_strings() {
             Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
         })
         .expect("a token at the configured limit is accepted");
-    assert_eq!(
-        equal_limit.as_value(),
-        &serde_json::Value::String("x".to_owned())
-    );
+    assert_eq!(equal_limit.as_value(), &serde_json::Value::String("x".to_owned()));
 }
 
 #[test]
 fn test_token_first_reports_duplicates_before_the_following_colon() {
-    let error = decode_error(
-        "{\"a\":1,\"a\" x}",
-        JsonValidatedAdmissionPolicy::TokenFirst,
-    );
+    let error = decode_error("{\"a\":1,\"a\" x}", JsonValidatedAdmissionPolicy::TokenFirst);
     match error {
         JsonValidatedDecodeError::Decode { error, .. } => {
             assert_eq!(
@@ -431,9 +387,7 @@ fn test_token_first_keeps_number_path_and_exact_integer_projection() {
 
 #[test]
 fn test_token_first_preserves_depth_and_node_limit_precedence() {
-    let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
-        .max_depth(0)
-        .build();
+    let limits = JsonDecodeLimits::<JsonResource, usize>::builder().max_depth(0).build();
     let mut decoder = JsonDecoder::with_limits(limits);
     let limited_nodes = JsonValidatedDecodeOptions::builder()
         .admission_policy(JsonValidatedAdmissionPolicy::TokenFirst)
@@ -446,10 +400,7 @@ fn test_token_first_preserves_depth_and_node_limit_precedence() {
         .expect_err("depth is checked before the node count");
     match error {
         JsonValidatedDecodeError::Decode { error, .. } => {
-            assert_eq!(
-                error.budget_error().unwrap().resource(),
-                &JsonResource::Depth
-            );
+            assert_eq!(error.budget_error().unwrap().resource(), &JsonResource::Depth);
         }
         other => panic!("unexpected limit precedence result: {other:?}"),
     }
@@ -474,8 +425,6 @@ fn decode_error_with_options(
     options: &JsonValidatedDecodeOptions,
 ) -> JsonValidatedDecodeError<Infallible> {
     JsonDecoder::unlimited()
-        .decode_unique_validated_str(input, options, |_, _| {
-            Ok::<_, Infallible>(JsonNumberPolicy::Preserve)
-        })
+        .decode_unique_validated_str(input, options, |_, _| Ok::<_, Infallible>(JsonNumberPolicy::Preserve))
         .expect_err("input must be rejected by the configured precedence")
 }

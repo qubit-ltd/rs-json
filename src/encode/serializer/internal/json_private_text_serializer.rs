@@ -38,22 +38,15 @@ use crate::encode::JsonSerializerStateError;
 ///
 /// A serializer callback can panic if the shared context or its output
 /// accounting cell is already borrowed when the callback needs access.
-pub(in crate::encode::serializer) struct JsonPrivateTextSerializer<
-    'context,
-    'transaction,
-    'budget,
-    S,
-    R,
-    Q,
-> where
+pub(in crate::encode::serializer) struct JsonPrivateTextSerializer<'context, 'transaction, 'budget, S, R, Q>
+where
     Q: ResourceQuantity,
 {
     /// serde_json private string emitter.
     pub(in crate::encode::serializer) inner: S,
 
     /// Shared traversal context.
-    pub(in crate::encode::serializer) context:
-        &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
+    pub(in crate::encode::serializer) context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
 
     /// Budget semantics represented by the emitted text.
     pub(in crate::encode::serializer) kind: PrivateTextKind,
@@ -314,8 +307,7 @@ where
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
         self.reject_non_text_payload()?;
-        self.inner
-            .serialize_unit_variant(name, variant_index, variant)
+        self.inner.serialize_unit_variant(name, variant_index, variant)
     }
 
     /// Rejects this non-text payload because the selected private text
@@ -337,11 +329,7 @@ where
     ///
     /// * `name` - Newtype name rejected because private protocols require text.
     /// * `value` - Value rejected because private protocols require text.
-    fn serialize_newtype_struct<T>(
-        self,
-        name: &'static str,
-        value: &T,
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -443,11 +431,7 @@ where
     ///   text.
     /// * `len` - Tuple-struct field count rejected because private protocols
     ///   require text.
-    fn serialize_tuple_struct(
-        self,
-        name: &'static str,
-        len: usize,
-    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_tuple_struct(name, len)
     }
@@ -480,8 +464,7 @@ where
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         self.reject_non_text_payload()?;
-        self.inner
-            .serialize_tuple_variant(name, variant_index, variant, len)
+        self.inner.serialize_tuple_variant(name, variant_index, variant, len)
     }
 
     /// Rejects this non-text payload because the selected private text
@@ -520,11 +503,7 @@ where
     /// * `name` - Struct name rejected because private protocols require text.
     /// * `len` - Struct field count rejected because private protocols require
     ///   text.
-    fn serialize_struct(
-        self,
-        name: &'static str,
-        len: usize,
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         self.reject_non_text_payload()?;
         self.inner.serialize_struct(name, len)
     }
@@ -553,8 +532,7 @@ where
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         self.reject_non_text_payload()?;
-        self.inner
-            .serialize_struct_variant(name, variant_index, variant, len)
+        self.inner.serialize_struct_variant(name, variant_index, variant, len)
     }
 
     /// Formats a display value, preflights it according to the selected
@@ -584,12 +562,7 @@ where
             PrivateTextKind::RawValue { depth } => (depth, DisplayBudgetKind::RawOutput),
             PrivateTextKind::Number { depth } => (depth, DisplayBudgetKind::Number),
         };
-        let text = JsonEncodeContext::collect_display::<S::Error, _>(
-            self.context,
-            value,
-            budget_kind,
-            depth,
-        )?;
+        let text = JsonEncodeContext::collect_display::<S::Error, _>(self.context, value, budget_kind, depth)?;
         match self.kind {
             PrivateTextKind::RawValue { .. } => {
                 self.context.borrow_mut().preflight_raw(&text, depth)?;

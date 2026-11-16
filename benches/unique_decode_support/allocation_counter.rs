@@ -136,38 +136,24 @@ pub(crate) fn self_check() {
     assert_eq!(allocated.end_live_bytes, allocated.baseline_live_bytes);
 
     let pointer = unsafe { ALLOCATOR.alloc(layout_64) };
-    assert!(
-        !pointer.is_null(),
-        "cross-window allocation probe must succeed"
-    );
+    assert!(!pointer.is_null(), "cross-window allocation probe must succeed");
     let ((), released) = measure(|| unsafe { ALLOCATOR.dealloc(pointer, layout_64) });
     assert_eq!(released.end_live_bytes, released.baseline_live_bytes - 64);
     assert_eq!(released.peak_extra_bytes, 0);
 
     let pointer = unsafe { ALLOCATOR.alloc(layout_64) };
-    assert!(
-        !pointer.is_null(),
-        "realloc growth probe allocation must succeed"
-    );
+    assert!(!pointer.is_null(), "realloc growth probe allocation must succeed");
     let (resized, grown) = measure(|| unsafe { ALLOCATOR.realloc(pointer, layout_64, 128) });
     assert!(!resized.is_null(), "realloc growth probe must succeed");
     assert_eq!(grown.end_live_bytes, grown.baseline_live_bytes + 64);
     assert_eq!(grown.peak_extra_bytes, 64);
     assert_eq!(grown.allocated_request_bytes, 128);
     assert_eq!(grown.reallocation_count, 1);
-    unsafe {
-        ALLOCATOR.dealloc(
-            resized,
-            Layout::from_size_align(128, 8).expect("valid resized layout"),
-        )
-    };
+    unsafe { ALLOCATOR.dealloc(resized, Layout::from_size_align(128, 8).expect("valid resized layout")) };
 
     let layout_128 = Layout::from_size_align(128, 8).expect("valid probe layout");
     let pointer = unsafe { ALLOCATOR.alloc(layout_128) };
-    assert!(
-        !pointer.is_null(),
-        "realloc shrink probe allocation must succeed"
-    );
+    assert!(!pointer.is_null(), "realloc shrink probe allocation must succeed");
     let (resized, shrunk) = measure(|| unsafe { ALLOCATOR.realloc(pointer, layout_128, 64) });
     assert!(!resized.is_null(), "realloc shrink probe must succeed");
     assert_eq!(shrunk.end_live_bytes, shrunk.baseline_live_bytes - 64);

@@ -63,11 +63,7 @@ impl JsonPrettyError {
         offset: Option<usize>,
         source: Option<Box<dyn Error + Send + Sync>>,
     ) -> Self {
-        Self {
-            kind,
-            offset,
-            source,
-        }
+        Self { kind, offset, source }
     }
 
     /// Returns the stable error category.

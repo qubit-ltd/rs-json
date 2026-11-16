@@ -101,9 +101,9 @@ impl Planner<'_> {
         if self.maximum.is_some_and(|maximum| self.length > maximum) {
             return Ok(());
         }
-        self.actions.try_reserve(1).map_err(|error| {
-            crate::format::json_token_formatter::capacity_error(Some(Box::new(error)))
-        })?;
+        self.actions
+            .try_reserve(1)
+            .map_err(|error| crate::format::json_token_formatter::capacity_error(Some(Box::new(error))))?;
         self.actions.push(action);
         Ok(())
     }
@@ -249,9 +249,9 @@ impl Planner<'_> {
     /// cannot be reserved.
     fn begin(&mut self, kind: ContainerKind, offset: usize) -> Result<(), JsonPrettyError> {
         self.span(offset, 1)?;
-        self.stack.try_reserve(1).map_err(|error| {
-            crate::format::json_token_formatter::capacity_error(Some(Box::new(error)))
-        })?;
+        self.stack
+            .try_reserve(1)
+            .map_err(|error| crate::format::json_token_formatter::capacity_error(Some(Box::new(error))))?;
         self.stack.push(Container {
             kind,
             count: 0,
@@ -281,8 +281,7 @@ impl Planner<'_> {
             .ok_or_else(|| crate::format::json_token_formatter::capacity_error(None))?;
         if !matches!(
             (frame.kind, expected),
-            (ContainerKind::Array, ContainerKind::Array)
-                | (ContainerKind::Object, ContainerKind::Object)
+            (ContainerKind::Array, ContainerKind::Array) | (ContainerKind::Object, ContainerKind::Object)
         ) || frame.awaiting_value
         {
             return Err(crate::format::json_token_formatter::capacity_error(None));
@@ -372,12 +371,11 @@ impl<'input> JsonLexicalConsumer<'input> for Planner<'_> {
             JsonLexicalEvent::EndArray { offset } => self.end(offset, ContainerKind::Array),
             JsonLexicalEvent::EndObject { offset } => self.end(offset, ContainerKind::Object),
             JsonLexicalEvent::Key { token, offset } => self.key(offset, token.len()),
-            JsonLexicalEvent::String { token, offset }
-            | JsonLexicalEvent::Number { token, offset } => self.span(offset, token.len()),
-            JsonLexicalEvent::Null { offset } => self.span(offset, 4),
-            JsonLexicalEvent::Boolean { value, offset } => {
-                self.span(offset, if value { 4 } else { 5 })
+            JsonLexicalEvent::String { token, offset } | JsonLexicalEvent::Number { token, offset } => {
+                self.span(offset, token.len())
             }
+            JsonLexicalEvent::Null { offset } => self.span(offset, 4),
+            JsonLexicalEvent::Boolean { value, offset } => self.span(offset, if value { 4 } else { 5 }),
         }
     }
 }
@@ -398,9 +396,7 @@ mod tests {
 
     #[test]
     fn test_planner_rejects_invalid_spans_and_unmatched_end() {
-        let options = JsonPrettyOptions::builder()
-            .build()
-            .expect("valid defaults");
+        let options = JsonPrettyOptions::builder().build().expect("valid defaults");
         let mut planner = Planner {
             input: b"[]",
             options: &options,
@@ -411,29 +407,21 @@ mod tests {
         };
         for (offset, length) in [(usize::MAX, 2), (1, 2)] {
             assert_eq!(
-                planner
-                    .span(offset, length)
-                    .expect_err("invalid span")
-                    .kind(),
+                planner.span(offset, length).expect_err("invalid span").kind(),
                 JsonPrettyErrorKind::Capacity
             );
             assert!(planner.actions.is_empty());
             assert_eq!(planner.length, 0);
         }
         assert_eq!(
-            planner
-                .end(1, ContainerKind::Array)
-                .expect_err("missing frame")
-                .kind(),
+            planner.end(1, ContainerKind::Array).expect_err("missing frame").kind(),
             JsonPrettyErrorKind::Capacity
         );
     }
 
     #[test]
     fn test_planner_container_counts_do_not_wrap() {
-        let options = JsonPrettyOptions::builder()
-            .build()
-            .expect("valid defaults");
+        let options = JsonPrettyOptions::builder().build().expect("valid defaults");
         for kind in [ContainerKind::Array, ContainerKind::Object] {
             let mut planner = Planner {
                 input: b"[]",
@@ -482,9 +470,7 @@ mod tests {
             (planner.actions.len(), planner.actions.capacity())
         }
 
-        let options = JsonPrettyOptions::builder()
-            .build()
-            .expect("valid defaults");
+        let options = JsonPrettyOptions::builder().build().expect("valid defaults");
         let mut zero_limit_planner = Planner {
             input: b"0",
             options: &options,
@@ -496,11 +482,7 @@ mod tests {
         zero_limit_planner
             .push(crate::format::internal::Action::Byte(b'0'), 1)
             .expect("crossing the limit does not stop scanning");
-        assert_eq!(
-            zero_limit_planner.actions.len(),
-            0,
-            "zero limit retains no actions"
-        );
+        assert_eq!(zero_limit_planner.actions.len(), 0, "zero limit retains no actions");
         assert_eq!(
             zero_limit_planner.actions.capacity(),
             0,
