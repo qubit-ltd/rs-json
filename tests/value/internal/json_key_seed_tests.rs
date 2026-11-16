@@ -28,7 +28,10 @@ use serde_json::Deserializer;
 #[test]
 fn test_json_key_seed_checks_prospective_object_entry() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)))
+        .structure_limits(
+            StructureLimits::builder()
+                .map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 1)),
+        )
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
@@ -61,7 +64,10 @@ fn test_json_key_seed_admits_borrowed_key_before_requesting_owned_text() {
     let error = AccountingJsonValueSeed::new(&mut transaction)
         .deserialize(deserializer)
         .expect_err("the borrowed key must be rejected before requesting its value");
-    assert!(error.to_string().contains("KeyBytes"), "unexpected error: {error}");
+    assert!(
+        error.to_string().contains("KeyBytes"),
+        "unexpected error: {error}"
+    );
     assert_eq!(next_value_calls.get(), 0);
     assert_eq!(key_deserialize_calls.get(), 1);
     let error = transaction
@@ -73,7 +79,10 @@ fn test_json_key_seed_admits_borrowed_key_before_requesting_owned_text() {
 #[test]
 fn test_json_key_seed_checks_map_entries_before_key_deserialization() {
     let limits = JsonValueLimits::<JsonResource, usize>::builder()
-        .structure_limits(StructureLimits::builder().map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 0)))
+        .structure_limits(
+            StructureLimits::builder()
+                .map_entries_limit(ResourceLimit::new(JsonResource::MapEntries, 0)),
+        )
         .build();
     let mut budget = limits.budget();
     let mut transaction = budget.transaction();
@@ -90,14 +99,21 @@ fn test_json_key_seed_checks_map_entries_before_key_deserialization() {
         .expect_err("the zero-entry map limit must reject before decoding its key");
     assert_eq!(key_deserialize_calls.get(), 0);
     assert_eq!(next_value_calls.get(), 0);
-    assert_eq!(transaction.commit().unwrap_err().resource(), &JsonResource::MapEntries);
+    assert_eq!(
+        transaction.commit().unwrap_err().resource(),
+        &JsonResource::MapEntries
+    );
 }
 
 #[test]
 fn test_json_key_seed_accepts_key_at_byte_limit_and_rejects_one_over() {
     for (input, maximum, expected_resource) in [
         (br#"{"12345678":null}"#.as_slice(), 8, None),
-        (br#"{"123456789":null}"#.as_slice(), 8, Some(JsonResource::KeyBytes)),
+        (
+            br#"{"123456789":null}"#.as_slice(),
+            8,
+            Some(JsonResource::KeyBytes),
+        ),
     ] {
         let limits = JsonValueLimits::<JsonResource, usize>::builder()
             .max_key_bytes(maximum)
@@ -132,7 +148,9 @@ fn test_json_key_seed_counts_decoded_bytes_of_escaped_key_once() {
         .deserialize(&mut deserializer)
         .expect("the decoded key contains three bytes and is admitted once");
     assert_eq!(value.as_object().unwrap().keys().next().unwrap(), "a\nb");
-    transaction.commit().expect("one decoded three-byte key must fit");
+    transaction
+        .commit()
+        .expect("one decoded three-byte key must fit");
 }
 
 #[test]
@@ -187,18 +205,24 @@ fn test_json_key_seed_accounts_payload_for_duplicate_entries() {
         .commit()
         .expect_err("the second duplicate value must exhaust payload");
     assert_eq!(error.resource(), &JsonResource::PayloadBytes);
-    let source = error.budget_error().expect("payload rejection must be a budget error");
+    let source = error
+        .budget_error()
+        .expect("payload rejection must be a budget error");
     assert_eq!(source.remaining(), Some(1));
     assert_eq!(source.requested(), Some(2));
 }
 
 #[test]
 fn test_json_key_seed_rejects_non_string_key_events() {
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
 
     AccountingJsonValueSeed::new(&mut transaction)
-        .deserialize(value::MapDeserializer::<_, value::Error>::new([(1_u8, ())].into_iter()))
+        .deserialize(value::MapDeserializer::<_, value::Error>::new(
+            [(1_u8, ())].into_iter(),
+        ))
         .expect_err("numeric keys must remain invalid JSON object keys");
 }
 

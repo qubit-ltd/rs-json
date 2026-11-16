@@ -24,8 +24,16 @@ use super::JsonKeyBudgetSerializer;
 /// * `R` - Resource identifier used by the shared encode budget.
 /// * `Q` - Quantity representation used by the shared encode budget.
 /// * `VALUE_LIMITS` - Whether value-level limits apply to the key.
-pub(in crate::encode) struct BudgetedKey<'a, 'transaction, 'budget, 'context, T, R, Q, const VALUE_LIMITS: bool>
-where
+pub(in crate::encode) struct BudgetedKey<
+    'a,
+    'transaction,
+    'budget,
+    'context,
+    T,
+    R,
+    Q,
+    const VALUE_LIMITS: bool,
+> where
     T: ?Sized,
     Q: ResourceQuantity,
 {
@@ -62,7 +70,8 @@ where
     }
 }
 
-impl<T, R, Q, const VALUE_LIMITS: bool> Serialize for BudgetedKey<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
+impl<T, R, Q, const VALUE_LIMITS: bool> Serialize
+    for BudgetedKey<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
 where
     T: Serialize + ?Sized,
     R: Clone,
@@ -94,10 +103,12 @@ where
     where
         S: Serializer,
     {
-        let result = self.value.serialize(JsonKeyBudgetSerializer::<S, R, Q, VALUE_LIMITS> {
-            inner: serializer,
-            context: self.context,
-        });
+        let result = self
+            .value
+            .serialize(JsonKeyBudgetSerializer::<S, R, Q, VALUE_LIMITS> {
+                inner: serializer,
+                context: self.context,
+            });
         if result.is_err() {
             self.context
                 .borrow()

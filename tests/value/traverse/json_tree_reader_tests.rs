@@ -75,14 +75,18 @@ impl JsonTreeVisitor for RecordingVisitor {
     type Error = Infallible;
 
     fn enter(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
-        self.events
-            .push(format!("enter:{:?}:{}:{value}", context.location, context.depth));
+        self.events.push(format!(
+            "enter:{:?}:{}:{value}",
+            context.location, context.depth
+        ));
         Ok(())
     }
 
     fn leave(&mut self, value: &Value, context: JsonTreeContext<'_>) -> Result<(), Self::Error> {
-        self.events
-            .push(format!("leave:{:?}:{}:{value}", context.location, context.depth));
+        self.events.push(format!(
+            "leave:{:?}:{}:{value}",
+            context.location, context.depth
+        ));
         Ok(())
     }
 }
@@ -91,7 +95,9 @@ impl JsonTreeVisitor for RecordingVisitor {
 #[test]
 fn test_process_visits_depth_first_with_root_and_key_locations() {
     let value = json!({"a": [true]});
-    let mut budget = JsonValueLimits::<JsonResource, usize>::builder().build().budget();
+    let mut budget = JsonValueLimits::<JsonResource, usize>::builder()
+        .build()
+        .budget();
     let mut transaction = budget.transaction();
     let mut visitor = RecordingVisitor { events: Vec::new() };
 
@@ -228,9 +234,13 @@ fn test_process_budget_failure_stops_callbacks_and_rejects_commit() {
     let error = JsonTreeReader::new(&mut transaction)
         .process(&json!([null]), &mut visitor)
         .expect_err("child admission exceeds the one-node limit");
-    assert!(matches!(error, JsonTreeProcessError::Budget(error) if error.resource() == &JsonResource::Nodes));
+    assert!(
+        matches!(error, JsonTreeProcessError::Budget(error) if error.resource() == &JsonResource::Nodes)
+    );
     assert_eq!(visitor.events.as_slice(), &["enter_root"]);
-    let error = transaction.commit().expect_err("a rejected transaction cannot commit");
+    let error = transaction
+        .commit()
+        .expect_err("a rejected transaction cannot commit");
     assert_eq!(error.resource(), &JsonResource::Nodes);
     assert_eq!(budget.used_nodes(), Some(0));
 }

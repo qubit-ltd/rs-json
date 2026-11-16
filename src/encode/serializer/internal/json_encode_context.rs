@@ -112,7 +112,10 @@ where
     ///
     /// Panics if the shared output accounting cell is already borrowed while
     /// a violation is recorded.
-    pub(super) fn record<E>(&mut self, result: Result<(), MeasuredBudgetError<R, Q>>) -> Result<(), E>
+    pub(super) fn record<E>(
+        &mut self,
+        result: Result<(), MeasuredBudgetError<R, Q>>,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -190,7 +193,12 @@ where
     ///
     /// Panics if the shared output accounting cell is already borrowed while
     /// a violation is recorded.
-    pub(super) fn check_display<E>(&mut self, kind: DisplayBudgetKind, depth: usize, bytes: usize) -> Result<(), E>
+    pub(super) fn check_display<E>(
+        &mut self,
+        kind: DisplayBudgetKind,
+        depth: usize,
+        bytes: usize,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -229,7 +237,11 @@ where
     ///
     /// Panics if the shared output accounting cell is already borrowed while
     /// a violation is recorded.
-    pub(super) fn enter_container<E>(&mut self, kind: JsonContainerKind, depth: usize) -> Result<(), E>
+    pub(super) fn enter_container<E>(
+        &mut self,
+        kind: JsonContainerKind,
+        depth: usize,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -265,7 +277,11 @@ where
     ///
     /// Panics if the shared output accounting cell is already borrowed while
     /// a violation is recorded.
-    pub(super) fn check_container_count<E>(&mut self, kind: JsonContainerKind, prospective: usize) -> Result<(), E>
+    pub(super) fn check_container_count<E>(
+        &mut self,
+        kind: JsonContainerKind,
+        prospective: usize,
+    ) -> Result<(), E>
     where
         E: Error,
     {
@@ -315,7 +331,8 @@ where
         let output = self.output.borrow().check_available(value.len());
         self.record(output)?;
         let result = {
-            let mut scanner = JsonLexicalScanner::at_depth(&mut *self.transaction, depth, self.has_value_limits);
+            let mut scanner =
+                JsonLexicalScanner::at_depth(&mut *self.transaction, depth, self.has_value_limits);
             scanner.scan(value.as_bytes())
         };
         match result {

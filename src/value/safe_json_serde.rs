@@ -128,7 +128,9 @@ impl<'de> Deserialize<'de> for SafeJsonValue {
         D: Deserializer<'de>,
     {
         stacker::maybe_grow(32 * 1024, 1024 * 1024, || {
-            deserializer.deserialize_any(ValueVisitor).map(SafeJsonValue::new)
+            deserializer
+                .deserialize_any(ValueVisitor)
+                .map(SafeJsonValue::new)
         })
     }
 }

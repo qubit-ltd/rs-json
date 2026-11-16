@@ -27,8 +27,16 @@ use super::JsonEncodeSerializer;
 /// * `R` - Resource identity tracked by the encoder.
 /// * `Q` - Quantity representation used for resource accounting.
 /// * `VALUE_LIMITS` - Whether nested value limits are enforced.
-pub(in crate::encode) struct BudgetedValue<'a, 'transaction, 'budget, 'context, T, R, Q, const VALUE_LIMITS: bool>
-where
+pub(in crate::encode) struct BudgetedValue<
+    'a,
+    'transaction,
+    'budget,
+    'context,
+    T,
+    R,
+    Q,
+    const VALUE_LIMITS: bool,
+> where
     T: ?Sized,
     Q: ResourceQuantity,
 {
@@ -66,11 +74,16 @@ where
         context: &'context RefCell<JsonEncodeContext<'transaction, 'budget, R, Q>>,
         depth: usize,
     ) -> Self {
-        Self { value, context, depth }
+        Self {
+            value,
+            context,
+            depth,
+        }
     }
 }
 
-impl<T, R, Q, const VALUE_LIMITS: bool> Serialize for BudgetedValue<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
+impl<T, R, Q, const VALUE_LIMITS: bool> Serialize
+    for BudgetedValue<'_, '_, '_, '_, T, R, Q, VALUE_LIMITS>
 where
     T: Serialize + ?Sized,
     R: Clone,
@@ -102,13 +115,13 @@ where
     where
         S: Serializer,
     {
-        let result = self
-            .value
-            .serialize(JsonEncodeSerializer::<S, R, Q, VALUE_LIMITS>::with_context(
-                serializer,
-                self.context,
-                self.depth,
-            ));
+        let result =
+            self.value
+                .serialize(JsonEncodeSerializer::<S, R, Q, VALUE_LIMITS>::with_context(
+                    serializer,
+                    self.context,
+                    self.depth,
+                ));
         if result.is_err() {
             self.context
                 .borrow()

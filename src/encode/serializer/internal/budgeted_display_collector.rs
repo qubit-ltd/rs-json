@@ -38,7 +38,8 @@ where
     depth: usize,
 }
 
-impl<'context, 'transaction, 'budget, R, Q> BudgetedDisplayCollector<'context, 'transaction, 'budget, R, Q>
+impl<'context, 'transaction, 'budget, R, Q>
+    BudgetedDisplayCollector<'context, 'transaction, 'budget, R, Q>
 where
     Q: ResourceQuantity,
 {
@@ -94,7 +95,9 @@ where
     fn write_str(&mut self, value: &str) -> fmt::Result {
         let next = self.text.len().checked_add(value.len()).ok_or(fmt::Error)?;
         let output_result = self.context.borrow().output.borrow().check_available(next);
-        self.context.borrow_mut().record::<fmt::Error>(output_result)?;
+        self.context
+            .borrow_mut()
+            .record::<fmt::Error>(output_result)?;
         self.context
             .borrow_mut()
             .check_display::<fmt::Error>(self.kind, self.depth, next)?;

@@ -49,8 +49,13 @@ type ContextCell<'context, 'transaction, 'budget, R, Q> =
 ///   constructing the serializer.
 /// * `Q` - Resource quantity type accepted by the budget API.
 #[derive(Clone, Copy)]
-pub(in crate::value::json_value_encoder) struct JsonValueMapKeySerializer<'context, 'transaction, 'budget, R, Q>
-where
+pub(in crate::value::json_value_encoder) struct JsonValueMapKeySerializer<
+    'context,
+    'transaction,
+    'budget,
+    R,
+    Q,
+> where
     Q: qubit_budget::ResourceQuantity,
 {
     /// Borrowed shared projection context; key checks do not commit its
@@ -58,7 +63,8 @@ where
     context: ContextCell<'context, 'transaction, 'budget, R, Q>,
 }
 
-impl<'context, 'transaction, 'budget, R, Q> JsonValueMapKeySerializer<'context, 'transaction, 'budget, R, Q>
+impl<'context, 'transaction, 'budget, R, Q>
+    JsonValueMapKeySerializer<'context, 'transaction, 'budget, R, Q>
 where
     R: Clone,
     Q: qubit_budget::ResourceQuantity,
@@ -290,12 +296,13 @@ where
     /// projection failure is retained.
     fn serialize_f32(self, value: f32) -> Result<String, Self::Error> {
         if !value.is_finite() {
-            return Err(JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat));
+            return Err(JsonSerializationError::new(
+                JsonSerializationErrorKind::NonFiniteFloat,
+            ));
         }
-        self.finish_key(
-            to_string(&value)
-                .map_err(|_| JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation))?,
-        )
+        self.finish_key(to_string(&value).map_err(|_| {
+            JsonSerializationError::new(JsonSerializationErrorKind::InvalidNumberRepresentation)
+        })?)
     }
 
     /// Serializes a finite 64-bit floating-point key.
@@ -318,7 +325,9 @@ where
         self.finish_key(
             Number::from_f64(value)
                 .map(|number| number.to_string())
-                .ok_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat))?,
+                .ok_or_else(|| {
+                    JsonSerializationError::new(JsonSerializationErrorKind::NonFiniteFloat)
+                })?,
         )
     }
 
@@ -509,7 +518,11 @@ where
     /// Returns the wrapped serializer's error when that key shape is
     /// unsupported or invalid.
     #[inline]
-    fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<String, Self::Error>
+    fn serialize_newtype_struct<T>(
+        self,
+        _name: &'static str,
+        value: &T,
+    ) -> Result<String, Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -675,7 +688,11 @@ where
     /// # Errors
     ///
     /// Returns `UnsupportedMapKey { kind: Struct }`.
-    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
         Err(unsupported_key(JsonMapKeyKind::Struct))
     }
 

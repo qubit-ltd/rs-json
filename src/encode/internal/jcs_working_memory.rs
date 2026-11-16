@@ -110,7 +110,11 @@ impl JcsWorkingMemory {
     /// Returns `JcsReserveError::Limit` if the resulting tracked capacity
     /// exceeds the configured limit, or `JcsReserveError::Allocation` if
     /// reservation fails.
-    pub(super) fn reserve_stack<T>(&mut self, values: &mut Vec<T>, additional: usize) -> Result<(), JcsReserveError> {
+    pub(super) fn reserve_stack<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+    ) -> Result<(), JcsReserveError> {
         self.reserve::<T, T>(values, additional, true, None)
     }
 
@@ -169,7 +173,10 @@ impl JcsWorkingMemory {
     /// The caller must invoke this before dropping the corresponding vector.
     /// Returns a limit error if its capacity cannot be represented or is
     /// not currently tracked.
-    pub(super) fn release_object_entries<T>(&mut self, values: &Vec<T>) -> Result<(), JcsReserveError> {
+    pub(super) fn release_object_entries<T>(
+        &mut self,
+        values: &Vec<T>,
+    ) -> Result<(), JcsReserveError> {
         let bytes = values
             .capacity()
             .checked_mul(size_of::<T>())
@@ -250,7 +257,8 @@ impl JcsWorkingMemory {
             .checked_add(additional)
             .ok_or_else(|| self.limit_error(usize::MAX))?;
         if is_stack {
-            self.stack_max_required_capacity = self.stack_max_required_capacity.max(required_capacity);
+            self.stack_max_required_capacity =
+                self.stack_max_required_capacity.max(required_capacity);
         }
         if required_capacity <= values.capacity() {
             return Ok(());
@@ -268,7 +276,11 @@ impl JcsWorkingMemory {
             .checked_sub(old_bytes)
             .ok_or_else(|| self.limit_error(usize::MAX))?;
         let target_capacity = if is_stack && required_capacity > self.stack_growth_exact_through {
-            let preferred = values.capacity().max(1).saturating_mul(2).max(required_capacity);
+            let preferred = values
+                .capacity()
+                .max(1)
+                .saturating_mul(2)
+                .max(required_capacity);
             let preferred = if self.limit == usize::MAX {
                 preferred
             } else {
@@ -299,7 +311,10 @@ impl JcsWorkingMemory {
             .ok_or_else(|| self.limit_error(usize::MAX))?;
         self.check_total_after_reclaim(&mut without_old, requested_bytes, stack.as_deref_mut())?;
 
-        if values.try_reserve_exact(target_capacity - values.len()).is_err() {
+        if values
+            .try_reserve_exact(target_capacity - values.len())
+            .is_err()
+        {
             if self.limit == usize::MAX || target_capacity == required_capacity {
                 return Err(JcsReserveError::Allocation);
             }
@@ -344,7 +359,8 @@ impl JcsWorkingMemory {
             self.stack_max_actual_bytes = self.stack_max_actual_bytes.max(actual_bytes);
         } else {
             self.object_growth_count = self.object_growth_count.saturating_add(1);
-            self.object_requested_bytes = self.object_requested_bytes.saturating_add(requested_bytes);
+            self.object_requested_bytes =
+                self.object_requested_bytes.saturating_add(requested_bytes);
             self.object_max_actual_bytes = self.object_max_actual_bytes.max(actual_bytes);
         }
         Ok(())
@@ -398,7 +414,9 @@ impl JcsWorkingMemory {
                 // Future siblings may need progressively larger tables.
                 // Reusing their reclaimed spare would copy these ancestors
                 // again on each sibling, even when the old exact path fits.
-                self.stack_growth_exact_through = self.stack_growth_exact_through.max(self.stack_max_required_capacity);
+                self.stack_growth_exact_through = self
+                    .stack_growth_exact_through
+                    .max(self.stack_max_required_capacity);
                 *without_old = without_old
                     .checked_sub(old_stack_bytes)
                     .and_then(|bytes| bytes.checked_add(self.stack_bytes))
@@ -429,7 +447,11 @@ impl JcsWorkingMemory {
     ///
     /// - `stack`: Traversal stack whose allocation is replaced.
     /// - `capacity`: Exact element capacity requested for the replacement.
-    fn replace_stack<T>(&mut self, stack: &mut Vec<T>, capacity: usize) -> Result<(), JcsReserveError> {
+    fn replace_stack<T>(
+        &mut self,
+        stack: &mut Vec<T>,
+        capacity: usize,
+    ) -> Result<(), JcsReserveError> {
         if capacity >= stack.capacity() {
             return Ok(());
         }
@@ -461,7 +483,9 @@ impl JcsWorkingMemory {
         #[cfg(feature = "jcs-allocation-diagnostics")]
         {
             self.stack_replacement_count = self.stack_replacement_count.saturating_add(1);
-            self.stack_requested_bytes = self.stack_requested_bytes.saturating_add(capacity * size_of::<T>());
+            self.stack_requested_bytes = self
+                .stack_requested_bytes
+                .saturating_add(capacity * size_of::<T>());
             self.stack_max_actual_bytes = self.stack_max_actual_bytes.max(actual_bytes);
         }
         Ok(())
@@ -489,7 +513,12 @@ mod tests {
 
     #[test]
     fn test_reserve_rejects_accounting_overflow_without_allocating() {
-        for path in ["live-total", "untracked-capacity", "element-bytes", "requested-total"] {
+        for path in [
+            "live-total",
+            "untracked-capacity",
+            "element-bytes",
+            "requested-total",
+        ] {
             let mut memory = JcsWorkingMemory::new(usize::MAX);
             let mut values = Vec::<u64>::new();
             let additional = match path {
@@ -517,8 +546,15 @@ mod tests {
                 }
                 other => panic!("expected arithmetic rejection for {path}, got {other:?}"),
             }
-            assert_eq!(values.capacity(), capacity, "{path} allocated before checking");
-            assert_eq!((memory.stack_bytes, memory.object_bytes, memory.peak_bytes()), tracked);
+            assert_eq!(
+                values.capacity(),
+                capacity,
+                "{path} allocated before checking"
+            );
+            assert_eq!(
+                (memory.stack_bytes, memory.object_bytes, memory.peak_bytes()),
+                tracked
+            );
         }
     }
 
@@ -572,7 +608,10 @@ mod tests {
             stack.push(0);
         }
         assert!(growths <= 15, "unexpected growth count: {growths}");
-        assert_eq!(memory.stack_bytes, stack.capacity() * std::mem::size_of::<u64>());
+        assert_eq!(
+            memory.stack_bytes,
+            stack.capacity() * std::mem::size_of::<u64>()
+        );
     }
 
     #[test]
@@ -597,7 +636,10 @@ mod tests {
             // A final budget-capped growth adds at most one full budget to
             // the preceding geometric series, which is below two budgets.
             assert!(requested_bytes <= 3 * memory.limit);
-            assert_eq!(memory.stack_bytes, stack.capacity() * std::mem::size_of::<u64>());
+            assert_eq!(
+                memory.stack_bytes,
+                stack.capacity() * std::mem::size_of::<u64>()
+            );
             assert!(memory.peak_bytes() <= memory.limit);
         }
     }
@@ -638,7 +680,10 @@ mod tests {
             .reserve_object_entries(&mut entries, 4, &mut stack)
             .expect("reclaiming stack spare must leave room for the member table");
         assert_eq!(stack, (0_u64..5).collect::<Vec<_>>());
-        assert_eq!(memory.stack_bytes, stack.capacity() * std::mem::size_of::<u64>());
+        assert_eq!(
+            memory.stack_bytes,
+            stack.capacity() * std::mem::size_of::<u64>()
+        );
         memory
             .reserve_stack(&mut stack, 1)
             .expect("the object frame fits after its table");
@@ -654,7 +699,8 @@ mod tests {
         let depth = 8192;
         let widths = 128;
         let mut memory = JcsWorkingMemory::new(
-            (depth + 1) * std::mem::size_of::<[u64; 4]>() + widths * std::mem::size_of::<[u64; 3]>(),
+            (depth + 1) * std::mem::size_of::<[u64; 4]>()
+                + widths * std::mem::size_of::<[u64; 3]>(),
         );
         let mut stack = Vec::new();
         for _ in 0..depth {
@@ -671,14 +717,19 @@ mod tests {
                 .reserve_object_entries(&mut entries, width, &mut stack)
                 .expect("all sibling tables fit alongside the exact stack high-water capacity");
             replacements += usize::from(stack.capacity() < old_capacity);
-            memory.reserve_stack(&mut stack, 1).expect("the sibling's frame fits");
+            memory
+                .reserve_stack(&mut stack, 1)
+                .expect("the sibling's frame fits");
             stack.push([0_u64; 4]);
             stack.pop();
             memory
                 .release_object_entries(&entries)
                 .expect("release the completed sibling table");
         }
-        assert!(replacements <= 1, "repeated ancestor copies: {replacements}");
+        assert!(
+            replacements <= 1,
+            "repeated ancestor copies: {replacements}"
+        );
         assert!(memory.peak_bytes() <= memory.limit);
     }
 
@@ -723,7 +774,11 @@ mod tests {
         let mut object_memory = JcsWorkingMemory::new(usize::MAX);
         let mut entries = Vec::<u8>::new();
         assert!(matches!(
-            object_memory.reserve_object_entries(&mut entries, impossible_capacity, &mut Vec::<u8>::new()),
+            object_memory.reserve_object_entries(
+                &mut entries,
+                impossible_capacity,
+                &mut Vec::<u8>::new()
+            ),
             Err(JcsReserveError::Allocation),
         ));
         assert!(entries.is_empty());
@@ -768,7 +823,10 @@ mod tests {
             stack.capacity() * std::mem::size_of::<u64>()
         );
         assert_eq!(memory.object_growth_count, 1);
-        assert_eq!(memory.object_requested_bytes, 2 * std::mem::size_of::<(usize, usize)>());
+        assert_eq!(
+            memory.object_requested_bytes,
+            2 * std::mem::size_of::<(usize, usize)>()
+        );
         assert_eq!(
             memory.object_max_actual_bytes,
             entries.capacity() * std::mem::size_of::<(usize, usize)>(),

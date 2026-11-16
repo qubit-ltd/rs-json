@@ -24,7 +24,10 @@ fn test_json_lexical_preflight_charges_nested_depth() {
     let limits = JsonDecodeLimits::<JsonResource, usize>::builder()
         .value_limits(
             JsonValueLimits::<JsonResource, usize>::builder()
-                .structure_limits(StructureLimits::builder().depth_limit(ResourceLimit::new(JsonResource::Depth, 1)))
+                .structure_limits(
+                    StructureLimits::builder()
+                        .depth_limit(ResourceLimit::new(JsonResource::Depth, 1)),
+                )
                 .build(),
         )
         .build();

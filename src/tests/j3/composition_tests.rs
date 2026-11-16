@@ -22,8 +22,8 @@ fn test_builder_consumer_stops_at_first_materialization_failure() {
     let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
     let mut transaction = budget.transaction();
     let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Integer64);
-    let result =
-        JsonLexicalScanner::new(&mut transaction, false).scan_with_consumer(br#"{"x":0,"x":1,"tail":]"#, &mut builder);
+    let result = JsonLexicalScanner::new(&mut transaction, false)
+        .scan_with_consumer(br#"{"x":0,"x":1,"tail":]"#, &mut builder);
 
     assert!(matches!(
         result,

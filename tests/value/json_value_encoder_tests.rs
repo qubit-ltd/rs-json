@@ -673,8 +673,12 @@ fn test_json_value_encoder_preserves_integer_boundaries() {
 #[test]
 fn test_json_value_encoder_rejects_wide_integers() {
     let encoder = JsonValueEncoder::new();
-    let signed = encoder.encode(&i128::MAX).expect_err("wide signed integer must fail");
-    let unsigned = encoder.encode(&u128::MAX).expect_err("wide unsigned integer must fail");
+    let signed = encoder
+        .encode(&i128::MAX)
+        .expect_err("wide signed integer must fail");
+    let unsigned = encoder
+        .encode(&u128::MAX)
+        .expect_err("wide unsigned integer must fail");
     assert_eq!(
         signed.kind(),
         JsonSerializationErrorKind::IntegerOutOfRange {
@@ -683,7 +687,10 @@ fn test_json_value_encoder_rejects_wide_integers() {
     );
     assert_eq!(signed.category(), JsonSerializationErrorCategory::Number);
     assert!(signed.is_number_error());
-    assert_eq!(signed.integer_signedness(), Some(JsonIntegerSignedness::Signed));
+    assert_eq!(
+        signed.integer_signedness(),
+        Some(JsonIntegerSignedness::Signed)
+    );
     assert_eq!(
         unsigned.kind(),
         JsonSerializationErrorKind::IntegerOutOfRange {
@@ -697,15 +704,24 @@ fn test_json_value_encoder_rejects_wide_integers() {
 fn test_json_value_encoder_rejects_non_finite_floats() {
     let encoder = JsonValueEncoder::new();
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        let error = encoder.encode(&value).expect_err("non-finite float must fail");
+        let error = encoder
+            .encode(&value)
+            .expect_err("non-finite float must fail");
         assert_eq!(error.kind(), JsonSerializationErrorKind::NonFiniteFloat);
     }
     let custom = encoder
         .encode(&NestedNonFiniteProbe)
         .expect_err("custom serializer failure must remain custom");
-    assert_eq!(custom.kind(), JsonSerializationErrorKind::CustomSerialization);
+    assert_eq!(
+        custom.kind(),
+        JsonSerializationErrorKind::CustomSerialization
+    );
     assert_eq!(custom.category(), JsonSerializationErrorCategory::Custom);
-    assert!(!custom.to_string().contains("non-finite floating-point value"));
+    assert!(
+        !custom
+            .to_string()
+            .contains("non-finite floating-point value")
+    );
 }
 
 /// Keeps f32 serialization short enough to round-trip as the original f32.
@@ -720,7 +736,10 @@ fn test_json_value_encoder_preserves_float32_semantics() {
         from_value::<f32>(projected).expect("projected f32 should decode"),
         source
     );
-    assert_ne!(text, to_string(&widened).expect("widened number should render"));
+    assert_ne!(
+        text,
+        to_string(&widened).expect("widened number should render")
+    );
 }
 
 #[test]
@@ -740,7 +759,12 @@ fn test_json_value_encoder_f32_keys_match_direct_encoding() {
         let probe = FloatKeyProbe(key);
         let projected = JsonValueEncoder::new().encode(&probe).unwrap();
         let direct = JsonEncoder::unlimited().to_vec(&probe).unwrap();
-        assert_eq!(to_vec(&projected).unwrap(), direct, "key bits={:08x}", key.to_bits());
+        assert_eq!(
+            to_vec(&projected).unwrap(),
+            direct,
+            "key bits={:08x}",
+            key.to_bits()
+        );
     }
 }
 
@@ -778,7 +802,9 @@ fn test_json_value_encoder_f32_rejects_non_finite_values_and_keys() {
     for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
         let error = JsonValueEncoder::new().encode(&value).unwrap_err();
         assert_eq!(error.kind(), JsonSerializationErrorKind::NonFiniteFloat);
-        let error = JsonValueEncoder::new().encode(&FloatKeyProbe(value)).unwrap_err();
+        let error = JsonValueEncoder::new()
+            .encode(&FloatKeyProbe(value))
+            .unwrap_err();
         assert_eq!(error.kind(), JsonSerializationErrorKind::NonFiniteFloat);
     }
 }
@@ -799,9 +825,13 @@ fn test_json_value_encoder_matches_text_encoder_float_map_keys() {
     let mut text_encoder = JsonEncoder::unlimited();
     for key in [-0.0, 1.0, 1.5, f64::MIN_POSITIVE, f64::MAX] {
         let probe = FloatKeyProbe(key);
-        let value = value_encoder.encode(&probe).expect("finite key should encode");
+        let value = value_encoder
+            .encode(&probe)
+            .expect("finite key should encode");
         let value_text = to_vec(&value).expect("JSON value should render");
-        let direct_text = text_encoder.to_vec(&probe).expect("finite key should encode as text");
+        let direct_text = text_encoder
+            .to_vec(&probe)
+            .expect("finite key should encode as text");
 
         assert_eq!(value_text, direct_text, "map key differs for {key}");
     }
@@ -849,8 +879,8 @@ fn test_json_value_encoder_rejects_non_finite_float_map_key() {
 #[test]
 fn test_json_value_encoder_supports_scalar_map_key_entry_points() {
     const EXPECTED_KEYS: [&str; 19] = [
-        "true", "-8", "-16", "-32", "-64", "-128", "8", "16", "32", "64", "128", "1.5", "2.5", "x", "text", "1",
-        "Unit", "-1", "display",
+        "true", "-8", "-16", "-32", "-64", "-128", "8", "16", "32", "64", "128", "1.5", "2.5", "x",
+        "text", "1", "Unit", "-1", "display",
     ];
     let encoder = JsonValueEncoder::new();
     let supported_indices = (0_u8..=14).chain([17, 20, 21, 30]);
@@ -935,7 +965,10 @@ fn test_json_value_encoder_rejects_duplicate_before_value_projection() {
     for path in ["split-map", "entry-map", "struct", "variant"] {
         let calls = Cell::new(0);
         let error = JsonValueEncoder::new()
-            .encode(&DuplicateProjectionProbe { path, calls: &calls })
+            .encode(&DuplicateProjectionProbe {
+                path,
+                calls: &calls,
+            })
             .expect_err("duplicate key must fail");
         assert_eq!(calls.get(), 0, "duplicate value was projected via {path}");
         assert_eq!(error.kind(), JsonSerializationErrorKind::DuplicateObjectKey);
@@ -955,8 +988,8 @@ fn test_json_value_encoder_preserves_distinct_object_values() {
 /// Materializes a strict RawValue payload into its represented JSON value.
 #[test]
 fn test_json_value_encoder_materializes_raw_value() {
-    let raw =
-        RawValue::from_string(String::from(r#"{"ok":true,"values":[1,2]}"#)).expect("fixture should be valid raw JSON");
+    let raw = RawValue::from_string(String::from(r#"{"ok":true,"values":[1,2]}"#))
+        .expect("fixture should be valid raw JSON");
     let actual = JsonValueEncoder::new()
         .encode(&raw)
         .expect("strict RawValue should materialize");
@@ -967,7 +1000,10 @@ fn test_json_value_encoder_materializes_raw_value() {
 #[test]
 fn test_json_value_encoder_newtype_delegation_and_raw_protocol() {
     let encoder = JsonValueEncoder::new();
-    assert_eq!(encoder.encode(&TransparentProbe(Some(true))), Ok(json!(true)));
+    assert_eq!(
+        encoder.encode(&TransparentProbe(Some(true))),
+        Ok(json!(true))
+    );
 
     let raw_name = RawValueNameProbe(String::from("true"));
     assert_eq!(encoder.encode(&raw_name), Ok(json!("true")));
@@ -979,7 +1015,10 @@ fn test_json_value_encoder_newtype_delegation_and_raw_protocol() {
     assert_eq!(encoder.encode(&raw_option), Ok(json!("true")));
 
     let mut ordinary = JsonEncoder::unlimited();
-    assert_eq!(ordinary.to_vec(&TransparentProbe(Some(true))).unwrap(), b"true");
+    assert_eq!(
+        ordinary.to_vec(&TransparentProbe(Some(true))).unwrap(),
+        b"true"
+    );
     assert_eq!(ordinary.to_vec(&raw_name).unwrap(), br#""true""#);
     assert_eq!(ordinary.to_vec(&raw_bool).unwrap(), b"true");
     assert_eq!(ordinary.to_vec(&raw_option).unwrap(), br#""true""#);
@@ -992,7 +1031,9 @@ fn test_json_value_encoder_accepts_deep_raw_value() {
     for depth in [128, 129] {
         let text = format!("{}null{}", "[".repeat(depth), "]".repeat(depth));
         let raw = RawValue::from_string(text).expect("nested fixture is valid JSON");
-        let value = encoder.encode(&raw).expect("shared builder accepts deep RawValue");
+        let value = encoder
+            .encode(&raw)
+            .expect("shared builder accepts deep RawValue");
         let protected = SafeJsonValue::new(value);
         assert!(protected.as_value().is_array());
     }
@@ -1034,8 +1075,14 @@ fn test_json_value_encoder_classifies_display_formatting_failure() {
     let error = JsonValueEncoder::new()
         .encode(&FailingDisplayProbe)
         .expect_err("failing Display must produce an error");
-    assert_eq!(error.kind(), JsonSerializationErrorKind::DisplayFormattingFailed);
-    assert_eq!(error.category(), JsonSerializationErrorCategory::SerializerContract);
+    assert_eq!(
+        error.kind(),
+        JsonSerializationErrorKind::DisplayFormattingFailed
+    );
+    assert_eq!(
+        error.category(),
+        JsonSerializationErrorCategory::SerializerContract
+    );
 }
 
 /// Classifies each externally reachable invalid map call sequence.
@@ -1123,13 +1170,22 @@ fn test_json_value_encoder_supports_all_serde_entry_points() {
         json!({"Object": {"key": 1}}),
         json!("display"),
     ];
-    assert_eq!(expected.len(), 31, "every probe index must have an expectation");
+    assert_eq!(
+        expected.len(),
+        31,
+        "every probe index must have an expectation"
+    );
     let encoder = JsonValueEncoder::new();
     for (index, expected) in expected.into_iter().enumerate() {
         let actual = encoder
-            .encode(&SerializerProbe(u8::try_from(index).expect("probe index fits u8")))
+            .encode(&SerializerProbe(
+                u8::try_from(index).expect("probe index fits u8"),
+            ))
             .expect("supported Serde entry point should encode");
-        assert_eq!(actual, expected, "Serde entry point {index} emitted the wrong Value");
+        assert_eq!(
+            actual, expected,
+            "Serde entry point {index} emitted the wrong Value"
+        );
     }
 }
 
@@ -1143,7 +1199,10 @@ fn test_json_value_encoder_materializes_derived_compound_shapes() {
     assert_eq!(encoder.encode(&(7_i32, true)), Ok(json!([7, true])));
     assert_eq!(encoder.encode(&Coordinate(8, false)), Ok(json!([8, false])));
     assert_eq!(
-        encoder.encode(&NamedRecord { id: 9, active: true }),
+        encoder.encode(&NamedRecord {
+            id: 9,
+            active: true
+        }),
         Ok(json!({"id": 9, "active": true})),
     );
     assert_eq!(
@@ -1171,7 +1230,10 @@ fn test_json_value_encoder_materializes_derived_compound_shapes() {
         Ok(json!({"Tuple": [11, false]})),
     );
     assert_eq!(
-        encoder.encode(&CompoundVariant::Struct { id: 12, active: true }),
+        encoder.encode(&CompoundVariant::Struct {
+            id: 12,
+            active: true
+        }),
         Ok(json!({"Struct": {"id": 12, "active": true}})),
     );
 }
@@ -1220,14 +1282,26 @@ fn test_projection_budget_failures_preserve_resource_and_roll_back() {
             JsonValueLimits::builder().max_sequence_items(0).build(),
             JsonResource::SequenceItems,
         ),
-        (27, JsonValueLimits::builder().max_nodes(1).build(), JsonResource::Nodes),
+        (
+            27,
+            JsonValueLimits::builder().max_nodes(1).build(),
+            JsonResource::Nodes,
+        ),
         (
             28,
             JsonValueLimits::builder().max_map_entries(0).build(),
             JsonResource::MapEntries,
         ),
-        (26, JsonValueLimits::builder().max_depth(1).build(), JsonResource::Depth),
-        (29, JsonValueLimits::builder().max_depth(1).build(), JsonResource::Depth),
+        (
+            26,
+            JsonValueLimits::builder().max_depth(1).build(),
+            JsonResource::Depth,
+        ),
+        (
+            29,
+            JsonValueLimits::builder().max_depth(1).build(),
+            JsonResource::Depth,
+        ),
     ];
     for (probe, limits, resource) in cases {
         let mut budget = JsonValueBudget::new(limits);
@@ -1316,7 +1390,9 @@ fn test_budgeted_collect_zero_limit_stops_on_first_chunk() {
             .expect_err("a nonempty Display exceeds a zero byte limit")
     };
     assert_eq!(calls.get(), 1);
-    assert!(matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &JsonResource::StringBytes));
+    assert!(
+        matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &JsonResource::StringBytes)
+    );
     assert_eq!(budget.used_nodes(), Some(0));
     assert_eq!(budget.used_payload_bytes(), Some(0));
 }
@@ -1353,7 +1429,9 @@ fn test_budgeted_collect_cumulative_payload_stops_at_rejected_chunk() {
             .expect_err("the second string exceeds cumulative payload after two chunks")
     };
     assert_eq!(calls.get(), 2);
-    assert!(matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &JsonResource::PayloadBytes));
+    assert!(
+        matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &JsonResource::PayloadBytes)
+    );
     assert_eq!(budget.used_payload_bytes(), Some(0));
 }
 
@@ -1369,7 +1447,9 @@ fn test_budgeted_collect_cumulative_payload_exact_boundary_is_counted_once() {
         .encode_in_transaction(&TwoExactCollectedStrings, &mut transaction)
         .expect("both projections exactly fit cumulative payload");
     assert_eq!(value.as_value(), &json!(["ab", "cd"]));
-    transaction.commit().expect("exact cumulative payload commits");
+    transaction
+        .commit()
+        .expect("exact cumulative payload commits");
     assert_eq!(budget.used_payload_bytes(), Some(4));
 }
 
@@ -1389,7 +1469,9 @@ fn test_budgeted_collect_key_zero_and_exact_utf8_boundaries() {
             .expect_err("nonempty Display key exceeds a zero byte limit")
     };
     assert_eq!(calls.get(), 1);
-    assert!(matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &JsonResource::KeyBytes));
+    assert!(
+        matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &JsonResource::KeyBytes)
+    );
     assert_eq!(zero_budget.used_payload_bytes(), Some(0));
 
     let exact_limits = JsonValueLimits::<JsonResource, usize>::builder()
@@ -1421,7 +1503,10 @@ fn test_budgeted_collect_display_failure_after_chunk_remains_formatting_error() 
             .encode_in_transaction(&FailingAfterChunk, &mut transaction)
             .expect_err("Display reports its own formatting failure after writing")
     };
-    assert_eq!(error.kind(), Some(JsonSerializationErrorKind::DisplayFormattingFailed));
+    assert_eq!(
+        error.kind(),
+        Some(JsonSerializationErrorKind::DisplayFormattingFailed)
+    );
     assert_eq!(budget.used_nodes(), Some(0));
     assert_eq!(budget.used_payload_bytes(), Some(0));
 }
@@ -1472,7 +1557,9 @@ fn test_budgeted_empty_collect_still_checks_nodes_and_depth() {
                 .encode_in_transaction(&StaticCollectedText(""), &mut transaction)
                 .expect_err("empty Display output still admits a string node")
         };
-        assert!(matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &resource));
+        assert!(
+            matches!(error, JsonValueEncodeError::Budget(source) if source.resource() == &resource)
+        );
         assert_eq!(budget.used_nodes(), Some(0));
     }
 }
@@ -1642,7 +1729,9 @@ mod migrated_projection {
             map.serialize_key("first")?;
             let _ignored = map.serialize_key("second");
             let _ignored = map.end();
-            Err(serde::ser::Error::custom("source ignored map state failure"))
+            Err(serde::ser::Error::custom(
+                "source ignored map state failure",
+            ))
         }
     }
 
@@ -1717,8 +1806,14 @@ mod migrated_projection {
         {
             let mut transaction = budget.transaction();
             let encoder = JsonValueEncoder::new();
-            let _first = encoder.encode_in_transaction(&true, &mut transaction).unwrap();
-            assert!(encoder.encode_in_transaction(&false, &mut transaction).is_err());
+            let _first = encoder
+                .encode_in_transaction(&true, &mut transaction)
+                .unwrap();
+            assert!(
+                encoder
+                    .encode_in_transaction(&false, &mut transaction)
+                    .is_err()
+            );
         }
         assert_eq!(budget.used_nodes(), Some(0));
     }
@@ -1807,7 +1902,10 @@ mod migrated_projection {
         );
         assert_eq!(values[4].as_value(), &serde_json::json!("Unit"));
         assert_eq!(values[5].as_value(), &serde_json::json!({"Newtype": 5}));
-        assert_eq!(values[6].as_value(), &serde_json::json!({"Tuple": [6, false]}));
+        assert_eq!(
+            values[6].as_value(),
+            &serde_json::json!({"Tuple": [6, false]})
+        );
         assert_eq!(
             values[7].as_value(),
             &serde_json::json!({"Record": {"name": "variant"}})
@@ -1821,7 +1919,8 @@ mod migrated_projection {
     fn test_projection_keeps_first_error_when_source_ignores_child_error() {
         let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
         let mut transaction = budget.transaction();
-        let result = JsonValueEncoder::new().encode_in_transaction(&IgnoresChildSerializationError, &mut transaction);
+        let result = JsonValueEncoder::new()
+            .encode_in_transaction(&IgnoresChildSerializationError, &mut transaction);
         assert!(matches!(
             result,
             Err(qubit_json::value::JsonValueEncodeError::Serialization(error))
@@ -1849,7 +1948,8 @@ mod migrated_projection {
         let mut budget = JsonValueBudget::new(limits);
         {
             let mut transaction = budget.transaction();
-            let result = JsonValueEncoder::new().encode_in_transaction(&IgnoreBudgetChild, &mut transaction);
+            let result =
+                JsonValueEncoder::new().encode_in_transaction(&IgnoreBudgetChild, &mut transaction);
             assert!(matches!(
                 result,
                 Err(qubit_json::value::JsonValueEncodeError::Budget(_))
@@ -1860,11 +1960,16 @@ mod migrated_projection {
 
     #[test]
     fn test_projection_drops_partial_tree_when_source_panics() {
-        let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().max_nodes(200).build());
+        let mut budget = JsonValueBudget::new(
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_nodes(200)
+                .build(),
+        );
         {
             let mut transaction = budget.transaction();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                JsonValueEncoder::new().encode_in_transaction(&PanicsAfterDeepChild, &mut transaction)
+                JsonValueEncoder::new()
+                    .encode_in_transaction(&PanicsAfterDeepChild, &mut transaction)
             }));
             assert!(result.is_err());
         }
@@ -1879,7 +1984,8 @@ mod migrated_projection {
         let mut budget = JsonValueBudget::new(limits);
         {
             let mut transaction = budget.transaction();
-            let result = JsonValueEncoder::new().encode_in_transaction(&SerializesChildThenFails, &mut transaction);
+            let result = JsonValueEncoder::new()
+                .encode_in_transaction(&SerializesChildThenFails, &mut transaction);
             assert!(matches!(
                 result,
                 Err(qubit_json::value::JsonValueEncodeError::Serialization(_))
@@ -1897,7 +2003,8 @@ mod migrated_projection {
     #[test]
     fn test_projection_raw_value_uses_transaction_and_no_synthetic_root_charge() {
         let mut deserializer = serde_json::Deserializer::from_str("[0]");
-        let raw: &serde_json::value::RawValue = <&serde_json::value::RawValue>::deserialize(&mut deserializer).unwrap();
+        let raw: &serde_json::value::RawValue =
+            <&serde_json::value::RawValue>::deserialize(&mut deserializer).unwrap();
         let mut budget = JsonValueBudget::new(
             JsonValueLimits::<JsonResource, usize>::builder()
                 .max_nodes(2)
@@ -1915,8 +2022,13 @@ mod migrated_projection {
     #[test]
     fn test_projection_raw_value_inherits_the_actual_container_depth() {
         let mut deserializer = serde_json::Deserializer::from_str("[0]");
-        let raw: &serde_json::value::RawValue = <&serde_json::value::RawValue>::deserialize(&mut deserializer).unwrap();
-        let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::builder().max_depth(2).build());
+        let raw: &serde_json::value::RawValue =
+            <&serde_json::value::RawValue>::deserialize(&mut deserializer).unwrap();
+        let mut budget = JsonValueBudget::new(
+            JsonValueLimits::<JsonResource, usize>::builder()
+                .max_depth(2)
+                .build(),
+        );
         let mut transaction = budget.transaction();
         let result = JsonValueEncoder::new().encode_in_transaction(&vec![raw], &mut transaction);
         assert!(result.is_err());
@@ -1927,7 +2039,8 @@ mod migrated_projection {
         let text = format!("{}0{}", "[".repeat(129), "]".repeat(129));
         let mut deserializer = serde_json::Deserializer::from_str(&text);
         deserializer.disable_recursion_limit();
-        let raw: &serde_json::value::RawValue = <&serde_json::value::RawValue>::deserialize(&mut deserializer).unwrap();
+        let raw: &serde_json::value::RawValue =
+            <&serde_json::value::RawValue>::deserialize(&mut deserializer).unwrap();
         let mut budget = JsonValueBudget::new(JsonValueLimits::<JsonResource, usize>::new());
         let mut transaction = budget.transaction();
         let projected = JsonValueEncoder::new().encode_in_transaction(raw, &mut transaction);
@@ -1980,11 +2093,14 @@ mod migrated_projection {
 
     #[test]
     fn test_projection_bytes_budget_failure_does_not_commit_values() {
-        let limits = JsonValueLimits::<JsonResource, usize>::builder().max_nodes(2).build();
+        let limits = JsonValueLimits::<JsonResource, usize>::builder()
+            .max_nodes(2)
+            .build();
         let mut budget = JsonValueBudget::new(limits);
         {
             let mut transaction = budget.transaction();
-            let result = JsonValueEncoder::new().encode_in_transaction(&ByteSlice, &mut transaction);
+            let result =
+                JsonValueEncoder::new().encode_in_transaction(&ByteSlice, &mut transaction);
             assert!(result.is_err(), "two byte elements require three nodes");
         }
         assert_eq!(budget.used_nodes(), Some(0));
@@ -2005,7 +2121,10 @@ mod migrated_projection {
             encoder.encode(&sequence).unwrap(),
             serde_json::to_value(sequence).unwrap()
         );
-        assert_eq!(encoder.encode(&tuple).unwrap(), serde_json::to_value(tuple).unwrap());
+        assert_eq!(
+            encoder.encode(&tuple).unwrap(),
+            serde_json::to_value(tuple).unwrap()
+        );
         assert_eq!(
             encoder.encode(&variant).unwrap(),
             serde_json::to_value(variant).unwrap()
@@ -2039,9 +2158,11 @@ mod migrated_projection {
         assert!(error.serialization_error().is_some());
         assert_eq!(
             error.kind(),
-            Some(qubit_json::encode::JsonSerializationErrorKind::UnsupportedMapKey {
-                kind: qubit_json::encode::JsonMapKeyKind::Tuple,
-            })
+            Some(
+                qubit_json::encode::JsonSerializationErrorKind::UnsupportedMapKey {
+                    kind: qubit_json::encode::JsonMapKeyKind::Tuple,
+                }
+            )
         );
         assert_eq!(
             error.category(),
@@ -2051,12 +2172,16 @@ mod migrated_projection {
         assert!(!error.is_number_error());
         assert!(!error.is_raw_value_error());
         assert!(!error.is_serializer_contract_error());
-        assert_eq!(error.map_key_kind(), Some(qubit_json::encode::JsonMapKeyKind::Tuple));
+        assert_eq!(
+            error.map_key_kind(),
+            Some(qubit_json::encode::JsonMapKeyKind::Tuple)
+        );
         assert_eq!(error.integer_signedness(), None);
         assert_eq!(error.collection_kind(), None);
         assert_eq!(error.serializer_state_error(), None);
 
-        let source = std::error::Error::source(&error).expect("serialization error must be retained as source");
+        let source = std::error::Error::source(&error)
+            .expect("serialization error must be retained as source");
         assert!(
             source
                 .downcast_ref::<qubit_json::encode::JsonSerializationError>()
@@ -2103,7 +2228,8 @@ mod migrated_projection {
             error.category(),
             Some(qubit_json::encode::JsonSerializationErrorCategory::SerializerContract)
         );
-        let source = std::error::Error::source(&error).expect("serializer failure must be retained as source");
+        let source = std::error::Error::source(&error)
+            .expect("serializer failure must be retained as source");
         assert!(
             source
                 .downcast_ref::<qubit_json::encode::JsonSerializationError>()
@@ -2128,7 +2254,9 @@ mod migrated_projection {
 
     #[test]
     fn test_projection_keeps_first_map_key_state_error_sticky() {
-        let error = JsonValueEncoder::new().encode(&MapKeySubmittedTwice).unwrap_err();
+        let error = JsonValueEncoder::new()
+            .encode(&MapKeySubmittedTwice)
+            .unwrap_err();
         assert_eq!(
             error.serializer_state_error(),
             Some(qubit_json::encode::JsonSerializerStateError::MapKeyAlreadyPending)
@@ -2137,7 +2265,9 @@ mod migrated_projection {
 
     #[test]
     fn test_projection_rejects_duplicate_fields_from_custom_struct_serializer() {
-        let error = JsonValueEncoder::new().encode(&DuplicateStructField).unwrap_err();
+        let error = JsonValueEncoder::new()
+            .encode(&DuplicateStructField)
+            .unwrap_err();
         assert_eq!(
             error.kind(),
             qubit_json::encode::JsonSerializationErrorKind::DuplicateObjectKey
@@ -2155,9 +2285,15 @@ mod migrated_projection {
         assert_eq!(encoder.encode(&32_u32).unwrap(), serde_json::json!(32));
         assert_eq!(encoder.encode(&1.25_f32).unwrap(), serde_json::json!(1.25));
         assert_eq!(encoder.encode(&'x').unwrap(), serde_json::json!("x"));
-        assert_eq!(encoder.encode(&Option::<u8>::None).unwrap(), serde_json::Value::Null);
+        assert_eq!(
+            encoder.encode(&Option::<u8>::None).unwrap(),
+            serde_json::Value::Null
+        );
         assert_eq!(encoder.encode(&Some(9_u8)).unwrap(), serde_json::json!(9));
-        assert_eq!(encoder.encode(&(true, 4_u8)).unwrap(), serde_json::json!([true, 4]));
+        assert_eq!(
+            encoder.encode(&(true, 4_u8)).unwrap(),
+            serde_json::json!([true, 4])
+        );
         assert_eq!(
             encoder.encode(&CollectedString).unwrap(),
             serde_json::json!("collected")
@@ -2168,10 +2304,11 @@ mod migrated_projection {
 #[test]
 fn test_value_encode_error_accessors_cover_serialization_and_budget() {
     let serialization = {
-        let mut unlimited = qubit_budget::json::JsonValueBudget::new(qubit_budget::json::JsonValueLimits::<
-            qubit_budget::json::JsonResource,
-            usize,
-        >::new());
+        let mut unlimited =
+            qubit_budget::json::JsonValueBudget::new(qubit_budget::json::JsonValueLimits::<
+                qubit_budget::json::JsonResource,
+                usize,
+            >::new());
         let mut transaction = unlimited.transaction();
         qubit_json::value::JsonValueEncoder::new()
             .encode_in_transaction(&u128::MAX, &mut transaction)
@@ -2179,9 +2316,11 @@ fn test_value_encode_error_accessors_cover_serialization_and_budget() {
     };
     assert_eq!(
         serialization.kind(),
-        Some(qubit_json::encode::JsonSerializationErrorKind::IntegerOutOfRange {
-            signedness: qubit_json::encode::JsonIntegerSignedness::Unsigned,
-        })
+        Some(
+            qubit_json::encode::JsonSerializationErrorKind::IntegerOutOfRange {
+                signedness: qubit_json::encode::JsonIntegerSignedness::Unsigned,
+            }
+        )
     );
     assert_eq!(
         serialization.category(),
@@ -2202,9 +2341,10 @@ fn test_value_encode_error_accessors_cover_serialization_and_budget() {
     assert!(std::error::Error::source(&serialization).is_some());
     assert!(serialization.to_string().contains("64-bit"));
 
-    let limits = qubit_budget::json::JsonValueLimits::<qubit_budget::json::JsonResource, usize>::builder()
-        .max_nodes(0)
-        .build();
+    let limits =
+        qubit_budget::json::JsonValueLimits::<qubit_budget::json::JsonResource, usize>::builder()
+            .max_nodes(0)
+            .build();
     let mut budget = qubit_budget::json::JsonValueBudget::new(limits);
     let mut transaction = budget.transaction();
     let rejected = qubit_json::value::JsonValueEncoder::new()

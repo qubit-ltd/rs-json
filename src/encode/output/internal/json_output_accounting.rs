@@ -106,14 +106,20 @@ where
     ///
     /// Returns a measured budget error when the amount cannot be represented
     /// or exceeds the available capacity.
-    pub(in crate::encode) fn check_available(&self, amount: usize) -> Result<(), MeasuredBudgetError<R, Q>>
+    pub(in crate::encode) fn check_available(
+        &self,
+        amount: usize,
+    ) -> Result<(), MeasuredBudgetError<R, Q>>
     where
         R: Clone,
     {
         self.output.as_deref().map_or(Ok(()), |output| {
-            let amount = Q::try_from_usize(amount)
-                .map_err(|source| MeasuredBudgetError::quantity(output.resource().clone(), source))?;
-            output.check_available(amount).map_err(MeasuredBudgetError::from)
+            let amount = Q::try_from_usize(amount).map_err(|source| {
+                MeasuredBudgetError::quantity(output.resource().clone(), source)
+            })?;
+            output
+                .check_available(amount)
+                .map_err(MeasuredBudgetError::from)
         })
     }
 
@@ -131,14 +137,20 @@ where
     ///
     /// Returns a measured budget error when the amount cannot be represented
     /// or the budget rejects consumption.
-    pub(in crate::encode) fn consume(&mut self, amount: usize) -> Result<(), MeasuredBudgetError<R, Q>>
+    pub(in crate::encode) fn consume(
+        &mut self,
+        amount: usize,
+    ) -> Result<(), MeasuredBudgetError<R, Q>>
     where
         R: Clone,
     {
         self.output.as_deref_mut().map_or(Ok(()), |output| {
-            let amount = Q::try_from_usize(amount)
-                .map_err(|source| MeasuredBudgetError::quantity(output.resource().clone(), source))?;
-            output.try_consume(amount).map_err(MeasuredBudgetError::from)
+            let amount = Q::try_from_usize(amount).map_err(|source| {
+                MeasuredBudgetError::quantity(output.resource().clone(), source)
+            })?;
+            output
+                .try_consume(amount)
+                .map_err(MeasuredBudgetError::from)
         })
     }
 
@@ -226,8 +238,11 @@ where
     /// # Returns
     ///
     /// The recorded serialization failure, or a custom-serialization fallback.
-    pub(in crate::encode) fn take_serialization_error_or_custom(&mut self) -> JsonSerializationError {
-        self.take_serialization_error()
-            .unwrap_or_else(|| JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization))
+    pub(in crate::encode) fn take_serialization_error_or_custom(
+        &mut self,
+    ) -> JsonSerializationError {
+        self.take_serialization_error().unwrap_or_else(|| {
+            JsonSerializationError::new(JsonSerializationErrorKind::CustomSerialization)
+        })
     }
 }
