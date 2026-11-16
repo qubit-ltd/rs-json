@@ -35,7 +35,10 @@ impl JsonPrivateProtocolState {
     /// # Errors
     ///
     /// Returns an invalid-state error unless `declared_len` is one.
-    pub(crate) fn new(kind: JsonPrivateProtocolKind, declared_len: usize) -> Result<Self, JsonSerializerStateError> {
+    pub(crate) fn new(
+        kind: JsonPrivateProtocolKind,
+        declared_len: usize,
+    ) -> Result<Self, JsonSerializerStateError> {
         if declared_len != 1 {
             return Err(kind.invalid_state());
         }

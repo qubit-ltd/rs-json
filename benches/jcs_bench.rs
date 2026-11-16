@@ -281,14 +281,19 @@ fn benchmark_jcs_encoding(criterion: &mut Criterion) {
                 .build();
             report_allocations(shape, "jcs-unlimited", || {
                 let mut encoder = JcsEncoder::unlimited();
-                encoder.to_vec(value).expect("unlimited JCS encoding must succeed")
+                encoder
+                    .to_vec(value)
+                    .expect("unlimited JCS encoding must succeed")
             });
             report_allocations(shape, "jcs-finite-budgets", || {
                 let mut encoder = JcsEncoder::with_limits(finite_limits, FINITE_WORKING_BYTES);
-                encoder.to_vec(value).expect("fixture must fit finite budgets")
+                encoder
+                    .to_vec(value)
+                    .expect("fixture must fit finite budgets")
             });
             report_allocations(shape, "legacy-canonicalizer", || {
-                serde_json_canonicalizer::to_vec(value).expect("legacy canonicalizer must encode the fixture")
+                serde_json_canonicalizer::to_vec(value)
+                    .expect("legacy canonicalizer must encode the fixture")
             });
         }
         return;
@@ -397,18 +402,27 @@ fn benchmark_jcs_depth(criterion: &mut Criterion) {
         }
 
         group.throughput(Throughput::Bytes(expected.len() as u64));
-        group.bench_with_input(BenchmarkId::new("unlimited", depth), &value, |bencher, value| {
-            bencher.iter(|| black_box(JcsEncoder::unlimited().to_vec(black_box(value)).unwrap()));
-        });
-        group.bench_with_input(BenchmarkId::new("finite", depth), &value, |bencher, value| {
-            bencher.iter(|| {
-                black_box(
-                    JcsEncoder::with_limits(limits, FINITE_WORKING_BYTES)
-                        .to_vec(black_box(value))
-                        .unwrap(),
-                )
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("unlimited", depth),
+            &value,
+            |bencher, value| {
+                bencher
+                    .iter(|| black_box(JcsEncoder::unlimited().to_vec(black_box(value)).unwrap()));
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("finite", depth),
+            &value,
+            |bencher, value| {
+                bencher.iter(|| {
+                    black_box(
+                        JcsEncoder::with_limits(limits, FINITE_WORKING_BYTES)
+                            .to_vec(black_box(value))
+                            .unwrap(),
+                    )
+                });
+            },
+        );
         drop_deep_array(value);
     }
     group.finish();

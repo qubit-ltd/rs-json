@@ -62,9 +62,12 @@ impl Serialize for MaskedInvalidRawValue {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
+        let mut state = serializer
+            .serialize_struct(concat!("$", "serde_json", ":", ":private::RawValue"), 1)?;
         state.serialize_field(concat!("$", "serde_json", ":", ":private::RawValue"), "[")?;
-        state.end().map_err(|_| S::Error::custom("masked raw JSON error"))
+        state
+            .end()
+            .map_err(|_| S::Error::custom("masked raw JSON error"))
     }
 }
 
@@ -280,9 +283,16 @@ type SwallowedNestedOutput = (
 
 /// Runs a value whose nested serialization error may be swallowed by its
 /// parent.
-fn run_swallowed_nested<T: Serialize>(value: &T, mode: OutputMode, finite: bool) -> SwallowedNestedOutput {
+fn run_swallowed_nested<T: Serialize>(
+    value: &T,
+    mode: OutputMode,
+    finite: bool,
+) -> SwallowedNestedOutput {
     let limits = if finite {
-        JsonEncodeLimits::builder().max_nodes(64).max_output_bytes(256).build()
+        JsonEncodeLimits::builder()
+            .max_nodes(64)
+            .max_output_bytes(256)
+            .build()
     } else {
         JsonEncodeLimits::new()
     };
@@ -296,7 +306,10 @@ fn run_swallowed_nested<T: Serialize>(value: &T, mode: OutputMode, finite: bool)
         OutputMode::Incremental => encoder.write_incremental(&mut output, value),
     };
     let used_nodes = encoder.session().value_budget().used_nodes();
-    let used_output_bytes = encoder.session().output_budget().map(|budget| budget.used());
+    let used_output_bytes = encoder
+        .session()
+        .output_budget()
+        .map(|budget| budget.used());
     (result, output, used_nodes, used_output_bytes)
 }
 
@@ -320,7 +333,10 @@ fn check_swallowed_nested_error(
         Ok(()) => issues.push(format!("{context}: operation unexpectedly succeeded")),
         Err(error) => {
             if error.kind() != JsonEncodeErrorKind::Serialize {
-                issues.push(format!("{context}: expected Serialize, got {:?}", error.kind()));
+                issues.push(format!(
+                    "{context}: expected Serialize, got {:?}",
+                    error.kind()
+                ));
             }
             let serialization_kind = error.serialization_error().map(|source| source.kind());
             if serialization_kind != Some(JsonSerializationErrorKind::NonFiniteFloat) {
@@ -328,7 +344,10 @@ fn check_swallowed_nested_error(
                     "{context}: expected NonFiniteFloat, got {serialization_kind:?}"
                 ));
             }
-            let diagnostic = format!("{error:?} {}", error.serialization_error().expect("Serialize source"));
+            let diagnostic = format!(
+                "{error:?} {}",
+                error.serialization_error().expect("Serialize source")
+            );
             if diagnostic.contains("1e400") || diagnostic.contains("swallowed custom text") {
                 issues.push(format!("{context}: sensitive serialization detail leaked"));
             }
@@ -341,10 +360,14 @@ fn check_swallowed_nested_error(
             match mode {
                 OutputMode::Vec | OutputMode::Buffered => {
                     if !output.is_empty() {
-                        issues.push(format!("{context}: failed buffered operation published bytes"));
+                        issues.push(format!(
+                            "{context}: failed buffered operation published bytes"
+                        ));
                     }
                     if finite && used_output_bytes != Some(0) {
-                        issues.push(format!("{context}: failed buffered operation charged output bytes"));
+                        issues.push(format!(
+                            "{context}: failed buffered operation charged output bytes"
+                        ));
                     }
                     if !finite && used_output_bytes.is_some() {
                         issues.push(format!("{context}: unlimited output budget was expected"));
@@ -352,7 +375,9 @@ fn check_swallowed_nested_error(
                 }
                 OutputMode::Incremental => {
                     if finite && used_output_bytes != Some(output.len()) {
-                        issues.push(format!("{context}: incremental bytes and output charge differ"));
+                        issues.push(format!(
+                            "{context}: incremental bytes and output charge differ"
+                        ));
                     }
                     if !finite && used_output_bytes.is_some() {
                         issues.push(format!("{context}: unlimited output budget was expected"));
@@ -415,7 +440,9 @@ fn test_json_encoder_preserves_chronological_budget_error_precedence() {
     let error = encode(&ValueThenOutputViolation, &mut session)
         .expect_err("the encoder must preserve the first ignored budget error");
 
-    let error = error.into_budget_error().expect("expected the first budget error");
+    let error = error
+        .into_budget_error()
+        .expect("expected the first budget error");
     assert_eq!(
         error
             .budget_error()
@@ -442,7 +469,11 @@ fn test_json_output_writer_preserves_raw_json_error_precedence() {
 #[test]
 fn test_json_output_writer_rejects_swallowed_nested_non_finite_errors() {
     let mut issues = Vec::new();
-    for mode in [OutputMode::Vec, OutputMode::Buffered, OutputMode::Incremental] {
+    for mode in [
+        OutputMode::Vec,
+        OutputMode::Buffered,
+        OutputMode::Incremental,
+    ] {
         for finite in [false, true] {
             let (result, output, used_nodes, used_output_bytes) =
                 run_swallowed_nested(&SwallowedNonFiniteElement, mode, finite);
@@ -462,7 +493,11 @@ fn test_json_output_writer_rejects_swallowed_nested_non_finite_errors() {
 #[test]
 fn test_json_output_writer_rejects_swallowed_nested_private_number_errors() {
     let mut issues = Vec::new();
-    for mode in [OutputMode::Vec, OutputMode::Buffered, OutputMode::Incremental] {
+    for mode in [
+        OutputMode::Vec,
+        OutputMode::Buffered,
+        OutputMode::Incremental,
+    ] {
         for finite in [false, true] {
             let (result, output, used_nodes, used_output_bytes) =
                 run_swallowed_nested(&SwallowedPrivateNumberElement, mode, finite);
@@ -481,7 +516,11 @@ fn test_json_output_writer_rejects_swallowed_nested_private_number_errors() {
 
 #[test]
 fn test_rejects_swallowed_custom_error_all_output_modes() {
-    for mode in [OutputMode::Vec, OutputMode::Buffered, OutputMode::Incremental] {
+    for mode in [
+        OutputMode::Vec,
+        OutputMode::Buffered,
+        OutputMode::Incremental,
+    ] {
         for value_limited in [false, true] {
             for output_limited in [false, true] {
                 let mut limits = JsonEncodeLimits::<JsonResource, usize>::new();
@@ -497,8 +536,12 @@ fn test_rejects_swallowed_custom_error_all_output_modes() {
                     OutputMode::Vec => encoder.to_vec(&SwallowedCustomElement).map(|bytes| {
                         output = bytes;
                     }),
-                    OutputMode::Buffered => encoder.write_buffered(&mut output, &SwallowedCustomElement),
-                    OutputMode::Incremental => encoder.write_incremental(&mut output, &SwallowedCustomElement),
+                    OutputMode::Buffered => {
+                        encoder.write_buffered(&mut output, &SwallowedCustomElement)
+                    }
+                    OutputMode::Incremental => {
+                        encoder.write_incremental(&mut output, &SwallowedCustomElement)
+                    }
                 };
                 let error = result.expect_err("nested failure must survive outer success");
                 assert_eq!(error.kind(), JsonEncodeErrorKind::Serialize);
@@ -520,11 +563,18 @@ fn test_rejects_swallowed_custom_error_all_output_modes() {
                         OutputMode::Incremental => output.len(),
                     };
                     assert_eq!(
-                        encoder.session().output_budget().expect("output budget").used(),
+                        encoder
+                            .session()
+                            .output_budget()
+                            .expect("output budget")
+                            .used(),
                         expected
                     );
                 }
-                assert_eq!(encoder.to_vec(&true).expect("next operation may succeed"), b"true");
+                assert_eq!(
+                    encoder.to_vec(&true).expect("next operation may succeed"),
+                    b"true"
+                );
             }
         }
     }
@@ -552,7 +602,8 @@ fn test_rejects_swallowed_custom_map_key() {
 
 #[test]
 fn test_rejects_swallowed_custom_private_payload() {
-    let raw_value = SwallowedCustomPrivatePayload(concat!("$", "serde_json", ":", ":private::RawValue"));
+    let raw_value =
+        SwallowedCustomPrivatePayload(concat!("$", "serde_json", ":", ":private::RawValue"));
     assert_custom_serialization_failure(&raw_value);
     let number = SwallowedCustomPrivatePayload(NUMBER_TOKEN);
     assert_custom_serialization_failure(&number);

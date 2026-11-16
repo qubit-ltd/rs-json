@@ -141,7 +141,10 @@ where
     ///
     /// Returns a structured error for invalid UTF-8, syntax, numeric range,
     /// duplicate keys, or configured resource limits.
-    pub fn decode_value_utf8(&mut self, input: &[u8]) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
+    pub fn decode_value_utf8(
+        &mut self,
+        input: &[u8],
+    ) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
         self.engine.decode_value_utf8(input, self.diagnostic_policy)
     }
 
@@ -159,7 +162,10 @@ where
     ///
     /// Returns a structured error for syntax, numeric range, duplicate keys,
     /// or configured resource limits.
-    pub fn decode_value_str(&mut self, input: &str) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
+    pub fn decode_value_str(
+        &mut self,
+        input: &str,
+    ) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
         self.decode_value_utf8(input.as_bytes())
     }
 
@@ -189,7 +195,8 @@ where
         &mut self,
         input: &mut I,
     ) -> Result<SafeJsonValue, JsonDecodeError<R, Q>> {
-        self.engine.decode_value_input(input, self.diagnostic_policy)
+        self.engine
+            .decode_value_input(input, self.diagnostic_policy)
     }
 
     /// Decodes one document while applying a caller policy to each source
@@ -249,10 +256,17 @@ where
         number_policy: F,
     ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
     where
-        F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
+        F: for<'call> FnMut(
+            &'call [JsonPathSegment],
+            JsonNumberToken<'call>,
+        ) -> Result<JsonNumberPolicy, E>,
     {
-        self.engine
-            .decode_unique_validated_utf8(input, options, number_policy, self.diagnostic_policy)
+        self.engine.decode_unique_validated_utf8(
+            input,
+            options,
+            number_policy,
+            self.diagnostic_policy,
+        )
     }
 
     /// UTF-8 string form of [`Self::decode_unique_validated_utf8`], with the
@@ -283,7 +297,10 @@ where
         number_policy: F,
     ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
     where
-        F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
+        F: for<'call> FnMut(
+            &'call [JsonPathSegment],
+            JsonNumberToken<'call>,
+        ) -> Result<JsonNumberPolicy, E>,
     {
         self.decode_unique_validated_utf8(input.as_bytes(), options, number_policy)
     }
@@ -324,10 +341,17 @@ where
     ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
     where
         I: ByteInput + ?Sized,
-        F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
+        F: for<'call> FnMut(
+            &'call [JsonPathSegment],
+            JsonNumberToken<'call>,
+        ) -> Result<JsonNumberPolicy, E>,
     {
-        self.engine
-            .decode_unique_validated_input(input, options, number_policy, self.diagnostic_policy)
+        self.engine.decode_unique_validated_input(
+            input,
+            options,
+            number_policy,
+            self.diagnostic_policy,
+        )
     }
 
     /// Decodes one byte input using an explicit integer/fallback number model.
@@ -560,7 +584,11 @@ where
     ///
     /// Returns a structured error when accounting, parsing, or seeded
     /// deserialization fails.
-    pub fn decode_seed_str<'de, S>(&mut self, seed: S, input: &'de str) -> Result<S::Value, JsonDecodeError<R, Q>>
+    pub fn decode_seed_str<'de, S>(
+        &mut self,
+        seed: S,
+        input: &'de str,
+    ) -> Result<S::Value, JsonDecodeError<R, Q>>
     where
         S: DeserializeSeed<'de>,
     {
@@ -586,11 +614,16 @@ where
     ///
     /// Returns a structured error when accounting, UTF-8 validation, parsing,
     /// or seeded deserialization fails.
-    pub fn decode_seed_utf8<'de, S>(&mut self, seed: S, input: &'de [u8]) -> Result<S::Value, JsonDecodeError<R, Q>>
+    pub fn decode_seed_utf8<'de, S>(
+        &mut self,
+        seed: S,
+        input: &'de [u8],
+    ) -> Result<S::Value, JsonDecodeError<R, Q>>
     where
         S: DeserializeSeed<'de>,
     {
-        self.engine.decode_seed_utf8(seed, input, self.diagnostic_policy)
+        self.engine
+            .decode_seed_utf8(seed, input, self.diagnostic_policy)
     }
 
     /// Decodes a unique-key JSON document into an owned target.
@@ -681,11 +714,16 @@ where
     /// duplicate keys, configured value-depth failure, or seed failure.
     /// Materialization errors retain source coordinates; target errors have
     /// no original source position and are redacted by default.
-    pub fn decode_unique_seed_utf8<S, T>(&mut self, seed: S, input: &[u8]) -> Result<T, JsonDecodeError<R, Q>>
+    pub fn decode_unique_seed_utf8<S, T>(
+        &mut self,
+        seed: S,
+        input: &[u8],
+    ) -> Result<T, JsonDecodeError<R, Q>>
     where
         S: for<'de> DeserializeSeed<'de, Value = T>,
     {
-        self.engine.decode_unique_seed_utf8(seed, input, self.diagnostic_policy)
+        self.engine
+            .decode_unique_seed_utf8(seed, input, self.diagnostic_policy)
     }
 
     /// Decodes a complete JSON string while requiring a top-level object.
@@ -738,7 +776,10 @@ where
     ///
     /// Returns a structured error for accounting, UTF-8 validation, parsing,
     /// top-level-kind, or deserialization failures.
-    pub fn decode_object_utf8<'de, T>(&mut self, input: &'de [u8]) -> Result<T, JsonDecodeError<R, Q>>
+    pub fn decode_object_utf8<'de, T>(
+        &mut self,
+        input: &'de [u8],
+    ) -> Result<T, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {
@@ -768,7 +809,10 @@ where
     ///
     /// Returns a structured error for accounting, parsing, top-level-kind, or
     /// deserialization failures.
-    pub fn decode_array_str<'de, T>(&mut self, input: &'de str) -> Result<Vec<T>, JsonDecodeError<R, Q>>
+    pub fn decode_array_str<'de, T>(
+        &mut self,
+        input: &'de str,
+    ) -> Result<Vec<T>, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {
@@ -794,7 +838,10 @@ where
     ///
     /// Returns a structured error for accounting, UTF-8 validation, parsing,
     /// top-level-kind, or deserialization failures.
-    pub fn decode_array_utf8<'de, T>(&mut self, input: &'de [u8]) -> Result<Vec<T>, JsonDecodeError<R, Q>>
+    pub fn decode_array_utf8<'de, T>(
+        &mut self,
+        input: &'de [u8],
+    ) -> Result<Vec<T>, JsonDecodeError<R, Q>>
     where
         T: Deserialize<'de>,
     {

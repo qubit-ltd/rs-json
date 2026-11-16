@@ -185,11 +185,20 @@ where
         let raw_input_bytes = input.len();
         let diagnostic_policy = normalizer.policy().diagnostic_policy();
         let mut attempt = self.session.begin_value();
-        attempt.try_consume_input_bytes(raw_input_bytes).map_err(|source| {
-            JsonDecodeError::budget(source, JsonDecodeStage::Input, raw_input_bytes, None, diagnostic_policy)
+        attempt
+            .try_consume_input_bytes(raw_input_bytes)
+            .map_err(|source| {
+                JsonDecodeError::budget(
+                    source,
+                    JsonDecodeStage::Input,
+                    raw_input_bytes,
+                    None,
+                    diagnostic_policy,
+                )
+            })?;
+        let input = from_utf8(input).map_err(|source| {
+            JsonDecodeError::invalid_utf8(source, raw_input_bytes, diagnostic_policy)
         })?;
-        let input = from_utf8(input)
-            .map_err(|source| JsonDecodeError::invalid_utf8(source, raw_input_bytes, diagnostic_policy))?;
         let normalized = normalizer.normalize_after_raw_charge(input, &mut attempt)?;
         Ok(NormalizedJsonDocument::new(normalized, raw_input_bytes))
     }
@@ -222,7 +231,12 @@ where
     where
         S: DeserializeSeed<'de>,
     {
-        self.decode_seed_utf8_with_number_model(seed, input, diagnostic_policy, JsonNumberModel::Integer64)
+        self.decode_seed_utf8_with_number_model(
+            seed,
+            input,
+            diagnostic_policy,
+            JsonNumberModel::Integer64,
+        )
     }
 
     /// Returns one-based Serde-compatible coordinates for a materialization
@@ -293,9 +307,19 @@ where
         charge_input: bool,
     ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
     where
-        F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
+        F: for<'call> FnMut(
+            &'call [JsonPathSegment],
+            JsonNumberToken<'call>,
+        ) -> Result<JsonNumberPolicy, E>,
     {
-        self.decode_unique_value_buffer(input, options, policy, diagnostic_policy, charge_input, true)
+        self.decode_unique_value_buffer(
+            input,
+            options,
+            policy,
+            diagnostic_policy,
+            charge_input,
+            true,
+        )
     }
 
     /// Shared transactional scanner and materialization path for owned values.
@@ -341,7 +365,10 @@ where
         track_path: bool,
     ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
     where
-        F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
+        F: for<'call> FnMut(
+            &'call [JsonPathSegment],
+            JsonNumberToken<'call>,
+        ) -> Result<JsonNumberPolicy, E>,
     {
         let raw_input_bytes = input.len();
         let depth_limit = self.session.value_budget().limits().max_depth();
@@ -367,7 +394,9 @@ where
         })?;
         let model = match options.number_model() {
             JsonDecodeNumberModel::Integer64 => JsonNumberModel::Integer64,
-            JsonDecodeNumberModel::Integer64WithFiniteFallback => JsonNumberModel::Integer64WithFiniteFallback,
+            JsonDecodeNumberModel::Integer64WithFiniteFallback => {
+                JsonNumberModel::Integer64WithFiniteFallback
+            }
         };
         let admission_policy = match options.admission_policy() {
             JsonValidatedAdmissionPolicy::Immediate => JsonLexicalAdmissionPolicy::Immediate,
@@ -415,9 +444,16 @@ where
                             ),
                         };
                         let (line, column) = Self::materialization_error_position(input, offset);
-                        let source = JsonError::custom(format_args!("{message} at line {line} column {column}"));
+                        let source = JsonError::custom(format_args!(
+                            "{message} at line {line} column {column}"
+                        ));
                         JsonValidatedDecodeError::Decode {
-                            error: JsonDecodeError::materialization(source, reason, raw_input_bytes, diagnostic_policy),
+                            error: JsonDecodeError::materialization(
+                                source,
+                                reason,
+                                raw_input_bytes,
+                                diagnostic_policy,
+                            ),
                             context: Some(context),
                         }
                     }
@@ -441,20 +477,35 @@ where
                     JsonLexicalError::Budget(_) => None,
                 };
                 return Err(JsonValidatedDecodeError::Decode {
-                    error: Self::map_validated_lexical_error(error, raw_input_bytes, diagnostic_policy),
+                    error: Self::map_validated_lexical_error(
+                        error,
+                        raw_input_bytes,
+                        diagnostic_policy,
+                    ),
                     context,
                 });
             }
         }
         let value = consumer.finish().map_err(|source| {
             let reason = match source {
-                JsonValueMaterializationError::DuplicateKey { .. } => JsonMaterializationErrorReason::DuplicateKey,
-                JsonValueMaterializationError::InvalidNumber { .. } => JsonMaterializationErrorReason::InvalidNumber,
+                JsonValueMaterializationError::DuplicateKey { .. } => {
+                    JsonMaterializationErrorReason::DuplicateKey
+                }
+                JsonValueMaterializationError::InvalidNumber { .. } => {
+                    JsonMaterializationErrorReason::InvalidNumber
+                }
             };
             let (line, column) = Self::materialization_error_position(input, 0);
-            let source = JsonError::custom(format_args!("materialization failed at line {line} column {column}"));
+            let source = JsonError::custom(format_args!(
+                "materialization failed at line {line} column {column}"
+            ));
             JsonValidatedDecodeError::Decode {
-                error: JsonDecodeError::materialization(source, reason, raw_input_bytes, diagnostic_policy),
+                error: JsonDecodeError::materialization(
+                    source,
+                    reason,
+                    raw_input_bytes,
+                    diagnostic_policy,
+                ),
                 context: Some(JsonDecodeContext::Value),
             }
         })?;
@@ -473,16 +524,18 @@ where
                 });
             }
         }
-        attempt.commit().map_err(|source| JsonValidatedDecodeError::Decode {
-            error: JsonDecodeError::budget(
-                source,
-                JsonDecodeStage::Admission,
-                raw_input_bytes,
-                None,
-                diagnostic_policy,
-            ),
-            context: None,
-        })?;
+        attempt
+            .commit()
+            .map_err(|source| JsonValidatedDecodeError::Decode {
+                error: JsonDecodeError::budget(
+                    source,
+                    JsonDecodeStage::Admission,
+                    raw_input_bytes,
+                    None,
+                    diagnostic_policy,
+                ),
+                context: None,
+            })?;
         Ok(value)
     }
 
@@ -550,7 +603,8 @@ where
         .map_err(|error| match error {
             JsonValidatedDecodeError::Decode { error, .. } => error,
             JsonValidatedDecodeError::Policy { source, .. } => match source {},
-            JsonValidatedDecodeError::ExactSafeInteger { .. } | JsonValidatedDecodeError::Limit { .. } => {
+            JsonValidatedDecodeError::ExactSafeInteger { .. }
+            | JsonValidatedDecodeError::Limit { .. } => {
                 unreachable!("owned value decoding has no policy or additional limits")
             }
         })
@@ -591,7 +645,10 @@ where
         diagnostic_policy: DiagnosticPolicy,
     ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
     where
-        F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
+        F: for<'call> FnMut(
+            &'call [JsonPathSegment],
+            JsonNumberToken<'call>,
+        ) -> Result<JsonNumberPolicy, E>,
     {
         self.decode_unique_validated_buffer(input, options, policy, diagnostic_policy, true)
     }
@@ -632,12 +689,19 @@ where
     ) -> Result<SafeJsonValue, JsonValidatedDecodeError<E, R, Q>>
     where
         I: ByteInput + ?Sized,
-        F: for<'call> FnMut(&'call [JsonPathSegment], JsonNumberToken<'call>) -> Result<JsonNumberPolicy, E>,
+        F: for<'call> FnMut(
+            &'call [JsonPathSegment],
+            JsonNumberToken<'call>,
+        ) -> Result<JsonNumberPolicy, E>,
     {
         let bytes = {
             let mut attempt = self.session.begin_value();
-            Self::read_input_bytes(&mut attempt, input, diagnostic_policy)
-                .map_err(|error| JsonValidatedDecodeError::Decode { error, context: None })?
+            Self::read_input_bytes(&mut attempt, input, diagnostic_policy).map_err(|error| {
+                JsonValidatedDecodeError::Decode {
+                    error,
+                    context: None,
+                }
+            })?
         };
         self.decode_unique_validated_buffer(&bytes, options, policy, diagnostic_policy, false)
     }
@@ -719,8 +783,8 @@ where
         let mut attempt = self.session.begin_value();
         Self::prepare_attempt(&mut attempt, input, metadata, true, has_value_limits)?;
         let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Integer64);
-        let scan =
-            JsonLexicalScanner::new(attempt.value_transaction_mut(), false).scan_with_consumer(input, &mut builder);
+        let scan = JsonLexicalScanner::new(attempt.value_transaction_mut(), false)
+            .scan_with_consumer(input, &mut builder);
         match scan {
             Ok(()) | Err(JsonLexicalScanError::Consumer(_)) => {}
             Err(JsonLexicalScanError::Lexical(error)) => {
@@ -750,11 +814,17 @@ where
         // The builder constructs canonical i64/u64/f64 Numbers. Unlike direct
         // arbitrary-precision text parsing, Value deserialization exposes these
         // as native numeric events, without guessing map-key provenance.
-        let value = seed
-            .deserialize(tree.as_value())
-            .map_err(|error| JsonDecodeError::deserialize(error, input.len(), None, diagnostic_policy))?;
+        let value = seed.deserialize(tree.as_value()).map_err(|error| {
+            JsonDecodeError::deserialize(error, input.len(), None, diagnostic_policy)
+        })?;
         attempt.commit().map_err(|error| {
-            JsonDecodeError::budget(error, JsonDecodeStage::Admission, input.len(), None, diagnostic_policy)
+            JsonDecodeError::budget(
+                error,
+                JsonDecodeStage::Admission,
+                input.len(),
+                None,
+                diagnostic_policy,
+            )
         })?;
         Ok(value)
     }
@@ -874,7 +944,13 @@ where
             diagnostic_policy,
             number_model: JsonNumberModel::Integer64,
         };
-        self.decode_seed(seed, document.as_str().as_bytes(), metadata, false, expected)
+        self.decode_seed(
+            seed,
+            document.as_str().as_bytes(),
+            metadata,
+            false,
+            expected,
+        )
     }
 
     /// Strictly validates one complete byte document and commits value usage.
@@ -1017,7 +1093,15 @@ where
             diagnostic_policy,
             number_model,
         };
-        let value = Self::decode_seed_attempt(&mut attempt, seed, &bytes, metadata, false, has_value_limits, None)?;
+        let value = Self::decode_seed_attempt(
+            &mut attempt,
+            seed,
+            &bytes,
+            metadata,
+            false,
+            has_value_limits,
+            None,
+        )?;
         attempt.commit().map_err(|source| {
             JsonDecodeError::budget(
                 source,
@@ -1133,7 +1217,13 @@ where
         charge_raw_input: bool,
         has_value_limits: bool,
     ) -> Result<SafeJsonValue, JcsDecodeError<R, Q>> {
-        Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
+        Self::prepare_attempt(
+            &mut attempt,
+            input,
+            metadata,
+            charge_raw_input,
+            has_value_limits,
+        )?;
         let mut builder = LexicalJsonValueBuilder::new(JsonNumberModel::Binary64);
         let scan = JsonLexicalScanner::new(attempt.value_transaction_mut(), false)
             .with_number_model(JsonNumberModel::Binary64)
@@ -1141,7 +1231,9 @@ where
         match scan {
             Ok(()) | Err(JsonLexicalScanError::Consumer(_)) => {}
             Err(JsonLexicalScanError::Lexical(error)) => {
-                return Err(JcsDecodeError::Decode(Self::map_lexical_error(error, input, metadata)));
+                return Err(JcsDecodeError::Decode(Self::map_lexical_error(
+                    error, input, metadata,
+                )));
             }
             Err(JsonLexicalScanError::EncodedStringLimit { .. }) => {
                 unreachable!("JCS scanning does not configure an encoded string limit")
@@ -1228,7 +1320,11 @@ where
                 Ok(count) => count,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                 Err(error) => {
-                    return Err(JsonDecodeError::read(error, raw_input_bytes, diagnostic_policy));
+                    return Err(JsonDecodeError::read(
+                        error,
+                        raw_input_bytes,
+                        diagnostic_policy,
+                    ));
                 }
             };
             let charged = admitted.map_or(count, |admitted| count.min(admitted));
@@ -1240,7 +1336,13 @@ where
                 )
             })?;
             attempt.try_consume_input_bytes(charged).map_err(|source| {
-                JsonDecodeError::budget(source, JsonDecodeStage::Input, raw_input_bytes, None, diagnostic_policy)
+                JsonDecodeError::budget(
+                    source,
+                    JsonDecodeStage::Input,
+                    raw_input_bytes,
+                    None,
+                    diagnostic_policy,
+                )
             })?;
             bytes.extend_from_slice(&scratch[..charged]);
             raw_input_bytes = next_total;
@@ -1254,7 +1356,10 @@ where
                         diagnostic_policy,
                     )),
                     Ok(()) => Err(JsonDecodeError::read(
-                        io::Error::new(io::ErrorKind::InvalidData, "input budget probe invariant violated"),
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "input budget probe invariant violated",
+                        ),
                         raw_input_bytes,
                         diagnostic_policy,
                     )),
@@ -1422,7 +1527,13 @@ where
     ) -> Result<(), JsonDecodeError<R, Q>> {
         let has_value_limits = self.session.value_budget().limits().has_limits();
         let mut attempt = self.session.begin_value();
-        Self::prepare_attempt(&mut attempt, input, metadata, charge_raw_input, has_value_limits)?;
+        Self::prepare_attempt(
+            &mut attempt,
+            input,
+            metadata,
+            charge_raw_input,
+            has_value_limits,
+        )?;
         Self::check_top_level(input, metadata, expected)?;
         attempt.commit().map_err(|source| {
             JsonDecodeError::budget(
@@ -1474,12 +1585,21 @@ where
                 })?;
         }
         from_utf8(input).map_err(|source| {
-            JsonDecodeError::invalid_utf8(source, metadata.raw_input_bytes, metadata.diagnostic_policy)
+            JsonDecodeError::invalid_utf8(
+                source,
+                metadata.raw_input_bytes,
+                metadata.diagnostic_policy,
+            )
         })?;
         let admission = if matches!(metadata.number_model, JsonNumberModel::Integer64) {
             admit_json_document(attempt, input, has_value_limits)
         } else {
-            admit_json_document_with_number_model(attempt, input, has_value_limits, metadata.number_model)
+            admit_json_document_with_number_model(
+                attempt,
+                input,
+                has_value_limits,
+                metadata.number_model,
+            )
         };
         admission.map_err(|error| Self::map_lexical_error(error, input, metadata))
     }
@@ -1510,12 +1630,13 @@ where
                 metadata.diagnostic_policy,
             ),
             JsonLexicalError::Syntax(source) => {
-                let detailed_source = (metadata.diagnostic_policy == DiagnosticPolicy::Detailed).then(|| {
-                    from_slice::<&RawValue>(input).err().map_or_else(
-                        || Arc::new(source) as Arc<dyn Error + Send + Sync>,
-                        |error| Arc::new(error) as Arc<dyn Error + Send + Sync>,
-                    )
-                });
+                let detailed_source = (metadata.diagnostic_policy == DiagnosticPolicy::Detailed)
+                    .then(|| {
+                        from_slice::<&RawValue>(input).err().map_or_else(
+                            || Arc::new(source) as Arc<dyn Error + Send + Sync>,
+                            |error| Arc::new(error) as Arc<dyn Error + Send + Sync>,
+                        )
+                    });
                 JsonDecodeError::invalid_json(
                     source,
                     detailed_source,
@@ -1562,7 +1683,13 @@ where
             JsonLexicalError::Syntax(source) => {
                 let detailed = (diagnostic_policy == DiagnosticPolicy::Detailed)
                     .then(|| Arc::new(source) as Arc<dyn Error + Send + Sync>);
-                JsonDecodeError::invalid_json(source, detailed, raw_input_bytes, None, diagnostic_policy)
+                JsonDecodeError::invalid_json(
+                    source,
+                    detailed,
+                    raw_input_bytes,
+                    None,
+                    diagnostic_policy,
+                )
             }
         }
     }

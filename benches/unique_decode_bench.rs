@@ -70,7 +70,13 @@ fn unique_decode(c: &mut Criterion) {
                         assert_decoded(&decoded, path, &fixture);
                         black_box(decoded);
                     }
-                    let base = format!("unique_decode/{}/{}/{}/{}", shape.name(), size, path.name(), budget);
+                    let base = format!(
+                        "unique_decode/{}/{}/{}/{}",
+                        shape.name(),
+                        size,
+                        path.name(),
+                        budget
+                    );
                     let mut fresh = c.benchmark_group(format!("{base}/fresh"));
                     fresh.throughput(Throughput::Bytes(fixture.bytes() as u64));
                     fresh.bench_function("decode", |bencher| {
@@ -102,7 +108,11 @@ fn unique_decode(c: &mut Criterion) {
                             },
                             |mut decoder| {
                                 for _ in 0..8 {
-                                    black_box(decode_with_decoder(path, black_box(&fixture), &mut decoder));
+                                    black_box(decode_with_decoder(
+                                        path,
+                                        black_box(&fixture),
+                                        &mut decoder,
+                                    ));
                                 }
                             },
                             BatchSize::SmallInput,
@@ -122,7 +132,9 @@ fn unique_decode(c: &mut Criterion) {
                     reject.bytes(),
                     budget
                 );
-                let _ = black_box(assert_duplicate_rejected(decode_reject_once(&reject, finite)));
+                let _ = black_box(assert_duplicate_rejected(decode_reject_once(
+                    &reject, finite,
+                )));
                 let mut group = c.benchmark_group(name);
                 group.throughput(Throughput::Bytes(reject.bytes() as u64));
                 group.bench_function("duplicate_key", |bencher| {
@@ -140,17 +152,18 @@ fn early_duplicate_tail(c: &mut Criterion) {
     for tail_bytes in SIZES {
         let input = format!(r#"{{"x":0,"x":1,"tail":"{}"}}"#, "a".repeat(tail_bytes));
         let bytes = input.as_bytes();
-        let unique_result =
-            JsonDecoder::unlimited().decode_unique_seed_utf8(std::marker::PhantomData::<serde_json::Value>, bytes);
+        let unique_result = JsonDecoder::unlimited()
+            .decode_unique_seed_utf8(std::marker::PhantomData::<serde_json::Value>, bytes);
         assert!(unique_result.is_err());
-        let mut group = c.benchmark_group(format!("early_duplicate_tail/unique_seed/{tail_bytes}B"));
+        let mut group =
+            c.benchmark_group(format!("early_duplicate_tail/unique_seed/{tail_bytes}B"));
         group.throughput(Throughput::Bytes(bytes.len() as u64));
         group.bench_function("decode", |bencher| {
             bencher.iter(|| {
-                black_box(
-                    JsonDecoder::unlimited()
-                        .decode_unique_seed_utf8(std::marker::PhantomData::<serde_json::Value>, black_box(bytes)),
-                )
+                black_box(JsonDecoder::unlimited().decode_unique_seed_utf8(
+                    std::marker::PhantomData::<serde_json::Value>,
+                    black_box(bytes),
+                ))
             });
         });
         group.finish();
@@ -194,7 +207,11 @@ fn unique_decode_structural(c: &mut Criterion) {
                     } else {
                         JsonDecoder::unlimited()
                     };
-                    for decoded in structural_decode::decode_batch_with_decoder(path, &fixture, &mut batch_decoder) {
+                    for decoded in structural_decode::decode_batch_with_decoder(
+                        path,
+                        &fixture,
+                        &mut batch_decoder,
+                    ) {
                         structural_decode::assert_decoded(&decoded, &fixture);
                         black_box(decoded);
                     }
@@ -208,7 +225,9 @@ fn unique_decode_structural(c: &mut Criterion) {
                     let mut fresh = c.benchmark_group(format!("{base}/fresh"));
                     fresh.throughput(Throughput::Bytes(fixture.text.len() as u64));
                     fresh.bench_function("decode", |bencher| {
-                        bencher.iter(|| black_box(structural_decode::decode_once(path, &fixture, finite)));
+                        bencher.iter(|| {
+                            black_box(structural_decode::decode_once(path, &fixture, finite))
+                        });
                     });
                     fresh.finish();
 
@@ -224,8 +243,11 @@ fn unique_decode_structural(c: &mut Criterion) {
                                 }
                             },
                             |mut decoder| {
-                                let decoded =
-                                    structural_decode::decode_batch_with_decoder(path, &fixture, &mut decoder);
+                                let decoded = structural_decode::decode_batch_with_decoder(
+                                    path,
+                                    &fixture,
+                                    &mut decoder,
+                                );
                                 black_box(decoded);
                             },
                             BatchSize::SmallInput,
@@ -242,7 +264,10 @@ fn unique_decode_structural(c: &mut Criterion) {
         .map(|count| {
             (
                 "short_key",
-                unique_decode_support::structural_fixtures::success_fixture(StructuralShape::WideObject, count),
+                unique_decode_support::structural_fixtures::success_fixture(
+                    StructuralShape::WideObject,
+                    count,
+                ),
             )
         })
         .chain(COUNTS.into_iter().map(|count| {
@@ -270,7 +295,9 @@ fn unique_decode_structural(c: &mut Criterion) {
                 bencher.iter(|| {
                     let decoded = match path {
                         "owned_value" => structural_decode::decode_owned_value(black_box(&fixture)),
-                        "validated_preserve" => structural_decode::decode_validated_preserve(black_box(&fixture)),
+                        "validated_preserve" => {
+                            structural_decode::decode_validated_preserve(black_box(&fixture))
+                        }
                         _ => unreachable!(),
                     };
                     black_box(decoded)
@@ -296,7 +323,8 @@ fn unique_decode_structural(c: &mut Criterion) {
 
     for count in COUNTS {
         for position in [DuplicatePosition::Early, DuplicatePosition::Late] {
-            let fixture = unique_decode_support::structural_fixtures::reject_fixture(count, position);
+            let fixture =
+                unique_decode_support::structural_fixtures::reject_fixture(count, position);
             for finite in [false, true] {
                 let budget = if finite { "finite" } else { "unlimited" };
                 structural_decode::assert_reject_fixture(&fixture);
@@ -313,7 +341,10 @@ fn unique_decode_structural(c: &mut Criterion) {
                 group.throughput(Throughput::Bytes(fixture.text.len() as u64));
                 group.bench_function("duplicate_key", |bencher| {
                     bencher.iter(|| {
-                        let _ = black_box(structural_decode::decode_reject_once(black_box(&fixture), finite));
+                        let _ = black_box(structural_decode::decode_reject_once(
+                            black_box(&fixture),
+                            finite,
+                        ));
                     });
                 });
                 group.finish();
@@ -336,13 +367,20 @@ fn lexical_arrays(c: &mut Criterion) {
         paths.push("jcs_value");
         for path in paths {
             for finite in [false, true] {
-                if fixture.shape == ArrayShape::Chain && path != "value" && path != "validated_preserve" {
+                if fixture.shape == ArrayShape::Chain
+                    && path != "value"
+                    && path != "validated_preserve"
+                {
                     continue;
                 }
                 let budget = if finite { "finite" } else { "unlimited" };
                 match path {
-                    "value" => assert_lexical_owner(&decode_lexical_value(&fixture, finite), &fixture),
-                    "validated_preserve" => assert_lexical_owner(&decode_lexical_preserve(&fixture, finite), &fixture),
+                    "value" => {
+                        assert_lexical_owner(&decode_lexical_value(&fixture, finite), &fixture)
+                    }
+                    "validated_preserve" => {
+                        assert_lexical_owner(&decode_lexical_preserve(&fixture, finite), &fixture)
+                    }
                     "unique_typed" if fixture.shape == ArrayShape::Scalar => {
                         let mut decoder = if finite {
                             lexical_finite_decoder(&fixture)
@@ -353,7 +391,12 @@ fn lexical_arrays(c: &mut Criterion) {
                             .decode_unique_str::<Vec<u64>>(&fixture.text)
                             .expect("typed array preflight");
                         assert_eq!(value.len(), fixture.size);
-                        assert!(value.iter().enumerate().all(|(index, item)| *item == index as u64));
+                        assert!(
+                            value
+                                .iter()
+                                .enumerate()
+                                .all(|(index, item)| *item == index as u64)
+                        );
                     }
                     "unique_seed" if fixture.shape == ArrayShape::Scalar => {
                         let mut decoder = if finite {
@@ -362,10 +405,18 @@ fn lexical_arrays(c: &mut Criterion) {
                             JsonDecoder::unlimited()
                         };
                         let value = decoder
-                            .decode_unique_seed_utf8(std::marker::PhantomData::<Vec<u64>>, fixture.text.as_bytes())
+                            .decode_unique_seed_utf8(
+                                std::marker::PhantomData::<Vec<u64>>,
+                                fixture.text.as_bytes(),
+                            )
                             .expect("seed array preflight");
                         assert_eq!(value.len(), fixture.size);
-                        assert!(value.iter().enumerate().all(|(index, item)| *item == index as u64));
+                        assert!(
+                            value
+                                .iter()
+                                .enumerate()
+                                .all(|(index, item)| *item == index as u64)
+                        );
                     }
                     "unique_typed" | "unique_seed" if fixture.shape == ArrayShape::Records => {
                         let mut decoder = if finite {
@@ -390,7 +441,8 @@ fn lexical_arrays(c: &mut Criterion) {
                             value
                                 .iter()
                                 .enumerate()
-                                .all(|(index, row)| row.id == index as u64 && row.label == format!("v{index:06}"))
+                                .all(|(index, row)| row.id == index as u64
+                                    && row.label == format!("v{index:06}"))
                         );
                     }
                     #[cfg(feature = "jcs")]
@@ -451,7 +503,9 @@ fn lexical_arrays(c: &mut Criterion) {
                                         .expect("seed array decodes"),
                                 );
                             }
-                            "unique_typed" | "unique_seed" if fixture.shape == ArrayShape::Records => {
+                            "unique_typed" | "unique_seed"
+                                if fixture.shape == ArrayShape::Records =>
+                            {
                                 let mut decoder = if finite {
                                     lexical_finite_decoder(&fixture)
                                 } else {
@@ -517,7 +571,9 @@ fn decode_lexical_value(fixture: &ArrayFixture, finite: bool) -> SafeJsonValue {
     } else {
         JsonDecoder::unlimited()
     };
-    decoder.decode_value_str(&fixture.text).expect("lexical value decodes")
+    decoder
+        .decode_value_str(&fixture.text)
+        .expect("lexical value decodes")
 }
 
 fn decode_lexical_preserve(fixture: &ArrayFixture, finite: bool) -> SafeJsonValue {
@@ -527,9 +583,11 @@ fn decode_lexical_preserve(fixture: &ArrayFixture, finite: bool) -> SafeJsonValu
         JsonDecoder::unlimited()
     };
     decoder
-        .decode_unique_validated_str(&fixture.text, &JsonValidatedDecodeOptions::builder().build(), |_, _| {
-            Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve)
-        })
+        .decode_unique_validated_str(
+            &fixture.text,
+            &JsonValidatedDecodeOptions::builder().build(),
+            |_, _| Ok::<_, std::convert::Infallible>(JsonNumberPolicy::Preserve),
+        )
         .expect("validated preserve decodes")
 }
 
@@ -574,7 +632,8 @@ fn assert_jcs_lexical_owner(owner: &SafeJsonValue, fixture: &ArrayFixture) {
                 let object = row.as_object().expect("record fixture item is object");
                 object.len() == 2
                     && object.get("id").and_then(serde_json::Value::as_f64) == Some(i as f64)
-                    && object.get("label").and_then(serde_json::Value::as_str) == Some(format!("v{i:06}").as_str())
+                    && object.get("label").and_then(serde_json::Value::as_str)
+                        == Some(format!("v{i:06}").as_str())
             }));
         }
         ArrayShape::Chain => {
